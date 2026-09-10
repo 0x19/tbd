@@ -20,6 +20,7 @@ impl Vars {
         let mut v = BTreeMap::new();
         let n = &service.name;
         v.insert("name".into(), n.as_str().to_owned());
+        v.insert("plural".into(), n.plural());
         v.insert("Name".into(), n.pascal());
         v.insert("NAME".into(), n.upper());
         v.insert("package".into(), service.package());

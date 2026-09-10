@@ -43,7 +43,7 @@ expressions). For `ledger` on port 50052:
 
 | Token | Value |
 |---|---|
-| `name`, `Name`, `NAME` | `ledger`, `Ledger`, `LEDGER` |
+| `name`, `Name`, `NAME`, `plural` | `ledger`, `Ledger`, `LEDGER`, `ledgers` (a name already ending in `s` stays as is: `humans`) |
 | `package`, `crate` | `tbd-ledger`, `tbd_ledger` |
 | `proto_package`, `grpc_service`, `proto_path` | `tbd.ledger.v1`, `tbd.ledger.v1.LedgerService`, `tbd/ledger/v1/ledger.proto` |
 | `port`, `metrics_port` | `50052`, `9466` |
@@ -62,7 +62,7 @@ when the file exists with different content, unless `--force`.
 | `cargo:dependency` | `Cargo.toml` | after the last `tbd-` line | `tbd-<name> ` |
 | `proto:module` | `crates/proto/src/lib.rs` | end of file | `pub mod <name> ` |
 | `chaos:module`, `chaos:kind`, `chaos:dependency` | `crates/chaos/src/kinds/mod.rs`, `crates/chaos/Cargo.toml` | after the last `pub mod` (rustfmt sorts them at apply time), before the `// tbd:kinds-end` marker in `ALL`, after `tbd-protocol.workspace` | `pub mod <name>;`, `&<name>::KIND,`, the dependency line |
-| `chaos:topology` | `topologies/dev.toml` | end of file | `[stack.<name>s.` |
+| `chaos:topology` | `topologies/dev.toml` | end of file | `[stack.<plural>.` (`<name>s`, or `<name>` when it already ends in `s`) |
 | `chaos:targets:{base,dev,production,cluster}` | `configs/chaos/*.toml` | after `engine = ` under `[targets]` | `<name> = "http` |
 | `chaos:k8s-env`, `chaos:compose-env`, `chaos:ansible-env` | `devops/k8s/chaos/deployment.yaml`, `compose.yaml`, the ansible compose template | after `CHAOS_ENGINE_URL` | `CHAOS_<NAME>_URL` |
 | `env:example` | `.env.example` | end of file | `<NAME>_LISTEN_ADDR=` (the block also carries a commented `CHAOS_<NAME>_URL`) |

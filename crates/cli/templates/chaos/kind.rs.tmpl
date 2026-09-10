@@ -24,7 +24,7 @@ use crate::{
 pub static KIND: Kind = Kind {
     name: "@@name@@",
     label: "@@Name@@",
-    plural: "@@name@@s",
+    plural: "@@plural@@",
     surface: "grpc",
     target: Some(Target {
         help: "@@Name@@ gRPC URL (through Envoy: the engine LB, matched by service name)",
@@ -44,7 +44,7 @@ pub static KIND: Kind = Kind {
     }],
 };
 
-/// `[stack.@@name@@s.<name>]` minus `listen`: a @@name@@ with an initial behaviour.
+/// `[stack.@@plural@@.<name>]` minus `listen`: a @@name@@ with an initial behaviour.
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct @@Name@@ {

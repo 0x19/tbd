@@ -166,11 +166,11 @@ pub fn registrations(service: &Service) -> Result<Vec<Registration>, TemplateErr
         "@@package@@.workspace = true",
         "@@package@@.workspace = true",
     )?;
-    let topology = b.r("\n[stack.@@name@@s.@@name@@-1]\nlisten = \"127.0.0.1:@@port@@\"\n")?;
+    let topology = b.r("\n[stack.@@plural@@.@@name@@-1]\nlisten = \"127.0.0.1:@@port@@\"\n")?;
     b.push(
         "chaos:topology",
         "topologies/dev.toml",
-        Some(&format!("[stack.{name}s.")),
+        Some(&format!("[stack.{}.", service.name.plural())),
         Edit::AppendEof { lines: topology },
     );
     for (env, url) in [

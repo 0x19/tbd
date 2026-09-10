@@ -53,6 +53,16 @@ impl ServiceName {
         &self.0
     }
 
+    /// The chaos topology table: `ledger` to `ledgers`, `humans` stays `humans`.
+    #[must_use]
+    pub fn plural(&self) -> String {
+        if self.0.ends_with('s') {
+            self.0.clone()
+        } else {
+            format!("{}s", self.0)
+        }
+    }
+
     /// `ledger` to `Ledger`.
     #[must_use]
     pub fn pascal(&self) -> String {
@@ -201,6 +211,8 @@ mod tests {
 
     #[test]
     fn names_are_validated() {
+        assert_eq!(ServiceName::parse("ledger").unwrap().plural(), "ledgers");
+        assert_eq!(ServiceName::parse("humans").unwrap().plural(), "humans");
         assert!(ServiceName::parse("ledger").is_ok());
         assert!(ServiceName::parse("a1").is_ok());
         assert_eq!(
