@@ -413,6 +413,11 @@ impl AppState {
                 .engine
                 .unwrap_or_else(|| self.config.targets.engine.clone()),
             timeout: req.timeout.unwrap_or(self.config.validate.timeout),
+            trust: self
+                .config
+                .validate
+                .trust()
+                .map_err(|e| ApiError::internal(e.to_string()))?,
         };
         for (what, u) in [("protocol", &targets.protocol), ("engine", &targets.engine)] {
             url::Url::parse(u).map_err(|e| ApiError::invalid(format!("{what}: {e}")))?;

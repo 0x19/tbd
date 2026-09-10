@@ -25,7 +25,7 @@ failed, `2` bad arguments.
 Hit every surface of a running stack. Checks run concurrently, each with its own timeout.
 
 ```
-chaos validate [--protocol URL] [--engine URL] [--timeout DURATION] [--json]
+chaos validate [--protocol URL] [--engine URL] [--timeout DURATION] [--ca-cert PEM] [--json]
 ```
 
 | Flag | Env | Default |
@@ -33,7 +33,14 @@ chaos validate [--protocol URL] [--engine URL] [--timeout DURATION] [--json]
 | `--protocol` | `CHAOS_PROTOCOL_URL` | `[targets] protocol`, `http://127.0.0.1:8080` in `base.toml` |
 | `--engine` | `CHAOS_ENGINE_URL` | `[targets] engine`, `http://127.0.0.1:50051` |
 | `--timeout` | | `[validate] timeout`, `5s` |
+| `--ca-cert` | `CHAOS_CA_CERT` | `[validate] ca_cert`, none: `https://`/`wss://` targets verify against the public roots |
 | `--json` | | off |
+
+Targets may be `http://` (h2c, plain WebSocket) or `https://` (TLS; WebSocket becomes
+`wss://`). Both URLs can be the same public edge, `https://api.<base>`: Envoy routes
+gRPC by service name, and the protocol's health service answers for the engine too.
+`--ca-cert` adds one PEM root (several concatenated are fine) for a staging edge or
+Caddy's internal CA; it never disables verification.
 
 Checks, in output order:
 

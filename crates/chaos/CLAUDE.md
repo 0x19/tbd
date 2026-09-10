@@ -40,6 +40,12 @@ Gotchas:
 - `chaos check` runs `ScenarioFile::check`; add cross-checks there, not in the executor.
 - WebSocket connections are opened via `load::ops::connect_ws`, which sets
   `TCP_NODELAY`; `connect_async` does not and adds 40 ms to the first frame.
+- `tls.rs` is the one place that decides what `https://`/`wss://` targets trust: web PKI
+  roots always, plus `--ca-cert` for validate. It builds the tonic endpoint, the reqwest
+  client and the WebSocket connector; do not construct those elsewhere or a target
+  scheme will silently work on one surface and not another. The chaos crate enables
+  tonic's `tls-ring`/`tls-webpki-roots` and tungstenite's rustls features itself; the
+  services stay h2c.
 - Scenarios run on port 0 by default; `topologies/dev.toml` uses fixed ports. Do not put
   fixed ports in `scenarios/` or CI runs collide.
 - Engine counters reset on restart; assertions on a restarted engine cover the time

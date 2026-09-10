@@ -54,6 +54,7 @@ TBD_ENV=production chaos config    # production
 | `targets.protocol` | `http://127.0.0.1:8080` | `--protocol`, `CHAOS_PROTOCOL_URL` | default for `validate` and API validate |
 | `targets.engine` | `http://127.0.0.1:50051` | `--engine`, `CHAOS_ENGINE_URL` | same, engine gRPC |
 | `validate.timeout` | `5s` | `--timeout` | per-check timeout |
+| `validate.ca_cert` | `""` | `--ca-cert`, `CHAOS_CA_CERT` | extra PEM root for `https://` / `wss://` targets; empty means the public roots only |
 | `links.grafana` | `""` | | UI link; empty hides it |
 | `links.victorialogs` | `""` | | UI link |
 | `links.pyroscope` | `""` | | UI link |

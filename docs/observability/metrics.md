@@ -25,7 +25,9 @@ backend is visible instead of clipped.
 
 `route` values: axum's matched pattern for HTTP (`/v1/evaluate`, `/v1/subjects/{subject_id}/events`),
 the RPC path for gRPC (`EngineService/Evaluate` on the engine,
-`tbd.protocol.v1.ProtocolService/Ping` on the protocol).
+`tbd.protocol.v1.ProtocolService/Ping` on the protocol). An HTTP request that matches
+no route is `unmatched` (answered 404), never its raw path, so internet scanners cannot
+grow the label set.
 
 How they are recorded: `RequestTimer::start(transport, route)` at admission, its `Drop`
 records the counter and histogram and decrements in-flight, so an early `return Err`

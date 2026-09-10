@@ -69,6 +69,10 @@ enum Command {
         /// Per-check timeout. Default: `[validate] timeout` from the config.
         #[arg(long, value_parser = humantime::parse_duration)]
         timeout: Option<Duration>,
+        /// Extra PEM root to trust for https/wss targets (a staging edge, Caddy's
+        /// internal CA). Default: `[validate] ca_cert` from the config.
+        #[arg(long, env = "CHAOS_CA_CERT")]
+        ca_cert: Option<PathBuf>,
         /// Emit JSON instead of text.
         #[arg(long)]
         json: bool,
@@ -141,13 +145,18 @@ async fn main() -> anyhow::Result<()> {
         Command::Validate {
             targets,
             timeout,
+            ca_cert,
             json,
         } => {
             targets.apply(&mut config);
+            if let Some(v) = ca_cert {
+                config.validate.ca_cert = v;
+            }
             let report = tbd_chaos::validate::run(tbd_chaos::validate::Targets {
                 protocol: config.targets.protocol,
                 engine: config.targets.engine,
                 timeout: timeout.unwrap_or(config.validate.timeout),
+                trust: config.validate.trust()?,
             })
             .await;
             if json {

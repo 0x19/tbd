@@ -84,6 +84,20 @@ pub struct Validate {
     /// Per-check timeout.
     #[serde(with = "humantime_serde")]
     pub timeout: Duration,
+    /// Extra PEM root for `https://` / `wss://` targets. Empty: public roots only.
+    #[serde(default)]
+    pub ca_cert: PathBuf,
+}
+
+impl Validate {
+    /// TLS trust for the targets: public roots plus `ca_cert` when set.
+    pub fn trust(&self) -> anyhow::Result<crate::tls::Trust> {
+        if self.ca_cert.as_os_str().is_empty() {
+            Ok(crate::tls::Trust::default())
+        } else {
+            crate::tls::Trust::from_pem_file(&self.ca_cert)
+        }
+    }
 }
 
 /// `[links]`

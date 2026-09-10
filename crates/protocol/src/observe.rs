@@ -24,7 +24,7 @@ impl propagation::Extractor for Headers<'_> {
     }
 }
 
-fn is_grpc(headers: &http::HeaderMap) -> bool {
+pub(crate) fn is_grpc(headers: &http::HeaderMap) -> bool {
     headers
         .get(http::header::CONTENT_TYPE)
         .and_then(|v| v.to_str().ok())
@@ -32,11 +32,16 @@ fn is_grpc(headers: &http::HeaderMap) -> bool {
 }
 
 /// The route label: the matched axum pattern for HTTP, the RPC path for gRPC.
+/// An HTTP request that matched nothing is labelled `unmatched`, never its raw
+/// path: on a public edge scanners would otherwise mint a label value per probe.
 fn route_of(request: &Request) -> String {
-    request.extensions().get::<MatchedPath>().map_or_else(
-        || request.uri().path().trim_start_matches('/').to_owned(),
-        |m| m.as_str().to_owned(),
-    )
+    match request.extensions().get::<MatchedPath>() {
+        Some(m) => m.as_str().to_owned(),
+        None if is_grpc(request.headers()) => {
+            request.uri().path().trim_start_matches('/').to_owned()
+        }
+        None => "unmatched".to_owned(),
+    }
 }
 
 /// Span factory for `tower_http::trace::TraceLayer`.

@@ -128,6 +128,84 @@ async fn graphql_evaluate() {
     assert_eq!(resp["data"]["evaluate"]["stub"], true);
 }
 
+/// Unknown paths are 404s, not tonic's "unimplemented" 200. gRPC callers of an
+/// unknown method still get the gRPC answer.
+#[tokio::test]
+async fn unknown_path_is_404_and_unknown_rpc_is_unimplemented() {
+    // One global recorder per process; nextest runs each test in its own.
+    let free = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let metrics_addr = free.local_addr().unwrap();
+    drop(free);
+    tbd_common::metrics::install(metrics_addr, "protocol-test").unwrap();
+
+    let stack = support::start().await;
+    let http = reqwest::Client::new();
+
+    let res = http.get(stack.url("/.env")).send().await.unwrap();
+    assert_eq!(res.status(), 404);
+    let body: Value = res.json().await.unwrap();
+    assert_eq!(body["code"], "not_found");
+
+    let res = http
+        .post(stack.url("/tbd.protocol.v1.ProtocolService/Nope"))
+        .header("content-type", "application/grpc")
+        .body(Vec::new())
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+    assert_eq!(res.headers()["grpc-status"], "12");
+
+    let metrics = http
+        .get(format!("http://{metrics_addr}/metrics"))
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+    assert!(
+        metrics.contains(r#"route="unmatched""#),
+        "unmatched HTTP paths must share one route label:\n{metrics}"
+    );
+    assert!(
+        !metrics.contains(".env"),
+        "raw path leaked into a label:\n{metrics}"
+    );
+}
+
+/// `Health/Check` on the protocol port answers for the engine too, so a client
+/// that only reaches the edge (where every health call lands on the protocol)
+/// learns whether the engine is up. The first report is asynchronous, hence the
+/// short retry.
+#[tokio::test]
+async fn grpc_health_reports_engine_service() {
+    use tonic_health::pb::{HealthCheckRequest, health_check_response::ServingStatus};
+    let stack = support::start().await;
+    let channel = tonic::transport::Endpoint::from_shared(stack.url(""))
+        .unwrap()
+        .connect()
+        .await
+        .unwrap();
+    let mut health = tonic_health::pb::health_client::HealthClient::new(channel);
+
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
+    loop {
+        let resp = health
+            .check(HealthCheckRequest {
+                service: tbd_protocol::ENGINE_SERVICE.into(),
+            })
+            .await;
+        match resp {
+            Ok(r) if r.get_ref().status == ServingStatus::Serving as i32 => break,
+            _ if tokio::time::Instant::now() < deadline => {
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            }
+            other => panic!("engine never reported SERVING on the protocol port: {other:?}"),
+        }
+    }
+}
+
 #[tokio::test]
 async fn grpc_ping_on_same_port() {
     let stack = support::start().await;

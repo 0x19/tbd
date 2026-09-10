@@ -41,6 +41,7 @@ async fn stack_starts_in_dependency_order_and_validate_passes() {
         protocol: protocol.http_url(),
         engine: engine.http_url(),
         timeout: Duration::from_secs(5),
+        trust: tbd_chaos::tls::Trust::default(),
     })
     .await;
     assert!(report.ok(), "validate failed:\n{}", report.render());

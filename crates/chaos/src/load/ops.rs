@@ -12,8 +12,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tbd_proto::protocol::v1::{PingRequest, protocol_service_client::ProtocolServiceClient};
 use tokio::sync::Mutex;
-use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, tungstenite::Message};
+use tokio_tungstenite::tungstenite::Message;
 use tonic::transport::Channel;
+
+use crate::tls::{Trust, Ws};
 
 /// Where load goes: one protocol instance.
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -56,27 +58,29 @@ impl OpError {
     }
 }
 
-type Ws = WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>;
-
 /// Connections shared by every operation. One per load run.
 pub struct Clients {
     http: reqwest::Client,
     ws: Mutex<HashMap<String, Vec<Ws>>>,
     grpc: Mutex<HashMap<String, Channel>>,
     timeout: Duration,
+    trust: Trust,
 }
 
 impl Clients {
     /// Build with a per-request timeout.
     pub fn new(timeout: Duration) -> Self {
+        Self::with_trust(timeout, Trust::default())
+    }
+
+    /// Build with a per-request timeout and explicit TLS trust for `https`/`wss` targets.
+    pub fn with_trust(timeout: Duration, trust: Trust) -> Self {
         Self {
-            http: reqwest::Client::builder()
-                .timeout(timeout)
-                .build()
-                .unwrap_or_default(),
+            http: trust.http(Some(timeout)),
             ws: Mutex::new(HashMap::new()),
             grpc: Mutex::new(HashMap::new()),
             timeout,
+            trust,
         }
     }
 
@@ -90,13 +94,10 @@ impl Clients {
         {
             return Ok(ws);
         }
-        let (ws, _) = tokio::time::timeout(
-            self.timeout,
-            tokio_tungstenite::connect_async(target.ws_url()),
-        )
-        .await
-        .map_err(|_| OpError::Transport)?
-        .map_err(|_| OpError::Transport)?;
+        let ws = tokio::time::timeout(self.timeout, self.trust.connect_ws(&target.ws_url()))
+            .await
+            .map_err(|_| OpError::Transport)?
+            .map_err(|_| OpError::Transport)?;
         Ok(ws)
     }
 
@@ -114,7 +115,9 @@ impl Clients {
         if let Some(ch) = map.get(&target.name) {
             return Ok(ch.clone());
         }
-        let ch = tonic::transport::Endpoint::from_shared(target.http_url.clone())
+        let ch = self
+            .trust
+            .endpoint(&target.http_url)
             .map_err(|_| OpError::Transport)?
             .timeout(self.timeout)
             .connect_lazy();
@@ -290,22 +293,6 @@ impl Operation for GrpcPing {
             Err(OpError::Contract("wrong echo".into()))
         }
     }
-}
-
-/// Open a WebSocket with `TCP_NODELAY` set. `connect_async` leaves Nagle on,
-/// which stalls small frames by ~40 ms against a server with delayed ACKs.
-pub async fn connect_ws(url: &str) -> anyhow::Result<Ws> {
-    let parsed = url::Url::parse(url)?;
-    let host = parsed
-        .host_str()
-        .ok_or_else(|| anyhow::anyhow!("no host in {url}"))?;
-    let port = parsed
-        .port_or_known_default()
-        .ok_or_else(|| anyhow::anyhow!("no port in {url}"))?;
-    let stream = tokio::net::TcpStream::connect((host, port)).await?;
-    stream.set_nodelay(true)?;
-    let (ws, _) = tokio_tungstenite::client_async(url, MaybeTlsStream::Plain(stream)).await?;
-    Ok(ws)
 }
 
 fn uuid_like() -> String {

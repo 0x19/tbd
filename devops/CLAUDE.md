@@ -50,3 +50,8 @@ this file is the non-obvious part.
 
 CI builds both images on every push and pushes on `main`; `release.yml` pushes on `v*`
 tags. See `docs/ci.md`.
+- `edge/` is the only thing that faces the internet from a home/office deployment. Caddy
+  terminates TLS and forwards to Envoy's edge on the host port (18080 for the local
+  cluster). gRPC is matched on `Content-Type: application/grpc*` and gets the h2c
+  transport; everything else, WebSocket upgrades included, goes over HTTP/1.1, because
+  Caddy cannot carry an upgrade over h2c. Observability UIs are never routed here.

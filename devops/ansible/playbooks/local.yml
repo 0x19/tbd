@@ -57,7 +57,7 @@
       when: rebuild | bool
 
     - name: Import images into the cluster
-      command: k3d image import -c {{ cluster }} {{ registry }}/tbd-engine:{{ tag }} {{ registry }}/tbd-protocol:{{ tag }}
+      command: k3d image import -m direct -c {{ cluster }} {{ registry }}/tbd-engine:{{ tag }} {{ registry }}/tbd-protocol:{{ tag }}
       when: rebuild | bool
 
     - name: Apply observability

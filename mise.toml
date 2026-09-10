@@ -272,7 +272,7 @@ mise run ui:build
 docker build -f devops/docker/Dockerfile --build-arg BIN=engine   --build-arg PORT=50051 -t $IMAGE_REGISTRY/tbd-engine:dev .
 docker build -f devops/docker/Dockerfile --build-arg BIN=protocol --build-arg PORT=8080  -t $IMAGE_REGISTRY/tbd-protocol:dev .
 docker build -f devops/docker/Dockerfile --build-arg BIN=chaos    --build-arg PORT=7700  -t $IMAGE_REGISTRY/tbd-chaos:dev .
-k3d image import -c "$K3D_CLUSTER" $IMAGE_REGISTRY/tbd-engine:dev $IMAGE_REGISTRY/tbd-protocol:dev $IMAGE_REGISTRY/tbd-chaos:dev
+k3d image import -m direct -c "$K3D_CLUSTER" $IMAGE_REGISTRY/tbd-engine:dev $IMAGE_REGISTRY/tbd-protocol:dev $IMAGE_REGISTRY/tbd-chaos:dev
 """
 
 [tasks."local:deploy"]
@@ -334,6 +334,28 @@ gql()  { while [ $(date +%s) -lt $end ]; do curl -s -o /dev/null -X POST http://
 for i in 1 2 3; do rest & done; for i in 1 2 3; do grpc & done; for i in 1 2; do gql & done
 echo "loading for ${secs}s (8 workers) ..."; wait; echo "done"
 """
+
+[tasks."edge:password"]
+description = "Print a random password once and the OBS_PASSWORD_HASH line for devops/edge/.env"
+run = '''
+pw=$(openssl rand -base64 24 | tr -d '/+=' | cut -c1-24)
+hash=$(docker run --rm caddy:2 caddy hash-password --plaintext "$pw")
+echo "password: $pw"
+# docker compose expands $ in .env files; bcrypt hashes are full of them, so double each.
+echo "OBS_PASSWORD_HASH=$(printf '%s' "$hash" | sed 's/\$/$$/g')"
+'''
+
+[tasks."edge:up"]
+description = "Public TLS edge on the host: Caddy with Let's Encrypt for api/grafana/logs/profiles/metrics.<BASE_DOMAIN> (settings in devops/edge/.env)"
+run = "docker compose -f devops/edge/compose.yaml up -d && docker compose -f devops/edge/compose.yaml logs --tail=20 caddy"
+
+[tasks."edge:down"]
+description = "Stop the public edge; certificates are kept in the caddy-data volume"
+run = "docker compose -f devops/edge/compose.yaml down"
+
+[tasks."edge:logs"]
+description = "Follow the public edge's access and certificate logs"
+run = "docker compose -f devops/edge/compose.yaml logs -f caddy"
 
 [tasks."local:down"]
 description = "Delete the local cluster (PVC data under K3D_STORAGE is kept)"

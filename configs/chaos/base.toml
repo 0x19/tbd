@@ -34,6 +34,9 @@ engine = "http://127.0.0.1:50051"
 
 [validate]
 timeout = "5s"
+# Extra PEM root for https:// and wss:// targets (a staging edge, Caddy's
+# internal CA). Empty: the public roots compiled into the binary.
+ca_cert = ""
 
 [links]
 # Shown by the UI and the overview endpoint. Empty: link hidden.

@@ -9,13 +9,21 @@ belongs in the engine.
 - `state.rs`: `AppState` holds one lazy, reconnecting tonic channel to the engine.
   `engine_ready()` is the readiness check and asks the engine's health service for
   `tbd.engine.v1.EngineService`.
+- The router has an explicit `fallback`: tonic's merged router would otherwise answer
+  every unknown REST path with HTTP 200 + `grpc-status: 12`. Unknown paths are a JSON
+  404 (`ApiError::NotFound`) with route label `unmatched`; unknown gRPC methods keep the
+  gRPC answer.
 - `error.rs`: `ApiError` maps `tonic::Code` to HTTP status. This mapping is what the
   chaos error classes (`http 503` etc.) reflect; change it and update
   `docs/chaos/scenarios.md`.
 - `ws.rs`: bridges a WebSocket to an engine `Session` stream, one session per socket,
   JSON envelope `{type: data|heartbeat|close|error, ...}` outbound.
 - `grpc.rs`: the protocol's own gRPC (`ProtocolService/Ping`), health and reflection,
-  mounted into the axum router via `Routes::into_axum_router`.
+  mounted into the axum router via `Routes::into_axum_router`. Health also reports
+  `tbd.engine.v1.EngineService` (exported as `ENGINE_SERVICE`), refreshed every 5 s
+  from `engine_ready()`: behind the Envoy edge every `grpc.health.v1.Health` call lands
+  on the protocol, so this is how an edge-only client learns the engine is up. `routes()`
+  spawns that task and therefore needs a Tokio runtime.
 
 - Observability: `observe.rs` has the span factory (parents to `traceparent`, records
   `trace_id`, classifies gRPC by content type) and the metrics middleware; `state.rs`
