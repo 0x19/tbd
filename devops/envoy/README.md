@@ -17,12 +17,23 @@ streams are the normal case here, so timeouts are per route, not per connection.
 
 ## Routing on the edge
 
-Evaluated top to bottom; first match wins.
+Evaluated top to bottom; first match wins. Every route on the catch-all host needs a
+bearer JWT (audience `tbd-api`) except the health paths; the UI hosts need the browser
+login; `auth.*` and `chaos.*` are open. The filters and what they check:
+[docs/auth/README.md](../../docs/auth/README.md).
 
 | Match | To | Timeout | Retries |
 |---|---|---|---|
+| any host, `/healthz`, `/readyz`, `/api/chaos/v1/healthz` | `protocol` / `chaos`, **no token** | 5 s | none |
+| host `grafana.*` | `grafana` (Grafana, auth proxy headers from the verified ID token), **browser login** | none | none |
+| host `logs.*` (`/` → `/select/vmui/`) | `victoria-logs`, **browser login** | none | none |
+| host `profiles.*` | `pyroscope`, **browser login** | none | none |
+| host `metrics.*` (`/` → `/vmui/`) | `victoria-metrics`, **browser login** | none | none |
+| host `auth.*`: `/oauth2/`, `/userinfo`, `/.well-known/{jwks.json,openid-configuration,oauth-authorization-server}` | `hydra` (Ory Hydra public API) | 15 s | none |
+| host `auth.*`: `/self-service/`, `/sessions/`, `/schemas/`, `/.well-known/ory/` | `kratos` (Ory Kratos public API) | 15 s | none |
+| host `auth.*`, anything else | `auth-ui` (login, registration, consent pages) | 15 s | none |
 | host `chaos.api.*`, any path | `chaos`, rewritten to `/api/chaos/...` | none | none |
-| host `chaos.*` or `chaosadmin.*`, any path | `chaos` unchanged: the UI at the root, `/api/chaos/` the API | 15 s (none for `/api/chaos/`) | none |
+| host `chaos.*` (local, open) or `chaosadmin.*` (**browser login**), any path | `chaos` unchanged: the UI at the root, `/api/chaos/` the API | 15 s (none for `/api/chaos/`) | none |
 | prefix `/api/chaos/` (chaos API, SSE) | `chaos` | none | none |
 | gRPC, prefix `/tbd.engine.v1.EngineService/` | `engine` | none | `connect-failure, refused-stream, unavailable`, 2 tries, 5 s per try |
 | gRPC, anything else (`tbd.protocol.v1`, `grpc.health.v1`, reflection) | `protocol` | none | same |

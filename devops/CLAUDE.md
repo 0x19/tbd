@@ -50,6 +50,18 @@ this file is the non-obvious part.
 
 CI builds both images on every push and pushes on `main`; `release.yml` pushes on `v*`
 tags. See `docs/ci.md`.
+- `k8s/auth/` is the identity stack (Ory Hydra + Kratos). Envoy is the only thing that
+  verifies tokens; services never do. Its public host is `auth.<domain>`; the URL is the
+  token issuer, so it is deploy-time config (`auth.env`), not a runtime default.
+- `envoy/envoy.yaml` gates everything (docs/auth/README.md): bearer JWT on the API,
+  browser login (oauth2 filter + ID-token cookie) on the UI hosts, nothing on `auth.*`
+  and `chaos.*`. It contains one placeholder, `__AUTH_PUBLIC_URL__`, rendered by the
+  Envoy pod's init container (from the `tbd-edge` ConfigMap, written by `local:edge-env`)
+  and by the compose service. The OAuth2 secrets are file-based SDS from the `envoy-oauth`
+  Secret (`mise run auth:envoy-secrets`). Every overlay must provide `tbd-edge` with
+  `AUTH_PUBLIC_URL` and that Secret, or Envoy will not start.
+- Env vars added for auth: `CHAOS_TOKEN`, `CHAOS_AUTH_TOKEN_URL`, `CHAOS_AUTH_CLIENT_ID`,
+  `CHAOS_AUTH_CLIENT_SECRET` (chaos deployment, compose, ansible template).
 - `edge/` is the only thing that faces the internet from a home/office deployment. Caddy
   terminates TLS and forwards to Envoy's edge on the host port (18080 for the local
   cluster). gRPC is matched on `Content-Type: application/grpc*` and gets the h2c

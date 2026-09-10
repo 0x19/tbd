@@ -6,6 +6,7 @@
 
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
+use crate::tls::{Grpc, Trust, Ws};
 use async_trait::async_trait;
 use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
@@ -13,9 +14,6 @@ use serde_json::{Value, json};
 use tbd_proto::protocol::v1::{PingRequest, protocol_service_client::ProtocolServiceClient};
 use tokio::sync::Mutex;
 use tokio_tungstenite::tungstenite::Message;
-use tonic::transport::Channel;
-
-use crate::tls::{Trust, Ws};
 
 /// Where load goes: one protocol instance.
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -62,7 +60,7 @@ impl OpError {
 pub struct Clients {
     http: reqwest::Client,
     ws: Mutex<HashMap<String, Vec<Ws>>>,
-    grpc: Mutex<HashMap<String, Channel>>,
+    grpc: Mutex<HashMap<String, Grpc>>,
     timeout: Duration,
     trust: Trust,
 }
@@ -73,7 +71,8 @@ impl Clients {
         Self::with_trust(timeout, Trust::default())
     }
 
-    /// Build with a per-request timeout and explicit TLS trust for `https`/`wss` targets.
+    /// Build with a per-request timeout and explicit TLS trust for `https`/`wss`
+    /// targets. Pass a [`Trust::snapshot`] so the clients carry the bearer token.
     pub fn with_trust(timeout: Duration, trust: Trust) -> Self {
         Self {
             http: trust.http(Some(timeout)),
@@ -110,17 +109,15 @@ impl Clients {
             .push(ws);
     }
 
-    async fn grpc(&self, target: &Target) -> Result<Channel, OpError> {
+    async fn grpc(&self, target: &Target) -> Result<Grpc, OpError> {
         let mut map = self.grpc.lock().await;
         if let Some(ch) = map.get(&target.name) {
             return Ok(ch.clone());
         }
         let ch = self
             .trust
-            .endpoint(&target.http_url)
-            .map_err(|_| OpError::Transport)?
-            .timeout(self.timeout)
-            .connect_lazy();
+            .grpc(&target.http_url, Some(self.timeout))
+            .map_err(|_| OpError::Transport)?;
         map.insert(target.name.clone(), ch.clone());
         Ok(ch)
     }

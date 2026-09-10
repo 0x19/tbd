@@ -31,6 +31,7 @@ steps idempotently and is the template for provisioning a real box the same way.
 | `tbd` | `protocol` | 2 | REST, SSE, GraphQL, WebSocket, gRPC |
 | `tbd` | `engine` | 2 | gRPC compute |
 | `tbd` | `chaos` | 1 | `chaos serve`: API and admin UI, behind Envoy at `/api/chaos/v1` and the `chaos.localhost` host |
+| `auth` | `postgres`, `hydra`, `kratos`, `auth-ui` | 1 each | sign-in and tokens ([auth/README.md](auth/README.md)); `auth.localhost:18080` |
 | `observability` | `victoria-metrics` | 1 | metrics store and scraper |
 | `observability` | `victoria-logs` | 1 | log store |
 | `observability` | `tempo` | 1 | trace store, span metrics |
@@ -50,7 +51,7 @@ on this machine use.
 | 18080 | `tbd/envoy-lb` | Envoy edge: REST, SSE, GraphQL, WebSocket, gRPC |
 | 15051 | `tbd/envoy-lb` | Envoy engine load balancer, gRPC |
 | 18080 | `tbd/envoy-lb` | `/api/chaos/v1/` on the same edge port and the admin UI at `http://chaos.localhost:18080/` ([chaos/ui.md](chaos/ui.md)) |
-| 3000 | `observability/grafana-lb` | Grafana, admin/admin |
+| 3000 | `observability/grafana-lb` | Grafana, admin/admin on the LAN (publicly: sign-in through Envoy) |
 | 9090 | `observability/victoria-metrics-lb` | VictoriaMetrics UI and API |
 | 14317 | `observability/otel-collector-lb` | OTLP/gRPC into the collector, for processes on the host |
 | 9428 | `observability/victoria-logs-lb` | VictoriaLogs UI at `/select/vmui` and its query API |
@@ -95,16 +96,18 @@ scraped, and their logs are not collected; use the cluster deployment for those.
 
 The cluster's host ports are LAN-only. To publish it, put `devops/edge` in front: Caddy
 on the host terminates TLS with Let's Encrypt certificates and forwards one subdomain to
-each host port. The API is open; the four observability UIs sit behind one basic-auth
-credential.
+Envoy. Envoy then decides who gets in: the API needs a bearer token, the UI hosts send
+the browser to sign in at `auth.<domain>` ([auth/README.md](auth/README.md)).
 
 ```
-internet ─443─▶ FRITZ!Box (port forward) ─▶ host: Caddy ─┬─▶ api.<base>      Envoy :18080
-                                                        ├─▶ grafana.<base>  :3000   (auth)
-                                                        ├─▶ logs.<base>     :9428   (auth)
-                                                        ├─▶ profiles.<base> :4040   (auth)
-                                                        ├─▶ metrics.<base>  :9090   (auth)
-                                                        └─▶ chaosadmin.<base> Envoy :18080, chaos UI (auth)
+internet ─443─▶ FRITZ!Box (port forward) ─▶ host: Caddy (TLS) ─▶ Envoy :18080
+                                                                 ├─ api.<base>         bearer token
+                                                                 ├─ grafana.<base>     sign-in
+                                                                 ├─ logs.<base>        sign-in
+                                                                 ├─ profiles.<base>    sign-in
+                                                                 ├─ metrics.<base>     sign-in
+                                                                 ├─ chaosadmin.<base>  sign-in
+                                                                 └─ auth.<base>        the sign-in
 ```
 
 1. **Public names.** `api`, `grafana`, `logs`, `profiles`, `metrics` and `chaosadmin`
@@ -119,27 +122,27 @@ internet ─443─▶ FRITZ!Box (port forward) ─▶ host: Caddy ─┬─▶ a
    machine: another stack's Envoy holds them), set `EDGE_HTTP_PORT`/`EDGE_HTTPS_PORT`
    and forward external 80 → that port and 443 → that port.
 3. **Start the edge.** Copy `devops/edge/.env.example` to `devops/edge/.env`, fill in
-   `BASE_DOMAIN` and `ACME_EMAIL`, paste the hash from `mise run edge:password`, then
-   `mise run edge:up`. `mise run edge:logs` shows the certificates being issued.
+   `BASE_DOMAIN` and `ACME_EMAIL`, then `mise run edge:up`. `mise run edge:logs` shows the certificates being issued.
 4. **Verify from outside** (a phone off Wi-Fi, or any other network):
 
    ```sh
    chaos validate --protocol https://api.$BASE_DOMAIN --engine https://api.$BASE_DOMAIN
    ```
 
-   All 11 checks pass through the edge, including gRPC streaming and WebSocket. If the
-   name is proxied by Cloudflare, gRPC must be switched on in the zone's Network settings
-   first; see `devops/edge/README.md`. Any
+   All 11 checks pass through the edge, including gRPC streaming and WebSocket, given a
+   token (`CHAOS_AUTH_TOKEN_URL` + `CHAOS_AUTH_CLIENT_SECRET`, or `--token`; see
+   [auth/README.md](auth/README.md)). If the name is proxied by Cloudflare, gRPC must be
+   switched on in the zone's Network settings first; see `devops/edge/README.md`. Any
    `https://`/`wss://` target is verified against the public roots; a private CA (a
    staging edge, Caddy's `tls internal`) needs `--ca-cert root.crt`.
 
 What stays private: the OTLP port and the engine load balancer. Grafana, VictoriaLogs,
-Pyroscope and VictoriaMetrics are reachable on their subdomains only with the basic-auth
-credential from `devops/edge/.env`; behind Cloudflare, put Cloudflare Access in front of
-those four as well. Grafana still runs with `admin`/`admin` and anonymous Editor, so the
-credential is what protects it; tighten Grafana before sharing it. The FRITZ!Box's
-WireGuard VPN (*Internet → Permit Access → VPN (WireGuard)*) remains the way to reach
-the raw host ports.
+Pyroscope, VictoriaMetrics and the chaos admin UI are reachable on their subdomains only
+after signing in at `auth.<domain>` (Envoy's OAuth2 login, [auth/README.md](auth/README.md));
+Grafana creates a user from that identity. The API needs a bearer token. The LAN host
+ports (3000, 9428, ...) stay open on the LAN for break-glass; the FRITZ!Box's WireGuard
+VPN (*Internet → Permit Access → VPN (WireGuard)*) is the way to reach them from
+outside.
 
 Before leaving the edge up for long: enable the host firewall (`ufw` is installed but
 inactive) allowing 22, 80 and 443 from anywhere and the cluster's host ports only from

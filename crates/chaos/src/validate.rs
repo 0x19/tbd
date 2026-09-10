@@ -13,7 +13,6 @@ use tbd_proto::{
     protocol::v1::{PingRequest, protocol_service_client::ProtocolServiceClient},
 };
 use tokio_tungstenite::tungstenite::Message;
-use tonic::transport::Channel;
 use tonic_health::pb::{HealthCheckRequest, health_client::HealthClient};
 
 /// Where to point the checks.
@@ -110,7 +109,24 @@ fn all() -> Vec<(&'static str, &'static str, Check)> {
 }
 
 /// Run every check concurrently.
-pub async fn run(targets: Targets) -> Report {
+pub async fn run(mut targets: Targets) -> Report {
+    // One token for the whole run; a failure to get it fails everything at once.
+    match targets.trust.snapshot().await {
+        Ok(trust) => targets.trust = trust,
+        Err(error) => {
+            return Report {
+                checks: vec![CheckResult {
+                    name: "auth_token".into(),
+                    surface: "auth".into(),
+                    passed: false,
+                    latency_ms: 0.0,
+                    detail: format!("{error:#}"),
+                }],
+                passed: 0,
+                failed: 1,
+            };
+        }
+    }
     let mut set = tokio::task::JoinSet::new();
     for (idx, (name, surface, check)) in all().into_iter().enumerate() {
         let t = targets.clone();
@@ -280,17 +296,12 @@ async fn ws_echo(t: Targets) -> Result<String, String> {
     }
 }
 
-async fn channel(t: &Targets, url: &str) -> Result<Channel, String> {
-    t.trust
-        .endpoint(url)
-        .map_err(|e| e.to_string())?
-        .connect()
-        .await
-        .map_err(|e| e.to_string())
+fn channel(t: &Targets, url: &str) -> Result<crate::tls::Grpc, String> {
+    t.trust.grpc(url, None).map_err(|e| e.to_string())
 }
 
 async fn grpc_engine_health(t: Targets) -> Result<String, String> {
-    let mut h = HealthClient::new(channel(&t, &t.engine).await?);
+    let mut h = HealthClient::new(channel(&t, &t.engine)?);
     let resp = h
         .check(HealthCheckRequest {
             service: "tbd.engine.v1.EngineService".into(),
@@ -306,7 +317,7 @@ async fn grpc_engine_health(t: Targets) -> Result<String, String> {
 }
 
 async fn grpc_engine_evaluate(t: Targets) -> Result<String, String> {
-    let mut c = EngineServiceClient::new(channel(&t, &t.engine).await?);
+    let mut c = EngineServiceClient::new(channel(&t, &t.engine)?);
     let r = c
         .evaluate(EvaluateRequest {
             subject_id: "validate".into(),
@@ -319,7 +330,7 @@ async fn grpc_engine_evaluate(t: Targets) -> Result<String, String> {
 }
 
 async fn grpc_engine_subscribe(t: Targets) -> Result<String, String> {
-    let mut c = EngineServiceClient::new(channel(&t, &t.engine).await?);
+    let mut c = EngineServiceClient::new(channel(&t, &t.engine)?);
     let mut s = c
         .subscribe(SubscribeRequest {
             subject_id: "validate".into(),
@@ -339,7 +350,7 @@ async fn grpc_engine_subscribe(t: Targets) -> Result<String, String> {
 }
 
 async fn grpc_protocol_health(t: Targets) -> Result<String, String> {
-    let mut h = HealthClient::new(channel(&t, &t.protocol).await?);
+    let mut h = HealthClient::new(channel(&t, &t.protocol)?);
     let resp = h
         .check(HealthCheckRequest {
             service: String::new(),
@@ -350,7 +361,7 @@ async fn grpc_protocol_health(t: Targets) -> Result<String, String> {
 }
 
 async fn grpc_protocol_ping(t: Targets) -> Result<String, String> {
-    let mut c = ProtocolServiceClient::new(channel(&t, &t.protocol).await?);
+    let mut c = ProtocolServiceClient::new(channel(&t, &t.protocol)?);
     let r = c
         .ping(PingRequest {
             message: "validate".into(),

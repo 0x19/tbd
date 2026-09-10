@@ -40,6 +40,40 @@ struct TargetArgs {
     engine: Option<String>,
 }
 
+/// Bearer token for a deployed stack (Envoy requires one on the API).
+#[derive(Args, Debug)]
+struct AuthArgs {
+    /// A fixed bearer token. Default: `[auth] token`.
+    #[arg(long, env = "CHAOS_TOKEN", hide_env_values = true)]
+    token: Option<String>,
+    /// `OAuth2` token endpoint for the client-credentials grant. Default: `[auth] token_url`.
+    #[arg(long, env = "CHAOS_AUTH_TOKEN_URL")]
+    auth_token_url: Option<String>,
+    /// Client id. Default: `[auth] client_id`.
+    #[arg(long, env = "CHAOS_AUTH_CLIENT_ID")]
+    auth_client_id: Option<String>,
+    /// Client secret. Default: `[auth] client_secret`.
+    #[arg(long, env = "CHAOS_AUTH_CLIENT_SECRET", hide_env_values = true)]
+    auth_client_secret: Option<String>,
+}
+
+impl AuthArgs {
+    fn apply(self, config: &mut ChaosConfig) {
+        if let Some(v) = self.token {
+            config.auth.token = v;
+        }
+        if let Some(v) = self.auth_token_url {
+            config.auth.token_url = v;
+        }
+        if let Some(v) = self.auth_client_id {
+            config.auth.client_id = v;
+        }
+        if let Some(v) = self.auth_client_secret {
+            config.auth.client_secret = v;
+        }
+    }
+}
+
 /// Flags of `chaos serve`; each overrides one config field.
 #[derive(Args, Debug)]
 struct ServeArgs {
@@ -70,11 +104,14 @@ struct ServeArgs {
     no_stack: bool,
     #[command(flatten)]
     targets: TargetArgs,
+    #[command(flatten)]
+    auth: AuthArgs,
 }
 
 impl ServeArgs {
     fn apply(self, config: &mut ChaosConfig) {
         self.targets.apply(config);
+        self.auth.apply(config);
         if let Some(v) = self.listen {
             config.serve.listen = v;
         }
@@ -132,6 +169,8 @@ enum Command {
     Validate {
         #[command(flatten)]
         targets: TargetArgs,
+        #[command(flatten)]
+        auth: AuthArgs,
         /// Per-check timeout. Default: `[validate] timeout` from the config.
         #[arg(long, value_parser = humantime::parse_duration)]
         timeout: Option<Duration>,
@@ -186,19 +225,23 @@ async fn main() -> anyhow::Result<()> {
         }
         Command::Validate {
             targets,
+            auth,
             timeout,
             ca_cert,
             json,
         } => {
             targets.apply(&mut config);
+            auth.apply(&mut config);
             if let Some(v) = ca_cert {
                 config.validate.ca_cert = v;
             }
+            config.check()?;
+            let trust = config.trust()?;
             let report = tbd_chaos::validate::run(tbd_chaos::validate::Targets {
                 protocol: config.targets.protocol,
                 engine: config.targets.engine,
                 timeout: timeout.unwrap_or(config.validate.timeout),
-                trust: config.validate.trust()?,
+                trust,
             })
             .await;
             if json {

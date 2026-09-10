@@ -26,7 +26,8 @@ failed, `2` bad arguments.
 Hit every surface of a running stack. Checks run concurrently, each with its own timeout.
 
 ```
-chaos validate [--protocol URL] [--engine URL] [--timeout DURATION] [--ca-cert PEM] [--json]
+chaos validate [--protocol URL] [--engine URL] [--timeout DURATION] [--ca-cert PEM]
+               [--token JWT | --auth-token-url URL --auth-client-id ID --auth-client-secret SECRET] [--json]
 ```
 
 | Flag | Env | Default |
@@ -35,6 +36,8 @@ chaos validate [--protocol URL] [--engine URL] [--timeout DURATION] [--ca-cert P
 | `--engine` | `CHAOS_ENGINE_URL` | `[targets] engine`, `http://127.0.0.1:50051` |
 | `--timeout` | | `[validate] timeout`, `5s` |
 | `--ca-cert` | `CHAOS_CA_CERT` | `[validate] ca_cert`, none: `https://`/`wss://` targets verify against the public roots |
+| `--token` | `CHAOS_TOKEN` | `[auth] token`: a fixed bearer token |
+| `--auth-token-url` | `CHAOS_AUTH_TOKEN_URL` | `[auth] token_url`: client-credentials grant, with `--auth-client-id` / `--auth-client-secret` (`CHAOS_AUTH_CLIENT_ID` / `CHAOS_AUTH_CLIENT_SECRET`) |
 | `--json` | | off |
 
 Targets may be `http://` (h2c, plain WebSocket) or `https://` (TLS; WebSocket becomes
@@ -42,6 +45,13 @@ Targets may be `http://` (h2c, plain WebSocket) or `https://` (TLS; WebSocket be
 gRPC by service name, and the protocol's health service answers for the engine too.
 `--ca-cert` adds one PEM root (several concatenated are fine) for a staging edge or
 Caddy's internal CA; it never disables verification.
+
+A deployed stack sits behind Envoy, which requires a bearer token on every API route
+(docs/auth/README.md). Give validate one with `--token`, or let it fetch one with the
+client-credentials grant. The token goes on HTTP requests, the WebSocket handshake and
+gRPC metadata. Without a token every check but the health ones fails with 401; a token
+that cannot be fetched fails a single `auth_token` check up front. In-process stacks
+(`chaos up`) have no Envoy and need none.
 
 Checks, in output order:
 

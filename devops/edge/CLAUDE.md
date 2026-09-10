@@ -2,16 +2,12 @@
 
 Public TLS edge for a cluster behind a home or office router. Read `README.md` first.
 
-- One Caddyfile, env-driven (`BASE_DOMAIN`, `ACME_EMAIL`, `OBS_USER`,
-  `OBS_PASSWORD_HASH`, `EDGE_HTTP_PORT`, `EDGE_HTTPS_PORT`). Subdomain names are fixed
+- One Caddyfile, env-driven (`BASE_DOMAIN`, `ACME_EMAIL`, `EDGE_HTTP_PORT`,
+  `EDGE_HTTPS_PORT`). Subdomain names are fixed
   (`api`, `grafana`, `logs`, `profiles`, `metrics`, `chaosadmin`); only the base is
   configurable, so
   DNS, docs and dashboards can rely on them. Caddy owns certificate issuance and
   renewal; nothing here needs cert-manager or a TLS listener in Envoy.
-- `OBS_PASSWORD_HASH` in `.env` must have every `$` doubled: compose interpolates
-  `$name` in env files, so a raw bcrypt hash arrives truncated and every login is 401.
-  `mise run edge:password` prints it escaped; `docker inspect` on the container shows
-  what Caddy actually got (60 characters, starting `$2a$14$`).
 - `chaosadmin.` is matched by Envoy's own `chaos.*` / `chaosadmin.*` virtual host, which
   serves the UI at the root; Caddy passes the Host header through unchanged and adds
   nothing but TLS and the credential.
@@ -19,12 +15,10 @@ Public TLS edge for a cluster behind a home or office router. Read `README.md` f
   compose does not restart on a bind-mounted config change. The mount is the whole
   `devops/edge` directory at `/etc/caddy`: a single-file bind mount keeps the old inode
   after `sed -i` or an editor save, so Caddy would reload the previous file.
-- The `(observability)` snippet carries the basic auth for every non-API host. A new
-  UI host imports it; never add a host that bypasses it. `api.` has no auth on purpose:
-  that is the product's job.
-- Grafana runs behind the edge with its own security unchanged (anonymous Editor,
-  `admin`/`admin` locally). The basic auth is the only thing between the internet and
-  that; tighten Grafana before sharing the credential widely.
+- The `(gated)` snippet is every non-API host: one `reverse_proxy` to Envoy. There is no
+  auth in Caddy at all; Envoy's OAuth2 + JWT filters do it (docs/auth/README.md). Do not
+  add basic auth back "as a second layer": it breaks the OAuth2 callback and hides the
+  real gate.
 - Two `reverse_proxy` blocks on purpose. `@grpc` (matched on
   `Content-Type: application/grpc*`) uses the h2c transport so the h2 stream survives
   end to end. The other block is HTTP/1.1: WebSocket upgrades fail with 502 over Caddy's

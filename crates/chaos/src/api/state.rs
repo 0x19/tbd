@@ -380,6 +380,10 @@ impl AppState {
 
         let state = Arc::clone(self);
         let config = req.load;
+        let trust = self
+            .config
+            .trust()
+            .map_err(|e| ApiError::internal(e.to_string()))?;
         tokio::spawn(async move {
             let started = Instant::now();
             let (tx, rx) = mpsc::unbounded_channel();
@@ -389,7 +393,7 @@ impl AppState {
             };
             let collector = tokio::spawn(collect_load(Arc::clone(&active), rx));
             let snapshot =
-                load::run_with(&config, &targets, Arc::new(Metrics::new()), &hooks).await;
+                load::run_with(&config, &targets, Arc::new(Metrics::new()), &hooks, &trust).await;
             drop(hooks);
             record.samples = collector.await.unwrap_or_default();
             let status = if active.cancel.is_cancelled() {
@@ -415,7 +419,6 @@ impl AppState {
             timeout: req.timeout.unwrap_or(self.config.validate.timeout),
             trust: self
                 .config
-                .validate
                 .trust()
                 .map_err(|e| ApiError::internal(e.to_string()))?,
         };

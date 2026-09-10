@@ -43,7 +43,7 @@ Details of the cluster itself are in [local-cluster.md](../local-cluster.md).
 
 | URL | What |
 |---|---|
-| http://localhost:3000 | Grafana, `admin` / `admin`, anonymous viewers allowed. Dashboards tagged `tbd`. |
+| http://localhost:3000 | Grafana, `admin` / `admin` on the LAN; publicly `grafana.<domain>` signs you in through Envoy and creates your user ([auth](../auth/README.md)). Dashboards tagged `tbd`. |
 | http://localhost:9090 | VictoriaMetrics UI: PromQL, targets, series |
 | http://localhost:18080 | Envoy edge: REST, SSE, GraphQL, WebSocket, gRPC |
 | http://localhost:15051 | Envoy engine load balancer, gRPC |

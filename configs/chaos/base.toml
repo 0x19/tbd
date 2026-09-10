@@ -40,6 +40,20 @@ timeout = "5s"
 # internal CA). Empty: the public roots compiled into the binary.
 ca_cert = ""
 
+[auth]
+# Bearer token for validate and load runs against a deployed stack: Envoy admits
+# API calls only with a JWT from the identity provider (docs/auth/README.md).
+# In-process stacks (chaos up, scenarios) need none. Either a fixed token
+# (`token`, --token, CHAOS_TOKEN) or the client-credentials grant below; empty
+# token_url means no token is sent. The secret only ever comes from
+# CHAOS_AUTH_CLIENT_SECRET.
+token = ""
+token_url = ""
+client_id = "tbd-chaos"
+client_secret = ""
+scope = "tbd.api"
+audience = "tbd-api"
+
 [links]
 # Where the UI sends people. Set `domain` and every link is derived from the
 # public edge's fixed hosts (devops/edge/Caddyfile): grafana.<domain>,

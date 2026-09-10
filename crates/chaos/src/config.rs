@@ -30,8 +30,52 @@ pub struct ChaosConfig {
     pub targets: Targets,
     /// `[validate]`
     pub validate: Validate,
+    /// `[auth]`
+    #[serde(default)]
+    pub auth: AuthConfig,
     /// `[links]`
     pub links: Links,
+}
+
+/// `[auth]`: the bearer token `validate` and load runs send to a deployed
+/// stack, where Envoy requires one on every API route except health.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct AuthConfig {
+    /// A fixed token. Wins over the client-credentials fields.
+    #[serde(skip_serializing)]
+    pub token: String,
+    /// `OAuth2` token endpoint, e.g. `https://auth.example.com/oauth2/token`. Empty: no auth.
+    pub token_url: String,
+    /// Client id for the client-credentials grant.
+    pub client_id: String,
+    /// Its secret. Comes from the environment, never from a file.
+    #[serde(skip_serializing)]
+    pub client_secret: String,
+    /// Requested scope.
+    pub scope: String,
+    /// Requested audience.
+    pub audience: String,
+}
+
+impl AuthConfig {
+    /// The configured token source, if any.
+    #[must_use]
+    pub fn auth(&self) -> Option<crate::auth::Auth> {
+        if !self.token.is_empty() {
+            return Some(crate::auth::Auth::token(self.token.clone()));
+        }
+        if self.token_url.is_empty() {
+            return None;
+        }
+        Some(crate::auth::Auth::client_credentials(
+            self.token_url.clone(),
+            self.client_id.clone(),
+            self.client_secret.clone(),
+            self.scope.clone(),
+            self.audience.clone(),
+        ))
+    }
 }
 
 /// `[serve]`
@@ -154,6 +198,14 @@ pub struct Source {
 }
 
 impl ChaosConfig {
+    /// TLS trust plus the bearer token source for the configured targets.
+    ///
+    /// # Errors
+    /// The extra CA file cannot be read.
+    pub fn trust(&self) -> anyhow::Result<crate::tls::Trust> {
+        Ok(self.validate.trust()?.with_auth(self.auth.auth()))
+    }
+
     /// Load `dir/base.toml` + `dir/<env>.toml`.
     pub fn load(dir: &Path, env: &str) -> anyhow::Result<(Self, Source)> {
         let loaded = tbd_common::config::load::<Self>(dir, env)?;
@@ -188,6 +240,14 @@ impl ChaosConfig {
             ("targets.engine", &self.targets.engine),
         ] {
             url::Url::parse(u).map_err(|e| anyhow::anyhow!("{what}: {e}"))?;
+        }
+        if !self.auth.token_url.is_empty() {
+            url::Url::parse(&self.auth.token_url)
+                .map_err(|e| anyhow::anyhow!("auth.token_url: {e}"))?;
+            anyhow::ensure!(
+                !self.auth.client_id.is_empty() && !self.auth.client_secret.is_empty(),
+                "auth.token_url is set but auth.client_id / auth.client_secret (CHAOS_AUTH_CLIENT_SECRET) are not"
+            );
         }
         Ok(())
     }

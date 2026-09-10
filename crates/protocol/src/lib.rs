@@ -19,6 +19,7 @@ mod grpc;
 mod http;
 mod observe;
 mod state;
+pub mod subject;
 mod ws;
 
 use std::net::SocketAddr;
@@ -125,6 +126,7 @@ pub fn router(state: &AppState) -> Router {
         .with_state(state.clone())
         .merge(grpc::routes(state))
         .fallback(fallback)
+        .layer(axum::middleware::from_fn(subject::attach))
         .layer(axum::middleware::from_fn(observe::metrics))
         .layer(TraceLayer::new_for_http().make_span_with(observe::make_span))
 }

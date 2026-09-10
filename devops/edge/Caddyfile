@@ -4,13 +4,11 @@
 #
 # One base domain, fixed subdomains:
 #   api.<base>       Envoy edge :18080  (REST, SSE, GraphQL, WebSocket, gRPC)   public
-#   grafana.<base>   Grafana :3000                                             basic auth
-#   logs.<base>      VictoriaLogs UI :9428                                     basic auth
-#   profiles.<base>  Pyroscope :4040                                           basic auth
-#   metrics.<base>   VictoriaMetrics UI :9090                                  basic auth
-#   chaosadmin.<base>  chaos admin UI (root) + API (/api/chaos/v1), via Envoy :18080    basic auth
+#   grafana.<base>, logs.<base>, profiles.<base>, metrics.<base>, chaosadmin.<base>
+#                    Envoy :18080, which signs the browser in through Ory Hydra
+#   auth.<base>      sign-in: Ory Hydra + Kratos + login pages, via Envoy :18080      public
 #
-# Env: BASE_DOMAIN, ACME_EMAIL, OBS_USER, OBS_PASSWORD_HASH (caddy hash-password).
+# Env: BASE_DOMAIN, ACME_EMAIL.
 {
 	email {$ACME_EMAIL}
 	servers {
@@ -18,12 +16,12 @@
 	}
 }
 
-# Everything the observability hosts share: one credential for all of them,
-# logs, and an HTTP/1.1 upstream (Grafana Live and the UIs use WebSockets).
-(observability) {
+# Everything that is not the API goes through Envoy's gated virtual hosts: the
+# sign-in happens there (Ory Hydra), not here. Caddy only adds TLS.
+(gated) {
 	encode zstd gzip
-	basic_auth {
-		{$OBS_USER} {$OBS_PASSWORD_HASH}
+	reverse_proxy cluster:18080 {
+		header_up X-Forwarded-Proto https
 	}
 	log {
 		output stdout
@@ -60,34 +58,27 @@ api.{$BASE_DOMAIN} {
 }
 
 grafana.{$BASE_DOMAIN} {
-	import observability
-	reverse_proxy cluster:3000
+	import gated
 }
 
 logs.{$BASE_DOMAIN} {
-	import observability
-	redir / /select/vmui/ 302
-	reverse_proxy cluster:9428
+	import gated
 }
 
 profiles.{$BASE_DOMAIN} {
-	import observability
-	reverse_proxy cluster:4040
+	import gated
 }
 
 metrics.{$BASE_DOMAIN} {
-	import observability
-	redir / /vmui/ 302
-	reverse_proxy cluster:9090
+	import gated
 }
 
-# The chaos admin UI can stop instances and start load, so it sits behind the same
-# credential. Envoy's `chaosadmin.*` virtual host serves the UI at the root and the
-# API at /api/chaos/v1; the Host header passes through unchanged.
+# The chaos admin UI: same login as the others (Envoy's `chaosadmin.*` host).
 chaosadmin.{$BASE_DOMAIN} {
-	import observability
-	reverse_proxy cluster:18080 {
-		flush_interval -1
-		header_up X-Forwarded-Proto https
-	}
+	import gated
+}
+
+# Where people sign in: Ory Hydra, Kratos and the login pages, via Envoy.
+auth.{$BASE_DOMAIN} {
+	import gated
 }
