@@ -1,0 +1,46 @@
+# Error injection: the engine starts failing half its requests one second in,
+# then heals. Proves faults propagate through the protocol as real errors and
+# that the error rate is bounded by the injected rate and window.
+
+[scenario]
+name = "error_injection"
+description = "Engine fails 50% of requests for one second; protocol surfaces it, then recovers"
+
+[stack.engines.engine-1]
+
+[stack.protocols.protocol-1]
+engine = "engine-1"
+
+[load]
+rate = 200
+duration = "3s"
+warmup = "300ms"
+
+[[load.operations]]
+op = "rest_evaluate"
+
+[[timeline]]
+at = "1s"
+action = "set_behavior"
+service = "engine-1"
+[timeline.behavior]
+type = "error"
+kind = "unavailable"
+rate = 0.5
+
+[[timeline]]
+at = "2s"
+action = "set_behavior"
+service = "engine-1"
+[timeline.behavior]
+type = "healthy"
+
+[assertions]
+# One third of the run at 50% failure: expect roughly 17%, allow up to 30%.
+max_error_rate = 0.30
+min_requests = 400
+
+[assertions.services.engine-1]
+# Injected failures are counted engine-side; there must be some, but not all.
+min_requests = 400
+max_failed = 200

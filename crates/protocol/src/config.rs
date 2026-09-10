@@ -5,11 +5,11 @@ use std::net::SocketAddr;
 use clap::Parser;
 use tbd_common::telemetry::LogArgs;
 
-/// Gateway configuration.
+/// Protocol configuration.
 #[derive(Debug, Clone, Parser)]
 #[command(name = "protocol", version = tbd_common::VERSION, about)]
 pub struct Config {
-    /// Address the gateway binds. Serves HTTP/1.1 and h2c (gRPC) on the same port.
+    /// Address the protocol binds. Serves HTTP/1.1 and h2c (gRPC) on the same port.
     #[arg(long, env = "PROTOCOL_LISTEN_ADDR", default_value = "0.0.0.0:8080")]
     pub listen_addr: SocketAddr,
 

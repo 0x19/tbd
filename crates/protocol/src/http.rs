@@ -14,7 +14,7 @@ use axum::{
 };
 use futures::{Stream, StreamExt};
 use serde::{Deserialize, Serialize};
-use tbd_proto::engine::v1::{EvaluateRequest, SubscribeRequest, event};
+use tbd_proto::engine::v1::{EvaluateRequest, SubscribeRequest, subscribe_response};
 
 use crate::{ApiError, AppState};
 
@@ -126,8 +126,8 @@ async fn events(
             }
         };
         let body = match ev.kind? {
-            event::Kind::Heartbeat(hb) => EventBody::Heartbeat { seq: hb.seq },
-            event::Kind::ScoreUpdated(s) => EventBody::ScoreUpdated {
+            subscribe_response::Kind::Heartbeat(hb) => EventBody::Heartbeat { seq: hb.seq },
+            subscribe_response::Kind::ScoreUpdated(s) => EventBody::ScoreUpdated {
                 score: s.score,
                 stub: s.stub,
             },

@@ -1,7 +1,7 @@
 //! WebSocket bridged to an engine `Session` bidirectional stream.
 //!
-//! Client → gateway: text frames become `SessionFrame.data`.
-//! Engine → gateway → client: every frame is sent as a JSON envelope.
+//! Client → protocol: text frames become `SessionFrame.data`.
+//! Engine → protocol → client: every frame is sent as a JSON envelope.
 
 use axum::{
     Router,
@@ -14,7 +14,7 @@ use axum::{
 };
 use futures::{SinkExt, StreamExt};
 use serde::Serialize;
-use tbd_proto::engine::v1::{Close, Heartbeat, SessionFrame, session_frame};
+use tbd_proto::engine::v1::{Close, Heartbeat, SessionRequest, session_request, session_response};
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 
@@ -61,7 +61,7 @@ async fn upgrade(ws: WebSocketUpgrade, State(state): State<AppState>) -> Respons
 async fn bridge(socket: WebSocket, state: AppState) {
     let session_id = uuid::Uuid::now_v7().to_string();
     let (mut ws_tx, mut ws_rx) = socket.split();
-    let (to_engine, from_ws) = mpsc::channel::<SessionFrame>(32);
+    let (to_engine, from_ws) = mpsc::channel::<SessionRequest>(32);
 
     let mut from_engine = match state.engine().session(ReceiverStream::new(from_ws)).await {
         Ok(resp) => resp.into_inner(),
@@ -82,29 +82,33 @@ async fn bridge(socket: WebSocket, state: AppState) {
             inbound = ws_rx.next() => match inbound {
                 Some(Ok(Message::Text(text))) => {
                     seq += 1;
-                    let frame = SessionFrame {
+                    let frame = SessionRequest {
                         session_id: session_id.clone(),
                         seq,
-                        body: Some(session_frame::Body::Data(text.as_bytes().to_vec())),
+                        body: Some(session_request::Body::Data(text.as_bytes().to_vec())),
                     };
                     if to_engine.send(frame).await.is_err() { break; }
                 }
                 Some(Ok(Message::Binary(bytes))) => {
                     seq += 1;
-                    let frame = SessionFrame {
+                    let frame = SessionRequest {
                         session_id: session_id.clone(),
                         seq,
-                        body: Some(session_frame::Body::Data(bytes.to_vec())),
+                        body: Some(session_request::Body::Data(bytes.to_vec())),
                     };
                     if to_engine.send(frame).await.is_err() { break; }
                 }
                 Some(Ok(Message::Close(_))) | None => {
                     seq += 1;
-                    let _ = to_engine.send(SessionFrame {
-                        session_id: session_id.clone(),
-                        seq,
-                        body: Some(session_frame::Body::Close(Close { reason: "client closed".into() })),
-                    }).await;
+                    let _ = to_engine
+                        .send(SessionRequest {
+                            session_id: session_id.clone(),
+                            seq,
+                            body: Some(session_request::Body::Close(Close {
+                                reason: "client closed".into(),
+                            })),
+                        })
+                        .await;
                     break;
                 }
                 Some(Ok(Message::Ping(_) | Message::Pong(_))) => {}
@@ -116,13 +120,13 @@ async fn bridge(socket: WebSocket, state: AppState) {
             outbound = from_engine.next() => match outbound {
                 Some(Ok(frame)) => {
                     let msg = match frame.body {
-                        Some(session_frame::Body::Data(data)) => WsFrame::Data {
+                        Some(session_response::Body::Data(data)) => WsFrame::Data {
                             session_id: &frame.session_id,
                             seq: frame.seq,
                             data: String::from_utf8_lossy(&data).into_owned(),
                         },
-                        Some(session_frame::Body::Heartbeat(Heartbeat { seq })) => WsFrame::Heartbeat { seq },
-                        Some(session_frame::Body::Close(Close { ref reason })) => WsFrame::Close { reason },
+                        Some(session_response::Body::Heartbeat(Heartbeat { seq })) => WsFrame::Heartbeat { seq },
+                        Some(session_response::Body::Close(Close { ref reason })) => WsFrame::Close { reason },
                         None => continue,
                     };
                     if ws_tx.send(Message::Text(json(&msg).into())).await.is_err() { break; }

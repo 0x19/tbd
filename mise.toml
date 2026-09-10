@@ -68,14 +68,30 @@ run = [
 
 [tasks.test]
 description = "Unit + integration tests (nextest) and doctests"
+# The progress bar writes carriage returns, which smear into one line when
+# output goes through mise. The per-test list is what we want anyway.
+env = { NEXTEST_HIDE_PROGRESS_BAR = "1" }
 run = [
   "cargo nextest run --workspace --all-features",
   "cargo test --workspace --doc",
 ]
 
-[tasks.smoke]
-description = "Hit every surface of a running local stack (HTTP, SSE, GraphQL, WS, gRPC)"
-run = "scripts/smoke.sh"
+[tasks.validate]
+description = "Hit every surface of a running stack (CHAOS_PROTOCOL_URL / CHAOS_ENGINE_URL to override)"
+run = "cargo run -q -p tbd-chaos -- validate"
+
+[tasks."chaos:up"]
+description = "Run the dev topology (topologies/dev.toml) in one process until Ctrl-C"
+run = "cargo run -q -p tbd-chaos -- up topologies/dev.toml"
+
+[tasks."chaos:check"]
+description = "Parse and check every scenario without running it"
+run = "cargo run -q -p tbd-chaos -- check scenarios/*.toml"
+
+[tasks."chaos:run"]
+description = "Run every scenario under scenarios/ (CHAOS_ARGS for extra flags, e.g. --json)"
+env = { RUST_LOG = "warn,tbd_chaos=info,tbd_protocol::error=off,tower_http=off" }
+run = "cargo run -q -p tbd-chaos -- run --dir scenarios $CHAOS_ARGS"
 
 [tasks.doc]
 run = "cargo doc --workspace --all-features --no-deps"
@@ -99,8 +115,16 @@ run = "cargo hack check --each-feature --no-dev-deps --workspace"
 run = "cargo hack check --rust-version --workspace --all-targets --ignore-private"
 
 [tasks.ci]
-description = "Everything CI runs, in order"
-depends = ["fmt:check", "lint", "test", "doc", "deny", "typos"]
+description = "Everything CI runs, in order. Sequential on purpose: parallel cargo invocations only fight over the target dir."
+run = [
+  "mise run fmt:check",
+  "mise run typos",
+  "mise run deny",
+  "mise run lint",
+  "mise run test",
+  "mise run doc",
+  "mise run chaos:run",
+]
 
 # ----------------------------------------------------------------- run ----
 
@@ -109,7 +133,7 @@ description = "Run the engine (gRPC on ENGINE_LISTEN_ADDR)"
 run = "cargo run -p tbd-engine"
 
 [tasks."run:protocol"]
-description = "Run the protocol gateway (HTTP/WS/GraphQL/gRPC on PROTOCOL_LISTEN_ADDR)"
+description = "Run the protocol service (HTTP/WS/GraphQL/gRPC on PROTOCOL_LISTEN_ADDR)"
 run = "cargo run -p tbd-protocol"
 
 [tasks.dev]

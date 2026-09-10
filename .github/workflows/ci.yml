@@ -103,3 +103,42 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.bin }}
           cache-to: type=gha,mode=max,scope=${{ matrix.bin }}
+
+  typos:
+    name: typos
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: crate-ci/typos@v1
+
+  proto:
+    name: buf lint + format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: bufbuild/buf-action@v1
+        with:
+          input: proto
+          lint: true
+          format: true
+          breaking: false
+          push: false
+
+  doc:
+    name: rustdoc
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - run: cargo doc --locked --workspace --all-features --no-deps
+
+  scenarios:
+    name: chaos scenarios
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - run: cargo run --locked -p tbd-chaos -- check scenarios/*.toml
+      - run: cargo run --locked -p tbd-chaos -- run --dir scenarios
+        env:
+          RUST_LOG: warn,tbd_chaos=info,tbd_protocol::error=off,tower_http=off

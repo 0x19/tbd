@@ -1,7 +1,7 @@
 # tbd
 
 Rust workspace: `engine` (gRPC streaming service) and `protocol` (HTTP/WS/GraphQL/gRPC
-gateway). Read `ARCHITECTURE.md` before changing crate boundaries. `docs/design/` is
+protocol). Read `ARCHITECTURE.md` before changing crate boundaries. `docs/design/` is
 earlier idea material for a product direction, not a spec; do not "fix" it.
 
 ## Commands
@@ -10,8 +10,14 @@ earlier idea material for a product direction, not a spec; do not "fix" it.
   docs, cargo-deny, typos. Run it before saying a change is done and show the output.
 - Single test: `cargo nextest run -p tbd-protocol -E 'test(name)'`.
 - `mise run run:engine` / `mise run run:protocol`; `mise run up` for the compose stack.
+- `mise run chaos:up` runs both in one process; `mise run validate` checks every surface;
+  `mise run chaos:run` runs the scenarios. Docs under `docs/chaos/` are the tool's
+  contract: a change to a flag, output field, TOML key, behaviour or check updates the
+  matching page in the same commit. CI is described in `docs/ci.md`.
 - Protos compile without `protoc` (`protox` in `crates/proto/build.rs`); edit `/proto`
-  and rebuild. `buf lint proto` runs in `mise run lint`.
+  and rebuild. `buf lint proto` runs in `mise run lint` with buf's STANDARD rules:
+  directory matches package (`proto/tbd/engine/v1/`), services end in `Service`,
+  streaming RPCs use distinct `XRequest`/`XResponse` messages.
 
 ## Conventions that differ from defaults
 
@@ -19,7 +25,7 @@ earlier idea material for a product direction, not a spec; do not "fix" it.
   `println`/`dbg` denied; `unsafe` forbidden.
 - Stub values are labelled stubs on every surface (`stub: true`, `stub-` model versions).
   Never let a placeholder look like a measurement.
-- Gateway handlers translate and forward only. Business logic goes in the engine.
+- Protocol handlers translate and forward only. Business logic goes in the engine.
 - `tbd-common` stays transport-free; `tbd-proto` stays generated-only.
 - Integration tests boot real servers on port 0 via `serve_on`; no mocks of our own
   services.

@@ -1,0 +1,48 @@
+[package]
+name = "tbd-chaos"
+description = "Validation, load and fault-injection tool. Starts the real services in-process, drives them, injects faults on a timeline and asserts. A framework with two extension points: Service and Operation."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "chaos"
+path = "src/main.rs"
+
+[dependencies]
+tbd-common.workspace = true
+tbd-engine.workspace = true
+tbd-proto.workspace = true
+tbd-protocol.workspace = true
+
+anyhow.workspace = true
+async-trait.workspace = true
+clap.workspace = true
+futures.workspace = true
+glob.workspace = true
+hdrhistogram.workspace = true
+humantime.workspace = true
+humantime-serde.workspace = true
+rand.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-stream.workspace = true
+tokio-tungstenite.workspace = true
+toml.workspace = true
+tonic.workspace = true
+tonic-health.workspace = true
+tracing.workspace = true
+url.workspace = true
+
+[dev-dependencies]
+serde.workspace = true
+toml.workspace = true
+
+[lints]
+workspace = true

@@ -8,7 +8,10 @@ use prost::Message;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let proto_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../proto");
-    let files = ["engine/v1/engine.proto", "protocol/v1/protocol.proto"];
+    let files = [
+        "tbd/engine/v1/engine.proto",
+        "tbd/protocol/v1/protocol.proto",
+    ];
     let out_dir = PathBuf::from(env::var("OUT_DIR")?);
 
     let fds = protox::compile(files, [proto_root.as_path()])?;

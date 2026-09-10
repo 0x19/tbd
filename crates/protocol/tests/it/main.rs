@@ -1,4 +1,4 @@
-//! Integration tests: real engine + real gateway on ephemeral ports, driven
+//! Integration tests: real engine + real protocol on ephemeral ports, driven
 //! over HTTP, WebSocket, GraphQL and gRPC.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
@@ -21,7 +21,7 @@ async fn healthz_and_readyz() {
     assert_eq!(
         ready.status(),
         200,
-        "engine is up, gateway must report ready"
+        "engine is up, protocol must report ready"
     );
 }
 
@@ -131,7 +131,10 @@ async fn graphql_evaluate() {
 #[tokio::test]
 async fn grpc_ping_on_same_port() {
     let stack = support::start().await;
-    let mut client = tbd_proto::protocol::v1::gateway_client::GatewayClient::connect(stack.url(""))
+    let mut client =
+        tbd_proto::protocol::v1::protocol_service_client::ProtocolServiceClient::connect(
+            stack.url(""),
+        )
         .await
         .unwrap();
 
@@ -143,5 +146,5 @@ async fn grpc_ping_on_same_port() {
         .unwrap()
         .into_inner();
     assert_eq!(resp.message, "hello");
-    assert_eq!(resp.gateway_version, tbd_common::VERSION);
+    assert_eq!(resp.protocol_version, tbd_common::VERSION);
 }

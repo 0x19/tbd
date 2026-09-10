@@ -1,4 +1,4 @@
-//! The protocol gateway.
+//! The protocol service.
 //!
 //! One listener, four surfaces:
 //!
@@ -7,9 +7,9 @@
 //! | `/v1/*`     | REST (JSON) and server-sent events       |
 //! | `/ws`       | WebSocket bridged to an engine session   |
 //! | `/graphql`  | GraphQL (POST) and `GraphiQL` (GET)      |
-//! | gRPC        | `tbd.protocol.v1.Gateway` + health, h2c  |
+//! | gRPC        | `tbd.protocol.v1.Protocol` + health, h2c  |
 //!
-//! The gateway holds no business logic. Every request is translated and
+//! The protocol holds no business logic. Every request is translated and
 //! forwarded to the engine; every engine `stub` flag is forwarded untouched.
 
 mod config;
@@ -22,7 +22,7 @@ mod ws;
 
 use std::net::SocketAddr;
 
-use axum::Router;
+use axum::{Router, serve::ListenerExt as _};
 use tokio::net::TcpListener;
 use tower_http::trace::TraceLayer;
 
@@ -30,7 +30,7 @@ pub use config::Config;
 pub use error::ApiError;
 pub use state::AppState;
 
-/// Errors from starting or running the gateway.
+/// Errors from starting or running the protocol.
 #[derive(Debug, thiserror::Error)]
 pub enum ServeError {
     /// Could not bind the listen address.
@@ -80,6 +80,16 @@ pub async fn serve_on(
     let app = router(&state);
 
     tracing::info!(%addr, engine = %config.engine_url, version = tbd_common::VERSION, "protocol listening");
+
+    // Accepted sockets keep Nagle on by default. A WebSocket upgrade writes
+    // the 101 and the first frame back to back, so without this the first
+    // frame waits ~40 ms for the client's delayed ACK. Found by the chaos
+    // baseline scenario.
+    let listener = listener.tap_io(|tcp| {
+        if let Err(error) = tcp.set_nodelay(true) {
+            tracing::warn!(%error, "failed to set TCP_NODELAY");
+        }
+    });
 
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdown)

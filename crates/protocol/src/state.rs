@@ -1,7 +1,7 @@
 //! Shared state: the engine client. Cloning is cheap; tonic channels are
 //! reference-counted and multiplex requests.
 
-use tbd_proto::engine::v1::engine_client::EngineClient;
+use tbd_proto::engine::v1::engine_service_client::EngineServiceClient;
 use tonic::transport::{Channel, Endpoint};
 use tonic_health::pb::{HealthCheckRequest, health_client::HealthClient};
 
@@ -15,7 +15,7 @@ pub struct AppState {
 
 impl AppState {
     /// Create a lazily-connecting channel to the engine. The first RPC
-    /// connects; failures surface per request, so the gateway starts even if
+    /// connects; failures surface per request, so the protocol starts even if
     /// the engine is not up yet.
     pub fn connect_lazy(config: &Config) -> Result<Self, ServeError> {
         let channel = Endpoint::from_shared(config.engine_url.clone())
@@ -28,15 +28,15 @@ impl AppState {
     }
 
     /// A fresh engine client over the shared channel.
-    pub fn engine(&self) -> EngineClient<Channel> {
-        EngineClient::new(self.channel.clone())
+    pub fn engine(&self) -> EngineServiceClient<Channel> {
+        EngineServiceClient::new(self.channel.clone())
     }
 
     /// True when the engine reports `SERVING` for its Engine service.
     pub async fn engine_ready(&self) -> bool {
         let mut health = HealthClient::new(self.channel.clone());
         let req = HealthCheckRequest {
-            service: "tbd.engine.v1.Engine".to_owned(),
+            service: "tbd.engine.v1.EngineService".to_owned(),
         };
         match health.check(req).await {
             Ok(resp) => {

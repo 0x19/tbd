@@ -1,4 +1,4 @@
-//! Test harness: engine and gateway, each on an ephemeral port.
+//! Test harness: engine and protocol, each on an ephemeral port.
 
 #![allow(clippy::unwrap_used, clippy::expect_used, dead_code)]
 
@@ -9,9 +9,9 @@ use tokio::{net::TcpListener, sync::oneshot};
 
 pub struct Stack {
     pub engine_addr: SocketAddr,
-    pub gateway_addr: SocketAddr,
+    pub protocol_addr: SocketAddr,
     _stop_engine: oneshot::Sender<()>,
-    _stop_gateway: oneshot::Sender<()>,
+    _stop_protocol: oneshot::Sender<()>,
 }
 
 pub async fn start() -> Stack {
@@ -27,17 +27,17 @@ pub async fn start() -> Stack {
         .unwrap();
     });
 
-    let gateway_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let gateway_addr = gateway_listener.local_addr().unwrap();
-    let gateway_config = tbd_protocol::Config::parse_from([
+    let protocol_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let protocol_addr = protocol_listener.local_addr().unwrap();
+    let protocol_config = tbd_protocol::Config::parse_from([
         "protocol",
         "--engine-url",
         &format!("http://{engine_addr}"),
     ]);
-    let (stop_gateway, gateway_stopped) = oneshot::channel();
+    let (stop_protocol, protocol_stopped) = oneshot::channel();
     tokio::spawn(async move {
-        tbd_protocol::serve_on(gateway_listener, gateway_config, async {
-            let _ = gateway_stopped.await;
+        tbd_protocol::serve_on(protocol_listener, protocol_config, async {
+            let _ = protocol_stopped.await;
         })
         .await
         .unwrap();
@@ -45,18 +45,18 @@ pub async fn start() -> Stack {
 
     Stack {
         engine_addr,
-        gateway_addr,
+        protocol_addr,
         _stop_engine: stop_engine,
-        _stop_gateway: stop_gateway,
+        _stop_protocol: stop_protocol,
     }
 }
 
 impl Stack {
     pub fn url(&self, path: &str) -> String {
-        format!("http://{}{path}", self.gateway_addr)
+        format!("http://{}{path}", self.protocol_addr)
     }
 
     pub fn ws_url(&self, path: &str) -> String {
-        format!("ws://{}{path}", self.gateway_addr)
+        format!("ws://{}{path}", self.protocol_addr)
     }
 }

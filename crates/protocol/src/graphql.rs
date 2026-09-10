@@ -34,7 +34,7 @@ pub struct Evaluation {
 
 #[Object]
 impl Query {
-    /// Gateway version.
+    /// Protocol version.
     async fn version(&self) -> &'static str {
         tbd_common::VERSION
     }

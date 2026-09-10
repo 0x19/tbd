@@ -1,0 +1,46 @@
+# Engine restart: the engine is killed mid-run and brought back on the same
+# port. Proves the protocol degrades to errors instead of hanging and recovers
+# by itself once the engine returns.
+
+[scenario]
+name = "engine_restart"
+description = "Stop the engine for one second under load; protocol fails fast then recovers"
+
+[stack.engines.engine-1]
+
+[stack.protocols.protocol-1]
+engine = "engine-1"
+
+[load]
+rate = 100
+duration = "4s"
+warmup = "300ms"
+timeout = "2s"
+
+[[load.operations]]
+op = "rest_evaluate"
+
+[[timeline]]
+at = "1s"
+action = "stop"
+service = "engine-1"
+
+[[timeline]]
+at = "2s"
+action = "start"
+service = "engine-1"
+
+[[timeline]]
+at = "3s"
+action = "log"
+message = "engine has been back for one second"
+
+[assertions]
+# A quarter of the run with the engine down; everything else must succeed.
+max_error_rate = 0.40
+min_requests = 300
+
+[assertions.services.engine-1]
+# Counters belong to the restarted instance, so they cover the last two seconds.
+min_requests = 100
+max_failed = 0

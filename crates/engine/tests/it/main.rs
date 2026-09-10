@@ -7,7 +7,8 @@ mod support;
 
 use futures::StreamExt;
 use tbd_proto::engine::v1::{
-    EvaluateRequest, SessionFrame, SubscribeRequest, event, session_frame,
+    EvaluateRequest, SessionRequest, SubscribeRequest, session_request, session_response,
+    subscribe_response,
 };
 use tokio_stream::wrappers::ReceiverStream;
 
@@ -67,7 +68,7 @@ async fn subscribe_streams_monotonic_heartbeats() {
         let ev = stream.next().await.unwrap().unwrap();
         assert_eq!(ev.subject_id, "s1");
         match ev.kind {
-            Some(event::Kind::Heartbeat(hb)) => seqs.push(hb.seq),
+            Some(subscribe_response::Kind::Heartbeat(hb)) => seqs.push(hb.seq),
             other => panic!("unexpected event kind: {other:?}"),
         }
     }
@@ -92,10 +93,10 @@ async fn session_echoes_data_frames() {
         .unwrap()
         .into_inner();
 
-    tx.send(SessionFrame {
+    tx.send(SessionRequest {
         session_id: "sess-1".into(),
         seq: 1,
-        body: Some(session_frame::Body::Data(b"hello".to_vec())),
+        body: Some(session_request::Body::Data(b"hello".to_vec())),
     })
     .await
     .unwrap();
@@ -103,16 +104,16 @@ async fn session_echoes_data_frames() {
     // Skip heartbeats until the echo arrives.
     let echoed = loop {
         let frame = outbound.next().await.unwrap().unwrap();
-        if let Some(session_frame::Body::Data(data)) = frame.body {
+        if let Some(session_response::Body::Data(data)) = frame.body {
             break data;
         }
     };
     assert_eq!(echoed, b"hello");
 
-    tx.send(SessionFrame {
+    tx.send(SessionRequest {
         session_id: "sess-1".into(),
         seq: 2,
-        body: Some(session_frame::Body::Close(tbd_proto::engine::v1::Close {
+        body: Some(session_request::Body::Close(tbd_proto::engine::v1::Close {
             reason: "done".into(),
         })),
     })
@@ -126,4 +127,70 @@ async fn session_echoes_data_frames() {
         remaining += 1;
         assert!(remaining < 10, "stream did not end after Close");
     }
+}
+
+#[tokio::test]
+async fn injected_error_surfaces_as_grpc_status_and_is_counted() {
+    use tbd_common::fault::{Behavior, ErrorKind};
+    let server = support::start().await;
+    let mut client = server.client().await;
+
+    server.runtime.fault.set(Behavior::Error {
+        kind: ErrorKind::Unavailable,
+        rate: 1.0,
+        message: "chaos".into(),
+    });
+    let err = client
+        .evaluate(EvaluateRequest {
+            subject_id: "s1".into(),
+            payload: vec![],
+        })
+        .await
+        .unwrap_err();
+    assert_eq!(err.code(), tonic::Code::Unavailable);
+    assert_eq!(err.message(), "chaos");
+
+    server.runtime.fault.set(Behavior::Healthy);
+    client
+        .evaluate(EvaluateRequest {
+            subject_id: "s1".into(),
+            payload: vec![],
+        })
+        .await
+        .unwrap();
+
+    let snap = server.runtime.stats.snapshot();
+    assert_eq!(snap.requests_total, 2);
+    assert_eq!(snap.requests_failed, 1);
+}
+
+#[tokio::test]
+async fn injected_error_terminates_subscribe_stream() {
+    use tbd_common::fault::{Behavior, ErrorKind};
+    let server = support::start().await;
+    let mut client = server.client().await;
+
+    let mut stream = client
+        .subscribe(SubscribeRequest {
+            subject_id: "s1".into(),
+        })
+        .await
+        .unwrap()
+        .into_inner();
+    stream.next().await.unwrap().unwrap();
+
+    server.runtime.fault.set(Behavior::Error {
+        kind: ErrorKind::Internal,
+        rate: 1.0,
+        message: "cut".into(),
+    });
+    let mut saw_error = false;
+    while let Some(item) = stream.next().await {
+        if let Err(status) = item {
+            assert_eq!(status.code(), tonic::Code::Internal);
+            saw_error = true;
+            break;
+        }
+    }
+    assert!(saw_error, "stream must end with the injected status");
 }

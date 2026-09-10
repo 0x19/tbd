@@ -1,6 +1,6 @@
 [package]
 name = "tbd-common"
-description = "Cross-service plumbing: telemetry init, shutdown signal, shared CLI args. Must not depend on tonic, axum or any transport."
+description = "Cross-service plumbing: telemetry init, shutdown signal, shared CLI args, fault injection. Must not depend on tonic, axum or any transport."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -10,10 +10,16 @@ publish.workspace = true
 
 [dependencies]
 clap.workspace = true
+humantime-serde.workspace = true
+rand.workspace = true
+serde.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+
+[dev-dependencies]
+toml.workspace = true
 
 [lints]
 workspace = true

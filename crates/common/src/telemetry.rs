@@ -25,7 +25,12 @@ pub struct LogArgs {
     pub format: LogFormat,
 
     /// `tracing` filter directive, e.g. `info,tbd=debug`.
-    #[arg(long = "log-filter", env = "RUST_LOG", default_value = "info")]
+    #[arg(
+        long = "log-filter",
+        env = "RUST_LOG",
+        default_value = "info",
+        global = true
+    )]
     pub filter: String,
 }
 

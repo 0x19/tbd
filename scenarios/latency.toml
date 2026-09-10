@@ -1,0 +1,41 @@
+# Latency injection: the engine becomes slow mid-run. Proves the p99 moves
+# with the injected latency and the protocol keeps serving without errors.
+
+[scenario]
+name = "latency"
+description = "Engine adds 50 ms (+/- 20 ms) after one second; no errors, p99 rises"
+
+[stack.engines.engine-1]
+
+[stack.protocols.protocol-1]
+engine = "engine-1"
+
+[load]
+rate = 100
+duration = "3s"
+warmup = "300ms"
+max_in_flight = 64
+
+[[load.operations]]
+op = "rest_evaluate"
+weight = 3
+
+[[load.operations]]
+op = "grpc_ping"
+weight = 1
+
+[[timeline]]
+at = "1s"
+action = "set_behavior"
+service = "engine-1"
+[timeline.behavior]
+type = "slow"
+latency = "50ms"
+jitter = "20ms"
+
+[assertions]
+max_error_rate = 0.0
+# Slow phase covers two thirds of the run; the median lands inside it.
+max_p50_ms = 120
+max_p99_ms = 250
+min_requests = 250

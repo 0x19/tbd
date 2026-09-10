@@ -1,0 +1,199 @@
+//! Runs a set of service instances in this process.
+//!
+//! Generic over [`Service`]: the stack knows names, dependencies, addresses and
+//! lifecycle, nothing about what the services are.
+
+use std::{
+    collections::BTreeMap,
+    net::{Ipv4Addr, SocketAddr},
+    sync::Arc,
+    time::Duration,
+};
+
+use crate::service::{Instance, Peers, RequestCounts, Service};
+
+/// One entry in a topology: a service and where to bind it.
+pub struct Launcher {
+    /// How to start it.
+    pub service: Arc<dyn Service>,
+    /// Address to bind. Port 0 on first start means any free port; the port
+    /// chosen is remembered so a restart lands on the same address.
+    pub listen: SocketAddr,
+}
+
+/// Errors from running a stack.
+#[derive(Debug, thiserror::Error)]
+pub enum StackError {
+    /// A dependency cycle or a reference to an unknown instance.
+    #[error("cannot order start-up: unresolved dependencies for {0:?}")]
+    Unresolvable(Vec<String>),
+    /// A service failed to start.
+    #[error("start {name}: {source}")]
+    Start {
+        /// Instance name.
+        name: String,
+        /// Cause.
+        source: anyhow::Error,
+    },
+    /// A service started but never became ready.
+    #[error("{name} at {addr} not ready after {timeout:?}")]
+    NotReady {
+        /// Instance name.
+        name: String,
+        /// Bound address.
+        addr: SocketAddr,
+        /// How long we waited.
+        timeout: Duration,
+    },
+    /// Unknown instance name.
+    #[error("no instance named {0:?}")]
+    Unknown(String),
+    /// Instance is already running.
+    #[error("{0:?} is already running")]
+    AlreadyRunning(String),
+}
+
+/// A running (or partially running) stack.
+pub struct Stack {
+    launchers: BTreeMap<String, Launcher>,
+    instances: BTreeMap<String, Instance>,
+    ready_timeout: Duration,
+}
+
+impl std::fmt::Debug for Stack {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Stack")
+            .field("instances", &self.instances)
+            .finish_non_exhaustive()
+    }
+}
+
+/// Any free port on loopback.
+pub fn ephemeral() -> SocketAddr {
+    SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 0)
+}
+
+impl Stack {
+    /// Start every launcher in dependency order and wait for readiness.
+    pub async fn start(launchers: BTreeMap<String, Launcher>) -> Result<Self, StackError> {
+        let mut stack = Self {
+            launchers,
+            instances: BTreeMap::new(),
+            ready_timeout: Duration::from_secs(10),
+        };
+        let mut pending: Vec<String> = stack.launchers.keys().cloned().collect();
+        while !pending.is_empty() {
+            let startable: Vec<String> = pending
+                .iter()
+                .filter(|name| {
+                    stack.launchers[*name]
+                        .service
+                        .depends_on()
+                        .iter()
+                        .all(|dep| stack.instances.contains_key(dep))
+                })
+                .cloned()
+                .collect();
+            if startable.is_empty() {
+                return Err(StackError::Unresolvable(pending));
+            }
+            for name in &startable {
+                stack.start_instance(name).await?;
+            }
+            pending.retain(|n| !startable.contains(n));
+        }
+        Ok(stack)
+    }
+
+    /// Start (or restart) one instance by name on its remembered address.
+    pub async fn start_instance(&mut self, name: &str) -> Result<&Instance, StackError> {
+        if self.instances.contains_key(name) {
+            return Err(StackError::AlreadyRunning(name.to_owned()));
+        }
+        let launcher = self
+            .launchers
+            .get(name)
+            .ok_or_else(|| StackError::Unknown(name.to_owned()))?;
+        let service = Arc::clone(&launcher.service);
+        let listen = launcher.listen;
+        let instance = service
+            .start(name, listen, &Peers(&self.instances))
+            .await
+            .map_err(|source| StackError::Start {
+                name: name.to_owned(),
+                source,
+            })?;
+        if !instance.wait_ready(self.ready_timeout).await {
+            let addr = instance.addr;
+            instance.stop().await;
+            return Err(StackError::NotReady {
+                name: name.to_owned(),
+                addr,
+                timeout: self.ready_timeout,
+            });
+        }
+        tracing::info!(instance = name, kind = instance.kind, addr = %instance.addr, "ready");
+        if let Some(l) = self.launchers.get_mut(name) {
+            l.listen = instance.addr;
+        }
+        self.instances.insert(name.to_owned(), instance);
+        Ok(&self.instances[name])
+    }
+
+    /// Stop one instance by name. Its address stays reserved for a restart.
+    pub async fn stop_instance(&mut self, name: &str) -> Result<(), StackError> {
+        let instance = self
+            .instances
+            .remove(name)
+            .ok_or_else(|| StackError::Unknown(name.to_owned()))?;
+        tracing::info!(instance = name, "stopping");
+        instance.stop().await;
+        Ok(())
+    }
+
+    /// A running instance.
+    pub fn get(&self, name: &str) -> Option<&Instance> {
+        self.instances.get(name)
+    }
+
+    /// Every running instance, by name.
+    pub fn instances(&self) -> impl Iterator<Item = (&str, &Instance)> {
+        self.instances.iter().map(|(k, v)| (k.as_str(), v))
+    }
+
+    /// Running instances of one kind.
+    pub fn of_kind(&self, kind: &str) -> Vec<&Instance> {
+        self.instances.values().filter(|i| i.kind == kind).collect()
+    }
+
+    /// Request counters of every instance that exposes them.
+    pub fn request_counts(&self) -> BTreeMap<String, RequestCounts> {
+        self.instances
+            .iter()
+            .filter_map(|(n, i)| i.requests().map(|c| (n.clone(), c)))
+            .collect()
+    }
+
+    /// Stop everything, dependents first.
+    pub async fn shutdown(mut self) {
+        while !self.instances.is_empty() {
+            let running: Vec<String> = self.instances.keys().cloned().collect();
+            // A leaf is an instance no other running instance depends on.
+            let leaves: Vec<String> = running
+                .iter()
+                .filter(|name| {
+                    !running.iter().any(|other| {
+                        self.launchers
+                            .get(other)
+                            .is_some_and(|l| l.service.depends_on().contains(name))
+                    })
+                })
+                .cloned()
+                .collect();
+            let batch = if leaves.is_empty() { running } else { leaves };
+            for name in batch {
+                let _ = self.stop_instance(&name).await;
+            }
+        }
+    }
+}

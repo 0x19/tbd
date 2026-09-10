@@ -1,4 +1,4 @@
-# Local stack: engine (gRPC) + protocol (HTTP/WS/GraphQL gateway).
+# Local stack: engine (gRPC) + protocol (HTTP/WS/GraphQL protocol).
 #
 #   docker compose up --build
 #   docker compose down -v

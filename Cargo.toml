@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
 members = ["crates/*"]
-default-members = ["crates/engine", "crates/protocol"]
+default-members = ["crates/engine", "crates/protocol", "crates/chaos"]
 
 [workspace.package]
 version = "0.1.0"
@@ -17,6 +17,7 @@ tbd-common   = { path = "crates/common" }
 tbd-proto    = { path = "crates/proto" }
 tbd-engine   = { path = "crates/engine" }
 tbd-protocol = { path = "crates/protocol" }
+tbd-chaos    = { path = "crates/chaos" }
 
 # async runtime
 tokio        = { version = "1.53", features = ["rt-multi-thread", "macros", "signal", "net", "sync", "time"] }
@@ -37,10 +38,11 @@ protox            = "0.9"
 # http / ws / graphql
 axum               = { version = "0.8", features = ["ws", "http2", "json"] }
 tower              = "0.5"
-tower-http         = { version = "0.7", features = ["trace", "cors"] }
+tower-http         = { version = "0.6", features = ["trace", "cors"] }
 http               = "1"
 async-graphql      = { version = "7.2", features = ["playground"] }
 async-graphql-axum = "7.2"
+async-trait        = "0.1"
 
 # serialization
 serde      = { version = "1", features = ["derive"] }
@@ -59,10 +61,19 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 
 # misc
 uuid = { version = "1", features = ["v4", "v7"] }
+rand            = "0.9"
+humantime       = "2"
+humantime-serde = "1"
+toml            = "1"
+glob            = "0.3"
+url             = "2"
+hdrhistogram    = "7"
+comfy-table     = "7"
+owo-colors      = "4"
 
-# dev
+# clients (chaos, tests)
 reqwest           = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
-tokio-tungstenite = "0.28"
+tokio-tungstenite = "0.29"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

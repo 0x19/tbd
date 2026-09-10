@@ -12,12 +12,16 @@ ignore = [
 confidence-threshold = 0.9
 allow = [
   "MIT", "Apache-2.0", "Apache-2.0 WITH LLVM-exception", "BSD-2-Clause", "BSD-3-Clause",
-  "ISC", "Unicode-3.0", "Zlib", "MPL-2.0", "CDLA-Permissive-2.0", "OpenSSL", "Unlicense",
+  "ISC", "Unicode-3.0", "Zlib", "MPL-2.0", "CDLA-Permissive-2.0", "Unlicense",
 ]
 
 [bans]
-multiple-versions = "warn"
+# Transitive duplicate versions are a size cost, not a correctness one, and they
+# churn with every dependency update. Inspect with `cargo tree -d` when curious.
+multiple-versions = "allow"
 wildcards = "deny"
+# Workspace path dependencies carry no version on purpose; they are not wildcards.
+allow-wildcard-paths = true
 deny = [
   { crate = "openssl", reason = "rustls only" },
   { crate = "openssl-sys", reason = "rustls only" },

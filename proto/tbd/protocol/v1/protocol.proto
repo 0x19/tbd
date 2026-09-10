@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package tbd.protocol.v1;
+
+// gRPC surface of the protocol service itself, multiplexed on the same port as
+// HTTP, WebSocket and GraphQL. Add protocol-owned RPCs here; engine RPCs stay
+// in tbd.engine.v1.
+service ProtocolService {
+  rpc Ping(PingRequest) returns (PingResponse);
+}
+
+message PingRequest {
+  string message = 1;
+}
+
+message PingResponse {
+  string message = 1;
+  string protocol_version = 2;
+}

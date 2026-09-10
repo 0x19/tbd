@@ -1,6 +1,6 @@
 [package]
 name = "tbd-protocol"
-description = "The API gateway. Serves HTTP, WebSocket, GraphQL and gRPC on one port and talks to the engine over gRPC. Owns no business logic."
+description = "The protocol service. Serves HTTP, WebSocket, GraphQL and gRPC on one port and talks to the engine over gRPC. Owns no business logic."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

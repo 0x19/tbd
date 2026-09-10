@@ -1,20 +1,32 @@
 //! The engine: a gRPC streaming service.
 //!
-//! The library exposes [`serve`] and [`serve_on`] so the same server can be run
-//! from `main` and from integration tests on an ephemeral port.
+//! The library exposes [`serve`], [`serve_on`] and [`serve_with`] so the same
+//! server can be run from `main`, from integration tests on an ephemeral port,
+//! and from the chaos tool with fault injection and counters attached.
 
 mod config;
 mod service;
+pub mod stats;
 
 use std::net::SocketAddr;
 
-use tbd_proto::engine::v1::engine_server::EngineServer;
+use tbd_proto::engine::v1::engine_service_server::EngineServiceServer;
 use tokio::net::TcpListener;
-use tokio_stream::wrappers::TcpListenerStream;
-use tonic::transport::Server;
+use tonic::transport::{Server, server::TcpIncoming};
 
 pub use config::Config;
-pub use service::EngineService;
+pub use service::Engine;
+pub use stats::{Stats, StatsHandle, StatsSnapshot};
+pub use tbd_common::fault::{Behavior, FaultHandle};
+
+/// Handles an embedder keeps to observe and perturb a running engine.
+#[derive(Debug, Clone, Default)]
+pub struct Runtime {
+    /// Fault injection. Healthy unless something sets it.
+    pub fault: FaultHandle,
+    /// Request counters.
+    pub stats: StatsHandle,
+}
 
 /// Errors from starting or running the server.
 #[derive(Debug, thiserror::Error)]
@@ -56,6 +68,16 @@ pub async fn serve_on(
     config: Config,
     shutdown: impl Future<Output = ()> + Send + 'static,
 ) -> Result<(), ServeError> {
+    serve_with(listener, config, Runtime::default(), shutdown).await
+}
+
+/// Serve on an already-bound listener with the embedder's [`Runtime`] attached.
+pub async fn serve_with(
+    listener: TcpListener,
+    config: Config,
+    runtime: Runtime,
+    shutdown: impl Future<Output = ()> + Send + 'static,
+) -> Result<(), ServeError> {
     let addr = listener.local_addr().map_err(|source| ServeError::Bind {
         addr: config.listen_addr,
         source,
@@ -63,7 +85,7 @@ pub async fn serve_on(
 
     let (health_reporter, health_service) = tonic_health::server::health_reporter();
     health_reporter
-        .set_serving::<EngineServer<EngineService>>()
+        .set_serving::<EngineServiceServer<Engine>>()
         .await;
 
     let reflection = tonic_reflection::server::Builder::configure()
@@ -71,16 +93,22 @@ pub async fn serve_on(
         .register_encoded_file_descriptor_set(tonic_health::pb::FILE_DESCRIPTOR_SET)
         .build_v1()?;
 
-    let service = EngineService::new(config.heartbeat_interval());
+    let service = Engine::new(config.heartbeat_interval(), runtime);
 
     tracing::info!(%addr, version = tbd_common::VERSION, "engine listening");
+
+    // `tcp_nodelay` on the builder only applies to tonic's own listener. With
+    // a caller-supplied listener it must be set on the incoming stream, or
+    // small responses stall ~40 ms on Nagle + delayed ACK. Found by the chaos
+    // baseline scenario.
+    let incoming = TcpIncoming::from(listener).with_nodelay(Some(true));
 
     Server::builder()
         .trace_fn(|_| tracing::info_span!("grpc"))
         .add_service(health_service)
         .add_service(reflection)
-        .add_service(EngineServer::new(service))
-        .serve_with_incoming_shutdown(TcpListenerStream::new(listener), shutdown)
+        .add_service(EngineServiceServer::new(service))
+        .serve_with_incoming_shutdown(incoming, shutdown)
         .await?;
 
     tracing::info!("engine stopped");

@@ -1,0 +1,44 @@
+# Baseline: one engine, one protocol, steady load, nothing injected.
+# Proves the stack serves a mixed workload cleanly and sets the latency floor
+# other scenarios are compared against.
+
+[scenario]
+name = "baseline"
+description = "Steady mixed load through one protocol to one healthy engine"
+
+[stack.engines.engine-1]
+heartbeat = "100ms"
+
+[stack.protocols.protocol-1]
+engine = "engine-1"
+
+[load]
+rate = 200
+duration = "3s"
+warmup = "500ms"
+
+[[load.operations]]
+op = "rest_evaluate"
+weight = 4
+
+[[load.operations]]
+op = "graphql_evaluate"
+weight = 2
+
+[[load.operations]]
+op = "ws_echo"
+weight = 2
+
+[[load.operations]]
+op = "grpc_ping"
+weight = 1
+
+[assertions]
+max_error_rate = 0.0
+# Loopback floor is ~3 ms. 50 leaves headroom for CI runners but still catches
+# the 40 ms Nagle stall this scenario originally found.
+max_p99_ms = 50
+min_requests = 500
+
+[assertions.services.engine-1]
+max_failed = 0

@@ -1,0 +1,9 @@
+# Development topology for `chaos up`. Fixed ports so the URLs are predictable.
+# Scenario files use the same [stack] table plus load, timeline and assertions.
+
+[stack.engines.engine-1]
+listen = "127.0.0.1:50051"
+
+[stack.protocols.protocol-1]
+listen = "127.0.0.1:8080"
+engine = "engine-1"

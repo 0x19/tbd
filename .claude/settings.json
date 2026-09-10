@@ -107,7 +107,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "echo 'After compaction: Rust workspace with engine (gRPC) and protocol (gateway) crates. mise run ci must pass before finishing. Stubs stay labelled stub on every surface.'"
+            "command": "echo 'After compaction: Rust workspace with engine (gRPC) and protocol (protocol) crates. mise run ci must pass before finishing. Stubs stay labelled stub on every surface.'"
           }
         ]
       }
