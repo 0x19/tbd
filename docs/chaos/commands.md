@@ -26,23 +26,28 @@ failed, `2` bad arguments.
 Hit every surface of a running stack. Checks run concurrently, each with its own timeout.
 
 ```
-chaos validate [--protocol URL] [--engine URL] [--ledger URL] [--timeout DURATION] [--ca-cert PEM]
+chaos validate [--target KIND=URL]... [--timeout DURATION] [--ca-cert PEM]
                [--token JWT | --auth-token-url URL --auth-client-id ID --auth-client-secret SECRET] [--json]
 ```
 
 | Flag | Env | Default |
 |---|---|---|
-| `--protocol` | `CHAOS_PROTOCOL_URL` | `[targets] protocol`, `http://127.0.0.1:8080` in `base.toml` |
-| `--engine` | `CHAOS_ENGINE_URL` | `[targets] engine`, `http://127.0.0.1:50051` |
-| `--ledger` | `CHAOS_LEDGER_URL` | `[targets] ledger`, `http://127.0.0.1:50052`; through Envoy `http://envoy:50051` |
+| `--target KIND=URL` (repeatable) | `CHAOS_TARGETS` (comma-separated), or `CHAOS_<KIND>_URL` per kind | `[targets] <kind>` ([config.md](config.md)), else the kind's default: `http://127.0.0.1:8080` for `protocol`, `:50051` for `engine`, `:50052` for `ledger` |
+| `--protocol`, `--engine`, `--ledger` | | aliases for `--target protocol=…` and so on |
 | `--timeout` | | `[validate] timeout`, `5s` |
 | `--ca-cert` | `CHAOS_CA_CERT` | `[validate] ca_cert`, none: `https://`/`wss://` targets verify against the public roots |
 | `--token` | `CHAOS_TOKEN` | `[auth] token`: a fixed bearer token |
 | `--auth-token-url` | `CHAOS_AUTH_TOKEN_URL` | `[auth] token_url`: client-credentials grant, with `--auth-client-id` / `--auth-client-secret` (`CHAOS_AUTH_CLIENT_ID` / `CHAOS_AUTH_CLIENT_SECRET`) |
 | `--json` | | off |
 
+A target is one URL per *kind* ([kinds.md](kinds.md)); every check of that kind runs
+against it. Precedence, lowest first: the config, `CHAOS_<KIND>_URL`, `--target` (or
+`CHAOS_TARGETS`), the aliases. A `KIND` that is not a registered kind with a validate
+target is a usage error (exit 2) naming the kinds that are. `configs/chaos/cluster.toml`
+holds the local k3d cluster's URLs, so `TBD_ENV=cluster chaos validate` needs no flags.
+
 Targets may be `http://` (h2c, plain WebSocket) or `https://` (TLS; WebSocket becomes
-`wss://`). Both URLs can be the same public edge, `https://api.<base>`: Envoy routes
+`wss://`). Every URL can be the same public edge, `https://api.<base>`: Envoy routes
 gRPC by service name, and the protocol's health service answers for the engine too.
 `--ca-cert` adds one PEM root (several concatenated are fine) for a staging edge or
 Caddy's internal CA; it never disables verification.
@@ -54,24 +59,11 @@ gRPC metadata. Without a token every check but the health ones fails with 401; a
 that cannot be fetched fails a single `auth_token` check up front. In-process stacks
 (`chaos up`) have no Envoy and need none.
 
-Checks, in output order:
-
-| Name | Surface | Passes when |
-|---|---|---|
-| `http_healthz` | HTTP | `GET /healthz` is 2xx |
-| `http_readyz` | HTTP | `GET /readyz` is 2xx, meaning the protocol reaches the engine |
-| `rest_evaluate` | REST | `POST /v1/evaluate` returns the subject and a boolean `stub` |
-| `sse_events` | SSE | `GET /v1/subjects/{id}/events` delivers two events |
-| `graphql_evaluate` | GraphQL | the query has no errors and `engineReady` is true |
-| `ws_echo` | WebSocket | a text frame on `/ws` comes back as a `data` frame |
-| `grpc_engine_health` | gRPC | `grpc.health.v1.Health/Check` on the engine reports `SERVING` |
-| `grpc_engine_evaluate` | gRPC | `EngineService/Evaluate` answers |
-| `grpc_engine_subscribe` | gRPC | `EngineService/Subscribe` delivers two events |
-| `grpc_protocol_health` | gRPC | health on the protocol port answers |
-| `grpc_protocol_ping` | gRPC | `ProtocolService/Ping` echoes the message |
-| `grpc_ledger_ping` | gRPC | `LedgerService/Ping` echoes the message and reports `stub`; the ledger has no named health check through Envoy's shared listener |
-
-The two streaming checks wait for two events, so they take about one heartbeat interval.
+The checks belong to the kinds and run in registry order, engine, protocol, ledger,
+then each kind's declaration order; the full table with what each passes on is
+[kinds.md](kinds.md), generated from the code (`chaos kinds --md`). A kind whose target
+URL is missing fails each of its checks with `no target URL for kind …`. The two
+streaming checks wait for two events, so they take about one heartbeat interval.
 
 Text output, one line per check:
 
@@ -101,7 +93,8 @@ JSON output:
 ## `chaos up`
 
 Start the `[stack]` of a topology or scenario file in this process and keep it running
-until Ctrl-C. Prints each instance's address and a ready-made `chaos validate` line.
+until Ctrl-C. Prints each instance's address and surface, and a ready-made
+`chaos validate --target …` line for the kinds present.
 
 ```
 chaos up [FILE]          # default: [paths] topology, topologies/dev.toml
@@ -194,7 +187,7 @@ in-process, until Ctrl-C. The API is documented in [api.md](api.md).
 chaos serve [--listen ADDR] [--base-path PATH] [--ui-dir DIR] [--topology FILE]
             [--scenarios DIR] [--results DIR] [--schedules FILE] [--stack-file FILE]
             [--slack-webhook URL]
-            [--no-stack] [--protocol URL] [--engine URL]
+            [--no-stack] [--target KIND=URL]...
 ```
 
 | Flag | Env | Default |
@@ -210,7 +203,7 @@ chaos serve [--listen ADDR] [--base-path PATH] [--ui-dir DIR] [--topology FILE]
 | `--stack-file` | `CHAOS_STACK_FILE` | `[paths] stack`, `.chaos/stack.json` |
 | `--slack-webhook` | `CHAOS_SLACK_WEBHOOK` | `[notify.slack] webhook`, none: run notifications off |
 | `--no-stack` | | off; sets `[serve] start_stack = false` |
-| `--protocol`, `--engine`, `--ledger` | `CHAOS_PROTOCOL_URL`, `CHAOS_ENGINE_URL`, `CHAOS_LEDGER_URL` | `[targets]`, the defaults for API validate |
+| `--target KIND=URL`, and the aliases | `CHAOS_TARGETS`, `CHAOS_<KIND>_URL` | `[targets]`, the defaults for API validate; same rules as `chaos validate` |
 
 On start it prints the API URL, the UI URL when configured, and each stack instance,
 loads the schedules file and starts firing the enabled ones. It
@@ -222,9 +215,26 @@ with `--ui-dir ui/chaos/out`.
 
 Print the effective configuration for `--env` as TOML, preceded by comments naming the
 files that were merged. Exits 1 when a file is missing, does not parse, or has an
-unknown key.
+unknown key. `[targets]` prints every kind with a validate target, defaults filled in.
 
 ```
 chaos config
 chaos --env dev config
 ```
+
+## `chaos kinds`
+
+List the registered service kinds and the validate checks: what `[stack.<plural>.X]`
+tables exist, which kinds take faults, counters and load, which can be added at runtime,
+their validate target and fields, and every check with its kind.
+
+```
+chaos kinds          # text, one line per kind then one per check
+chaos kinds --json   # {"kinds": [KindDescriptor], "checks": [{"name","surface","kind"}]}
+chaos kinds --md     # the Markdown tables of docs/chaos/kinds.md
+```
+
+`KindDescriptor` is the object `GET /overview` returns under `kinds`
+([api.md](api.md#overview)). `mise run chaos:docs` writes `--md` into
+`docs/chaos/kinds.md`; `chaos:docs:check` in `mise run ci` fails when it is stale.
+Neither config nor logging is touched, so the output is safe to pipe.

@@ -150,12 +150,20 @@ pub fn apply(
                     continue;
                 }
                 let existing = ws.read(&reg.path)?;
-                let new =
+                let mut new =
                     reg.apply(existing.as_deref())
                         .map_err(|reason| ScaffoldError::Apply {
                             id: reg.id.clone(),
                             reason,
                         })?;
+                // An edited Rust file is left as rustfmt would (it sorts
+                // `pub mod` lines), so `cargo fmt --check` stays green.
+                if !is_create
+                    && reg.path.extension().is_some_and(|e| e == "rs")
+                    && let Some(formatted) = crate::fmt::rustfmt(&new)
+                {
+                    new = formatted;
+                }
                 ws.write(&reg.path, new);
                 if is_create {
                     outcome.created.push(reg.path.clone());

@@ -14,6 +14,7 @@ name. If you add a check, add it in both places; this page lists the mapping.
 | `lint` | `lint` | any clippy warning (pedantic is on), any `buf lint` finding |
 | `test` | `test` | any failing test, `cargo nextest` plus doctests |
 | `doc` | `doc` | any rustdoc warning, broken intra-doc links included |
+| `chaos:docs:check` | `scenarios` | `docs/chaos/kinds.md` differs from `chaos kinds --md` (run `mise run chaos:docs` and commit) |
 | `chaos:run` | `scenarios` | any scenario under `scenarios/` failing an assertion or timeline action |
 | `ui:check` | `ui` | `ui/chaos`: prettier drift, an eslint finding (React Compiler rules included), a type error; CI also runs `pnpm build` |
 | not in the gate | `docker` | any image failing to build; on `main` also failing to push. The chaos image build runs `pnpm build` first so it carries the UI |
@@ -51,7 +52,7 @@ commands above still work if those tools are on `PATH`.
 | `lint` clippy | fix it; a targeted `#[allow(clippy::...)]` with a comment is acceptable when the lint is wrong for that spot |
 | `lint` buf | protos follow buf's STANDARD rules: directory matches package, services end in `Service`, RPC messages are `<Rpc>Request` / `<Rpc>Response` |
 | `doc` | usually a `[`Name`]` link to a private or renamed item |
-| `scenarios` | run `mise run chaos:run` locally; the report says which assertion failed and by how much. See [chaos/scenarios.md](chaos/scenarios.md) |
+| `scenarios` | run `mise run chaos:run` locally; the report says which assertion failed and by how much. See [chaos/scenarios.md](chaos/scenarios.md). A `kinds.md` diff: `mise run chaos:docs` and commit |
 | `ui` prettier | `cd ui/chaos && pnpm format` |
 | `ui` eslint `set-state-in-effect` | derive the value or move the `setState` into the callback that learns the news; see `src/lib/api/hooks.ts` |
 

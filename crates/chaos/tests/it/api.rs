@@ -410,32 +410,56 @@ async fn ui_at_the_root_serves_pages_next_to_the_api() {
 #[tokio::test]
 async fn validate_runs_against_config_targets_and_is_recorded() {
     let s = boot().await;
-    // The serve stack has no ledger; run one beside it for the ledger check.
-    let ledger_stack: tbd_chaos::topology::StackConfig =
-        toml::from_str("[stack.ledgers.ledger-1]\n")
-            .map(|t: tbd_chaos::topology::TopologyFile| t.stack)
-            .unwrap();
-    let ledger_stack = ledger_stack.start().await.unwrap();
-    let ledger_url = ledger_stack.get("ledger-1").unwrap().http_url();
-    // The test stack is on ephemeral ports; point validate at it explicitly.
+    // The serve stack is engine + protocol on ephemeral ports; every other
+    // kind with a target runs beside it. Point validate at all of them.
     let stack = s.state.stack_info().await.unwrap();
-    let url = |kind: &str| {
-        format!(
-            "http://{}",
-            stack.iter().find(|i| i.kind == kind).unwrap().addr
-        )
-    };
-    let (status, record) = s
-        .post(
-            "/validate",
-            json!({"protocol": url("protocol"), "engine": url("engine"), "ledger": ledger_url}),
-        )
-        .await;
+    let mut side = tbd_chaos::topology::StackConfig::default();
+    for (kind, _) in tbd_chaos::kinds::with_target() {
+        if stack.iter().all(|i| i.kind != kind.name) {
+            side.insert(&format!("{}-1", kind.name), kind, toml::Table::new())
+                .unwrap();
+        }
+    }
+    let side = side.start().await.unwrap();
+    let mut body = serde_json::Map::new();
+    for (kind, _) in tbd_chaos::kinds::with_target() {
+        let url = match stack.iter().find(|i| i.kind == kind.name) {
+            Some(i) => format!("http://{}", i.addr),
+            None => side.get(&format!("{}-1", kind.name)).unwrap().http_url(),
+        };
+        body.insert(kind.name.to_owned(), Value::String(url));
+    }
+    // Explicit nulls, as a stored schedule sends them, mean "the config's".
+    body.insert("timeout".into(), Value::Null);
+    let (status, record) = s.post("/validate", Value::Object(body)).await;
     assert_eq!(status, 200, "{record}");
     assert_eq!(record["status"], "passed");
     assert_eq!(record["validate"]["failed"], 0);
     let (_, overview) = s.get("/overview").await;
     assert_eq!(overview["last_validate"]["status"], "passed");
+    // The request is recorded as the target map it was.
+    assert_eq!(record["request"]["timeout"], "5s", "{}", record["request"]);
+    // A key that is not a kind with a target is rejected before anything runs.
+    let (status, err) = s.post("/validate", json!({"widget": "http://x"})).await;
+    assert_eq!(status, 422, "{err}");
+    let (status, err) = s.post("/validate", json!({"engine": "not a url"})).await;
+    assert_eq!(status, 422, "{err}");
+    // The overview describes the kinds and the checks the UI renders from.
+    let kinds = overview["kinds"].as_array().unwrap();
+    assert_eq!(kinds.len(), tbd_chaos::kinds::ALL.len());
+    let protocol = kinds.iter().find(|k| k["name"] == "protocol").unwrap();
+    assert_eq!(protocol["dependency_kind"], "engine");
+    assert_eq!(protocol["fields"][0]["kind"], "instance_of");
+    assert_eq!(
+        overview["validate"]["checks"].as_array().unwrap().len(),
+        tbd_chaos::validate::checks().count()
+    );
+    assert!(
+        overview["config"]["targets"]["ledger"].is_string(),
+        "{}",
+        overview["config"]
+    );
+    side.shutdown().await;
 }
 
 #[tokio::test]
@@ -671,16 +695,18 @@ min_requests = 100000
     assert_eq!(seen.lock().await.len(), 2, "the passed run posted");
 }
 
+/// Instance names of a `/stack` body.
+fn names(v: &Value) -> Vec<String> {
+    v.as_array()
+        .unwrap()
+        .iter()
+        .map(|i| i["name"].as_str().unwrap().to_owned())
+        .collect()
+}
+
 #[tokio::test]
 async fn instances_can_be_replicated_added_and_removed_at_runtime() {
     let s = boot().await;
-    let names = |v: &Value| -> Vec<String> {
-        v.as_array()
-            .unwrap()
-            .iter()
-            .map(|i| i["name"].as_str().unwrap().to_owned())
-            .collect()
-    };
 
     // A replica of the protocol: same engine, fresh port, marked added.
     let (status, body) = s.post("/stack/protocol-1/clone", json!({})).await;
@@ -728,6 +754,15 @@ async fn instances_can_be_replicated_added_and_removed_at_runtime() {
         .post("/stack", json!({"kind": "engine", "name": "engine-1"}))
         .await;
     assert_eq!(status, 409, "duplicate name");
+    let (status, err) = s.post("/stack", json!({"kind": "widget"})).await;
+    assert_eq!(status, 422, "unknown kind: {err}");
+    assert!(err["error"].as_str().unwrap().contains("engine"), "{err}");
+    let (status, err) = s
+        .post("/stack", json!({"kind": "engine", "bogus": 1}))
+        .await;
+    assert_eq!(status, 422, "unknown field: {err}");
+    let (status, err) = s.post("/stack", json!({"kind": "protocol"})).await;
+    assert_eq!(status, 422, "missing dependency field: {err}");
 
     // Load with no explicit targets spreads over every running protocol.
     let (status, run) = s
@@ -770,10 +805,57 @@ async fn instances_can_be_replicated_added_and_removed_at_runtime() {
     );
 }
 
+/// Every addable kind can be added with an empty spec (dependencies pointed
+/// at the running `<dep>-1`), then cloned, then removed; the added instances
+/// are running, of that kind, and gone again afterwards.
+#[tokio::test]
+async fn any_registered_kind_can_be_added_cloned_and_removed() {
+    let s = boot().await;
+    for kind in tbd_chaos::kinds::ALL.iter().filter(|k| k.addable) {
+        let mut body = serde_json::Map::new();
+        body.insert("kind".into(), Value::String(kind.name.to_owned()));
+        body.insert("name".into(), Value::String(format!("{}-x", kind.name)));
+        for f in kind.fields {
+            if let tbd_chaos::kinds::FieldKind::InstanceOf(dep) = f.kind {
+                body.insert(f.name.to_owned(), Value::String(format!("{dep}-1")));
+            }
+        }
+        let (status, stack) = s.post("/stack", Value::Object(body)).await;
+        assert_eq!(status, 201, "{}: {stack}", kind.name);
+        let added = stack
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|i| i["name"] == format!("{}-x", kind.name))
+            .unwrap();
+        assert_eq!(added["kind"], kind.name);
+        assert_eq!(added["running"], true);
+        assert_eq!(added["added"], true);
+        let (status, stack) = s
+            .post(&format!("/stack/{}-x/clone", kind.name), json!({}))
+            .await;
+        assert_eq!(status, 201, "{}: {stack}", kind.name);
+        assert!(
+            names(&stack).contains(&format!("{}-x-2", kind.name)),
+            "{stack}"
+        );
+        for name in [format!("{}-x-2", kind.name), format!("{}-x", kind.name)] {
+            let (status, _) = s
+                .send(reqwest::Method::DELETE, &format!("/stack/{name}"), None)
+                .await;
+            assert_eq!(status, 200, "{name}");
+        }
+    }
+    let (_, body) = s.get("/stack").await;
+    assert_eq!(names(&body), ["engine-1", "protocol-1"]);
+}
+
 #[tokio::test]
 async fn added_instances_come_back_after_a_restart() {
     let s = boot().await;
     let (status, _) = s.post("/stack/protocol-1/clone", json!({})).await;
+    assert_eq!(status, 201);
+    let (status, _) = s.post("/stack", json!({"kind": "ledger"})).await;
     assert_eq!(status, 201);
     let (status, _) = s
         .post(
@@ -817,6 +899,7 @@ async fn added_instances_come_back_after_a_restart() {
     assert_eq!(
         running,
         [
+            ("ledger-1".to_owned(), true),
             ("on-spare".to_owned(), true),
             ("protocol-2".to_owned(), true),
             ("spare".to_owned(), true)

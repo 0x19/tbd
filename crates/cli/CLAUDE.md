@@ -19,9 +19,14 @@ whose bin name (`tbd`) differs from its directory (`cli`); it is never an image,
   optionally scoped to the first match after another line) and `Status`.
 - `registry.rs`: **the registration table, as data, in apply order.** One function,
   one list; `scaffold`, `check` and `list` iterate it. `CHECKLIST` is what it cannot do
-  safely (chaos topology, targets, validate, UI schema).
+  safely (`cargo check` for the lockfile, `chaos:docs`). The chaos side is one kind
+  module (`templates/chaos/kind.rs.tmpl`, a copy of `crates/chaos/src/kinds/ledger.rs`
+  with tokens) plus registrations for the registry line, the dev topology, the
+  `[targets]` entries and `CHAOS_<NAME>_URL`; the admin UI needs nothing, it reads
+  kinds from the API.
 - `scaffold.rs`: two-phase plan/apply over the `repo.rs` cache; nothing reaches disk
-  unless every registration resolves; TOML files are re-parsed before commit.
+  unless every registration resolves; TOML files are re-parsed before commit; an
+  edited `.rs` file goes through rustfmt so `pub mod` lines land sorted.
 - `fmt.rs`: generated `.rs` content goes through `rustfmt` before it is compared or
   written, so a re-run recognises its own files.
 

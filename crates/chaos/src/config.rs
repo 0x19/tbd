@@ -4,12 +4,15 @@
 //! `<env>.toml`. Flags override fields after loading; see `main.rs`.
 
 use std::{
+    collections::BTreeMap,
     net::SocketAddr,
     path::{Path, PathBuf},
     time::Duration,
 };
 
 use serde::{Deserialize, Serialize};
+
+use crate::kinds;
 
 pub use tbd_common::config::{DEFAULT_ENV, ENV_VAR};
 
@@ -154,8 +157,8 @@ pub struct Paths {
     /// Schedules file (`chaos serve` cron jobs). Missing: no schedules yet.
     #[serde(default = "default_schedules")]
     pub schedules: PathBuf,
-    /// Instances added to the serve stack at runtime (replicas, new engines
-    /// and protocols), re-added on start. Missing: none yet.
+    /// Instances added to the serve stack at runtime (replicas, new instances
+    /// of any kind), re-added on start. Missing: none yet.
     #[serde(default = "default_stack_file")]
     pub stack: PathBuf,
 }
@@ -168,16 +171,73 @@ fn default_schedules() -> PathBuf {
     PathBuf::from(".chaos/schedules.json")
 }
 
-/// `[targets]`
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct Targets {
-    /// Protocol base URL.
-    pub protocol: String,
-    /// Engine gRPC URL.
-    pub engine: String,
-    /// Ledger gRPC URL. Through Envoy, the internal listener (`http://envoy:50051`).
-    pub ledger: String,
+/// `[targets]`: one URL per kind that `validate` targets, keyed by kind
+/// name. A kind without an entry uses its registry default; a key that is
+/// not such a kind fails [`ChaosConfig::check`].
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(transparent)]
+pub struct Targets(BTreeMap<String, String>);
+
+impl Targets {
+    /// The URL for a kind: configured, else the registry default.
+    #[must_use]
+    pub fn url(&self, kind: &str) -> Option<String> {
+        self.0.get(kind).cloned().or_else(|| {
+            kinds::by_name(kind)
+                .and_then(|k| k.target.as_ref())
+                .map(|t| t.default_url.to_owned())
+        })
+    }
+
+    /// Override the URL for a kind.
+    pub fn set(&mut self, kind: &str, url: String) {
+        self.0.insert(kind.to_owned(), url);
+    }
+
+    /// Every kind with a target and its effective URL, registry order.
+    #[must_use]
+    pub fn resolved(&self) -> Vec<(&'static str, String)> {
+        kinds::with_target()
+            .map(|(k, t)| {
+                (
+                    k.name,
+                    self.0
+                        .get(k.name)
+                        .cloned()
+                        .unwrap_or_else(|| t.default_url.to_owned()),
+                )
+            })
+            .collect()
+    }
+
+    /// Keys and URLs are well-formed.
+    ///
+    /// # Errors
+    /// A key is not a kind with a validate target, or a URL does not parse.
+    pub fn check(&self) -> anyhow::Result<()> {
+        for (kind, url) in &self.0 {
+            anyhow::ensure!(
+                kinds::by_name(kind).is_some_and(|k| k.target.is_some()),
+                "targets.{kind}: not a kind with a validate target; kinds with one: {}",
+                kinds::with_target()
+                    .map(|(k, _)| k.name)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+            url::Url::parse(url).map_err(|e| anyhow::anyhow!("targets.{kind}: {e}"))?;
+        }
+        Ok(())
+    }
+}
+
+/// Serialised resolved, so `chaos config` and `/overview` show every kind.
+impl Serialize for Targets {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        self.resolved()
+            .into_iter()
+            .collect::<BTreeMap<_, _>>()
+            .serialize(s)
+    }
 }
 
 /// `[validate]`
@@ -304,13 +364,7 @@ impl ChaosConfig {
             self.serve.base_path != self.serve.ui_path,
             "serve.base_path and serve.ui_path must differ"
         );
-        for (what, u) in [
-            ("targets.protocol", &self.targets.protocol),
-            ("targets.engine", &self.targets.engine),
-            ("targets.ledger", &self.targets.ledger),
-        ] {
-            url::Url::parse(u).map_err(|e| anyhow::anyhow!("{what}: {e}"))?;
-        }
+        self.targets.check()?;
         if !self.auth.token_url.is_empty() {
             url::Url::parse(&self.auth.token_url)
                 .map_err(|e| anyhow::anyhow!("auth.token_url: {e}"))?;

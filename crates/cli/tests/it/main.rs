@@ -46,6 +46,16 @@ fn every_template_renders_without_leftover_tokens() {
             assert!(body.contains("package tbd.zeta.v1;"));
             assert!(body.contains("service ZetaService {"));
         }
+        if out.starts_with("crates/chaos/src/kinds/") {
+            assert!(body.contains("pub static KIND: Kind"), "{out}");
+            assert!(body.contains("name: \"zeta\""), "{out}");
+            assert!(body.contains("plural: \"zetas\""), "{out}");
+            assert!(body.contains("grpc_zeta_ping"), "{out}");
+            assert!(
+                body.contains("default_url: \"http://127.0.0.1:50099\""),
+                "{out}"
+            );
+        }
     }
 }
 

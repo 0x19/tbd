@@ -59,24 +59,31 @@ impl ScenarioFile {
         self.stack.check()?;
         if let Some(load) = &self.load {
             load.check()?;
-            if self.stack.protocols.is_empty() {
-                return Err("load needs at least one protocol instance to target".into());
+            if !self.stack.instances.values().any(|i| i.kind.load_target) {
+                return Err(format!(
+                    "load needs at least one instance load can target ({})",
+                    crate::kinds::ALL
+                        .iter()
+                        .filter(|k| k.load_target)
+                        .map(|k| k.name)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ));
             }
         }
         for event in &self.timeline {
             if let Some(service) = event.service()
-                && !self.stack.engines.contains_key(service)
-                && !self.stack.protocols.contains_key(service)
+                && self.stack.get(service).is_none()
             {
                 return Err(format!("timeline references unknown service {service:?}"));
             }
-            if matches!(event, TimelineEvent::SetBehavior { service, .. } if !self.stack.engines.contains_key(service))
+            if matches!(event, TimelineEvent::SetBehavior { service, .. } if !self.stack.get(service).is_some_and(|i| i.kind.fault))
             {
                 return Err("set_behavior targets an instance without fault injection".into());
             }
         }
         for name in self.assertions.services.keys() {
-            if !self.stack.engines.contains_key(name) && !self.stack.protocols.contains_key(name) {
+            if self.stack.get(name).is_none() {
                 return Err(format!("assertions reference unknown service {name:?}"));
             }
         }

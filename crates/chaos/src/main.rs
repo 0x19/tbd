@@ -3,11 +3,14 @@
 
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
-use std::{net::SocketAddr, path::PathBuf, time::Duration};
+use std::{collections::BTreeMap, net::SocketAddr, path::PathBuf, time::Duration};
 
 use anyhow::Context;
 use clap::{Args, Parser, Subcommand};
-use tbd_chaos::config::{self, ChaosConfig, Source};
+use tbd_chaos::{
+    config::{self, ChaosConfig, Source},
+    kinds,
+};
 use tbd_common::telemetry::TelemetryArgs;
 
 #[derive(Parser)]
@@ -29,18 +32,48 @@ struct Cli {
     public_domain: Option<String>,
 }
 
-/// Flags that override `[targets]` in the config.
+/// Flags that override `[targets]` in the config. Precedence, lowest first:
+/// the config, `CHAOS_<KIND>_URL` per kind, `--target` (or `CHAOS_TARGETS`),
+/// the per-kind aliases.
 #[derive(Args, Debug, Clone)]
 struct TargetArgs {
-    /// Protocol base URL.
-    #[arg(long, env = "CHAOS_PROTOCOL_URL")]
+    /// Target URL for a kind, as `KIND=URL`; repeatable. `CHAOS_<KIND>_URL`
+    /// sets one kind from the environment. Kinds: see `chaos kinds`.
+    #[arg(
+        long = "target",
+        value_name = "KIND=URL",
+        value_parser = parse_target,
+        env = "CHAOS_TARGETS",
+        value_delimiter = ','
+    )]
+    targets: Vec<(String, String)>,
+    /// Alias for `--target protocol=URL`.
+    #[arg(long, value_name = "URL")]
     protocol: Option<String>,
-    /// Engine gRPC URL.
-    #[arg(long, env = "CHAOS_ENGINE_URL")]
+    /// Alias for `--target engine=URL`.
+    #[arg(long, value_name = "URL")]
     engine: Option<String>,
-    /// Ledger gRPC URL.
-    #[arg(long, env = "CHAOS_LEDGER_URL")]
+    /// Alias for `--target ledger=URL`.
+    #[arg(long, value_name = "URL")]
     ledger: Option<String>,
+}
+
+/// `KIND=URL` where `KIND` is a registered kind with a validate target.
+fn parse_target(s: &str) -> Result<(String, String), String> {
+    let (kind, url) = s
+        .split_once('=')
+        .ok_or_else(|| format!("{s:?}: expected KIND=URL"))?;
+    let known = kinds::with_target()
+        .map(|(k, _)| k.name)
+        .collect::<Vec<_>>()
+        .join(", ");
+    if kinds::by_name(kind).is_none_or(|k| k.target.is_none()) {
+        return Err(format!(
+            "{kind:?}: not a kind with a validate target; one of {known}"
+        ));
+    }
+    url::Url::parse(url).map_err(|e| format!("{kind}: {e}"))?;
+    Ok((kind.to_owned(), url.to_owned()))
 }
 
 /// Bearer token for a deployed stack (Envoy requires one on the API).
@@ -209,6 +242,15 @@ enum Command {
     Serve(ServeArgs),
     /// Print the effective configuration for the environment as TOML.
     Config,
+    /// List the service kinds and the validate checks.
+    Kinds {
+        /// Emit JSON: `{"kinds": [...], "checks": [...]}`.
+        #[arg(long, conflicts_with = "md")]
+        json: bool,
+        /// Emit Markdown tables (`docs/chaos/kinds.md`).
+        #[arg(long)]
+        md: bool,
+    },
 }
 
 /// Services run in-process and log every injected failure at error level,
@@ -219,6 +261,10 @@ const DEFAULT_FILTER: &str = "warn,tbd_chaos=info,tbd_protocol::error=off,tower_
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let mut cli = Cli::parse();
+    // Needs neither config nor logging, and its stdout is piped into a file.
+    if let Command::Kinds { json, md } = cli.command {
+        return kinds_command(json, md);
+    }
     if std::env::var_os("RUST_LOG").is_none() && cli.telemetry.filter == "info" {
         DEFAULT_FILTER.clone_into(&mut cli.telemetry.filter);
     }
@@ -259,15 +305,9 @@ async fn main() -> anyhow::Result<()> {
                 config.validate.ca_cert = v;
             }
             config.check()?;
-            let trust = config.trust()?;
-            let report = tbd_chaos::validate::run(tbd_chaos::validate::Targets {
-                protocol: config.targets.protocol,
-                engine: config.targets.engine,
-                ledger: config.targets.ledger,
-                timeout: timeout.unwrap_or(config.validate.timeout),
-                trust,
-            })
-            .await;
+            let targets =
+                tbd_chaos::validate::Targets::from_config(&config, &BTreeMap::new(), timeout)?;
+            let report = tbd_chaos::validate::run(targets).await;
             if json {
                 println!("{}", serde_json::to_string_pretty(&report)?);
             } else {
@@ -292,19 +332,64 @@ async fn main() -> anyhow::Result<()> {
             print!("{}", toml::to_string_pretty(&config)?);
             Ok(())
         }
+        Command::Kinds { .. } => Ok(()),
     }
+}
+
+fn kinds_command(json: bool, md: bool) -> anyhow::Result<()> {
+    if json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&serde_json::json!({
+                "kinds": kinds::describe(),
+                "checks": tbd_chaos::validate::catalogue(),
+            }))?
+        );
+    } else if md {
+        print!("{}", kinds::markdown());
+    } else {
+        for k in kinds::ALL {
+            let target = k
+                .target
+                .as_ref()
+                .map_or("no validate target".to_owned(), |t| {
+                    format!("target {} ({})", t.default_url, k.env_var())
+                });
+            println!(
+                "{:<10} {:<26} {:<22} {target}",
+                k.name,
+                format!("[stack.{}.<name>]", k.plural),
+                k.surface
+            );
+        }
+        println!();
+        for (k, c) in tbd_chaos::validate::checks() {
+            println!("{:<22} {:<8} {}", c.name, c.surface, k.name);
+        }
+    }
+    Ok(())
 }
 
 impl TargetArgs {
     fn apply(self, config: &mut ChaosConfig) {
-        if let Some(p) = self.protocol {
-            config.targets.protocol = p;
+        for (kind, _) in kinds::with_target() {
+            if let Ok(url) = std::env::var(kind.env_var())
+                && !url.trim().is_empty()
+            {
+                config.targets.set(kind.name, url);
+            }
         }
-        if let Some(e) = self.engine {
-            config.targets.engine = e;
+        for (kind, url) in self.targets {
+            config.targets.set(&kind, url);
         }
-        if let Some(l) = self.ledger {
-            config.targets.ledger = l;
+        for (kind, url) in [
+            ("protocol", self.protocol),
+            ("engine", self.engine),
+            ("ledger", self.ledger),
+        ] {
+            if let Some(url) = url {
+                config.targets.set(kind, url);
+            }
         }
     }
 }
@@ -352,31 +437,22 @@ async fn up(file: PathBuf) -> anyhow::Result<()> {
 
     println!("\nstack up:");
     for (name, instance) in stack.instances() {
-        let surface = match instance.kind {
-            "engine" | "ledger" => "grpc",
-            "protocol" => "http/ws/graphql/grpc",
-            _ => "",
-        };
+        let surface = kinds::by_name(instance.kind).map_or("", |k| k.surface);
         println!(
             "  {:<12} {:<9} {:<22} {surface}",
             name, instance.kind, instance.addr
         );
     }
-    if let Some(p) = stack.of_kind("protocol").first() {
-        println!(
-            "\n  chaos validate --protocol {} --engine {} --ledger {}",
-            p.http_url(),
+    let hint: Vec<String> = kinds::with_target()
+        .filter_map(|(k, _)| {
             stack
-                .of_kind("engine")
+                .of_kind(k.name)
                 .first()
-                .map(|e| e.http_url())
-                .unwrap_or_default(),
-            stack
-                .of_kind("ledger")
-                .first()
-                .map(|l| l.http_url())
-                .unwrap_or_default()
-        );
+                .map(|i| format!("--target {}={}", k.name, i.http_url()))
+        })
+        .collect();
+    if !hint.is_empty() {
+        println!("\n  chaos validate {}", hint.join(" "));
     }
     println!("\nCtrl-C to stop.");
     tbd_common::shutdown::signal().await;

@@ -32,7 +32,7 @@ A name is 2 to 24 lowercase letters and digits starting with a letter. Reserved:
 | `proto/tbd/<name>/v1/<name>.proto` | `<Name>Service { rpc Ping }`, buf STANDARD clean |
 | `configs/<name>/{base,local,dev,production}.toml` | every key in `base.toml`; the others exist so a mistyped `TBD_ENV` fails at start |
 | `devops/k8s/base/<name>/` | Deployment (gRPC probes, `/tmp` emptyDir, non-root, read-only), headless Service, kustomization |
-| `crates/chaos/src/service/<name>.rs` | the chaos adapter: starts the service in-process with a `Runtime`, readiness by named health check |
+| `crates/chaos/src/kinds/<name>.rs` | the chaos kind ([chaos/kinds.md](../chaos/kinds.md)): the spec struct that starts the service in-process with a `Runtime`, readiness by named health check, a `grpc_<name>_ping` validate check, and `KIND` (fault injection, counters, addable, target on the service's port) |
 
 The marker: `<!-- tbd new service ledger --kind grpc --port 50052 --metrics-port 9466 --bacon-key l (tbd-cli 0.1.0) -->`.
 
@@ -62,8 +62,11 @@ when the file exists with different content, unless `--force`.
 | `cargo:dependency` | `Cargo.toml` | after the last `tbd-` line | `tbd-<name> ` |
 | `proto:build` | `crates/proto/build.rs` | after the protocol proto line | the proto path |
 | `proto:module` | `crates/proto/src/lib.rs` | end of file | `pub mod <name> ` |
-| `chaos:module`, `chaos:dependency` | `crates/chaos/src/service/mod.rs`, `crates/chaos/Cargo.toml` | after `pub mod protocol;`, after `tbd-protocol.workspace` | the line itself |
-| `env:example` | `.env.example` | end of file | `<NAME>_LISTEN_ADDR=` |
+| `chaos:module`, `chaos:kind`, `chaos:dependency` | `crates/chaos/src/kinds/mod.rs`, `crates/chaos/Cargo.toml` | after the last `pub mod` (rustfmt sorts them at apply time), before the `// tbd:kinds-end` marker in `ALL`, after `tbd-protocol.workspace` | `pub mod <name>;`, `&<name>::KIND,`, the dependency line |
+| `chaos:topology` | `topologies/dev.toml` | end of file | `[stack.<name>s.` |
+| `chaos:targets:{base,dev,production,cluster}` | `configs/chaos/*.toml` | after `engine = ` under `[targets]` | `<name> = "http` |
+| `chaos:k8s-env`, `chaos:compose-env`, `chaos:ansible-env` | `devops/k8s/chaos/deployment.yaml`, `compose.yaml`, the ansible compose template | after `CHAOS_ENGINE_URL` | `CHAOS_<NAME>_URL` |
+| `env:example` | `.env.example` | end of file | `<NAME>_LISTEN_ADDR=` (the block also carries a commented `CHAOS_<NAME>_URL`) |
 | `k8s:configmap`, `k8s:base` | `devops/k8s/base/{configmap,kustomization}.yaml` | after `PROTOCOL_METRICS_ADDR:`, after `  - protocol` | `<NAME>_LISTEN_ADDR:`, `  - <name>` |
 | `k8s:overlay:{local,dev,prod}:{image,patch}` | the overlay kustomizations | before `patches:`, before `configMapGenerator:` | the image name, the patch target line |
 | `envoy:header`, `envoy:route`, `envoy:cluster` | `devops/envoy/envoy.yaml` | the cluster list comment; before the `engine-lb` catch-all route; before `- name: chaos` under `clusters:` | `` `<name>`, ``, `/tbd.<name>.v1.<Name>Service/`, `    - name: <name>` |
@@ -80,12 +83,11 @@ service that must be public gets its edge route by hand, with the JWT requiremen
 
 ## What it does not do
 
-Printed as a checklist after scaffolding, because the code has no safe anchor:
+Printed as a checklist after scaffolding, because the code has no safe anchor or the
+step is a build:
 
-- chaos: a `<name>s` spec in `crates/chaos/src/topology.rs`, `Targets.<name>` and
-  `--<name>` in its config and `main.rs`, a validate check, the `ui/chaos` schema
-  (`docs/chaos/extending.md`).
 - `cargo check -p tbd-<name>`, which updates `Cargo.lock`.
+- `mise run chaos:docs`, which regenerates `docs/chaos/kinds.md` with the new kind.
 - The devops gate: `kustomize build devops/k8s/overlays/local`, `docker compose config -q`,
   `mise run envoy:validate`.
 - A Grafana dashboard, if the service wants one.

@@ -1,0 +1,10 @@
+# The local k3d cluster as seen from the host (docs/local-cluster.md): the
+# Envoy edge on :18080 and the engine LB on :15051. `TBD_ENV=cluster mise run
+# validate` after `mise run local:up`; API routes need a token (`[auth]`,
+# CHAOS_AUTH_CLIENT_SECRET or --token).
+
+[targets]
+protocol = "http://localhost:18080"
+engine = "http://localhost:15051"
+# The ledger shares the engine LB; Envoy matches by gRPC service name.
+ledger = "http://localhost:15051"

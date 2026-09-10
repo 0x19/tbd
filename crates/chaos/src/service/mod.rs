@@ -3,10 +3,6 @@
 //! A [`Service`] knows how to start one instance of something on an address
 //! and hand back an [`Instance`] the stack can observe, perturb and stop.
 
-pub mod engine;
-pub mod ledger;
-pub mod protocol;
-
 use std::{collections::BTreeMap, net::SocketAddr, time::Duration};
 
 use async_trait::async_trait;

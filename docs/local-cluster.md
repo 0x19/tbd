@@ -130,7 +130,7 @@ internet ─443─▶ FRITZ!Box (port forward) ─▶ host: Caddy (TLS) ─▶ E
    chaos validate --protocol https://api.$BASE_DOMAIN --engine https://api.$BASE_DOMAIN
    ```
 
-   All 11 checks pass through the edge, including gRPC streaming and WebSocket, given a
+   Every check passes through the edge, including gRPC streaming and WebSocket, given a
    token (`CHAOS_AUTH_TOKEN_URL` + `CHAOS_AUTH_CLIENT_SECRET`, or `--token`; see
    [auth/README.md](auth/README.md)). If the name is proxied by Cloudflare, gRPC must be
    switched on in the zone's Network settings first; see `devops/edge/README.md`. Any

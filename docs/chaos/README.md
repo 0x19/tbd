@@ -5,19 +5,22 @@ It starts the real services in this process, drives them through their real surf
 injects faults into them at runtime, and asserts on what happened. No mocks, no
 containers, no ports to free up afterwards.
 
-It is also a framework. This project plugs in two services (engine, protocol) and four
-operations (REST, GraphQL, WebSocket, gRPC). A future project plugs in its own and reuses
-the runner, the load generator, the timeline, the assertions and the reports unchanged.
+It is also a framework. This project plugs in three service kinds (engine, protocol,
+ledger; [kinds.md](kinds.md)) and four operations (REST, GraphQL, WebSocket, gRPC). A
+new service brings one kind module and one registry line, both written by
+`tbd new service`; a future project plugs in its own and reuses the runner, the load
+generator, the timeline, the assertions and the reports unchanged.
 
 | Command | Use it to | Page |
 |---|---|---|
 | `chaos validate` | prove a running stack answers on every surface | [commands.md](commands.md#chaos-validate) |
-| `chaos up` | run engines and protocols in one process while developing | [commands.md](commands.md#chaos-up) |
+| `chaos up` | run a stack of any kinds in one process while developing | [commands.md](commands.md#chaos-up) |
 | `chaos run` | execute scenarios: load, faults on a timeline, assertions | [commands.md](commands.md#chaos-run) |
 | `chaos check` | validate scenario files without running them | [commands.md](commands.md#chaos-check) |
 | `chaos serve` | run the tool as an HTTP API for the admin UI: stack, scenarios, runs, live progress | [api.md](api.md) |
 | the admin UI | the same, in a browser: `ui/chaos`, served at the root of its host | [ui.md](ui.md) |
 | `chaos config` | print the effective `configs/chaos/` configuration for an environment | [config.md](config.md) |
+| `chaos kinds` | list the service kinds and the validate checks | [commands.md](commands.md#chaos-kinds), [kinds.md](kinds.md) |
 
 Further reading: [scenarios.md](scenarios.md) for writing scenarios,
 [config.md](config.md) for the layered configuration, [api.md](api.md) for the HTTP
@@ -30,8 +33,8 @@ checks.
 ```sh
 mise run setup                     # once: installs the tools
 
-mise run chaos:up                  # terminal 1: engine on :50051, protocol on :8080
-mise run validate                  # terminal 2: 12 checks, one line each
+mise run chaos:up                  # terminal 1: engine on :50051, protocol on :8080, ledger on :50052
+mise run validate                  # terminal 2: every check, one line each
 chaos validate --json              # same, for machines
 
 mise run chaos:run                 # all scenarios, fresh stack per scenario, exit 1 on failure
@@ -63,12 +66,12 @@ timeline did and when, and each assertion with its bound and the observed value.
 
 ## What it can do today
 
-- Start any number of engines and protocols on free or fixed ports, in dependency order,
-  and wait for each to be ready.
+- Start any number of instances of any registered kind on free or fixed ports, in
+  dependency order, and wait for each to be ready.
 - Generate open-loop load at a constant or ramping rate over a weighted mix of REST,
   GraphQL, WebSocket and gRPC operations, spread round-robin across protocol instances.
-- Make an engine slow, failing at a rate, hung, or healthy-then-failing, at any second of
-  the run.
+- Make an engine or a ledger slow, failing at a rate, hung, or healthy-then-failing, at
+  any second of the run.
 - Stop and restart any instance mid-run on the same port.
 - Assert on error rate, latency percentiles, throughput, request counts, and per-service
   counters.

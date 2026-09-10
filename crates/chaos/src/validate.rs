@@ -1,35 +1,151 @@
 //! `chaos validate`: hit every surface of a running stack and report per check.
 //!
-//! Checks run concurrently, each with its own timeout. A check is a plain
-//! async function returning [`CheckResult`]; add one to `all()` to extend.
+//! Checks belong to the kinds ([`crate::kinds`]): each kind with a target
+//! lists its checks, and [`checks`] walks the registry in order. Checks run
+//! concurrently, each with its own timeout, each against the [`Endpoint`] of
+//! its kind.
 
-use std::time::{Duration, Instant};
-
-use futures::{SinkExt, StreamExt};
-use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
-use tbd_proto::{
-    engine::v1::{EvaluateRequest, SubscribeRequest, engine_service_client::EngineServiceClient},
-    ledger::v1::{PingRequest as LedgerPingRequest, ledger_service_client::LedgerServiceClient},
-    protocol::v1::{PingRequest, protocol_service_client::ProtocolServiceClient},
+use std::{
+    collections::BTreeMap,
+    time::{Duration, Instant},
 };
-use tokio_tungstenite::tungstenite::Message;
-use tonic_health::pb::{HealthCheckRequest, health_client::HealthClient};
 
-/// Where to point the checks.
+use serde::{Deserialize, Serialize};
+
+use crate::{
+    config::ChaosConfig,
+    kinds::{self, Kind},
+    stack::Stack,
+    tls::{Grpc, Trust, Ws},
+};
+
+/// What one check receives: the target URL of its kind and the trust to use.
+#[derive(Debug, Clone)]
+pub struct Endpoint {
+    /// `http://host:port` or `https://...`.
+    pub url: String,
+    /// Roots and bearer token.
+    pub trust: Trust,
+}
+
+impl Endpoint {
+    /// An HTTP client.
+    #[must_use]
+    pub fn http(&self) -> reqwest::Client {
+        self.trust.http(None)
+    }
+
+    /// A gRPC channel to the URL.
+    ///
+    /// # Errors
+    /// The URL is invalid.
+    pub fn grpc(&self) -> Result<Grpc, String> {
+        self.trust.grpc(&self.url, None).map_err(|e| e.to_string())
+    }
+
+    /// `ws://host:port<path>`.
+    #[must_use]
+    pub fn ws_url(&self, path: &str) -> String {
+        self.url.replacen("http", "ws", 1) + path
+    }
+
+    /// A WebSocket at `path`.
+    ///
+    /// # Errors
+    /// The handshake fails.
+    pub async fn connect_ws(&self, path: &str) -> Result<Ws, String> {
+        self.trust
+            .connect_ws(&self.ws_url(path))
+            .await
+            .map_err(|e| e.to_string())
+    }
+}
+
+/// The body of a check.
+pub type CheckFn = fn(Endpoint) -> futures::future::BoxFuture<'static, Result<String, String>>;
+
+/// One check of a kind.
+pub struct Check {
+    /// Name, unique across kinds.
+    pub name: &'static str,
+    /// Surface it exercises.
+    pub surface: &'static str,
+    /// When it passes, for the docs.
+    pub doc: &'static str,
+    /// The check.
+    pub run: CheckFn,
+}
+
+/// Where to point the checks: one URL per kind with a target.
 #[derive(Debug, Clone)]
 pub struct Targets {
-    /// Protocol base URL, e.g. `http://127.0.0.1:8080`.
-    pub protocol: String,
-    /// Engine gRPC URL, e.g. `http://127.0.0.1:50051`.
-    pub engine: String,
-    /// Ledger gRPC URL, e.g. `http://127.0.0.1:50052`. Through Envoy it is the
-    /// same internal listener as the engine, matched by service name.
-    pub ledger: String,
+    /// URL by kind name.
+    pub urls: BTreeMap<String, String>,
     /// Per-check timeout.
     pub timeout: Duration,
-    /// Roots for `https://` / `wss://` targets.
-    pub trust: crate::tls::Trust,
+    /// Roots and bearer token for `https://` / `wss://` targets.
+    pub trust: Trust,
+}
+
+impl Targets {
+    /// The URL for a kind.
+    #[must_use]
+    pub fn url(&self, kind: &Kind) -> Option<&str> {
+        self.urls.get(kind.name).map(String::as_str)
+    }
+
+    /// The first running instance of every kind with a target, default trust.
+    /// For in-process stacks and tests.
+    #[must_use]
+    pub fn of_stack(stack: &Stack, timeout: Duration) -> Self {
+        let mut urls = BTreeMap::new();
+        for (kind, _) in kinds::with_target() {
+            if let Some(i) = stack.of_kind(kind.name).first() {
+                urls.insert(kind.name.to_owned(), i.http_url());
+            }
+        }
+        Self {
+            urls,
+            timeout,
+            trust: Trust::default(),
+        }
+    }
+
+    /// `[targets]` with per-kind overrides (`POST /validate`, the CLI).
+    ///
+    /// # Errors
+    /// An override names a kind without a target, a URL does not parse, or
+    /// the trust cannot be built.
+    pub fn from_config(
+        config: &ChaosConfig,
+        overrides: &BTreeMap<String, Option<String>>,
+        timeout: Option<Duration>,
+    ) -> anyhow::Result<Self> {
+        let mut urls: BTreeMap<String, String> = config
+            .targets
+            .resolved()
+            .into_iter()
+            .map(|(k, v)| (k.to_owned(), v))
+            .collect();
+        for (kind, url) in overrides {
+            let Some(url) = url else { continue };
+            anyhow::ensure!(
+                kinds::by_name(kind).is_some_and(|k| k.target.is_some()),
+                "{kind}: not a kind with a validate target; kinds with a target: {}",
+                kinds::with_target()
+                    .map(|(k, _)| k.name)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+            url::Url::parse(url).map_err(|e| anyhow::anyhow!("{kind}: {e}"))?;
+            urls.insert(kind.clone(), url.clone());
+        }
+        Ok(Self {
+            urls,
+            timeout: timeout.unwrap_or(config.validate.timeout),
+            trust: config.trust()?,
+        })
+    }
 }
 
 /// Outcome of one check.
@@ -60,11 +176,13 @@ pub struct Report {
 
 impl Report {
     /// True when nothing failed.
+    #[must_use]
     pub fn ok(&self) -> bool {
         self.failed == 0
     }
 
     /// Human-readable rendering.
+    #[must_use]
     pub fn render(&self) -> String {
         use std::fmt::Write as _;
         let mut out = String::new();
@@ -81,38 +199,35 @@ impl Report {
     }
 }
 
-type Check = fn(Targets) -> futures::future::BoxFuture<'static, Result<String, String>>;
+/// Every check with its kind, registry order then declaration order.
+pub fn checks() -> impl Iterator<Item = (&'static Kind, &'static Check)> {
+    kinds::ALL
+        .iter()
+        .copied()
+        .flat_map(|k| k.checks.iter().map(move |c| (k, c)))
+}
 
-/// The full list. Order is display order.
-fn all() -> Vec<(&'static str, &'static str, Check)> {
-    vec![
-        ("http_healthz", "http", |t| Box::pin(http_healthz(t))),
-        ("http_readyz", "http", |t| Box::pin(http_readyz(t))),
-        ("rest_evaluate", "rest", |t| Box::pin(rest_evaluate(t))),
-        ("sse_events", "sse", |t| Box::pin(sse_events(t))),
-        ("graphql_evaluate", "graphql", |t| {
-            Box::pin(graphql_evaluate(t))
-        }),
-        ("ws_echo", "ws", |t| Box::pin(ws_echo(t))),
-        ("grpc_engine_health", "grpc", |t| {
-            Box::pin(grpc_engine_health(t))
-        }),
-        ("grpc_engine_evaluate", "grpc", |t| {
-            Box::pin(grpc_engine_evaluate(t))
-        }),
-        ("grpc_engine_subscribe", "grpc", |t| {
-            Box::pin(grpc_engine_subscribe(t))
-        }),
-        ("grpc_protocol_health", "grpc", |t| {
-            Box::pin(grpc_protocol_health(t))
-        }),
-        ("grpc_protocol_ping", "grpc", |t| {
-            Box::pin(grpc_protocol_ping(t))
-        }),
-        ("grpc_ledger_ping", "grpc", |t| {
-            Box::pin(grpc_ledger_ping(t))
-        }),
-    ]
+/// A check as the API sees it.
+#[derive(Debug, Clone, Serialize)]
+pub struct CheckInfo {
+    /// Name.
+    pub name: &'static str,
+    /// Surface.
+    pub surface: &'static str,
+    /// The kind it targets.
+    pub kind: &'static str,
+}
+
+/// The catalogue of checks.
+#[must_use]
+pub fn catalogue() -> Vec<CheckInfo> {
+    checks()
+        .map(|(k, c)| CheckInfo {
+            name: c.name,
+            surface: c.surface,
+            kind: k.name,
+        })
+        .collect()
 }
 
 /// Run every check concurrently.
@@ -135,16 +250,36 @@ pub async fn run(mut targets: Targets) -> Report {
         }
     }
     let mut set = tokio::task::JoinSet::new();
-    for (idx, (name, surface, check)) in all().into_iter().enumerate() {
-        let t = targets.clone();
+    let mut results: Vec<(usize, CheckResult)> = Vec::new();
+    for (idx, (kind, check)) in checks().enumerate() {
+        let Some(url) = targets.url(kind) else {
+            results.push((
+                idx,
+                CheckResult {
+                    name: check.name.to_owned(),
+                    surface: check.surface.to_owned(),
+                    passed: false,
+                    latency_ms: 0.0,
+                    detail: format!("no target URL for kind `{}`", kind.name),
+                },
+            ));
+            continue;
+        };
+        let endpoint = Endpoint {
+            url: url.to_owned(),
+            trust: targets.trust.clone(),
+        };
+        let timeout = targets.timeout;
+        let run = check.run;
+        let (name, surface) = (check.name, check.surface);
         set.spawn(async move {
             let started = Instant::now();
-            let outcome = tokio::time::timeout(t.timeout, check(t.clone())).await;
+            let outcome = tokio::time::timeout(timeout, run(endpoint)).await;
             let latency_ms = started.elapsed().as_secs_f64() * 1000.0;
             let (passed, detail) = match outcome {
                 Ok(Ok(detail)) => (true, detail),
                 Ok(Err(detail)) => (false, detail),
-                Err(_) => (false, format!("timed out after {:?}", t.timeout)),
+                Err(_) => (false, format!("timed out after {timeout:?}")),
             };
             (
                 idx,
@@ -158,7 +293,6 @@ pub async fn run(mut targets: Targets) -> Report {
             )
         });
     }
-    let mut results: Vec<(usize, CheckResult)> = Vec::new();
     while let Some(joined) = set.join_next().await {
         match joined {
             Ok(r) => results.push(r),
@@ -173,231 +307,5 @@ pub async fn run(mut targets: Targets) -> Report {
         checks,
         passed,
         failed,
-    }
-}
-
-async fn http_healthz(t: Targets) -> Result<String, String> {
-    let r = t
-        .trust
-        .http(None)
-        .get(format!("{}/healthz", t.protocol))
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
-    let status = r.status();
-    let body = r.text().await.unwrap_or_default();
-    if status.is_success() {
-        Ok(format!("{status} {body}"))
-    } else {
-        Err(format!("{status} {body}"))
-    }
-}
-
-async fn http_readyz(t: Targets) -> Result<String, String> {
-    let r = t
-        .trust
-        .http(None)
-        .get(format!("{}/readyz", t.protocol))
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
-    let status = r.status();
-    let body = r.text().await.unwrap_or_default();
-    if status.is_success() {
-        Ok(format!("{status} {body}"))
-    } else {
-        Err(format!("{status} {body}"))
-    }
-}
-
-async fn rest_evaluate(t: Targets) -> Result<String, String> {
-    let v: Value = t
-        .trust
-        .http(None)
-        .post(format!("{}/v1/evaluate", t.protocol))
-        .json(&json!({ "subject_id": "validate", "payload": "hi" }))
-        .send()
-        .await
-        .map_err(|e| e.to_string())?
-        .error_for_status()
-        .map_err(|e| e.to_string())?
-        .json()
-        .await
-        .map_err(|e| e.to_string())?;
-    if v["stub"].is_boolean() && v["subject_id"] == "validate" {
-        Ok(format!("stub={} model={}", v["stub"], v["model_version"]))
-    } else {
-        Err(format!("unexpected body {v}"))
-    }
-}
-
-async fn sse_events(t: Targets) -> Result<String, String> {
-    let r = t
-        .trust
-        .http(None)
-        .get(format!("{}/v1/subjects/validate/events", t.protocol))
-        .send()
-        .await
-        .map_err(|e| e.to_string())?
-        .error_for_status()
-        .map_err(|e| e.to_string())?;
-    let mut body = r.bytes_stream();
-    let mut buf = String::new();
-    let mut events = 0;
-    while events < 2 {
-        let chunk = body
-            .next()
-            .await
-            .ok_or("stream ended")?
-            .map_err(|e| e.to_string())?;
-        buf.push_str(&String::from_utf8_lossy(&chunk));
-        events = buf.matches("data:").count();
-    }
-    Ok(format!("{events} events"))
-}
-
-async fn graphql_evaluate(t: Targets) -> Result<String, String> {
-    let v: Value = t.trust.http(None)
-        .post(format!("{}/graphql", t.protocol))
-        .json(&json!({ "query": "{ version engineReady evaluate(subjectId:\"validate\"){ stub modelVersion } }" }))
-        .send()
-        .await
-        .map_err(|e| e.to_string())?
-        .json()
-        .await
-        .map_err(|e| e.to_string())?;
-    if !v["errors"].is_null() {
-        return Err(format!("errors: {}", v["errors"]));
-    }
-    if v["data"]["engineReady"] != true {
-        return Err(format!("engineReady={}", v["data"]["engineReady"]));
-    }
-    Ok(format!(
-        "version={} stub={}",
-        v["data"]["version"], v["data"]["evaluate"]["stub"]
-    ))
-}
-
-async fn ws_echo(t: Targets) -> Result<String, String> {
-    let url = t.protocol.replacen("http", "ws", 1) + "/ws";
-    let mut ws = t.trust.connect_ws(&url).await.map_err(|e| e.to_string())?;
-    ws.send(Message::Text("validate".into()))
-        .await
-        .map_err(|e| e.to_string())?;
-    loop {
-        let msg = ws
-            .next()
-            .await
-            .ok_or("closed before echo")?
-            .map_err(|e| e.to_string())?;
-        let text = msg.into_text().map_err(|e| e.to_string())?;
-        let v: Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
-        if v["type"] == "data" {
-            let _ = ws.close(None).await;
-            return if v["data"] == "validate" {
-                Ok("echo ok".into())
-            } else {
-                Err(format!("wrong echo {v}"))
-            };
-        }
-    }
-}
-
-fn channel(t: &Targets, url: &str) -> Result<crate::tls::Grpc, String> {
-    t.trust.grpc(url, None).map_err(|e| e.to_string())
-}
-
-async fn grpc_engine_health(t: Targets) -> Result<String, String> {
-    let mut h = HealthClient::new(channel(&t, &t.engine)?);
-    let resp = h
-        .check(HealthCheckRequest {
-            service: "tbd.engine.v1.EngineService".into(),
-        })
-        .await
-        .map_err(|e| e.to_string())?
-        .into_inner();
-    if resp.status == tonic_health::pb::health_check_response::ServingStatus::Serving as i32 {
-        Ok("SERVING".into())
-    } else {
-        Err(format!("status {}", resp.status))
-    }
-}
-
-async fn grpc_engine_evaluate(t: Targets) -> Result<String, String> {
-    let mut c = EngineServiceClient::new(channel(&t, &t.engine)?);
-    let r = c
-        .evaluate(EvaluateRequest {
-            subject_id: "validate".into(),
-            payload: b"hi".to_vec(),
-        })
-        .await
-        .map_err(|e| e.to_string())?
-        .into_inner();
-    Ok(format!("stub={} model={}", r.stub, r.model_version))
-}
-
-async fn grpc_engine_subscribe(t: Targets) -> Result<String, String> {
-    let mut c = EngineServiceClient::new(channel(&t, &t.engine)?);
-    let mut s = c
-        .subscribe(SubscribeRequest {
-            subject_id: "validate".into(),
-        })
-        .await
-        .map_err(|e| e.to_string())?
-        .into_inner();
-    let mut n = 0;
-    while n < 2 {
-        s.next()
-            .await
-            .ok_or("stream ended")?
-            .map_err(|e| e.to_string())?;
-        n += 1;
-    }
-    Ok(format!("{n} events"))
-}
-
-async fn grpc_protocol_health(t: Targets) -> Result<String, String> {
-    let mut h = HealthClient::new(channel(&t, &t.protocol)?);
-    let resp = h
-        .check(HealthCheckRequest {
-            service: String::new(),
-        })
-        .await
-        .map_err(|e| e.to_string())?;
-    Ok(format!("status {}", resp.into_inner().status))
-}
-
-async fn grpc_protocol_ping(t: Targets) -> Result<String, String> {
-    let mut c = ProtocolServiceClient::new(channel(&t, &t.protocol)?);
-    let r = c
-        .ping(PingRequest {
-            message: "validate".into(),
-        })
-        .await
-        .map_err(|e| e.to_string())?
-        .into_inner();
-    if r.message == "validate" {
-        Ok(format!("version={}", r.protocol_version))
-    } else {
-        Err(format!("wrong echo {r:?}"))
-    }
-}
-
-/// `LedgerService/Ping` echoes and is labelled a stub. Not a named health
-/// check: through Envoy's internal listener a health request lands on the
-/// engine, and a check whose result depends on the path is worse than none.
-async fn grpc_ledger_ping(t: Targets) -> Result<String, String> {
-    let mut c = LedgerServiceClient::new(channel(&t, &t.ledger)?);
-    let r = c
-        .ping(LedgerPingRequest {
-            message: "validate".into(),
-        })
-        .await
-        .map_err(|e| e.to_string())?
-        .into_inner();
-    if r.message == "validate" {
-        Ok(format!("version={} stub={}", r.version, r.stub))
-    } else {
-        Err(format!("wrong echo {r:?}"))
     }
 }

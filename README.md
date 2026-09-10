@@ -80,7 +80,8 @@ Details, the local-to-CI mapping and how to fix each kind of failure: [docs/ci.m
 ## The chaos tool
 
 ```sh
-chaos validate [--protocol URL] [--engine URL] [--json]   # every surface, per-check pass/fail
+chaos validate [--target KIND=URL]... [--json]             # every surface, per-check pass/fail
+chaos kinds                                                 # the service kinds and checks
 chaos up [topology.toml]                                    # stack in one process until Ctrl-C
 chaos run scenarios/*.toml | --dir scenarios [--json]       # load + faults + assertions
 chaos check scenarios/*.toml                                # validate files only

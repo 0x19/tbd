@@ -12,7 +12,7 @@ the next plan; encryption ([005](../design/humans/005-encryption.md)) the one af
 | Contract | `proto/tbd/ledger/v1/ledger.proto`: `LedgerService.Ping` |
 | Config layers | `configs/ledger/{base,local,dev,production}.toml`; `ledger config` prints the merged result |
 | Deployment | `devops/k8s/base/ledger`, port 50052, metrics 9464; reached through Envoy's internal listener (`http://envoy:50051`, matched by service name); no edge route |
-| Chaos | `[stack.ledgers.X]` in topologies and scenarios; `chaos validate --ledger`; the `grpc_ledger_ping` check |
+| Chaos | the `ledger` kind (`crates/chaos/src/kinds/ledger.rs`): `[stack.ledgers.X]` in topologies and scenarios, `chaos validate --target ledger=URL` (`CHAOS_LEDGER_URL`), the `grpc_ledger_ping` check, add and clone in the admin UI |
 
 ## The contract today
 

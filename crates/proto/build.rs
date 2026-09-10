@@ -7,7 +7,9 @@ use std::{env, fs, path::PathBuf};
 use prost::Message;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let proto_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../proto");
+    // Read at run time, not `env!`: the self-check builds a copy of the tree into
+    // the shared target dir, and a baked-in path would point at the deleted copy.
+    let proto_root = PathBuf::from(env::var("CARGO_MANIFEST_DIR")?).join("../../proto");
     let files = [
         "tbd/engine/v1/engine.proto",
         "tbd/protocol/v1/protocol.proto",

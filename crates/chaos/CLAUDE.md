@@ -1,10 +1,10 @@
 # crates/chaos
 
-The `chaos` binary: validate, up, run, check, serve, config. A framework with two
+The `chaos` binary: validate, up, run, check, serve, config, kinds. A framework with two
 extension points, `service::Service` and `load::ops::Operation`; this project's
-specifics live in `topology.rs`, `service/{engine,protocol}.rs`, `load/ops.rs` and the
-check list in `validate.rs`. Everything else is generic and meant to move to the next
-project as-is.
+specifics live in `kinds/` (one module per service kind, each with its spec, handle,
+validate checks and a `static KIND` registered in `kinds::ALL`) and `load/ops.rs`.
+Everything else is generic and meant to move to the next project as-is.
 
 Docs are the contract: `docs/chaos/README.md` (usage), `commands.md` (flags, output
 schemas, exit codes), `scenarios.md` (file reference), `api.md` (`chaos serve` routes,
@@ -17,10 +17,14 @@ is a change there too.
 Where things are:
 - `main.rs` is the only file allowed to print to stdout (`print_stdout` lint allowed
   there). It also sets the default log filter that silences the in-process services.
-- Service kinds: `engine`, `protocol`, `ledger` (`service/{engine,protocol,ledger}.rs`;
-  the ledger adapter is what `tbd new service` renders). `[stack.ledgers.X]` takes
-  `listen` and `behavior`; validate's `grpc_ledger_ping` is the twelfth check and needs
-  `targets.ledger` (`--ledger`, `CHAOS_LEDGER_URL`).
+- Service kinds are data: `kinds/{engine,protocol,ledger}.rs`, registered in
+  `kinds::ALL` above the `tbd:kinds-end` marker (`tbd new service` inserts there and
+  renders a module like `kinds/ledger.rs`). Topology tables, launchers, cross-checks,
+  validate targets and checks, `--target`, `CHAOS_<KIND>_URL`, runtime add and clone,
+  `GET /overview kinds` and the UI all derive from it. **Nothing outside `kinds/` may
+  match on a kind name**; reach for `kinds::by_name`, the capability flags or
+  `Field::InstanceOf`. `docs/chaos/kinds.md` is generated (`mise run chaos:docs`) and
+  drift-checked in `ci`.
 - `stack/mod.rs` never knows what a service is; keep it that way.
 - `scenario/executor.rs` is the one executor. There is no second path for Rust-defined
   scenarios; add hooks there rather than a parallel executor.
@@ -45,14 +49,17 @@ Where things are:
   runs after every record is final, decides with the schedule's mode, and posts in a
   task so a slow Slack never delays a run. `added.rs` is the file of instances added to
   the serve stack at runtime (`[paths] stack`): `AppState::{add,clone,remove}_instance`
-  go through it and `AppState::new` replays it after the topology starts. The generic
-  `Stack` only knows `add_instance`/`remove_instance`/`next_name`; what an instance is
-  (engine heartbeat, protocol's engine) is `AddedSpec`, built from the topology types.
+  go through it and `AppState::new` replays it after the topology starts, in dependency
+  order. The generic `Stack` only knows `add_instance`/`remove_instance`/`next_name`;
+  what an instance is (`kind` plus the kind's table) is `AddedSpec`, rebuilt into a
+  launcher through the kind's `parse`.
 
 Gotchas:
 - Every config struct is `deny_unknown_fields`. `TimelineEvent` is an internally tagged
   enum (`action = ...`) with `at` repeated per variant because `flatten` and
-  `deny_unknown_fields` do not combine.
+  `deny_unknown_fields` do not combine. `StackConfig` and `[targets]` have hand-written
+  serde impls keyed by the registry; `ValidateRequest` and `AddInstance` flatten a map
+  of the kind's keys and validate them against the registry instead.
 - `chaos check` runs `ScenarioFile::check`; add cross-checks there, not in the executor.
 - WebSocket connections are opened via `load::ops::connect_ws`, which sets
   `TCP_NODELAY`; `connect_async` does not and adds 40 ms to the first frame.
@@ -70,8 +77,8 @@ Gotchas:
   services stay h2c.
 - Scenarios run on port 0 by default; `topologies/dev.toml` uses fixed ports. Do not put
   fixed ports in `scenarios/` or CI runs collide.
-- Engine counters reset on restart; assertions on a restarted engine cover the time
-  since the restart.
+- Counters reset on restart; assertions on a restarted instance cover the time since
+  the restart.
 - Result types (`ScenarioResult`, `LoadSnapshot`, `Report`, ...) derive `Deserialize`
   because run records round-trip through JSON files; config types derive `Serialize`
   because the API returns parsed scenarios. Keep both when adding fields.
@@ -81,11 +88,15 @@ Gotchas:
 - `serve` in the cluster binds `0.0.0.0` via `CHAOS_LISTEN_ADDR`; `base.toml` stays on
   loopback on purpose.
 
-Tests: `tests/it/main.rs` boots stacks in-process: validate passes, a fault maps to
-503, an engine restarts on its port, a full scenario with a fault timeline runs, bad
-files are rejected. `tests/it/api.rs` boots `chaos serve` on port 0 with a temp
+Tests: `tests/it/main.rs` boots stacks in-process: a stack of every registered kind
+built from the registry (validate passes, capabilities match, a fault on any fault kind
+fails only its own and its dependents' checks), the registry is consistent, a fault maps
+to 503, an engine restarts on its port, a full scenario with a fault timeline runs, bad
+files are rejected. Never enumerate kinds in a test; a scaffolded kind must pass here
+unchanged (`mise run tbd:selfcheck` runs these tests with `zeta` registered). `tests/it/api.rs` boots `chaos serve` on port 0 with a temp
 scenarios directory and drives it like the UI: stack calls, scenario run over SSE,
-ad-hoc load cancel, scenario write/check/delete, validate, the queue (run all expands,
+ad-hoc load cancel, scenario write/check/delete, validate (every kind with a target,
+rejects unknown keys), add/clone/remove of every addable kind, the queue (run all expands,
 items drain one at a time, remove and clear) and schedules (persist to the file, fire on
 their own within seconds on a per-second cron, run now, disable, delete). The shipped
 scenarios are run by `mise run ci`.

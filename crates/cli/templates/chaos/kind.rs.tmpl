@@ -1,31 +1,55 @@
-//! The @@name@@ service as a chaos [`Service`].
+//! The @@name@@ kind: an in-process `@@package@@` with fault injection.
+//! Rendered by `tbd new service`; edit freely, the CLI never rewrites it.
 
 use std::net::SocketAddr;
 
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 use tbd_common::fault::Behavior;
-use tonic::transport::Endpoint;
-use tonic_health::pb::{HealthCheckRequest, health_client::HealthClient};
 use @@crate@@::{
     Config, Runtime,
     config::{Metrics, Ping, Server},
 };
+use tbd_proto::@@name@@::v1::{PingRequest, @@name@@_service_client::@@Name@@ServiceClient};
+use tonic::transport::Endpoint;
+use tonic_health::pb::{HealthCheckRequest, health_client::HealthClient};
 
-use super::{Instance, InstanceHandle, Peers, RequestCounts, Service, TaskHandle};
+use super::{Kind, Target};
+use crate::{
+    service::{Instance, InstanceHandle, Peers, RequestCounts, Service, TaskHandle},
+    validate::{Check, Endpoint as Ep},
+};
 
-/// Start a @@name@@ with an initial behaviour.
-#[derive(Debug, Clone)]
+/// The registry entry.
+pub static KIND: Kind = Kind {
+    name: "@@name@@",
+    label: "@@Name@@",
+    plural: "@@name@@s",
+    surface: "grpc",
+    target: Some(Target {
+        help: "@@Name@@ gRPC URL (through Envoy: the engine LB, matched by service name)",
+        default_url: "http://127.0.0.1:@@port@@",
+    }),
+    fields: &[],
+    fault: true,
+    counters: true,
+    load_target: false,
+    addable: true,
+    parse: super::parse::<@@Name@@>,
+    checks: &[Check {
+        name: "grpc_@@name@@_ping",
+        surface: "grpc",
+        doc: "`Ping` echoes the message and is labelled a stub",
+        run: |e| Box::pin(grpc_@@name@@_ping(e)),
+    }],
+};
+
+/// `[stack.@@name@@s.<name>]` minus `listen`: a @@name@@ with an initial behaviour.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields, default)]
 pub struct @@Name@@ {
     /// Initial fault behaviour.
     pub behavior: Behavior,
-}
-
-impl Default for @@Name@@ {
-    fn default() -> Self {
-        Self {
-            behavior: Behavior::Healthy,
-        }
-    }
 }
 
 struct @@Name@@Handle {
@@ -70,7 +94,7 @@ impl InstanceHandle for @@Name@@Handle {
 #[async_trait]
 impl Service for @@Name@@ {
     fn kind(&self) -> &'static str {
-        "@@name@@"
+        KIND.name
     }
 
     async fn start(
@@ -112,5 +136,24 @@ impl Service for @@Name@@ {
                 task: TaskHandle::new(stop, task),
             },
         ))
+    }
+}
+
+/// `@@Name@@Service/Ping` echoes and is labelled a stub. Not a named health
+/// check: through Envoy's internal listener a health request lands on the
+/// engine, and a check whose result depends on the path is worse than none.
+async fn grpc_@@name@@_ping(e: Ep) -> Result<String, String> {
+    let mut c = @@Name@@ServiceClient::new(e.grpc()?);
+    let r = c
+        .ping(PingRequest {
+            message: "validate".into(),
+        })
+        .await
+        .map_err(|e| e.to_string())?
+        .into_inner();
+    if r.message == "validate" {
+        Ok(format!("version={} stub={}", r.version, r.stub))
+    } else {
+        Err(format!("wrong echo {r:?}"))
     }
 }

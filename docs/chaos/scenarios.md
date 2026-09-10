@@ -5,7 +5,7 @@ a typo fails at `chaos check` instead of silently doing nothing.
 
 ```
 [scenario]      name, description, skip
-[stack]         which engines, protocols and ledgers to run
+[stack]         which instances of which kinds to run
 [load]          how much traffic, of what kind, for how long
 [[timeline]]    what happens while load runs, and when
 [assertions]    what must be true afterwards
@@ -26,7 +26,9 @@ skip = false                    # optional; reported as SKIP when running a dire
 
 ## `[stack]`
 
-Same table `chaos up` uses. Names are yours. Kinds are `engines` and `protocols`.
+Same table `chaos up` uses. Names are yours. Each table under `[stack]` is a kind's
+plural, `[stack.<plural>.<name>]`; the kinds, their tables and their keys are in
+[kinds.md](kinds.md). `listen` is common to all; the other keys are the kind's own.
 
 ```toml
 [stack.engines.engine-1]
@@ -43,11 +45,13 @@ engine = "engine-1"             # required; the engine this protocol forwards to
 listen = "127.0.0.1:50052"      # optional; `behavior` as for engines; no dependencies
 ```
 
-Engines start first, then the protocols that reference them. Each instance keeps its port
+Instances start in dependency order (engines before the protocols that name them; a
+reference to a missing instance or one of the wrong kind fails `chaos check`). Each
+instance keeps its port
 across a `stop` and `start`, so a restarted engine comes back where the protocol expects
 it. Scenarios run on free ports by default so they never collide with a dev stack.
 
-Load targets every protocol instance, round-robin. Two protocols on one engine is a
+Load targets every instance of a kind that takes load (protocols), round-robin. Two protocols on one engine is a
 valid way to test the protocol under a split load.
 
 ## `[load]`
@@ -103,7 +107,7 @@ Offsets are from the moment load starts, after warmup. Events are sorted by `at`
 ```toml
 [[timeline]]
 at = "1s"
-action = "set_behavior"         # engines only
+action = "set_behavior"         # kinds with fault injection: engines, ledgers
 service = "engine-1"
 [timeline.behavior]
 type = "error"

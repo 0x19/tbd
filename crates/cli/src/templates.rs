@@ -58,10 +58,7 @@ pub const GRPC: &[FileTemplate] = &[
         "devops/k8s/base/@@name@@/kustomization.yaml",
         "k8s/kustomization.yaml.tmpl"
     ),
-    file!(
-        "crates/chaos/src/service/@@name@@.rs",
-        "chaos/adapter.rs.tmpl"
-    ),
+    file!("crates/chaos/src/kinds/@@name@@.rs", "chaos/kind.rs.tmpl"),
 ];
 
 /// A snippet inserted into a shared file, by name.

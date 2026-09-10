@@ -148,13 +148,23 @@ pub fn registrations(service: &Service) -> Result<Vec<Registration>, TemplateErr
         Edit::AppendEof { lines: module },
     );
 
-    // 4. Chaos adapter module and dependency.
+    // 4. Chaos: the kind module, its registry line, the dependency, the dev
+    //    topology, the validate target per environment and the target env var
+    //    everywhere the chaos pod is configured. rustfmt reorders `pub mod`
+    //    lines at apply time (scaffold.rs), so the anchor only has to exist.
     b.after(
         "chaos:module",
-        "crates/chaos/src/service/mod.rs",
-        Anchor::line(exact("pub mod protocol;")),
+        "crates/chaos/src/kinds/mod.rs",
+        Anchor::line(Match::LastPrefix("pub mod ".into())),
         "pub mod @@name@@;",
         "pub mod @@name@@;",
+    )?;
+    b.before(
+        "chaos:kind",
+        "crates/chaos/src/kinds/mod.rs",
+        Anchor::line(prefix("    // tbd:kinds-end")),
+        "    &@@name@@::KIND,",
+        "&@@name@@::KIND,",
     )?;
     b.after(
         "chaos:dependency",
@@ -162,6 +172,51 @@ pub fn registrations(service: &Service) -> Result<Vec<Registration>, TemplateErr
         Anchor::line(exact("tbd-protocol.workspace = true")),
         "@@package@@.workspace = true",
         "@@package@@.workspace = true",
+    )?;
+    let topology = b.r("\n[stack.@@name@@s.@@name@@-1]\nlisten = \"127.0.0.1:@@port@@\"\n")?;
+    b.push(
+        "chaos:topology",
+        "topologies/dev.toml",
+        Some(&format!("[stack.{name}s.")),
+        Edit::AppendEof { lines: topology },
+    );
+    for (env, url) in [
+        ("base", "http://127.0.0.1:@@port@@"),
+        ("dev", "http://envoy:50051"),
+        ("production", "https://engine.api.example.invalid"),
+        ("cluster", "http://localhost:15051"),
+    ] {
+        b.after(
+            &format!("chaos:targets:{env}"),
+            &format!("configs/chaos/{env}.toml"),
+            Anchor::scoped(exact("[targets]"), prefix("engine = ")),
+            &format!("@@name@@ = \"{url}\""),
+            "@@name@@ = \"http",
+        )?;
+    }
+    b.after(
+        "chaos:k8s-env",
+        "devops/k8s/chaos/deployment.yaml",
+        Anchor::scoped(
+            contains("- name: CHAOS_ENGINE_URL"),
+            prefix("              value: "),
+        ),
+        "            - name: CHAOS_@@NAME@@_URL\n              value: http://envoy:50051",
+        "CHAOS_@@NAME@@_URL",
+    )?;
+    b.after(
+        "chaos:compose-env",
+        "compose.yaml",
+        Anchor::line(prefix("      CHAOS_ENGINE_URL:")),
+        "      CHAOS_@@NAME@@_URL: http://envoy:50051",
+        "CHAOS_@@NAME@@_URL:",
+    )?;
+    b.after(
+        "chaos:ansible-env",
+        "devops/ansible/roles/tbd_app/templates/compose.yaml.j2",
+        Anchor::line(prefix("      CHAOS_ENGINE_URL:")),
+        "      CHAOS_@@NAME@@_URL: http://@@name@@:{{ @@name@@_port }}",
+        "CHAOS_@@NAME@@_URL:",
     )?;
 
     // 5. Environment and config maps.
@@ -520,7 +575,7 @@ pub fn registrations(service: &Service) -> Result<Vec<Registration>, TemplateErr
 /// The steps the scaffold cannot do safely and prints as a checklist.
 pub const CHECKLIST: &[&str] = &[
     "cargo check -p @@package@@                      # updates Cargo.lock",
-    "chaos: add a `@@name@@s` spec to crates/chaos/src/topology.rs, `Targets.@@name@@` and `--@@name@@` to its config and main, a validate check, and the ui/chaos schema (docs/chaos/extending.md)",
+    "mise run chaos:docs                              # docs/chaos/kinds.md gains the @@name@@ kind",
     "kustomize build devops/k8s/overlays/local > /dev/null && docker compose config -q && mise run envoy:validate",
     "mise run ci",
 ];

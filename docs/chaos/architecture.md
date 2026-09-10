@@ -2,19 +2,21 @@
 
 ```
 crates/chaos/src
-├── main.rs            CLI: up, validate, run, check, serve, config
+├── main.rs            CLI: up, validate, run, check, serve, config, kinds
 ├── config.rs          configs/chaos/ schema, loaded via tbd_common::config
-├── topology.rs        this project's [stack] TOML → launchers      (replace per project)
+├── kinds/             the service kinds as data: one module + one line in ALL per kind
+│   ├── mod.rs         Kind, Field, the registry, describe(), markdown()
+│   ├── engine.rs      spec, handle, KIND (fault, counters, 3 checks)
+│   ├── protocol.rs    spec, handle, KIND (depends on an engine, load target, 8 checks)
+│   └── ledger.rs      spec, handle, KIND (what `tbd new service` renders)
+├── topology.rs        [stack.<plural>.<name>] tables → InstanceSpec → launchers
 ├── api/               chaos serve
 │   ├── mod.rs         router: API under base_path, built UI under ui_path
 │   ├── state.rs       AppState: config, the long-lived stack, run jobs, global feed
 │   ├── runs.rs        RunRecord/RunStore (JSON files), ActiveRun (live feed)
 │   ├── routes.rs      handlers and SSE
 │   └── error.rs       ApiError → status + {"error"}
-├── service/           the Service extension point (engine, protocol, ledger adapters)
-│   ├── mod.rs         Service, InstanceHandle, Instance, Peers
-│   ├── engine.rs      engine adapter: serve_with + Runtime (fault, counters)
-│   └── protocol.rs    protocol adapter: serve_on, /readyz
+├── service/mod.rs     the Service extension point: Service, InstanceHandle, Instance, Peers
 ├── stack/mod.rs       generic runner: order, readiness, stop/start, shutdown
 ├── load/
 │   ├── mod.rs         LoadConfig, Pattern
@@ -27,7 +29,7 @@ crates/chaos/src
 │   ├── assertions.rs  Assertions over an immutable Snapshot
 │   ├── executor.rs    the one executor
 │   └── report.rs      text rendering
-└── validate.rs        the checks and their concurrent runner
+└── validate.rs        Endpoint, Check, Targets by kind and the concurrent runner
 ```
 
 ## Services and the stack
@@ -37,10 +39,19 @@ The instance's handle answers `ready()`, stops on request, and optionally expose
 `FaultHandle` and request counters. The stack never learns what a service is.
 
 ```
-StackConfig (topology.rs)          Stack (stack/mod.rs)
-  engines: {name → spec}   ──►      launchers: {name → (Arc<dyn Service>, listen addr)}
-  protocols: {name → spec}          instances: {name → Instance}
+kinds::ALL                 StackConfig (topology.rs)         Stack (stack/mod.rs)
+  Kind{plural, parse, ..}    instances: {name → InstanceSpec}   launchers: {name → (Arc<dyn Service>, listen)}
+  by_plural("engines") ──►     kind, listen, table, service ──►  instances: {name → Instance}
 ```
+
+A kind is a `static Kind`: name, plural, surface, capabilities (`fault`, `counters`,
+`load_target`, `addable`), its validate target and checks, its table's fields, and a
+`parse` fn from `toml::Table` to `Arc<dyn Service>`. `StackConfig` deserialises
+`[stack.<plural>.<name>]` by looking the plural up in the registry, peeling `listen`,
+and letting the kind parse the rest; it serialises back the same way, so the JSON the
+API returns keeps the file's shape. Cross-checks read `Field::InstanceOf` to verify a
+dependency names a running instance of the right kind. Runtime add (`api/added.rs`)
+stores `kind` plus the table and rebuilds a launcher through the same `parse`.
 
 `Stack::start` repeatedly starts every launcher whose `depends_on()` are all running,
 so engines come up before the protocols that name them. After each start it polls
@@ -102,9 +113,14 @@ is nothing to await or lock inside them.
 
 ## Validate
 
-Each check is `async fn(Targets) -> Result<String, String>`. The runner spawns all of
-them into a `JoinSet` with the timeout wrapped around each, collects results, restores
-the declared order, and counts. Text and JSON render the same `Report`.
+Each check is a `Check { name, surface, doc, run }` in its kind's `checks`, where `run`
+is `fn(Endpoint) -> BoxFuture<Result<String, String>>` and `Endpoint` is that kind's
+target URL plus the trust (roots and bearer token). `Targets` is a map of URL by kind:
+`of_stack` takes the first running instance per kind, `from_config` the `[targets]`
+table with overrides. The runner walks `validate::checks()` (registry order), spawns
+every check into a `JoinSet` with the timeout wrapped around each, fails a check whose
+kind has no URL, collects results, restores the declared order, and counts. Text and
+JSON render the same `Report`.
 
 ## Serve
 
@@ -122,9 +138,11 @@ stack so the serve stack is never disturbed.
 ## Conventions the code relies on
 
 - Instance names are unique across kinds; a name cannot be both an engine and a
-  protocol.
-- `set_behavior` requires the target's handle to expose a `FaultHandle`; today only
-  engines do.
+  protocol (the topology rejects it).
+- `set_behavior` requires the kind's `fault` capability (its handle exposes a
+  `FaultHandle`): engines and ledgers, not protocols. `chaos check` enforces it.
+- Everything kind-specific is reached through `kinds::ALL`; nothing outside `kinds/`
+  matches on a kind name, so `tbd new service` only adds a module and a line.
 - Engine counters are per instance and reset on restart.
 - The protocol's engine channel is lazy and reconnecting, which is why an engine restart
   needs no action on the protocol.

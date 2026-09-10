@@ -158,16 +158,7 @@ pub async fn run_scenario_with(file: &ScenarioFile, hooks: &Hooks) -> ScenarioRe
         }
     };
 
-    let targets: Vec<Target> = {
-        let s = stack.lock().await;
-        s.of_kind("protocol")
-            .iter()
-            .map(|i| Target {
-                name: i.name.clone(),
-                http_url: i.http_url(),
-            })
-            .collect()
-    };
+    let targets: Vec<Target> = crate::kinds::load_targets(&*stack.lock().await);
 
     // Timeline runs alongside load, from the moment load starts.
     let mut events = file.timeline.clone();

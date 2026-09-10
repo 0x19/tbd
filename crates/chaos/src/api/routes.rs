@@ -25,7 +25,7 @@ use super::{
     runs::{RunFeed, RunKind, RunRecord, RunSummary},
     state::{AppState, LoadRequest, ScenarioEntry, ValidateRequest},
 };
-use crate::{scenario::ScenarioFile, stack::InstanceInfo};
+use crate::{kinds, scenario::ScenarioFile, stack::InstanceInfo, validate};
 
 type Shared = Arc<AppState>;
 type Result<T> = std::result::Result<T, ApiError>;
@@ -79,6 +79,8 @@ struct Overview {
     config_files: Vec<String>,
     config: crate::config::ChaosConfig,
     stack: Option<Vec<InstanceInfo>>,
+    kinds: Vec<kinds::KindInfo>,
+    validate: ValidateInfo,
     active_run: Option<RunSummary>,
     queue: Vec<QueuedRun>,
     recent_runs: Vec<RunSummary>,
@@ -89,6 +91,12 @@ struct Overview {
     schedules_enabled: usize,
     next_schedule: Option<Schedule>,
     notify: serde_json::Value,
+}
+
+/// What `validate` runs, for the UI's copy.
+#[derive(Serialize)]
+struct ValidateInfo {
+    checks: Vec<validate::CheckInfo>,
 }
 
 async fn overview(State(state): State<Shared>) -> Json<Overview> {
@@ -108,6 +116,10 @@ async fn overview(State(state): State<Shared>) -> Json<Overview> {
             .collect(),
         config: state.config.clone(),
         stack: state.stack_info().await.ok(),
+        kinds: kinds::describe(),
+        validate: ValidateInfo {
+            checks: validate::catalogue(),
+        },
         active_run: active,
         queue: state.queue.list().await,
         recent_runs: state.runs.list(10).await,
@@ -227,25 +239,19 @@ async fn stack_stop(
         .map(Json)
 }
 
-/// Body of `POST /stack`: a new instance, the same keys as the topology's
-/// `[stack.engines.X]` / `[stack.protocols.X]` tables plus `kind` and `name`.
+/// Body of `POST /stack`: a new instance, `kind` and `name` plus the same
+/// keys as the topology's `[stack.<plural>.<name>]` table for that kind
+/// (`GET /overview` lists them under `kinds[].fields`).
 #[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
 struct AddInstance {
-    /// `engine` or `protocol`.
+    /// A registered kind that is addable.
     kind: String,
     /// Omit for the next free `<kind>-<n>`.
     #[serde(default)]
     name: Option<String>,
-    /// Protocols: the engine to forward to.
-    #[serde(default)]
-    engine: Option<String>,
-    /// Engines: heartbeat interval.
-    #[serde(default, with = "humantime_serde")]
-    heartbeat: Option<std::time::Duration>,
-    /// Engines: initial behaviour.
-    #[serde(default)]
-    behavior: Option<Behavior>,
+    /// The kind's own keys.
+    #[serde(flatten)]
+    spec: toml::Table,
 }
 
 async fn stack_add(
@@ -262,26 +268,32 @@ async fn stack_add(
             "name {n:?}: use letters, digits, `_`, `-` and `.`"
         )));
     }
-    let spec = match body.kind.as_str() {
-        "engine" => AddedSpec::Engine {
-            heartbeat: body.heartbeat.unwrap_or(std::time::Duration::from_secs(1)),
-            behavior: body.behavior.unwrap_or_default(),
-        },
-        "protocol" => AddedSpec::Protocol {
-            engine: body
-                .engine
-                .filter(|e| !e.trim().is_empty())
-                .ok_or_else(|| {
-                    ApiError::invalid("a protocol needs `engine`: the engine it forwards to")
-                })?,
-        },
-        other => {
-            return Err(ApiError::invalid(format!(
-                "kind {other:?}: engine or protocol"
-            )));
-        }
-    };
-    let info = state.add_instance(spec, name, None).await?;
+    let kind = kinds::by_name(&body.kind).ok_or_else(|| {
+        ApiError::invalid(format!("kind {:?}: one of {}", body.kind, kinds::names()))
+    })?;
+    if !kind.addable {
+        return Err(ApiError::invalid(format!(
+            "kind {:?} cannot be added at runtime",
+            kind.name
+        )));
+    }
+    // Empty strings from a form mean "not given".
+    let spec: toml::Table = body
+        .spec
+        .into_iter()
+        .filter(|(_, v)| v.as_str().is_none_or(|s| !s.trim().is_empty()))
+        .collect();
+    (kind.parse)(spec.clone()).map_err(|e| ApiError::invalid(format!("{}: {e}", kind.name)))?;
+    let info = state
+        .add_instance(
+            AddedSpec {
+                kind: kind.name.to_owned(),
+                spec,
+            },
+            name,
+            None,
+        )
+        .await?;
     Ok((StatusCode::CREATED, Json(info)))
 }
 

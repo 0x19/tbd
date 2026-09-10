@@ -111,4 +111,4 @@
         msg:
           - "edge http://localhost:18080   engine LB http://localhost:15051"
           - "grafana http://localhost:3000 (admin/admin)   victoria-metrics http://localhost:9090   victoria-logs http://localhost:9428/select/vmui   pyroscope http://localhost:4040"
-          - "chaos validate --protocol http://localhost:18080 --engine http://localhost:15051"
+          - "TBD_ENV=cluster chaos validate   (configs/chaos/cluster.toml: edge :18080, engine LB :15051)"

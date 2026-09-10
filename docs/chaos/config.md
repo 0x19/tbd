@@ -57,11 +57,9 @@ TBD_ENV=production chaos config    # production
 | `paths.scenarios` | `scenarios` | `--scenarios`, `CHAOS_SCENARIOS_DIR` | scenario files the API lists and edits |
 | `paths.scenarios_seed` | `""` | `--scenarios-seed`, `CHAOS_SCENARIOS_SEED` | copied into `paths.scenarios` on `serve` start when it is missing or empty; containers set it to the image's read-only `scenarios/` and point `paths.scenarios` at a volume |
 | `paths.results` | `.chaos/results` | `--results`, `CHAOS_RESULTS_DIR` | run records |
-| `paths.stack` | `.chaos/stack.json` | `--stack-file`, `CHAOS_STACK_FILE` | instances added to the serve stack at runtime (replicas, new engines and protocols, [api.md](api.md#stack)); re-added on start, engines first; one that no longer starts is dropped with a warning; containers put it on `/data` |
+| `paths.stack` | `.chaos/stack.json` | `--stack-file`, `CHAOS_STACK_FILE` | instances added to the serve stack at runtime (replicas, new instances of any kind, [api.md](api.md#stack)); re-added on start in dependency order; one that no longer starts is dropped with a warning; containers put it on `/data` |
 | `paths.schedules` | `.chaos/schedules.json` | `--schedules`, `CHAOS_SCHEDULES_FILE` | the schedules file (`chaos serve` cron jobs, [api.md](api.md#schedules)); created on first write; containers put it on the `/data` volume next to the results |
-| `targets.protocol` | `http://127.0.0.1:8080` | `--protocol`, `CHAOS_PROTOCOL_URL` | default for `validate` and API validate |
-| `targets.engine` | `http://127.0.0.1:50051` | `--engine`, `CHAOS_ENGINE_URL` | same, engine gRPC |
-| `targets.ledger` | `http://127.0.0.1:50052` | `--ledger`, `CHAOS_LEDGER_URL` | same, ledger gRPC; through Envoy the internal listener `http://envoy:50051`, matched by service name |
+| `targets.<kind>` | the kind's default ([kinds.md](kinds.md)): `protocol` `http://127.0.0.1:8080`, `engine` `http://127.0.0.1:50051`, `ledger` `http://127.0.0.1:50052` | `--target <kind>=URL`, `CHAOS_<KIND>_URL` (`CHAOS_TARGETS` for several) | default for `validate` and API validate, one URL per kind with a validate target; a key that is not such a kind fails the load; through Envoy the engine and the ledger share the internal listener `http://envoy:50051`, matched by service name |
 | `validate.timeout` | `5s` | `--timeout` | per-check timeout |
 | `validate.ca_cert` | `""` | `--ca-cert`, `CHAOS_CA_CERT` | extra PEM root for `https://` / `wss://` targets; empty means the public roots only |
 | `notify.slack.webhook` | `""` | `--slack-webhook`, `CHAOS_SLACK_WEBHOOK` | Slack incoming webhook; environment only, never a file; empty means off |
@@ -79,7 +77,8 @@ TBD_ENV=production chaos config    # production
 
 `serve.base_path` must start with `/` and not end with one; `serve.ui_path` is empty (the
 root) or the same shape; they must differ.
-`targets.*` must be absolute URLs.
+`targets.*` must be absolute URLs and their keys registered kinds with a validate target;
+`chaos config` and `GET /overview` print every such kind, defaults filled in.
 
 ## Per environment
 
@@ -90,9 +89,9 @@ and `local:restart` copy `BASE_DOMAIN` from `devops/edge/.env` into
 `devops/k8s/overlays/local/edge.env`, which becomes the `tbd-edge` ConfigMap and sets
 `CHAOS_PUBLIC_DOMAIN` on the chaos pod. The UI then links to `https://grafana.<domain>`
 and friends. Targets stay at `127.0.0.1:8080` and
-`:50051`, which is both `chaos up` and the compose stack; against the k3d cluster pass
-`--protocol http://localhost:18080 --engine http://localhost:15051`, as `mise run
-local:traffic` does.
+`:50051`, which is both `chaos up` and the compose stack; `cluster.toml` is the k3d
+cluster seen from the host (`http://localhost:18080`, `http://localhost:15051`), so
+`TBD_ENV=cluster mise run validate` checks it, as `mise run local:traffic` does.
 
 In the cluster the chaos pod keeps `/data` (run records, the editable scenario copy,
 `schedules.json`, `stack.json`) on a PersistentVolumeClaim (`devops/k8s/chaos/pvc.yaml`),

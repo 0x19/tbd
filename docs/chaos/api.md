@@ -38,6 +38,13 @@ or `500`. Every body is JSON; `PUT`/`POST` bodies reject unknown fields.
   "stack": [ { "name": "engine-1", "kind": "engine", "addr": "127.0.0.1:50051",
                "running": true, "depends_on": [], "behavior": {"type": "healthy"},
                "requests": {"total": 12, "failed": 0} } ],
+  "kinds": [ { "name": "protocol", "label": "Protocol", "plural": "protocols",
+               "surface": "http/ws/graphql/grpc", "fault": false, "counters": false,
+               "load_target": true, "addable": true, "target": true,
+               "dependency_kind": "engine",
+               "fields": [ { "name": "engine", "label": "Engine", "kind": "instance_of",
+                             "of_kind": "engine", "required": true, "default": null } ] } ],
+  "validate": { "checks": [ { "name": "http_healthz", "surface": "http", "kind": "protocol" } ] },
   "active_run": null,
   "queue": [ "…QueuedRun, front first" ],
   "recent_runs": [ "…RunSummary, newest first, at most 10" ],
@@ -78,24 +85,36 @@ are the `[[timeline]]` actions, by hand.
 | `POST /stack/{name}/start` | | `[InstanceInfo]`; same port as before |
 | `PUT /stack/{name}/behavior` | a behaviour, e.g. `{"type":"error","kind":"unavailable","rate":0.5,"message":"x"}` | `[InstanceInfo]` |
 | `POST /stack/{name}/clone` | `{"count": 1}`, optional, at most 16 | `201` + `[InstanceInfo]`: `count` replicas of `name`, the same service on fresh ports, named `<base>-<n>` for the next free `n` (`protocol-1` gives `protocol-2`); a protocol replica forwards to the same engine |
-| `POST /stack` | `{"kind": "engine"\|"protocol", "name"?, "engine"? (protocols), "heartbeat"?, "behavior"? (engines)}` | `201` + `[InstanceInfo]`: a new instance, started now on a free port; `name` defaults to the next free `<kind>-<n>`; `409` when the name exists or the engine is not running |
+| `POST /stack` | `{"kind", "name"?, …the kind's fields}`: `kind` is a registered, addable kind (`overview.kinds`), the rest the same keys as its `[stack.<plural>.X]` table (`engine` for a protocol, `heartbeat` and `behavior` for an engine, `behavior` for a ledger); empty strings count as absent | `201` + `[InstanceInfo]`: a new instance, started now on a free port; `name` defaults to the next free `<kind>-<n>`; `422` for an unknown kind (the message lists them), an unknown or missing field; `409` when the name exists or the dependency is not running |
 | `DELETE /stack/{name}` | | `[InstanceInfo]`: stop and forget an instance added at runtime; `409` for a topology instance (stop it instead) or one another instance forwards to |
 
 Behaviours are the same objects as in `[[timeline]]`, in JSON: `healthy`, `slow`,
 `hang`, `error`, `delayed_failure` ([scenarios.md](scenarios.md#behaviours)). Only
-engines have fault injection; a protocol answers `422`.
+kinds with `fault` in `overview.kinds` (engine, ledger) have fault injection; a
+protocol answers `422`.
 
-`InstanceInfo`: `name`, `kind` (`engine`/`protocol`), `addr`, `running`,
-`depends_on`, `behavior` (`null` when stopped or without fault injection),
-`requests` (`{"total","failed"}`, engine-side counters, reset on restart), `added`
-(created at runtime by `clone` or `POST /stack`; only these can be deleted).
+`InstanceInfo`: `name`, `kind` (a registered kind, [kinds.md](kinds.md)), `addr`,
+`running`, `depends_on`, `behavior` (`null` when stopped or without fault injection),
+`requests` (`{"total","failed"}`, the service's own counters, reset on restart; kinds
+with `counters`), `added` (created at runtime by `clone` or `POST /stack`; only these
+can be deleted).
 
-Replicas and added instances are recorded in `[paths] stack` (one JSON file, the same
-keys as the topology tables plus `replica_of`) and re-added when serve starts, engines
-first; the topology file itself is never changed. One that no longer starts, because
-its engine was removed or its port is taken, is dropped from the file with a warning. Load runs with no explicit targets spread over every
-running protocol, so a protocol replica takes traffic at once; an engine replica takes
-traffic once a protocol forwards to it (`POST /stack` with `"engine": "engine-2"`).
+`overview.kinds` describes every registered kind: `name`, `label`, `plural` (its
+topology table), `surface`, the capabilities `fault`, `counters`, `load_target`,
+`addable`, `target` (has a validate target), `dependency_kind` (the kind its
+`instance_of` field names, or `null`) and `fields` (`name`, `label`, `kind` `text` /
+`duration` / `instance_of`, `of_kind`, `required`, `default`). The UI builds the
+add-instance form, the validate targets and its copy from it. `overview.validate.checks`
+is the check catalogue (`name`, `surface`, `kind`) in run order.
+
+Replicas and added instances are recorded in `[paths] stack` (one JSON file: `name`,
+`kind`, the kind's keys, `replica_of`, `added_at`) and re-added when serve starts in
+dependency order; the topology file itself is never changed. One that no longer starts,
+because its dependency was removed, its port is taken or its kind is gone, is dropped
+from the file with a warning. Load runs with no explicit targets spread over every
+running instance of a `load_target` kind (protocols), so a protocol replica takes
+traffic at once; an engine replica takes traffic once a protocol forwards to it
+(`POST /stack` with `"engine": "engine-2"`).
 
 ## Scenarios
 
@@ -134,14 +153,15 @@ One run at a time. A second `POST /runs` while one is active answers `409`.
 | `GET /runs/{id}/events` | | SSE: history so far, then live, ending at `finished` |
 | `POST /runs/{id}/cancel` | | `202`; `409` if not active |
 | `DELETE /runs/{id}` | | `204`; `409` if active |
-| `POST /validate` | `{"protocol", "engine", "ledger", "timeout"}`, every field optional | `200` + `RunRecord` (kind `validate`), synchronous |
+| `POST /validate` | `{"<kind>": url, …, "timeout"}`, every key optional or `null`; a key must be a kind with a validate target (`overview.kinds[].target`), else `422` | `200` + `RunRecord` (kind `validate`), synchronous |
 
 An ad-hoc load run takes the `[load]` table of a scenario as JSON (`rate`, `duration`,
 `warmup`, `timeout`, `max_in_flight`, `pattern`, `operations`; see
-[scenarios.md](scenarios.md#load)). `targets` defaults to every running protocol in the
-serve stack; give explicit targets to load a stack serve did not start, such as the
+[scenarios.md](scenarios.md#load)). `targets` defaults to every running instance of a
+`load_target` kind (protocols) in the serve stack; give explicit targets to load a stack serve did not start, such as the
 cluster through Envoy: `[{"name":"envoy","http_url":"http://localhost:18080"}]`.
-Validate defaults to `[targets]` in the config. Both validate and explicit-target load
+Validate defaults to `[targets]` in the config, per kind; the record's `request` is the
+resolved map plus `timeout`. Both validate and explicit-target load
 runs send the bearer token from `[auth]` (client credentials, fetched per run); in the
 cluster the chaos pod has the `tbd-chaos` client's secret from the `chaos-auth` Secret.
 The API itself is reachable only through Envoy's gate: `chaosadmin.<domain>` after the

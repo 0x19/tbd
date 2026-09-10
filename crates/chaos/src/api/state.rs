@@ -2,6 +2,7 @@
 //! schedules, the global feed, and the jobs that drive runs in the background.
 
 use std::{
+    collections::BTreeMap,
     path::{Path, PathBuf},
     sync::Arc,
     time::{Duration, Instant},
@@ -23,7 +24,7 @@ use crate::{
     config::{ChaosConfig, Source},
     load::{self, LoadConfig, LoadSnapshot, Metrics, Target},
     scenario::{self, RunEvent, ScenarioFile, executor::EventOutcome},
-    stack::{InstanceInfo, Stack},
+    stack::{InstanceInfo, Stack, StackError},
     topology::{StackConfig, TopologyFile},
     validate,
 };
@@ -92,19 +93,14 @@ pub struct LoadRequest {
     pub load: LoadConfig,
 }
 
-/// Body of `POST /validate`. Every field defaults to the config.
+/// Body of `POST /validate`: `{<kind>: url, ..., timeout}`. Every key
+/// defaults to the config; a key that is not a kind with a validate target
+/// is rejected.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct ValidateRequest {
-    /// Protocol base URL.
-    #[serde(default)]
-    pub protocol: Option<String>,
-    /// Engine gRPC URL.
-    #[serde(default)]
-    pub engine: Option<String>,
-    /// Ledger gRPC URL.
-    #[serde(default)]
-    pub ledger: Option<String>,
+    /// URL per kind; `null` means the config's.
+    #[serde(flatten)]
+    pub targets: BTreeMap<String, Option<String>>,
     /// Per-check timeout.
     #[serde(default, with = "humantime_serde")]
     pub timeout: Option<Duration>,
@@ -155,22 +151,53 @@ impl AppState {
                 .map_err(|e| anyhow::anyhow!("{}: {e}", path.display()))?;
             let mut stack = file.stack.start().await?;
             topology = file.stack;
-            // Re-add what was added last time, engines first. Whatever no
-            // longer starts (its engine is gone, a port clash) is dropped
-            // from the file with a warning rather than blocking serve.
-            for item in added.list().await {
-                let Some(launcher) = item.spec.launcher(&item.name) else {
-                    continue;
-                };
-                match stack.add_instance(&item.name, launcher).await {
-                    Ok(_) => tracing::info!(instance = item.name, "re-added"),
-                    Err(error) => {
-                        tracing::warn!(instance = item.name, %error, "could not re-add; dropped");
+            // Re-add what was added last time, in dependency order: a round
+            // starts what can start, what waits on a dependency tries again
+            // next round. Whatever no longer starts (its dependency is gone,
+            // a port clash, a kind that is not registered any more) is
+            // dropped from the file with a warning rather than blocking serve.
+            let mut pending = added.list().await;
+            loop {
+                let mut progressed = false;
+                let mut waiting = Vec::new();
+                for item in pending {
+                    let launcher = match item.spec.launcher() {
+                        Ok(l) => l,
+                        Err(error) => {
+                            tracing::warn!(instance = item.name, %error, "could not re-add; dropped");
+                            if let Err(e) = added.remove(&item.name).await {
+                                tracing::error!(error = %e, "could not write stack file");
+                            }
+                            continue;
+                        }
+                    };
+                    match stack.add_instance(&item.name, launcher).await {
+                        Ok(_) => {
+                            progressed = true;
+                            tracing::info!(instance = item.name, "re-added");
+                        }
+                        Err(StackError::DependencyDown { .. }) => waiting.push(item),
+                        Err(error) => {
+                            tracing::warn!(instance = item.name, %error, "could not re-add; dropped");
+                            if let Err(e) = added.remove(&item.name).await {
+                                tracing::error!(error = %e, "could not write stack file");
+                            }
+                        }
+                    }
+                }
+                if waiting.is_empty() {
+                    break;
+                }
+                if !progressed {
+                    for item in waiting {
+                        tracing::warn!(instance = item.name, "dependency never came up; dropped");
                         if let Err(e) = added.remove(&item.name).await {
                             tracing::error!(error = %e, "could not write stack file");
                         }
                     }
+                    break;
                 }
+                pending = waiting;
             }
             Some(stack)
         } else {
@@ -263,14 +290,12 @@ impl AppState {
                     None => match &replica_of {
                         Some(source) => s.next_name(source),
                         None => (1..=10_000)
-                            .map(|n| format!("{}-{n}", spec.kind()))
+                            .map(|n| format!("{}-{n}", spec.kind))
                             .find(|c| !s.has(c))
-                            .unwrap_or_else(|| format!("{}-1", spec.kind())),
+                            .unwrap_or_else(|| format!("{}-1", spec.kind)),
                     },
                 };
-                let launcher = spec
-                    .launcher(&name)
-                    .ok_or_else(|| ApiError::internal("no launcher built"))?;
+                let launcher = spec.launcher().map_err(ApiError::invalid)?;
                 s.add_instance(&name, launcher).await?;
                 Ok((name, s.describe()))
             })
@@ -324,15 +349,7 @@ impl AppState {
             .lock()
             .await
             .as_ref()
-            .map(|s| {
-                s.of_kind("protocol")
-                    .iter()
-                    .map(|i| Target {
-                        name: i.name.clone(),
-                        http_url: i.http_url(),
-                    })
-                    .collect()
-            })
+            .map(crate::kinds::load_targets)
             .unwrap_or_default()
     }
 
@@ -535,7 +552,7 @@ impl AppState {
         };
         if targets.is_empty() {
             return Err(ApiError::invalid(
-                "no targets: give `targets` or run serve with a stack that has a protocol",
+                "no targets: give `targets` or run serve with a stack that has an instance load can target",
             ));
         }
         for t in &targets {
@@ -585,29 +602,8 @@ impl AppState {
         req: ValidateRequest,
         schedule_id: Option<String>,
     ) -> Result<RunRecord, ApiError> {
-        let targets = validate::Targets {
-            protocol: req
-                .protocol
-                .unwrap_or_else(|| self.config.targets.protocol.clone()),
-            engine: req
-                .engine
-                .unwrap_or_else(|| self.config.targets.engine.clone()),
-            ledger: req
-                .ledger
-                .unwrap_or_else(|| self.config.targets.ledger.clone()),
-            timeout: req.timeout.unwrap_or(self.config.validate.timeout),
-            trust: self
-                .config
-                .trust()
-                .map_err(|e| ApiError::internal(e.to_string()))?,
-        };
-        for (what, u) in [
-            ("protocol", &targets.protocol),
-            ("engine", &targets.engine),
-            ("ledger", &targets.ledger),
-        ] {
-            url::Url::parse(u).map_err(|e| ApiError::invalid(format!("{what}: {e}")))?;
-        }
+        let targets = validate::Targets::from_config(&self.config, &req.targets, req.timeout)
+            .map_err(|e| ApiError::invalid(e.to_string()))?;
         let mut record = RunRecord::start(RunKind::Validate, "validate");
         record.request = Some(targets_json(&targets));
         record.schedule_id = schedule_id;
@@ -848,12 +844,15 @@ fn no_stack() -> ApiError {
 }
 
 fn targets_json(t: &validate::Targets) -> serde_json::Value {
-    serde_json::json!({
-        "protocol": t.protocol,
-        "engine": t.engine,
-        "ledger": t.ledger,
-        "timeout": humantime::format_duration(t.timeout).to_string(),
-    })
+    let mut map = serde_json::Map::new();
+    for (kind, url) in &t.urls {
+        map.insert(kind.clone(), serde_json::Value::String(url.clone()));
+    }
+    map.insert(
+        "timeout".into(),
+        serde_json::Value::String(humantime::format_duration(t.timeout).to_string()),
+    );
+    serde_json::Value::Object(map)
 }
 
 /// Parse and check scenario text.

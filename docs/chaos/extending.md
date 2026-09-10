@@ -5,23 +5,40 @@ in each.
 
 ## Add a service kind
 
-Reference: `crates/chaos/src/service/ledger.rs`, the smallest (no peers), which
-`tbd new service` renders for every new service; `service/protocol.rs` for a service
-with a dependency, and `service/engine.rs` for fault and counter wiring.
+One module under `crates/chaos/src/kinds/` and one line in `kinds::ALL`; `tbd new
+service` writes both. Reference: `kinds/ledger.rs`, the smallest (no dependency), which
+is what the CLI renders; `kinds/protocol.rs` for a kind with a dependency field;
+`kinds/engine.rs` for a field with a default.
 
-1. Implement `service::Service`: `kind()`, `depends_on()` if it needs other instances,
-   and `start(name, listen, peers)` which binds, spawns the service's library entry point
-   on a task, and returns an `Instance`.
+1. The spec struct is the service: `#[derive(Deserialize, Serialize)]` with
+   `deny_unknown_fields`, its fields the keys of `[stack.<plural>.<name>]` minus
+   `listen`. Implement `service::Service` on it: `kind()` returns `KIND.name`,
+   `depends_on()` if it needs other instances, and `start(name, listen, peers)` which
+   binds, spawns the service's library entry point on a task, and returns an `Instance`.
 2. Implement `service::InstanceHandle` for its handle: `ready()` must answer true only
    when the service can take traffic; `stop()` signals the graceful-shutdown future and
    awaits the task. Return `Some` from `fault()` and `requests()` if the service exposes
    them.
-3. Add its spec to `topology.rs` and a `Launcher` in `StackConfig::launchers`. Add any
-   cross-checks to `StackConfig::check`.
-4. If the service should receive load, decide whether it is a target (see operations).
+3. Declare `pub static KIND: Kind { .. }`: `name`, `label`, `plural`, `surface`, the
+   `target` (help and default URL) and `checks` (see below), `fields` (one `Field` per
+   key: `Text`, `Duration`, or `InstanceOf("engine")` for a dependency), and the
+   capability flags `fault`, `counters`, `load_target`, `addable`, matching what the
+   handle really exposes; `parse: kinds::parse::<Spec>`.
+4. Add `pub mod <name>;` and `&<name>::KIND,` above the `tbd:kinds-end` marker in
+   `kinds/mod.rs`, a `[stack.<plural>.<name>-1]` table to `topologies/dev.toml`,
+   `<name> = "…"` under `[targets]` in every `configs/chaos/*.toml`, and
+   `CHAOS_<NAME>_URL` where the chaos pod, compose and ansible set the others.
+5. `mise run chaos:docs` regenerates `docs/chaos/kinds.md`.
+
+From the registry derive: the topology table and its cross-checks, `chaos up`,
+validate's target and checks, `--target <name>=`, `CHAOS_<NAME>_URL`, `[targets]
+<name>`, `POST /stack {"kind": "<name>"}`, clone and re-add, `set_behavior` and
+`[assertions.services]` rules in `chaos check`, `GET /overview kinds`, and the admin
+UI's add-instance form, validate targets and copy. The integration tests build a stack
+of every registered kind, so a kind whose flags lie fails `cargo nextest -p tbd-chaos`.
 
 The service itself needs a `serve_on(listener, config, shutdown)`-style entry point so
-it can run on a caller-supplied listener. Both existing services have one.
+it can run on a caller-supplied listener. Every scaffolded service has one.
 
 ## Give a service fault injection
 
@@ -78,11 +95,14 @@ if you need something new, add it to the snapshot in the executor first. Keep th
 
 ## Add a validate check
 
-Reference: `crates/chaos/src/validate.rs`.
+Reference: the `checks` of `crates/chaos/src/kinds/ledger.rs`.
 
-Write `async fn name(t: Targets) -> Result<String, String>` and add a line to `all()`.
-`Ok(detail)` passes, `Err(detail)` fails; the runner adds the timeout and the timing.
-Keep checks independent: they run concurrently.
+Write `async fn name(e: validate::Endpoint) -> Result<String, String>` in the kind's
+module (`e.url` is the kind's target, `e.http()`, `e.grpc()`, `e.connect_ws(path)` carry
+the trust and the token) and add a `Check { name, surface, doc, run: |e|
+Box::pin(name(e)) }` to the kind's `checks`. `Ok(detail)` passes, `Err(detail)` fails;
+the runner adds the timeout and the timing. Keep checks independent: they run
+concurrently. Then `mise run chaos:docs`.
 
 ## Add a load pattern
 
@@ -99,8 +119,7 @@ five phases in `executor.rs`.
 
 ## Reusing chaos in another project
 
-Keep `service/mod.rs`, `stack/`, `load/generator.rs`, `load/metrics.rs`, `scenario/`
-and `validate.rs`'s runner as they are. Replace `topology.rs` with your services,
-`service/*.rs` with your adapters, `load/ops.rs` with your operations, and the check
-list in `validate.rs` with your surfaces. The scenario file format, the reports and the
-CLI stay the same.
+Keep `service/mod.rs`, `stack/`, `topology.rs`, `load/generator.rs`, `load/metrics.rs`,
+`scenario/` and `validate.rs` as they are. Replace the modules under `kinds/` with your
+kinds (each with its checks) and `load/ops.rs` with your operations. The scenario file
+format, the reports, the API and the CLI stay the same.
