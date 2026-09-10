@@ -22,7 +22,9 @@ services:
       OBS_USER: ${OBS_USER:?set OBS_USER}
       OBS_PASSWORD_HASH: ${OBS_PASSWORD_HASH:?set OBS_PASSWORD_HASH (mise run edge:password)}
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # The directory, not the file: editors and sed replace the file's inode, and a
+      # single-file bind mount would keep showing the old content to Caddy.
+      - ./:/etc/caddy:ro
       - caddy-data:/data
       - caddy-config:/config
     extra_hosts:

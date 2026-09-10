@@ -103,11 +103,12 @@ internet ─443─▶ FRITZ!Box (port forward) ─▶ host: Caddy ─┬─▶ a
                                                         ├─▶ grafana.<base>  :3000   (auth)
                                                         ├─▶ logs.<base>     :9428   (auth)
                                                         ├─▶ profiles.<base> :4040   (auth)
-                                                        └─▶ metrics.<base>  :9090   (auth)
+                                                        ├─▶ metrics.<base>  :9090   (auth)
+                                                        └─▶ chaosadmin.<base> Envoy :18080 /chaos (auth)
 ```
 
-1. **Public names.** `api`, `grafana`, `logs`, `profiles` and `metrics` under the base
-   domain. On the FRITZ!Box, *Internet → Permit Access → DynDNS* (or MyFRITZ!) keeps a
+1. **Public names.** `api`, `grafana`, `logs`, `profiles`, `metrics` and `chaosadmin`
+   under the base domain, created before Caddy starts serving them. On the FRITZ!Box, *Internet → Permit Access → DynDNS* (or MyFRITZ!) keeps a
    hostname pointing at the box's public IPv4; `CNAME`s from your own domain to that
    hostname, or `A` records you update yourself, both work. This machine's box
    reports its external address over UPnP and it matches what the internet sees, so there is

@@ -19,17 +19,22 @@ internet ──443──▶ router (port forward) ──▶ this host: caddy ─
 | `logs.<base>` | VictoriaLogs 9428 | HTTP basic | `/` redirects to `/select/vmui/` |
 | `profiles.<base>` | Pyroscope 4040 | HTTP basic | |
 | `metrics.<base>` | VictoriaMetrics 9090 | HTTP basic | `/` redirects to `/vmui/` |
+| `chaosadmin.<base>` | Envoy 18080 (`/chaos/`, `/api/chaos/`) | HTTP basic | the chaos admin UI and API; `/` redirects to `/chaos/` |
 
 ## Setup
 
-1. DNS: five records (`api`, `grafana`, `logs`, `profiles`, `metrics`) under the base
-   domain pointing at the public IP, or `CNAME`s to the router's DynDNS name.
+1. DNS: six records (`api`, `grafana`, `logs`, `profiles`, `metrics`, `chaosadmin`)
+   under the base domain pointing at the public IP, or `CNAME`s to the router's DynDNS
+   name. Create the record before starting Caddy for it: every failed certificate
+   attempt counts toward Let's Encrypt's five failed authorizations per hostname per
+   hour, and a name added later waits that hour out.
 2. On the router, forward TCP 80 and TCP 443 (and UDP 443 for HTTP/3) to this machine.
    80 is needed for the certificate challenge and redirects to 443.
 3. `cp devops/edge/.env.example devops/edge/.env`, fill in `BASE_DOMAIN` and
    `ACME_EMAIL`, run `mise run edge:password` and paste the hash line as printed (its
    `$` are doubled because compose expands variables inside `.env`).
-4. `mise run edge:up`. The first start requests one certificate per host;
+4. `mise run edge:up` (also after any Caddyfile change: it reloads the running Caddy
+   gracefully). The first start requests one certificate per host;
    `mise run edge:logs` shows them being issued. A host whose DNS does not resolve yet
    keeps retrying in the background without affecting the others.
 5. `chaos validate --protocol https://api.<base> --engine https://api.<base>` from

@@ -4,13 +4,21 @@ Public TLS edge for a cluster behind a home or office router. Read `README.md` f
 
 - One Caddyfile, env-driven (`BASE_DOMAIN`, `ACME_EMAIL`, `OBS_USER`,
   `OBS_PASSWORD_HASH`, `EDGE_HTTP_PORT`, `EDGE_HTTPS_PORT`). Subdomain names are fixed
-  (`api`, `grafana`, `logs`, `profiles`, `metrics`); only the base is configurable, so
+  (`api`, `grafana`, `logs`, `profiles`, `metrics`, `chaosadmin`); only the base is
+  configurable, so
   DNS, docs and dashboards can rely on them. Caddy owns certificate issuance and
   renewal; nothing here needs cert-manager or a TLS listener in Envoy.
 - `OBS_PASSWORD_HASH` in `.env` must have every `$` doubled: compose interpolates
   `$name` in env files, so a raw bcrypt hash arrives truncated and every login is 401.
   `mise run edge:password` prints it escaped; `docker inspect` on the container shows
   what Caddy actually got (60 characters, starting `$2a$14$`).
+- `chaosadmin.` goes through Envoy's prefix routes (`/chaos/`, `/api/chaos/`) on the
+  `*` virtual host, not Envoy's `chaos.*` host, whose prefix rewrite double-prefixes the
+  UI's `/chaos/_next/...` assets. Caddy only adds the `/` → `/chaos/` redirect.
+- `mise run edge:up` runs `caddy reload` inside the container after `up -d`, because
+  compose does not restart on a bind-mounted config change. The mount is the whole
+  `devops/edge` directory at `/etc/caddy`: a single-file bind mount keeps the old inode
+  after `sed -i` or an editor save, so Caddy would reload the previous file.
 - The `(observability)` snippet carries the basic auth for every non-API host. A new
   UI host imports it; never add a host that bypasses it. `api.` has no auth on purpose:
   that is the product's job.

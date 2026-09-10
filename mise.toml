@@ -347,7 +347,11 @@ echo "OBS_PASSWORD_HASH=$(printf '%s' "$hash" | sed 's/\$/$$/g')"
 
 [tasks."edge:up"]
 description = "Public TLS edge on the host: Caddy with Let's Encrypt for api/grafana/logs/profiles/metrics.<BASE_DOMAIN> (settings in devops/edge/.env)"
-run = "docker compose -f devops/edge/compose.yaml up -d && docker compose -f devops/edge/compose.yaml logs --tail=20 caddy"
+run = """
+docker compose -f devops/edge/compose.yaml up -d
+docker compose -f devops/edge/compose.yaml exec caddy caddy reload --config /etc/caddy/Caddyfile
+docker compose -f devops/edge/compose.yaml logs --tail=20 caddy
+"""
 
 [tasks."edge:down"]
 description = "Stop the public edge; certificates are kept in the caddy-data volume"
