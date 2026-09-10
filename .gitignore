@@ -61,3 +61,10 @@ CLAUDE.local.md
 # =============================================================================
 .mise.local.toml
 junit.xml
+
+# chaos serve run records (docs/chaos/api.md)
+.chaos/
+
+# ui/chaos build output (mise run ui:build); the chaos image copies it when present
+ui/chaos/.next/
+ui/chaos/out/

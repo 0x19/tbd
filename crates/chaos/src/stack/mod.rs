@@ -10,7 +10,29 @@ use std::{
     time::Duration,
 };
 
+use serde::{Deserialize, Serialize};
+use tbd_common::fault::Behavior;
+
 use crate::service::{Instance, Peers, RequestCounts, Service};
+
+/// One launcher, running or not, as the API and the UI see it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InstanceInfo {
+    /// Name from the topology.
+    pub name: String,
+    /// Service kind.
+    pub kind: String,
+    /// Bound (or remembered) address.
+    pub addr: SocketAddr,
+    /// Currently running.
+    pub running: bool,
+    /// Names it needs running first.
+    pub depends_on: Vec<String>,
+    /// Current fault behaviour, when the service has fault injection.
+    pub behavior: Option<Behavior>,
+    /// Request counters, when the service exposes them.
+    pub requests: Option<RequestCounts>,
+}
 
 /// One entry in a topology: a service and where to bind it.
 pub struct Launcher {
@@ -51,6 +73,9 @@ pub enum StackError {
     /// Instance is already running.
     #[error("{0:?} is already running")]
     AlreadyRunning(String),
+    /// Instance has no fault injection.
+    #[error("{0:?} has no fault injection")]
+    NoFaults(String),
 }
 
 /// A running (or partially running) stack.
@@ -164,6 +189,38 @@ impl Stack {
     /// Running instances of one kind.
     pub fn of_kind(&self, kind: &str) -> Vec<&Instance> {
         self.instances.values().filter(|i| i.kind == kind).collect()
+    }
+
+    /// Every launcher with its live state, sorted by name.
+    pub fn describe(&self) -> Vec<InstanceInfo> {
+        self.launchers
+            .iter()
+            .map(|(name, l)| {
+                let instance = self.instances.get(name);
+                InstanceInfo {
+                    name: name.clone(),
+                    kind: l.service.kind().to_owned(),
+                    addr: instance.map_or(l.listen, |i| i.addr),
+                    running: instance.is_some(),
+                    depends_on: l.service.depends_on(),
+                    behavior: instance.and_then(|i| i.fault().map(|f| f.get())),
+                    requests: instance.and_then(Instance::requests),
+                }
+            })
+            .collect()
+    }
+
+    /// Set the fault behaviour of a running instance.
+    pub fn set_behavior(&self, name: &str, behavior: Behavior) -> Result<(), StackError> {
+        let instance = self
+            .instances
+            .get(name)
+            .ok_or_else(|| StackError::Unknown(name.to_owned()))?;
+        let fault = instance
+            .fault()
+            .ok_or_else(|| StackError::NoFaults(name.to_owned()))?;
+        fault.set(behavior);
+        Ok(())
     }
 
     /// Request counters of every instance that exposes them.

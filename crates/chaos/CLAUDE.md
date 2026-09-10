@@ -1,14 +1,18 @@
 # crates/chaos
 
-The `chaos` binary: validate, up, run, check. A framework with two extension points,
-`service::Service` and `load::ops::Operation`; this project's specifics live in
-`topology.rs`, `service/{engine,protocol}.rs`, `load/ops.rs` and the check list in
-`validate.rs`. Everything else is generic and meant to move to the next project as-is.
+The `chaos` binary: validate, up, run, check, serve, config. A framework with two
+extension points, `service::Service` and `load::ops::Operation`; this project's
+specifics live in `topology.rs`, `service/{engine,protocol}.rs`, `load/ops.rs` and the
+check list in `validate.rs`. Everything else is generic and meant to move to the next
+project as-is.
 
 Docs are the contract: `docs/chaos/README.md` (usage), `commands.md` (flags, output
-schemas, exit codes), `scenarios.md` (file reference), `architecture.md`, `extending.md`.
-**Any change to a flag, output field, TOML key, behaviour, error class or check must
-update the matching page in the same commit.**
+schemas, exit codes), `scenarios.md` (file reference), `api.md` (`chaos serve` routes,
+bodies, SSE frames, run record), `config.md` (`configs/chaos/` keys and precedence),
+`architecture.md`, `extending.md`. **Any change to a flag, output field, TOML key, API
+route, behaviour, error class or check must update the matching page in the same
+commit.** The UI in `ui/chaos` mirrors `api.md` in its Zod schemas; a field change here
+is a change there too.
 
 Where things are:
 - `main.rs` is the only file allowed to print to stdout (`print_stdout` lint allowed
@@ -20,6 +24,14 @@ Where things are:
 - `load/generator.rs` is open loop with an absolute-deadline pacer and a
   `max_in_flight` semaphore. Do not turn it closed loop; latency must not lower the
   rate.
+- `config.rs` is the schema of `configs/chaos/`; loading and merging is
+  `tbd_common::config`. `main.rs` loads it before dispatching and applies flag
+  overrides field by field; add a flag there when a key needs an env var.
+- `api/` is `chaos serve`. `state.rs` owns the long-lived stack (a `Mutex<Option<Stack>>`)
+  and spawns run jobs; `runs.rs` is the record store (one JSON per run under
+  `[paths] results`) and the live feed; `routes.rs` only translates HTTP. Runs reuse
+  `scenario::run_file_with` / `load::run_with` with `Hooks` (event channel +
+  `CancellationToken`); do not add a second executor for the API.
 
 Gotchas:
 - Every config struct is `deny_unknown_fields`. `TimelineEvent` is an internally tagged
@@ -32,7 +44,18 @@ Gotchas:
   fixed ports in `scenarios/` or CI runs collide.
 - Engine counters reset on restart; assertions on a restarted engine cover the time
   since the restart.
+- Result types (`ScenarioResult`, `LoadSnapshot`, `Report`, ...) derive `Deserialize`
+  because run records round-trip through JSON files; config types derive `Serialize`
+  because the API returns parsed scenarios. Keep both when adding fields.
+- One run at a time in serve (`RunStore::begin`); scenario runs use ephemeral ports so
+  they never touch the serve stack. A `running` record found on start is marked
+  `error: interrupted`.
+- `serve` in the cluster binds `0.0.0.0` via `CHAOS_LISTEN_ADDR`; `base.toml` stays on
+  loopback on purpose.
 
 Tests: `tests/it/main.rs` boots stacks in-process: validate passes, a fault maps to
 503, an engine restarts on its port, a full scenario with a fault timeline runs, bad
-files are rejected. The shipped scenarios are run by `mise run ci`.
+files are rejected. `tests/it/api.rs` boots `chaos serve` on port 0 with a temp
+scenarios directory and drives it like the UI: stack calls, scenario run over SSE,
+ad-hoc load cancel, scenario write/check/delete, validate. The shipped scenarios are run
+by `mise run ci`.

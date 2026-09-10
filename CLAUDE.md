@@ -16,9 +16,14 @@ earlier idea material for a product direction, not a spec; do not "fix" it.
   `mise run grafana:reload`; Envoy config check with `mise run envoy:validate`.
   Docs: `docs/local-cluster.md`, `docs/observability/README.md`.
 - `mise run chaos:up` runs both in one process; `mise run validate` checks every surface;
-  `mise run chaos:run` runs the scenarios. Docs under `docs/chaos/` are the tool's
-  contract: a change to a flag, output field, TOML key, behaviour or check updates the
-  matching page in the same commit. CI is described in `docs/ci.md`.
+  `mise run chaos:run` runs the scenarios; `mise run chaos:serve` is the HTTP API the
+  admin UI (`ui/chaos`) uses. Docs under `docs/chaos/` are the tool's contract: a change
+  to a flag, output field, TOML key, API route, behaviour or check updates the matching
+  page in the same commit (`api.md` for routes and SSE frames, `config.md` for
+  `configs/chaos/`). CI is described in `docs/ci.md`.
+- Binaries read layered config from `configs/<binary>/base.toml` + `<TBD_ENV>.toml`
+  (`tbd_common::config`); every key lives in `base.toml`, env files carry differences,
+  flags and env vars override. `chaos config` prints the effective result.
 - Protos compile without `protoc` (`protox` in `crates/proto/build.rs`); edit `/proto`
   and rebuild. `buf lint proto` runs in `mise run lint` with buf's STANDARD rules:
   directory matches package (`proto/tbd/engine/v1/`), services end in `Service`,

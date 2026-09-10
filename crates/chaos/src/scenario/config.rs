@@ -2,14 +2,14 @@
 
 use std::path::Path;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::{load::LoadConfig, topology::StackConfig};
 
 use super::{assertions::Assertions, timeline::TimelineEvent};
 
 /// A whole scenario file.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ScenarioFile {
     /// `[scenario]`
@@ -28,7 +28,7 @@ pub struct ScenarioFile {
 }
 
 /// `[scenario]`
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Meta {
     /// Name shown in reports.

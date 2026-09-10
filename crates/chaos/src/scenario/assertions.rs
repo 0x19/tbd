@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use crate::{load::LoadSnapshot, service::RequestCounts};
 
 /// `[assertions]`
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Assertions {
     /// `failed / total` across all load, inclusive bound.
@@ -32,7 +32,7 @@ pub struct Assertions {
 
 /// Assertions on one instance. Engines are checked against their own counters;
 /// protocols against what the load generator sent them.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ServiceAssertions {
     /// Requests the instance handled, at least.
@@ -47,7 +47,7 @@ pub struct ServiceAssertions {
 }
 
 /// One evaluated assertion.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AssertionResult {
     /// Which assertion.
     pub name: String,

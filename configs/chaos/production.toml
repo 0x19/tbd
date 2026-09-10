@@ -1,0 +1,10 @@
+# Production. chaos is not deployed here (see devops/k8s/overlays/prod); this
+# file exists so `chaos validate --env production` from an operator's machine
+# points at the right place once the domain is known.
+
+[targets]
+protocol = "https://api.example.invalid"
+engine = "https://engine.api.example.invalid"
+
+[serve]
+start_stack = false

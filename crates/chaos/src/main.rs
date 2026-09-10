@@ -3,10 +3,11 @@
 
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
-use std::{path::PathBuf, time::Duration};
+use std::{net::SocketAddr, path::PathBuf, time::Duration};
 
 use anyhow::Context;
-use clap::{Parser, Subcommand};
+use clap::{Args, Parser, Subcommand};
+use tbd_chaos::config::{self, ChaosConfig, Source};
 use tbd_common::telemetry::TelemetryArgs;
 
 #[derive(Parser)]
@@ -16,6 +17,23 @@ struct Cli {
     command: Command,
     #[command(flatten)]
     telemetry: TelemetryArgs,
+    /// Environment: picks `<config-dir>/<env>.toml` to merge over `base.toml`.
+    #[arg(long, env = config::ENV_VAR, default_value = config::DEFAULT_ENV, global = true)]
+    env: String,
+    /// Directory holding `base.toml` and one file per environment.
+    #[arg(long, env = "CHAOS_CONFIG_DIR", default_value = config::DEFAULT_DIR, global = true)]
+    config_dir: PathBuf,
+}
+
+/// Flags that override `[targets]` in the config.
+#[derive(Args, Debug, Clone)]
+struct TargetArgs {
+    /// Protocol base URL.
+    #[arg(long, env = "CHAOS_PROTOCOL_URL")]
+    protocol: Option<String>,
+    /// Engine gRPC URL.
+    #[arg(long, env = "CHAOS_ENGINE_URL")]
+    engine: Option<String>,
 }
 
 #[derive(Subcommand)]
@@ -23,8 +41,8 @@ enum Command {
     /// Start the stack described in a topology file and keep it running until Ctrl-C.
     Up {
         /// Topology or scenario file; only its `[stack]` section is used.
-        #[arg(default_value = "topologies/dev.toml")]
-        file: PathBuf,
+        /// Default: `[paths] topology` from the config.
+        file: Option<PathBuf>,
     },
     /// Run scenario files: start the stack, apply load, play the timeline, assert.
     Run {
@@ -46,27 +64,47 @@ enum Command {
     },
     /// Hit every surface of a running stack and report per check.
     Validate {
-        /// Protocol base URL.
-        #[arg(
-            long,
-            env = "CHAOS_PROTOCOL_URL",
-            default_value = "http://127.0.0.1:8080"
-        )]
-        protocol: String,
-        /// Engine gRPC URL.
-        #[arg(
-            long,
-            env = "CHAOS_ENGINE_URL",
-            default_value = "http://127.0.0.1:50051"
-        )]
-        engine: String,
-        /// Per-check timeout.
-        #[arg(long, default_value = "5s", value_parser = humantime::parse_duration)]
-        timeout: Duration,
+        #[command(flatten)]
+        targets: TargetArgs,
+        /// Per-check timeout. Default: `[validate] timeout` from the config.
+        #[arg(long, value_parser = humantime::parse_duration)]
+        timeout: Option<Duration>,
         /// Emit JSON instead of text.
         #[arg(long)]
         json: bool,
     },
+    /// Serve the HTTP API (and the UI when built) until Ctrl-C.
+    Serve {
+        /// Listen address. Default: `[serve] listen`.
+        #[arg(long, env = "CHAOS_LISTEN_ADDR")]
+        listen: Option<SocketAddr>,
+        /// API prefix. Default: `[serve] base_path`.
+        #[arg(long, env = "CHAOS_BASE_PATH")]
+        base_path: Option<String>,
+        /// Built UI directory. Default: `[serve] ui_dir`.
+        #[arg(long, env = "CHAOS_UI_DIR")]
+        ui_dir: Option<String>,
+        /// Topology to run in-process. Default: `[paths] topology`.
+        #[arg(long, env = "CHAOS_TOPOLOGY")]
+        topology: Option<PathBuf>,
+        /// Scenario directory. Default: `[paths] scenarios`.
+        #[arg(long, env = "CHAOS_SCENARIOS_DIR")]
+        scenarios: Option<PathBuf>,
+        /// Copied into the scenario directory when it is missing or empty.
+        /// Default: `[paths] scenarios_seed`.
+        #[arg(long, env = "CHAOS_SCENARIOS_SEED")]
+        scenarios_seed: Option<PathBuf>,
+        /// Run records directory. Default: `[paths] results`.
+        #[arg(long, env = "CHAOS_RESULTS_DIR")]
+        results: Option<PathBuf>,
+        /// Do not start the topology stack; API only.
+        #[arg(long)]
+        no_stack: bool,
+        #[command(flatten)]
+        targets: TargetArgs,
+    },
+    /// Print the effective configuration for the environment as TOML.
+    Config,
 }
 
 /// Services run in-process and log every injected failure at error level,
@@ -81,8 +119,11 @@ async fn main() -> anyhow::Result<()> {
         DEFAULT_FILTER.clone_into(&mut cli.telemetry.filter);
     }
     let _telemetry = tbd_common::telemetry::init(&cli.telemetry, "chaos")?;
+    let (mut config, source) = ChaosConfig::load(&cli.config_dir, &cli.env)?;
+    tracing::info!(env = %source.env, files = ?source.files, "config");
+
     match cli.command {
-        Command::Up { file } => up(file).await,
+        Command::Up { file } => up(file.unwrap_or(config.paths.topology)).await,
         Command::Run { files, dir, json } => run(files, dir, json).await,
         Command::Check { files } => {
             let mut ok = true;
@@ -98,15 +139,15 @@ async fn main() -> anyhow::Result<()> {
             if ok { Ok(()) } else { std::process::exit(1) }
         }
         Command::Validate {
-            protocol,
-            engine,
+            targets,
             timeout,
             json,
         } => {
+            targets.apply(&mut config);
             let report = tbd_chaos::validate::run(tbd_chaos::validate::Targets {
-                protocol,
-                engine,
-                timeout,
+                protocol: config.targets.protocol,
+                engine: config.targets.engine,
+                timeout: timeout.unwrap_or(config.validate.timeout),
             })
             .await;
             if json {
@@ -120,7 +161,95 @@ async fn main() -> anyhow::Result<()> {
                 std::process::exit(1)
             }
         }
+        Command::Serve {
+            listen,
+            base_path,
+            ui_dir,
+            topology,
+            scenarios,
+            scenarios_seed,
+            results,
+            no_stack,
+            targets,
+        } => {
+            targets.apply(&mut config);
+            if let Some(v) = listen {
+                config.serve.listen = v;
+            }
+            if let Some(v) = base_path {
+                config.serve.base_path = v;
+            }
+            if let Some(v) = ui_dir {
+                config.serve.ui_dir = v;
+            }
+            if let Some(v) = topology {
+                config.paths.topology = v;
+            }
+            if let Some(v) = scenarios {
+                config.paths.scenarios = v;
+            }
+            if let Some(v) = scenarios_seed {
+                config.paths.scenarios_seed = v;
+            }
+            if let Some(v) = results {
+                config.paths.results = v;
+            }
+            if no_stack {
+                config.serve.start_stack = false;
+            }
+            config.check()?;
+            serve(config, source).await
+        }
+        Command::Config => {
+            println!("# env: {}", source.env);
+            for f in &source.files {
+                println!("# {}", f.display());
+            }
+            print!("{}", toml::to_string_pretty(&config)?);
+            Ok(())
+        }
     }
+}
+
+impl TargetArgs {
+    fn apply(self, config: &mut ChaosConfig) {
+        if let Some(p) = self.protocol {
+            config.targets.protocol = p;
+        }
+        if let Some(e) = self.engine {
+            config.targets.engine = e;
+        }
+    }
+}
+
+async fn serve(config: ChaosConfig, source: Source) -> anyhow::Result<()> {
+    let listener = tokio::net::TcpListener::bind(config.serve.listen)
+        .await
+        .with_context(|| format!("bind {}", config.serve.listen))?;
+    let addr = listener.local_addr()?;
+    let state = tbd_chaos::api::state(config, source).await?;
+
+    println!("\nchaos serve on http://{addr}");
+    println!(
+        "  api   http://{addr}{}/overview",
+        state.config.serve.base_path
+    );
+    if state.config.serve.ui_dir.is_empty() {
+        println!("  ui    not configured ([serve] ui_dir)");
+    } else {
+        println!("  ui    http://{addr}{}/", state.config.serve.ui_path);
+    }
+    match state.stack_info().await {
+        Ok(instances) => {
+            println!("  stack {}", state.config.paths.topology.display());
+            for i in instances {
+                println!("        {:<12} {:<9} {}", i.name, i.kind, i.addr);
+            }
+        }
+        Err(_) => println!("  stack none (--no-stack)"),
+    }
+    println!("\nCtrl-C to stop.");
+    tbd_chaos::api::serve(state, listener, tbd_common::shutdown::signal()).await
 }
 
 async fn up(file: PathBuf) -> anyhow::Result<()> {

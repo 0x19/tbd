@@ -15,10 +15,15 @@ the runner, the load generator, the timeline, the assertions and the reports unc
 | `chaos up` | run engines and protocols in one process while developing | [commands.md](commands.md#chaos-up) |
 | `chaos run` | execute scenarios: load, faults on a timeline, assertions | [commands.md](commands.md#chaos-run) |
 | `chaos check` | validate scenario files without running them | [commands.md](commands.md#chaos-check) |
+| `chaos serve` | run the tool as an HTTP API for the admin UI: stack, scenarios, runs, live progress | [api.md](api.md) |
+| the admin UI | the same, in a browser: `ui/chaos`, served at `/chaos` | [ui.md](ui.md) |
+| `chaos config` | print the effective `configs/chaos/` configuration for an environment | [config.md](config.md) |
 
 Further reading: [scenarios.md](scenarios.md) for writing scenarios,
-[architecture.md](architecture.md) for how it works, [extending.md](extending.md) for
-adding services, operations, actions, assertions and checks.
+[config.md](config.md) for the layered configuration, [api.md](api.md) for the HTTP
+API the UI uses, [architecture.md](architecture.md) for how it works,
+[extending.md](extending.md) for adding services, operations, actions, assertions and
+checks.
 
 ## Five-minute tour
 
@@ -32,6 +37,9 @@ chaos validate --json              # same, for machines
 mise run chaos:run                 # all scenarios, fresh stack per scenario, exit 1 on failure
 chaos run scenarios/latency.toml   # one scenario
 chaos check scenarios/*.toml       # parse and cross-check without running
+
+mise run chaos:serve               # API on :7700 + dev stack; the admin UI when built
+curl -s localhost:7700/api/chaos/overview | jq .
 ```
 
 What a passing scenario looks like:
@@ -65,11 +73,18 @@ timeline did and when, and each assertion with its bound and the observed value.
 - Assert on error rate, latency percentiles, throughput, request counts, and per-service
   counters.
 - Report as text or JSON with a non-zero exit on failure, so it runs unattended in CI.
+- Serve all of it over HTTP (`chaos serve`): stop, start and fault instances by hand,
+  edit and push scenario files, run scenarios and ad-hoc load with per-second progress
+  over Server-Sent Events, keep every run as a JSON record, and validate the deployed
+  stack through Envoy. This is what the admin UI in `ui/chaos` drives.
+- Read its configuration from `configs/chaos/base.toml` merged with the environment's
+  file (`local`, `dev`, `production`), overridable by flags and env vars.
 
 ## What it does not do yet
 
-- Bench against a stack it did not start. `validate` works against any URL; `run` always
-  starts its own stack.
+- Run a scenario against a stack it did not start. `validate` works against any URL and
+  an ad-hoc load run through the API takes explicit targets, but `run` always starts its
+  own stack because the timeline needs fault handles on the instances.
 - Scenarios defined in Rust. Only TOML, though the executor is written so a Rust source
   can be added.
 - Burst and step load patterns, per-operation assertions, multi-engine failover through

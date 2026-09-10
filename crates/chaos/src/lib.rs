@@ -10,6 +10,8 @@
 //! Everything else is generic: the [`stack`] runner, validation, load
 //! generation, timelines, assertions and reports.
 
+pub mod api;
+pub mod config;
 pub mod load;
 pub mod scenario;
 pub mod service;

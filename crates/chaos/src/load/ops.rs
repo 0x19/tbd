@@ -8,7 +8,7 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 use futures::{SinkExt, StreamExt};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tbd_proto::protocol::v1::{PingRequest, protocol_service_client::ProtocolServiceClient};
 use tokio::sync::Mutex;
@@ -16,7 +16,8 @@ use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, tungstenite::Message};
 use tonic::transport::Channel;
 
 /// Where load goes: one protocol instance.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct Target {
     /// Instance name from the topology.
     pub name: String,
@@ -132,7 +133,7 @@ pub trait Operation: Send + Sync {
 }
 
 /// Operations known to this project. The TOML value is the `snake_case` name.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum OpKind {
     /// `POST /v1/evaluate`.

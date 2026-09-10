@@ -2,8 +2,15 @@
 
 ```
 crates/chaos/src
-├── main.rs            CLI: up, validate, run, check
+├── main.rs            CLI: up, validate, run, check, serve, config
+├── config.rs          configs/chaos/ schema, loaded via tbd_common::config
 ├── topology.rs        this project's [stack] TOML → launchers      (replace per project)
+├── api/               chaos serve
+│   ├── mod.rs         router: API under base_path, built UI under ui_path
+│   ├── state.rs       AppState: config, the long-lived stack, run jobs, global feed
+│   ├── runs.rs        RunRecord/RunStore (JSON files), ActiveRun (live feed)
+│   ├── routes.rs      handlers and SSE
+│   └── error.rs       ApiError → status + {"error"}
 ├── service/           the Service extension point
 │   ├── mod.rs         Service, InstanceHandle, Instance, Peers
 │   ├── engine.rs      engine adapter: serve_with + Runtime (fault, counters)
@@ -95,6 +102,19 @@ is nothing to await or lock inside them.
 Each check is `async fn(Targets) -> Result<String, String>`. The runner spawns all of
 them into a `JoinSet` with the timeout wrapped around each, collects results, restores
 the declared order, and counts. Text and JSON render the same `Report`.
+
+## Serve
+
+`chaos serve` wraps the same pieces in an axum router ([api.md](api.md)). The stack from
+the topology lives in `AppState` behind a mutex for the life of the process; stack
+routes lock it, act, and broadcast `stack_changed`. Runs go through hooks the executor
+and the load generator already expose: `scenario::Hooks` and `load::Hooks` carry an
+event channel and a `CancellationToken`, so the same `run_scenario_with` that the CLI
+calls (with default hooks) streams phases, per-second snapshots and timeline events
+to the API, and stops early on cancel. A run's events are kept in memory while it is
+active (late clients get a replay) and its final record is one JSON file under
+`[paths] results`. One run is active at a time; scenario runs use their own ephemeral
+stack so the serve stack is never disturbed.
 
 ## Conventions the code relies on
 

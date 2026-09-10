@@ -11,4 +11,6 @@ pub mod report;
 pub mod timeline;
 
 pub use config::ScenarioFile;
-pub use executor::{ScenarioResult, run_file, run_scenario};
+pub use executor::{
+    Hooks, RunEvent, ScenarioResult, run_file, run_file_with, run_scenario, run_scenario_with,
+};

@@ -6,6 +6,11 @@ Global flags, valid before or after the subcommand:
 |---|---|---|---|
 | `--log-format text\|json` | `LOG_FORMAT` | `text` | log encoding |
 | `--log-filter <directive>` | `RUST_LOG` | see below | `tracing` filter |
+| `--env <name>` | `TBD_ENV` | `local` | which `configs/chaos/<env>.toml` to merge over `base.toml` |
+| `--config-dir <dir>` | `CHAOS_CONFIG_DIR` | `configs/chaos` | where those files are |
+
+Every command loads the configuration first ([config.md](config.md)); flags below
+override the fields they name.
 
 When neither the flag nor `RUST_LOG` is given, the default filter is
 `warn,tbd_chaos=info,tbd_protocol::error=off,tower_http=off`: the tool's own progress at
@@ -25,9 +30,9 @@ chaos validate [--protocol URL] [--engine URL] [--timeout DURATION] [--json]
 
 | Flag | Env | Default |
 |---|---|---|
-| `--protocol` | `CHAOS_PROTOCOL_URL` | `http://127.0.0.1:8080` |
-| `--engine` | `CHAOS_ENGINE_URL` | `http://127.0.0.1:50051` |
-| `--timeout` | | `5s` |
+| `--protocol` | `CHAOS_PROTOCOL_URL` | `[targets] protocol`, `http://127.0.0.1:8080` in `base.toml` |
+| `--engine` | `CHAOS_ENGINE_URL` | `[targets] engine`, `http://127.0.0.1:50051` |
+| `--timeout` | | `[validate] timeout`, `5s` |
 | `--json` | | off |
 
 Checks, in output order:
@@ -79,7 +84,7 @@ Start the `[stack]` of a topology or scenario file in this process and keep it r
 until Ctrl-C. Prints each instance's address and a ready-made `chaos validate` line.
 
 ```
-chaos up [FILE]          # default: topologies/dev.toml
+chaos up [FILE]          # default: [paths] topology, topologies/dev.toml
 ```
 
 Any file with a `[stack]` table works, so a scenario file doubles as a topology. Other
@@ -159,3 +164,41 @@ chaos check FILES...
 ```
 
 Prints `ok <file> (<name>)` or `error <message>` per file and exits 1 if any failed.
+
+## `chaos serve`
+
+Run the tool as an HTTP API for the admin UI and for scripts, with the topology stack
+in-process, until Ctrl-C. The API is documented in [api.md](api.md).
+
+```
+chaos serve [--listen ADDR] [--base-path PATH] [--ui-dir DIR] [--topology FILE]
+            [--scenarios DIR] [--results DIR] [--no-stack] [--protocol URL] [--engine URL]
+```
+
+| Flag | Env | Default |
+|---|---|---|
+| `--listen` | `CHAOS_LISTEN_ADDR` | `[serve] listen`, `127.0.0.1:7700` |
+| `--base-path` | `CHAOS_BASE_PATH` | `[serve] base_path`, `/api/chaos` |
+| `--ui-dir` | `CHAOS_UI_DIR` | `[serve] ui_dir`, none |
+| `--topology` | `CHAOS_TOPOLOGY` | `[paths] topology` |
+| `--scenarios` | `CHAOS_SCENARIOS_DIR` | `[paths] scenarios` |
+| `--scenarios-seed` | `CHAOS_SCENARIOS_SEED` | `[paths] scenarios_seed`, none; seeds `--scenarios` when empty |
+| `--results` | `CHAOS_RESULTS_DIR` | `[paths] results`, `.chaos/results` |
+| `--no-stack` | | off; sets `[serve] start_stack = false` |
+| `--protocol`, `--engine` | `CHAOS_PROTOCOL_URL`, `CHAOS_ENGINE_URL` | `[targets]`, the defaults for API validate |
+
+On start it prints the API URL, the UI URL when configured, and each stack instance. It
+exits 1 when the stack cannot start (typically the fixed ports of `topologies/dev.toml`
+are taken) or the results directory cannot be created. `mise run chaos:serve` runs it
+with `--ui-dir ui/chaos/out`.
+
+## `chaos config`
+
+Print the effective configuration for `--env` as TOML, preceded by comments naming the
+files that were merged. Exits 1 when a file is missing, does not parse, or has an
+unknown key.
+
+```
+chaos config
+chaos --env dev config
+```

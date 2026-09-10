@@ -3,6 +3,8 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+mod api;
+
 use std::time::Duration;
 
 use tbd_chaos::{topology::StackConfig, validate};

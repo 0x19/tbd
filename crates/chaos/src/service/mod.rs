@@ -9,7 +9,7 @@ pub mod protocol;
 use std::{collections::BTreeMap, net::SocketAddr, time::Duration};
 
 use async_trait::async_trait;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tbd_common::fault::FaultHandle;
 
 /// Something that can be started in-process.
@@ -43,7 +43,7 @@ impl Peers<'_> {
 }
 
 /// Request counters an instance may expose.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RequestCounts {
     /// Requests received.
     pub total: u64,
