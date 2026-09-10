@@ -19,6 +19,7 @@ use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 
 use crate::AppState;
+use tbd_common::metrics::StreamGuard;
 
 pub fn routes() -> Router<AppState> {
     Router::new().route("/ws", get(upgrade))
@@ -75,12 +76,14 @@ async fn bridge(socket: WebSocket, state: AppState) {
         }
     };
     tracing::info!(%session_id, "ws session opened");
+    let guard = StreamGuard::open("ws");
 
     let mut seq = 0_u64;
     loop {
         tokio::select! {
             inbound = ws_rx.next() => match inbound {
                 Some(Ok(Message::Text(text))) => {
+                    guard.item("in");
                     seq += 1;
                     let frame = SessionRequest {
                         session_id: session_id.clone(),
@@ -90,6 +93,7 @@ async fn bridge(socket: WebSocket, state: AppState) {
                     if to_engine.send(frame).await.is_err() { break; }
                 }
                 Some(Ok(Message::Binary(bytes))) => {
+                    guard.item("in");
                     seq += 1;
                     let frame = SessionRequest {
                         session_id: session_id.clone(),
@@ -129,7 +133,10 @@ async fn bridge(socket: WebSocket, state: AppState) {
                         Some(session_response::Body::Close(Close { ref reason })) => WsFrame::Close { reason },
                         None => continue,
                     };
-                    if ws_tx.send(Message::Text(json(&msg).into())).await.is_err() { break; }
+                    if ws_tx.send(Message::Text(json(&msg).into())).await.is_err() {
+                        break;
+                    }
+                    guard.item("out");
                 }
                 Some(Err(status)) => {
                     let msg = WsFrame::Error { message: status.to_string() };

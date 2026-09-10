@@ -1,0 +1,144 @@
+# VictoriaMetrics single-node: scrapes every pod annotated prometheus.io/scrape,
+# accepts remote-write from Tempo's metrics-generator, answers PromQL for Grafana.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: victoria-metrics
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: victoria-metrics-scrape
+rules:
+  - apiGroups: [""]
+    resources: [pods, services, endpoints, nodes, nodes/metrics]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: victoria-metrics-scrape
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: victoria-metrics-scrape
+subjects:
+  - kind: ServiceAccount
+    name: victoria-metrics
+    namespace: observability
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: victoria-metrics-scrape
+data:
+  scrape.yaml: |
+    global:
+      scrape_interval: 15s
+    scrape_configs:
+      # Any pod that opts in with annotations. Our services and Envoy do.
+      - job_name: kubernetes-pods
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: "true"
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+          - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+            target_label: app
+          - source_labels: [__meta_kubernetes_pod_node_name]
+            target_label: node
+      - job_name: victoria-metrics
+        static_configs: [{ targets: ["localhost:8428"] }]
+      - job_name: victoria-logs
+        static_configs: [{ targets: ["victoria-logs:9428"] }]
+      - job_name: tempo
+        static_configs: [{ targets: ["tempo:3200"] }]
+      - job_name: otel-collector
+        static_configs: [{ targets: ["otel-collector:8888"] }]
+      - job_name: grafana
+        static_configs: [{ targets: ["grafana:3000"] }]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: victoria-metrics
+  labels:
+    app.kubernetes.io/name: victoria-metrics
+spec:
+  serviceName: victoria-metrics
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: victoria-metrics
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: victoria-metrics
+    spec:
+      serviceAccountName: victoria-metrics
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: victoria-metrics
+          image: victoriametrics/victoria-metrics:v1.151.0
+          args:
+            - -promscrape.config=/etc/vm/scrape.yaml
+            - -storageDataPath=/storage
+            - -retentionPeriod=30d
+            - -httpListenAddr=:8428
+            - -search.latencyOffset=5s
+          ports:
+            - name: http
+              containerPort: 8428
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 5
+          resources:
+            requests: { cpu: 200m, memory: 512Mi }
+            limits: { cpu: "4", memory: 4Gi }
+          volumeMounts:
+            - name: scrape
+              mountPath: /etc/vm
+              readOnly: true
+            - name: storage
+              mountPath: /storage
+      volumes:
+        - name: scrape
+          configMap:
+            name: victoria-metrics-scrape
+  volumeClaimTemplates:
+    - metadata:
+        name: storage
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 100Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: victoria-metrics
+spec:
+  selector:
+    app.kubernetes.io/name: victoria-metrics
+  ports:
+    - name: http
+      port: 8428
+      targetPort: http

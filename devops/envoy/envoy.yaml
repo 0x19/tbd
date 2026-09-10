@@ -1,0 +1,259 @@
+# Envoy: the only thing clients and services talk to.
+#
+# Listeners
+#   :8080  edge       HTTP/1.1 + h2c. gRPC by service name, WebSocket upgrade,
+#                     REST, SSE, GraphQL. Streams get no timeout.
+#   :50051 engine-lb  gRPC only. Protocol instances point their engine URL here,
+#                     so engine replicas are a pure scale-out.
+#   :9901  admin      /ready, /stats/prometheus, /clusters, /config_dump.
+#
+# Clusters resolve by DNS name: `engine`, `protocol`, `otel-collector`. In compose
+# those are service names; in Kubernetes they are headless Services (engine,
+# protocol) and an ExternalName Service (otel-collector), so this one file is
+# used unchanged everywhere. STRICT_DNS re-resolves every 5 s, so scale-out
+# and pod churn are picked up without a restart.
+#
+# Observability: JSON access logs to stdout with the trace id, Prometheus stats on
+# the admin port, OpenTelemetry tracing to the collector with W3C traceparent
+# propagation, so an Envoy span is the root of every trace.
+
+admin:
+  address:
+    socket_address: { address: 0.0.0.0, port_value: 9901 }
+
+layered_runtime:
+  layers:
+    - name: static
+      static_layer:
+        # Keep connections to busy upstreams bounded; raise with traffic.
+        envoy.resource_limits.listener.edge.connection_limit: 100000
+
+static_resources:
+  listeners:
+    - name: edge
+      address:
+        socket_address: { address: 0.0.0.0, port_value: 8080 }
+      filter_chains:
+        - filters:
+            - name: envoy.filters.network.http_connection_manager
+              typed_config:
+                "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+                stat_prefix: edge
+                codec_type: AUTO
+                generate_request_id: true
+                use_remote_address: true
+                # Long-lived streams (SSE, gRPC, WebSocket) must not be idled out
+                # by the connection manager; per-route timeouts handle unary calls.
+                stream_idle_timeout: 0s
+                request_timeout: 0s
+                upgrade_configs:
+                  - upgrade_type: websocket
+                tracing:
+                  provider:
+                    name: envoy.tracers.opentelemetry
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.config.trace.v3.OpenTelemetryConfig
+                      service_name: envoy
+                      grpc_service:
+                        envoy_grpc: { cluster_name: otel-collector }
+                        timeout: 0.25s
+                access_log:
+                  - name: envoy.access_loggers.stdout
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.access_loggers.stream.v3.StdoutAccessLog
+                      log_format:
+                        json_format: &access_log_json
+                          timestamp: "%START_TIME%"
+                          level: "INFO"
+                          message: "access"
+                          listener: "%DOWNSTREAM_LOCAL_ADDRESS%"
+                          method: "%REQ(:METHOD)%"
+                          path: "%REQ(X-ENVOY-ORIGINAL-PATH?:PATH)%"
+                          protocol: "%PROTOCOL%"
+                          status: "%RESPONSE_CODE%"
+                          grpc_status: "%GRPC_STATUS_NUMBER%"
+                          flags: "%RESPONSE_FLAGS%"
+                          duration_ms: "%DURATION%"
+                          upstream_ms: "%RESPONSE_DURATION%"
+                          bytes_in: "%BYTES_RECEIVED%"
+                          bytes_out: "%BYTES_SENT%"
+                          upstream: "%UPSTREAM_HOST%"
+                          cluster: "%UPSTREAM_CLUSTER%"
+                          client: "%DOWNSTREAM_REMOTE_ADDRESS_WITHOUT_PORT%"
+                          request_id: "%REQ(X-REQUEST-ID)%"
+                          traceparent: "%REQ(TRACEPARENT)%"
+                          trace_id: "%TRACE_ID%"
+                          user_agent: "%REQ(USER-AGENT)%"
+                http_filters:
+                  - name: envoy.filters.http.router
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+                route_config:
+                  name: edge
+                  virtual_hosts:
+                    - name: all
+                      domains: ["*"]
+                      routes:
+                        # gRPC: engine service straight to the engines.
+                        - match: { prefix: "/tbd.engine.v1.EngineService/", grpc: {} }
+                          route:
+                            cluster: engine
+                            timeout: 0s
+                            retry_policy: &grpc_retry
+                              retry_on: "connect-failure,refused-stream,unavailable"
+                              num_retries: 2
+                              per_try_timeout: 5s
+                        # gRPC owned by the protocol: its own service, health, reflection.
+                        - match: { prefix: "/", grpc: {} }
+                          route:
+                            cluster: protocol
+                            timeout: 0s
+                            retry_policy: *grpc_retry
+                        # WebSocket bridge.
+                        - match: { path: "/ws" }
+                          route:
+                            cluster: protocol
+                            timeout: 0s
+                            idle_timeout: 0s
+                        # Server-sent events.
+                        - match: { prefix: "/v1/subjects/" }
+                          route:
+                            cluster: protocol
+                            timeout: 0s
+                        # Everything else: REST, GraphQL, health.
+                        - match: { prefix: "/" }
+                          route:
+                            cluster: protocol
+                            timeout: 15s
+                            retry_policy:
+                              # Only failures where the request was never sent.
+                              retry_on: "connect-failure,refused-stream"
+                              num_retries: 2
+
+    - name: engine-lb
+      address:
+        socket_address: { address: 0.0.0.0, port_value: 50051 }
+      filter_chains:
+        - filters:
+            - name: envoy.filters.network.http_connection_manager
+              typed_config:
+                "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+                stat_prefix: engine_lb
+                codec_type: HTTP2
+                generate_request_id: true
+                stream_idle_timeout: 0s
+                request_timeout: 0s
+                tracing:
+                  provider:
+                    name: envoy.tracers.opentelemetry
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.config.trace.v3.OpenTelemetryConfig
+                      service_name: envoy
+                      grpc_service:
+                        envoy_grpc: { cluster_name: otel-collector }
+                        timeout: 0.25s
+                access_log:
+                  - name: envoy.access_loggers.stdout
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.access_loggers.stream.v3.StdoutAccessLog
+                      log_format:
+                        json_format: *access_log_json
+                http_filters:
+                  - name: envoy.filters.http.router
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+                route_config:
+                  name: engine-lb
+                  virtual_hosts:
+                    - name: all
+                      domains: ["*"]
+                      routes:
+                        - match: { prefix: "/" }
+                          route:
+                            cluster: engine
+                            timeout: 0s
+                            retry_policy: *grpc_retry
+
+  clusters:
+    - name: protocol
+      type: STRICT_DNS
+      dns_lookup_family: V4_ONLY
+      dns_refresh_rate: 5s
+      lb_policy: LEAST_REQUEST
+      connect_timeout: 1s
+      typed_extension_protocol_options:
+        envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+          "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+          # h2 to the protocol when the client spoke h2 (gRPC), HTTP/1.1 otherwise
+          # (REST, WebSocket). The protocol serves both on one port.
+          use_downstream_protocol_config:
+            http_protocol_options: {}
+            http2_protocol_options: {}
+      load_assignment:
+        cluster_name: protocol
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address: { address: protocol, port_value: 8080 }
+      health_checks:
+        - timeout: 1s
+          interval: 5s
+          unhealthy_threshold: 2
+          healthy_threshold: 1
+          http_health_check:
+            path: /readyz
+      outlier_detection:
+        consecutive_5xx: 5
+        interval: 5s
+        base_ejection_time: 30s
+        max_ejection_percent: 50
+
+    - name: engine
+      type: STRICT_DNS
+      dns_lookup_family: V4_ONLY
+      dns_refresh_rate: 5s
+      lb_policy: LEAST_REQUEST
+      connect_timeout: 1s
+      typed_extension_protocol_options:
+        envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+          "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+          explicit_http_config:
+            http2_protocol_options: {}
+      load_assignment:
+        cluster_name: engine
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address: { address: engine, port_value: 50051 }
+      health_checks:
+        - timeout: 1s
+          interval: 5s
+          unhealthy_threshold: 2
+          healthy_threshold: 1
+          grpc_health_check:
+            service_name: tbd.engine.v1.EngineService
+      outlier_detection:
+        consecutive_gateway_failure: 5
+        interval: 5s
+        base_ejection_time: 30s
+        max_ejection_percent: 50
+
+    - name: otel-collector
+      type: STRICT_DNS
+      dns_lookup_family: V4_ONLY
+      lb_policy: ROUND_ROBIN
+      connect_timeout: 1s
+      typed_extension_protocol_options:
+        envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+          "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+          explicit_http_config:
+            http2_protocol_options: {}
+      load_assignment:
+        cluster_name: otel-collector
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address: { address: otel-collector, port_value: 4317 }

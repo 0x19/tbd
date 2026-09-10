@@ -1,0 +1,18 @@
+# Host-facing Envoy for the local cluster. In-cluster clients keep using the
+# ClusterIP Service `envoy` on 8080/50051; k3d maps these ports to the host.
+apiVersion: v1
+kind: Service
+metadata:
+  name: envoy-lb
+  namespace: tbd
+spec:
+  type: LoadBalancer
+  selector:
+    app.kubernetes.io/name: envoy
+  ports:
+    - name: edge
+      port: 18080
+      targetPort: edge
+    - name: engine-lb
+      port: 15051
+      targetPort: engine-lb

@@ -5,7 +5,8 @@ metadata:
   labels:
     app.kubernetes.io/name: engine
 spec:
-  type: ClusterIP
+  # Headless: Envoy resolves every pod and balances itself.
+  clusterIP: None
   selector:
     app.kubernetes.io/name: engine
   ports:

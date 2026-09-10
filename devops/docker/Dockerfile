@@ -2,8 +2,8 @@
 #
 # One Dockerfile for every workspace binary. Select with --build-arg BIN=engine|protocol.
 #
-#   docker build -f devops/docker/Dockerfile --build-arg BIN=engine   -t ghcr.io/ORG/tbd-engine   .
-#   docker build -f devops/docker/Dockerfile --build-arg BIN=protocol -t ghcr.io/ORG/tbd-protocol .
+#   docker build -f devops/docker/Dockerfile --build-arg BIN=engine   -t ghcr.io/0x19/tbd-engine   .
+#   docker build -f devops/docker/Dockerfile --build-arg BIN=protocol -t ghcr.io/0x19/tbd-protocol .
 #
 # Stages: chef (toolchain + cargo-chef) -> planner (recipe.json) -> cacher (deps only)
 #         -> builder (workspace) -> runtime (distroless).

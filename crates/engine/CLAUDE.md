@@ -11,6 +11,12 @@ The streaming compute service. gRPC only. Talks to nothing else yet.
   by the chaos tool through `Runtime.stats`. Not production metrics.
 - `config.rs`: clap `Config`; every field has an env var (`ENGINE_*`).
 
+- Observability: `request_span` in `lib.rs` makes one `grpc.request` span per call,
+  adopts a caller's `traceparent` from metadata and records `trace_id`; `admit()` in
+  `service.rs` starts the `RequestTimer` and counts injected faults; streams hold a
+  `StreamGuard`. Metrics listen on `ENGINE_METRICS_ADDR` (default `:9464`), set to
+  `None` by embedders.
+
 Invariants:
 - Every score is a stub and says so: `stub = true`, `model_version` starts with
   `stub-`. Do not let a placeholder look like a measurement.

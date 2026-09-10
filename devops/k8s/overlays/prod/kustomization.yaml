@@ -4,9 +4,9 @@ resources:
   - ../../base
 images:
   # Pin to an immutable tag (a release tag or image digest) before applying.
-  - name: ghcr.io/ORG/tbd-engine
+  - name: ghcr.io/0x19/tbd-engine
     newTag: v0.0.0-REPLACE
-  - name: ghcr.io/ORG/tbd-protocol
+  - name: ghcr.io/0x19/tbd-protocol
     newTag: v0.0.0-REPLACE
 patches:
   - target:

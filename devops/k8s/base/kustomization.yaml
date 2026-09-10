@@ -6,6 +6,7 @@ resources:
   - configmap.yaml
   - engine
   - protocol
+  - envoy
 labels:
   - pairs:
       app.kubernetes.io/part-of: tbd

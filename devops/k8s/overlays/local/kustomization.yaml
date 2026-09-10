@@ -1,0 +1,39 @@
+# Local k3d cluster: images imported from the docker daemon, Envoy exposed on
+# host ports 18080/15051 through envoy-lb.yaml and k3d's load balancer,
+# two protocol replicas and two engines so Envoy has something to balance.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+  - envoy-lb.yaml
+images:
+  - name: ghcr.io/0x19/tbd-engine
+    newTag: dev
+  - name: ghcr.io/0x19/tbd-protocol
+    newTag: dev
+patches:
+  - target:
+      kind: Deployment
+      name: engine
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 2
+      - op: replace
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: IfNotPresent
+  - target:
+      kind: Deployment
+      name: protocol
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 2
+      - op: replace
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: IfNotPresent
+configMapGenerator:
+  - name: tbd-env
+    behavior: merge
+    literals:
+      - RUST_LOG=info,tbd=debug

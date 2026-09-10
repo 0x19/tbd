@@ -5,12 +5,13 @@ metadata:
   labels:
     app.kubernetes.io/name: protocol
 spec:
-  type: ClusterIP
+  # Headless: Envoy resolves every pod and balances itself.
+  clusterIP: None
   selector:
     app.kubernetes.io/name: protocol
   ports:
     - name: http
-      port: 80
+      port: 8080
       targetPort: http
       protocol: TCP
       appProtocol: http

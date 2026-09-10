@@ -8,6 +8,8 @@ services:
       RUST_LOG: {{ rust_log }}
       LOG_FORMAT: {{ log_format }}
       ENGINE_LISTEN_ADDR: 0.0.0.0:{{ engine_port }}
+      ENGINE_METRICS_ADDR: 0.0.0.0:9464
+      OTEL_EXPORTER_OTLP_ENDPOINT: "{{ otlp_endpoint | default('') }}"
     restart: unless-stopped
 
   protocol:
@@ -16,6 +18,8 @@ services:
       RUST_LOG: {{ rust_log }}
       LOG_FORMAT: {{ log_format }}
       PROTOCOL_LISTEN_ADDR: 0.0.0.0:{{ protocol_port }}
+      PROTOCOL_METRICS_ADDR: 0.0.0.0:9465
+      OTEL_EXPORTER_OTLP_ENDPOINT: "{{ otlp_endpoint | default('') }}"
       PROTOCOL_ENGINE_URL: http://engine:{{ engine_port }}
     ports:
       - "{{ protocol_port }}:{{ protocol_port }}"

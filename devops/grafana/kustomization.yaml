@@ -1,0 +1,20 @@
+# Turns the provisioning files and dashboards into ConfigMaps. Referenced from
+# devops/k8s/observability; the hash suffix on names makes every dashboard
+# change roll Grafana, which is how `mise run grafana:reload` works.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: observability
+configMapGenerator:
+  - name: grafana-datasources
+    files:
+      - provisioning/datasources/datasources.yaml
+  - name: grafana-dashboard-provider
+    files:
+      - provisioning/dashboards/dashboards.yaml
+  - name: grafana-dashboards
+    files:
+      - dashboards/tbd-overview.json
+      - dashboards/tbd-engine.json
+      - dashboards/tbd-protocol.json
+      - dashboards/tbd-traces.json
+      - dashboards/tbd-envoy.json

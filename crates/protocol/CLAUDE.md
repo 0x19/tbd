@@ -17,6 +17,12 @@ belongs in the engine.
 - `grpc.rs`: the protocol's own gRPC (`ProtocolService/Ping`), health and reflection,
   mounted into the axum router via `Routes::into_axum_router`.
 
+- Observability: `observe.rs` has the span factory (parents to `traceparent`, records
+  `trace_id`, classifies gRPC by content type) and the metrics middleware; `state.rs`
+  wraps the engine channel in `Measured` (client metrics per route) and `TraceInject`
+  (propagates `traceparent`). Metrics listen on `PROTOCOL_METRICS_ADDR` (default `:9465`).
+  The engine URL is Envoy's engine LB in every deployed environment.
+
 Invariants:
 - Forward the engine's `stub` flag untouched on REST, GraphQL and SSE.
 - `TCP_NODELAY` is applied with `ListenerExt::tap_io` in `serve_on`. axum 0.8 has no

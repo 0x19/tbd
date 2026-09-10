@@ -1,0 +1,43 @@
+# Host-facing Services for the local cluster only; applied by mise run local:deploy.
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana-lb
+  namespace: observability
+spec:
+  type: LoadBalancer
+  selector:
+    app.kubernetes.io/name: grafana
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: victoria-metrics-lb
+  namespace: observability
+spec:
+  type: LoadBalancer
+  selector:
+    app.kubernetes.io/name: victoria-metrics
+  ports:
+    - name: http
+      port: 9090
+      targetPort: http
+---
+# OTLP from processes on the host (mise run dev) into the cluster's collector.
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector-lb
+  namespace: observability
+spec:
+  type: LoadBalancer
+  selector:
+    app.kubernetes.io/name: otel-collector
+  ports:
+    - name: otlp-grpc
+      port: 14317
+      targetPort: otlp-grpc

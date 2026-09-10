@@ -9,7 +9,10 @@
 use std::{pin::Pin, time::Duration};
 
 use futures::{Stream, StreamExt};
-use tbd_common::fault::{ErrorKind, Fault};
+use tbd_common::{
+    fault::{ErrorKind, Fault},
+    metrics::{RequestTimer, StreamGuard, names},
+};
 use tbd_proto::engine::v1::{
     Close, EvaluateRequest, EvaluateResponse, Heartbeat, SessionRequest, SessionResponse,
     SubscribeRequest, SubscribeResponse, engine_service_server::EngineService, session_request,
@@ -44,18 +47,25 @@ impl Engine {
         prost_types::Timestamp::from(std::time::SystemTime::now())
     }
 
-    /// Count the request and apply any injected fault before real work.
-    async fn admit(&self) -> Result<(), Status> {
+    /// Count the request, start its timer and apply any injected fault
+    /// before real work.
+    async fn admit(&self, route: &'static str) -> Result<RequestTimer, Status> {
         self.runtime.stats.request();
+        let mut timer = RequestTimer::start("grpc", route);
         if let Err(fault) = self.runtime.fault.apply().await {
             self.runtime.stats.failure();
-            return Err(status_from(fault));
+            metrics::counter!(names::FAULTS_INJECTED_TOTAL, "kind" => format!("{:?}", fault.kind).to_lowercase())
+                .increment(1);
+            let status = status_from(fault);
+            timer.set_status(format!("{:?}", status.code()));
+            return Err(status);
         }
-        Ok(())
+        Ok(timer)
     }
 
-    fn reject(&self, status: Status) -> Status {
+    fn reject(&self, timer: &mut RequestTimer, status: Status) -> Status {
         self.runtime.stats.failure();
+        timer.set_status(format!("{:?}", status.code()));
         status
     }
 }
@@ -77,10 +87,13 @@ impl EngineService for Engine {
         &self,
         request: Request<EvaluateRequest>,
     ) -> Result<Response<EvaluateResponse>, Status> {
-        self.admit().await?;
+        let mut timer = self.admit("EngineService/Evaluate").await?;
         let req = request.into_inner();
         if req.subject_id.is_empty() {
-            return Err(self.reject(Status::invalid_argument("subject_id is required")));
+            return Err(self.reject(
+                &mut timer,
+                Status::invalid_argument("subject_id is required"),
+            ));
         }
         tracing::debug!(subject_id = %req.subject_id, payload_len = req.payload.len(), "evaluate (stub)");
         Ok(Response::new(EvaluateResponse {
@@ -97,13 +110,17 @@ impl EngineService for Engine {
         &self,
         request: Request<SubscribeRequest>,
     ) -> Result<Response<Self::SubscribeStream>, Status> {
-        self.admit().await?;
+        let mut timer = self.admit("EngineService/Subscribe").await?;
         let subject_id = request.into_inner().subject_id;
         if subject_id.is_empty() {
-            return Err(self.reject(Status::invalid_argument("subject_id is required")));
+            return Err(self.reject(
+                &mut timer,
+                Status::invalid_argument("subject_id is required"),
+            ));
         }
         tracing::debug!(%subject_id, "subscribe");
         let fault = self.runtime.fault.clone();
+        let guard = StreamGuard::open("subscribe");
 
         // One interval for the life of the stream. It is moved through the unfold
         // state so it survives across awaits; the first tick fires immediately,
@@ -111,24 +128,25 @@ impl EngineService for Engine {
         let mut interval = tokio::time::interval(self.heartbeat);
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         let stream = futures::stream::unfold(
-            (0_u64, subject_id, interval, fault),
-            |(seq, subject_id, mut interval, fault)| async move {
+            (0_u64, subject_id, interval, fault, guard),
+            |(seq, subject_id, mut interval, fault, guard)| async move {
                 if seq == u64::MAX {
                     return None;
                 }
                 interval.tick().await;
                 if let Some(injected) = fault.stream_error() {
                     // Yield the injected status, then end the stream on the next poll.
-                    let state = (u64::MAX, subject_id, interval, fault);
+                    let state = (u64::MAX, subject_id, interval, fault, guard);
                     return Some((Err(status_from(injected)), state));
                 }
+                guard.item("out");
                 let event = SubscribeResponse {
                     id: uuid::Uuid::now_v7().to_string(),
                     subject_id: subject_id.clone(),
                     at: Some(Self::now()),
                     kind: Some(subscribe_response::Kind::Heartbeat(Heartbeat { seq })),
                 };
-                Some((Ok(event), (seq + 1, subject_id, interval, fault)))
+                Some((Ok(event), (seq + 1, subject_id, interval, fault, guard)))
             },
         );
         Ok(Response::new(Box::pin(stream)))
@@ -140,12 +158,13 @@ impl EngineService for Engine {
         &self,
         request: Request<Streaming<SessionRequest>>,
     ) -> Result<Response<Self::SessionStream>, Status> {
-        self.admit().await?;
+        let _timer = self.admit("EngineService/Session").await?;
         let mut inbound = request.into_inner();
         let (tx, rx) = mpsc::channel::<Result<SessionResponse, Status>>(32);
         let heartbeat = self.heartbeat;
 
         tokio::spawn(async move {
+            let guard = StreamGuard::open("session");
             // First heartbeat after one full interval, so it never races the
             // echo of the client's opening frame.
             let mut ticker =
@@ -157,7 +176,10 @@ impl EngineService for Engine {
             loop {
                 let frame = tokio::select! {
                     inbound = inbound.next() => match inbound {
-                        Some(Ok(frame)) => frame,
+                        Some(Ok(frame)) => {
+                            guard.item("in");
+                            frame
+                        }
                         Some(Err(status)) => {
                             tracing::warn!(%status, "session inbound error");
                             break;
@@ -174,6 +196,7 @@ impl EngineService for Engine {
                         if tx.send(Ok(hb)).await.is_err() {
                             break;
                         }
+                        guard.item("out");
                         continue;
                     }
                 };
@@ -194,6 +217,7 @@ impl EngineService for Engine {
                         if tx.send(Ok(echo)).await.is_err() {
                             break;
                         }
+                        guard.item("out");
                     }
                     Some(session_request::Body::Heartbeat(_)) | None => {}
                     Some(session_request::Body::Close(Close { reason })) => {

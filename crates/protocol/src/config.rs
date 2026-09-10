@@ -3,7 +3,7 @@
 use std::net::SocketAddr;
 
 use clap::Parser;
-use tbd_common::telemetry::LogArgs;
+use tbd_common::telemetry::TelemetryArgs;
 
 /// Protocol configuration.
 #[derive(Debug, Clone, Parser)]
@@ -21,7 +21,11 @@ pub struct Config {
     )]
     pub engine_url: String,
 
-    /// Logging.
+    /// Prometheus `/metrics` listener. Unset in embedded use.
+    #[arg(long, env = "PROTOCOL_METRICS_ADDR", default_value = "0.0.0.0:9465")]
+    pub metrics_addr: Option<SocketAddr>,
+
+    /// Logs and traces.
     #[command(flatten)]
-    pub log: LogArgs,
+    pub telemetry: TelemetryArgs,
 }

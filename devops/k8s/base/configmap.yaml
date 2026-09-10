@@ -6,5 +6,11 @@ data:
   RUST_LOG: info
   LOG_FORMAT: json
   ENGINE_LISTEN_ADDR: 0.0.0.0:50051
+  ENGINE_METRICS_ADDR: 0.0.0.0:9464
   PROTOCOL_LISTEN_ADDR: 0.0.0.0:8080
-  PROTOCOL_ENGINE_URL: http://engine:50051
+  PROTOCOL_METRICS_ADDR: 0.0.0.0:9464
+  # Through Envoy, never straight to an engine.
+  PROTOCOL_ENGINE_URL: http://envoy:50051
+  # OTLP/gRPC collector for traces. Alloy in the observability namespace.
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector.observability.svc:4317
+  OTEL_TRACES_SAMPLER_ARG: "1.0"

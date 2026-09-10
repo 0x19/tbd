@@ -17,6 +17,7 @@ mod error;
 mod graphql;
 mod grpc;
 mod http;
+mod observe;
 mod state;
 mod ws;
 
@@ -99,7 +100,8 @@ pub async fn serve_on(
     Ok(())
 }
 
-/// The full router: REST, SSE, WebSocket, GraphQL and gRPC on one port.
+/// The full router: REST, SSE, WebSocket, GraphQL and gRPC on one port, each
+/// request traced and measured.
 pub fn router(state: &AppState) -> Router {
     Router::new()
         .merge(http::routes())
@@ -107,5 +109,6 @@ pub fn router(state: &AppState) -> Router {
         .merge(graphql::routes(state))
         .with_state(state.clone())
         .merge(grpc::routes(state))
-        .layer(TraceLayer::new_for_http())
+        .layer(axum::middleware::from_fn(observe::metrics))
+        .layer(TraceLayer::new_for_http().make_span_with(observe::make_span))
 }

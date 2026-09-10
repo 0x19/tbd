@@ -17,6 +17,7 @@ use serde::{Deserialize, Serialize};
 use tbd_proto::engine::v1::{EvaluateRequest, SubscribeRequest, subscribe_response};
 
 use crate::{ApiError, AppState};
+use tbd_common::metrics::StreamGuard;
 
 pub fn routes() -> Router<AppState> {
     Router::new()
@@ -115,25 +116,29 @@ async fn events(
         .await?
         .into_inner();
 
-    let sse = stream.filter_map(|item| async move {
-        let ev = match item {
-            Ok(ev) => ev,
-            Err(status) => {
-                tracing::warn!(%status, "engine event stream error");
-                return Some(Ok(SseEvent::default()
-                    .event("error")
-                    .data(status.message())));
-            }
-        };
-        let body = match ev.kind? {
-            subscribe_response::Kind::Heartbeat(hb) => EventBody::Heartbeat { seq: hb.seq },
-            subscribe_response::Kind::ScoreUpdated(s) => EventBody::ScoreUpdated {
-                score: s.score,
-                stub: s.stub,
-            },
-        };
-        let sse = SseEvent::default().id(ev.id).json_data(body).ok()?;
-        Some(Ok(sse))
+    let guard = StreamGuard::open("sse");
+    let sse = stream.filter_map(move |item| {
+        guard.item("out");
+        async move {
+            let ev = match item {
+                Ok(ev) => ev,
+                Err(status) => {
+                    tracing::warn!(%status, "engine event stream error");
+                    return Some(Ok(SseEvent::default()
+                        .event("error")
+                        .data(status.message())));
+                }
+            };
+            let body = match ev.kind? {
+                subscribe_response::Kind::Heartbeat(hb) => EventBody::Heartbeat { seq: hb.seq },
+                subscribe_response::Kind::ScoreUpdated(s) => EventBody::ScoreUpdated {
+                    score: s.score,
+                    stub: s.stub,
+                },
+            };
+            let sse = SseEvent::default().id(ev.id).json_data(body).ok()?;
+            Some(Ok(sse))
+        }
     });
 
     Ok(Sse::new(sse).keep_alive(KeepAlive::default()))

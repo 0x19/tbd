@@ -1,0 +1,110 @@
+# Bring up the whole stack on this machine: k3d cluster, images, observability, app.
+# Idempotent; re-run after code changes to rebuild and roll the app.
+#
+#   ansible-playbook playbooks/local.yml                # from devops/ansible, tools on PATH via mise
+#   ansible-playbook playbooks/local.yml -e rebuild=false
+- name: Local k3d cluster with Envoy, services and observability
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    cluster: tbd
+    storage: /mnt/raid0/tbd-k3d/storage
+    k3s_image: rancher/k3s:v1.34.9-k3s1
+    registry: ghcr.io/0x19
+    tag: dev
+    rebuild: true
+    repo: "{{ playbook_dir }}/../../.."
+  tasks:
+    - name: Docker is reachable
+      command: docker info --format '{{ "{{" }}.ServerVersion{{ "}}" }}'
+      changed_when: false
+
+    - name: Storage directory exists
+      file:
+        path: "{{ storage }}"
+        state: directory
+        mode: "0775"
+
+    - name: Existing clusters
+      command: k3d cluster list -o json
+      register: clusters
+      changed_when: false
+
+    - name: Create the cluster
+      command: >
+        k3d cluster create {{ cluster }} --image {{ k3s_image }} --servers 1 --agents 2
+        --volume {{ storage }}:/var/lib/rancher/k3s/storage@all
+        -p 3000:3000@loadbalancer -p 9090:9090@loadbalancer -p 18080:18080@loadbalancer
+        -p 15051:15051@loadbalancer -p 14317:14317@loadbalancer
+        --k3s-arg --disable=traefik@server:0 --wait
+      when: (clusters.stdout | from_json | map(attribute='name') | list) is not contains(cluster)
+
+    - name: Use the cluster context
+      command: kubectl config use-context k3d-{{ cluster }}
+      changed_when: false
+
+    - name: Build images
+      command: >
+        docker build -f devops/docker/Dockerfile --build-arg BIN={{ item.bin }} --build-arg PORT={{ item.port }}
+        -t {{ registry }}/tbd-{{ item.bin }}:{{ tag }} .
+      args:
+        chdir: "{{ repo }}"
+      loop:
+        - { bin: engine, port: 50051 }
+        - { bin: protocol, port: 8080 }
+      when: rebuild | bool
+
+    - name: Import images into the cluster
+      command: k3d image import -c {{ cluster }} {{ registry }}/tbd-engine:{{ tag }} {{ registry }}/tbd-protocol:{{ tag }}
+      when: rebuild | bool
+
+    - name: Apply observability
+      command: kubectl apply -k devops/k8s/observability
+      args:
+        chdir: "{{ repo }}"
+      register: obs
+      changed_when: "'configured' in obs.stdout or 'created' in obs.stdout"
+
+    - name: Apply host-facing services
+      command: kubectl apply -f devops/k8s/observability/local-services.yaml
+      args:
+        chdir: "{{ repo }}"
+      register: lbs
+      changed_when: "'configured' in lbs.stdout or 'created' in lbs.stdout"
+
+    - name: Apply the app
+      command: kubectl apply -k devops/k8s/overlays/local
+      args:
+        chdir: "{{ repo }}"
+      register: app
+      changed_when: "'configured' in app.stdout or 'created' in app.stdout"
+
+    - name: Roll the app onto rebuilt images
+      command: kubectl -n tbd rollout restart deployment/engine deployment/protocol
+      when: rebuild | bool
+
+    - name: Wait for observability
+      command: kubectl -n observability rollout status {{ item }} --timeout=300s
+      loop:
+        - statefulset/victoria-metrics
+        - statefulset/victoria-logs
+        - statefulset/tempo
+        - deployment/otel-collector
+        - deployment/grafana
+      changed_when: false
+
+    - name: Wait for the app
+      command: kubectl -n tbd rollout status {{ item }} --timeout=180s
+      loop:
+        - deployment/engine
+        - deployment/protocol
+        - deployment/envoy
+      changed_when: false
+
+    - name: Where things are
+      debug:
+        msg:
+          - "edge http://localhost:18080   engine LB http://localhost:15051"
+          - "grafana http://localhost:3000 (admin/admin)   victoria-metrics http://localhost:9090"
+          - "chaos validate --protocol http://localhost:18080 --engine http://localhost:15051"

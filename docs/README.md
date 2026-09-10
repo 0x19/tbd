@@ -9,6 +9,8 @@
 | You want to know how chaos works inside | [chaos/architecture.md](chaos/architecture.md) |
 | You are adding a service, operation, action, assertion or check | [chaos/extending.md](chaos/extending.md) |
 | A check failed in CI, or you are changing CI | [ci.md](ci.md) |
+| You want metrics, traces, logs, dashboards, or to run the local cluster | [observability.md](observability.md) |
+| You are changing how traffic is routed | [../devops/envoy/README.md](../devops/envoy/README.md) |
 | You are deploying | [../devops/README.md](../devops/README.md) |
 | You want the earlier product thinking | [design/](design/README.md), idea material only |
 

@@ -1,7 +1,7 @@
 ---
 # Non-secret defaults for every host. Secrets live in group_vars/vault.yml (ansible-vault).
 registry: ghcr.io
-image_org: ORG                     # PLACEHOLDER: GitHub org/user that owns the images
+image_org: 0x19                    # GitHub org that owns the images
 engine_image: "{{ registry }}/{{ image_org }}/tbd-engine"
 protocol_image: "{{ registry }}/{{ image_org }}/tbd-protocol"
 

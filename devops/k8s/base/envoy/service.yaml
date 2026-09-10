@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: envoy
+  labels:
+    app.kubernetes.io/name: envoy
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: envoy
+  ports:
+    - name: edge
+      port: 8080
+      targetPort: edge
+      appProtocol: http
+    - name: engine-lb
+      port: 50051
+      targetPort: engine-lb
+      appProtocol: grpc
+---
+# Lets the Envoy config use the same `otel-collector` name in every environment.
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector
+spec:
+  type: ExternalName
+  externalName: otel-collector.observability.svc.cluster.local
