@@ -1,0 +1,99 @@
+# chaos serve: the chaos API (and the admin UI once built) inside the cluster.
+# It runs its own engine + protocol in-process for scenarios; validate and
+# ad-hoc load default to the deployed stack through Envoy (CHAOS_*_URL below).
+# Not part of base/: only overlays that want it (local, dev) include ../../chaos.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chaos
+  labels:
+    app.kubernetes.io/name: chaos
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: chaos
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: chaos
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: chaos
+          # Overlays pin the tag.
+          image: ghcr.io/0x19/tbd-chaos:dev
+          imagePullPolicy: IfNotPresent
+          args: ["serve"]
+          ports:
+            - name: http
+              containerPort: 7700
+          envFrom:
+            - configMapRef:
+                name: tbd-env
+          env:
+            # TBD_ENV comes from tbd-env (overlays set local/dev).
+            - name: CHAOS_LISTEN_ADDR
+              value: 0.0.0.0:7700
+            # Through Envoy, like every other client.
+            - name: CHAOS_PROTOCOL_URL
+              value: http://envoy:8080
+            - name: CHAOS_ENGINE_URL
+              value: http://envoy:50051
+            - name: CHAOS_RESULTS_DIR
+              value: /data/results
+            # The image's scenarios/ is read-only; the UI edits a seeded copy.
+            - name: CHAOS_SCENARIOS_DIR
+              value: /data/scenarios
+            - name: CHAOS_SCENARIOS_SEED
+              value: /app/scenarios
+            - name: CHAOS_UI_DIR
+              value: /app/ui
+            - name: OTEL_SERVICE_NAME
+              value: chaos
+          livenessProbe:
+            httpGet:
+              path: /api/chaos/healthz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /api/chaos/healthz
+              port: http
+            initialDelaySeconds: 1
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 200m
+              memory: 128Mi
+            limits:
+              cpu: "4"
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        # Run records. emptyDir: history lives as long as the pod. Swap for a
+        # PVC when an environment should keep it across restarts.
+        - name: data
+          emptyDir:
+            sizeLimit: 1Gi
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi

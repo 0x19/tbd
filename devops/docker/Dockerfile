@@ -1,9 +1,14 @@
 # syntax=docker/dockerfile:1.7
 #
-# One Dockerfile for every workspace binary. Select with --build-arg BIN=engine|protocol.
+# One Dockerfile for every workspace binary. Select with --build-arg BIN=engine|protocol|chaos.
 #
 #   docker build -f devops/docker/Dockerfile --build-arg BIN=engine   -t ghcr.io/0x19/tbd-engine   .
 #   docker build -f devops/docker/Dockerfile --build-arg BIN=protocol -t ghcr.io/0x19/tbd-protocol .
+#   docker build -f devops/docker/Dockerfile --build-arg BIN=chaos --build-arg PORT=7700 -t ghcr.io/0x19/tbd-chaos .
+#
+# The runtime working directory is /app and holds configs/, scenarios/ and topologies/,
+# so chaos finds its layered config and scenario files at their default relative paths.
+# If ui/chaos/out exists in the build context it is copied to /app/ui (the admin UI).
 #
 # Stages: chef (toolchain + cargo-chef) -> planner (recipe.json) -> cacher (deps only)
 #         -> builder (workspace) -> runtime (distroless).
@@ -54,7 +59,13 @@ ARG PORT=50051
 ENV LOG_FORMAT=json \
     RUST_LOG=info \
     BIN=${BIN}
+WORKDIR /app
 COPY --from=builder /usr/local/bin/app /usr/local/bin/app
+COPY configs ./configs
+COPY scenarios ./scenarios
+COPY topologies ./topologies
+# Optional: the built admin UI. The glob on the first segment keeps the COPY valid when absent.
+COPY u[i]/chaos/out ./ui
 USER nonroot:nonroot
 EXPOSE ${PORT}
 ENTRYPOINT ["/usr/local/bin/app"]

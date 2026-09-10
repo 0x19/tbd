@@ -1,4 +1,4 @@
-# Local stack: engine (gRPC) + protocol (HTTP/WS/GraphQL protocol).
+# Local stack: engine (gRPC) + protocol (HTTP/WS/GraphQL protocol) + Envoy + chaos serve.
 #
 #   docker compose up --build
 #   docker compose down -v
@@ -52,6 +52,33 @@ services:
       - engine
     restart: unless-stopped
 
+  chaos:
+    # chaos API (and admin UI when ui/chaos/out was built into the image):
+    # http://localhost:8080/api/chaos/overview and http://localhost:8080/chaos/ via Envoy.
+    image: ${IMAGE_REGISTRY:-ghcr.io/0x19}/tbd-chaos:${IMAGE_TAG:-dev}
+    build:
+      context: .
+      dockerfile: devops/docker/Dockerfile
+      args:
+        BIN: chaos
+        PORT: "7700"
+    command: ["serve"]
+    environment:
+      <<: *common-env
+      TBD_ENV: ${TBD_ENV:-local}
+      CHAOS_LISTEN_ADDR: 0.0.0.0:7700
+      CHAOS_PROTOCOL_URL: http://envoy:8080
+      CHAOS_ENGINE_URL: http://envoy:50051
+      CHAOS_RESULTS_DIR: /data/results
+      CHAOS_SCENARIOS_DIR: /data/scenarios
+      CHAOS_SCENARIOS_SEED: /app/scenarios
+      CHAOS_UI_DIR: /app/ui
+    volumes:
+      - chaos-results:/data
+    tmpfs:
+      - /tmp
+    restart: unless-stopped
+
   envoy:
     image: envoyproxy/envoy:v1.39.1
     command: ["-c", "/etc/envoy/envoy.yaml", "--service-cluster", "envoy", "--service-node", "compose"]
@@ -64,4 +91,8 @@ services:
     depends_on:
       - engine
       - protocol
+      - chaos
     restart: unless-stopped
+
+volumes:
+  chaos-results:

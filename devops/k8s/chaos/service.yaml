@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: chaos
+  labels:
+    app.kubernetes.io/name: chaos
+spec:
+  # Headless like the other upstreams: Envoy resolves the pod and routes
+  # /api/chaos and /chaos to it.
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: chaos
+  ports:
+    - name: http
+      port: 7700
+      targetPort: http
+      protocol: TCP
+      appProtocol: http

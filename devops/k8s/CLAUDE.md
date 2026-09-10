@@ -11,6 +11,11 @@ Read `README.md` here first. Non-obvious facts:
   match the `-p` flags in `mise.toml` `local:up` and `ansible/playbooks/local.yml`.
 - `local-services.yaml` under `observability/` is applied with `-f`, not part of the
   kustomization, so other environments never get `LoadBalancer` Services.
+- `chaos/` is a separate kustomization included by `overlays/local` and `overlays/dev`
+  only; `prod` must not include it. The chaos pod runs its own engine and protocol
+  in-process on pod-local ports for scenarios and reaches the deployed stack through
+  `envoy:8080` / `envoy:50051` for validate and ad-hoc load. Run records live on an
+  `emptyDir`; use a PVC where history must outlive the pod.
 - `observability/kustomization.yaml` pulls `../../grafana`; the dashboard ConfigMaps
   are generated there with hash suffixes and the Grafana Deployment's volume names are
   rewritten by kustomize. Do not hardcode a hashed name anywhere.

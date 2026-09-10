@@ -21,6 +21,10 @@ Evaluated top to bottom; first match wins.
 
 | Match | To | Timeout | Retries |
 |---|---|---|---|
+| host `chaos.api.*`, any path | `chaos`, rewritten to `/api/chaos/...` | none | none |
+| host `chaos.*`, any path | `chaos`, rewritten to `/chaos/...` (`/api/chaos/` passed through) | none | none |
+| prefix `/api/chaos/` (chaos API, SSE) | `chaos` | none | none |
+| prefix `/chaos/` (chaos UI) | `chaos` | 15 s | none |
 | gRPC, prefix `/tbd.engine.v1.EngineService/` | `engine` | none | `connect-failure, refused-stream, unavailable`, 2 tries, 5 s per try |
 | gRPC, anything else (`tbd.protocol.v1`, `grpc.health.v1`, reflection) | `protocol` | none | same |
 | path `/ws` | `protocol`, WebSocket upgrade | none, idle none | none |

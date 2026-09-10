@@ -8,7 +8,7 @@ k3s nodes as Docker containers, with a load balancer container that maps host po
 
 ```sh
 mise run local:up        # create the cluster if missing; ~40 s
-mise run local:build     # build both images and import them (no registry needed)
+mise run local:build     # build the engine, protocol and chaos images and import them (no registry needed)
 mise run local:deploy    # apply observability, host services and the app; waits for readiness
 mise run local:traffic   # 30 rounds of `chaos validate` through Envoy (TRAFFIC_ROUNDS=n)
 mise run local:load      # sustained load through Envoy, 8 workers (LOAD_SECONDS=n); fills dashboards and profiles
@@ -30,6 +30,7 @@ steps idempotently and is the template for provisioning a real box the same way.
 | `tbd` | `envoy` | 2 | edge and engine load balancer |
 | `tbd` | `protocol` | 2 | REST, SSE, GraphQL, WebSocket, gRPC |
 | `tbd` | `engine` | 2 | gRPC compute |
+| `tbd` | `chaos` | 1 | `chaos serve`: API and admin UI, behind Envoy at `/api/chaos` and `/chaos` |
 | `observability` | `victoria-metrics` | 1 | metrics store and scraper |
 | `observability` | `victoria-logs` | 1 | log store |
 | `observability` | `tempo` | 1 | trace store, span metrics |
@@ -48,6 +49,7 @@ on this machine use.
 |---|---|---|
 | 18080 | `tbd/envoy-lb` | Envoy edge: REST, SSE, GraphQL, WebSocket, gRPC |
 | 15051 | `tbd/envoy-lb` | Envoy engine load balancer, gRPC |
+| 18080 | `tbd/envoy-lb` | `/api/chaos/` and `/chaos/` on the same edge port: the chaos API and admin UI ([chaos/ui.md](chaos/ui.md)) |
 | 3000 | `observability/grafana-lb` | Grafana, admin/admin |
 | 9090 | `observability/victoria-metrics-lb` | VictoriaMetrics UI and API |
 | 14317 | `observability/otel-collector-lb` | OTLP/gRPC into the collector, for processes on the host |
