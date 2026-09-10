@@ -11,8 +11,10 @@ earlier idea material for a product direction, not a spec; do not "fix" it.
 - Single test: `cargo nextest run -p tbd-protocol -E 'test(name)'`.
 - `mise run run:engine` / `mise run run:protocol`; `mise run up` for the compose stack.
 - Local cluster with Envoy and the observability stack: `mise run local:up`, `local:build`,
-  `local:deploy`, then `local:traffic`; Grafana on :3000, Envoy edge on :18080. Dashboards
-  reload with `mise run grafana:reload`. See `docs/observability.md`.
+  `local:deploy`, then `local:traffic`; after code changes `local:restart`. Grafana on
+  :3000 (admin/admin), Envoy edge on :18080, engine LB on :15051. Dashboards reload with
+  `mise run grafana:reload`; Envoy config check with `mise run envoy:validate`.
+  Docs: `docs/local-cluster.md`, `docs/observability/README.md`.
 - `mise run chaos:up` runs both in one process; `mise run validate` checks every surface;
   `mise run chaos:run` runs the scenarios. Docs under `docs/chaos/` are the tool's
   contract: a change to a flag, output field, TOML key, behaviour or check updates the
@@ -35,7 +37,9 @@ earlier idea material for a product direction, not a spec; do not "fix" it.
 - Every new env var goes on a clap flag with `env = ...` and into `.env.example`,
   `compose.yaml`, `devops/k8s/base/configmap.yaml` and the ansible compose template.
 - Every new metric name goes into `crates/common/src/metrics.rs` `names` and the table in
-  `docs/observability.md`; every request path gets a span with `trace_id` recorded.
+  `docs/observability/metrics.md`; every request path gets a span with `trace_id`
+  recorded and a `RequestTimer`; streams get a `StreamGuard`.
+- Services never address each other directly: the engine URL is Envoy's engine LB.
 
 ## Git
 

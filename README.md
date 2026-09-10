@@ -103,9 +103,10 @@ mise run k9s
 ```
 
 `mise run ansible:local` does the same through Ansible. Dashboards live in
-`devops/grafana/dashboards/`; `mise run grafana:reload` pushes edits in seconds. How the
-signals flow and how to follow one request across Envoy, protocol and engine:
-[docs/observability.md](docs/observability.md).
+`devops/grafana/dashboards/`; `mise run grafana:reload` pushes edits in seconds. The
+cluster itself: [docs/local-cluster.md](docs/local-cluster.md). How the signals flow and
+how to follow one request across Envoy, protocol and engine:
+[docs/observability/README.md](docs/observability/README.md).
 
 ## Ship
 

@@ -11,6 +11,7 @@ Project-level Claude Code configuration. Committed, except `settings.local.json`
 | `hooks/stop-check.sh` | `Stop`: runs clippy and tests when Rust files changed |
 | `rules/rust.md` | Loaded only when Claude touches `.rs` or `Cargo.toml` files |
 | `rules/design-docs.md` | Loaded only when Claude touches `docs/design/` |
+| `rules/devops.md` | Loaded only when Claude touches `devops/`, `compose.yaml` or the workflows: validation commands, the one-config rule, the port map |
 | `skills/design-doc/` | `/design-doc <plane> <title>` creates a numbered decision doc |
 | `agents/design-reviewer.md` | Reviews a design doc against the others for contradictions |
 | `agents/apex-archaeologist.md` | Read-only digger for lessons in apex and Proximity |

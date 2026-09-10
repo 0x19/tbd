@@ -17,12 +17,12 @@ nothing is created by hand in the UI.
 ## How dashboards reach the cluster
 
 kustomize builds a ConfigMap from `dashboards/*.json` and mounts it at
-`/var/lib/grafana/dashboards`. The provider in `dashboards.yaml` re-reads that directory
-every 10 seconds, so a changed file appears without restarting Grafana. The kubelet
-refreshes a mounted ConfigMap within about a minute of the object changing.
+`/var/lib/grafana/dashboards`. The ConfigMap name carries a content hash, so a changed
+file produces a new ConfigMap and Grafana's Deployment rolls onto it; the provider in
+`dashboards.yaml` then loads the directory. End to end this takes a few seconds.
 
 ```sh
-mise run grafana:reload     # rebuild and apply the ConfigMap; wait ~1 min, then refresh the browser
+mise run grafana:reload     # apply, wait for the rollout, print the dashboards URL
 ```
 
 Dashboards are provisioned read-only (`allowUiUpdates: false`). To change one:

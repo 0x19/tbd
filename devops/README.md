@@ -17,7 +17,7 @@ Root-level `compose.yaml` runs the same images locally: `docker compose up --bui
 
 ## Deploy paths
 
-- **Local cluster** (the one with Grafana): `mise run local:up && mise run local:build && mise run local:deploy`, or `mise run ansible:local`. Envoy on 18080/15051, Grafana on 3000. See `docs/observability.md`.
+- **Local cluster** (the one with Grafana): `mise run local:up && mise run local:build && mise run local:deploy`, or `mise run ansible:local`. Envoy on 18080/15051, Grafana on 3000. See `docs/observability/README.md`.
 - **Compose**: `docker compose up --build`. Envoy on 8080 (edge) and 50051 (engine LB), admin on 9901.
 - **Single server**: `ansible/playbooks/bootstrap.yml` once, then `deploy.yml` with an explicit `image_tag`.
 - **Cluster**: pin `newTag` in `k8s/overlays/prod/kustomization.yaml`, then `kubectl apply -k`.
