@@ -6,6 +6,7 @@
 | `envoy/` | the load balancer config, one file for every environment | `mise run envoy:validate`; see `envoy/README.md` |
 | `k8s/` | kustomize base (engine, protocol, envoy) plus `local`, `dev` and `prod` overlays, and the `observability/` stack | `kubectl apply -k devops/k8s/overlays/<env>` |
 | `grafana/` | datasources and dashboards, provisioned into the cluster as ConfigMaps | `mise run grafana:reload` |
+| `edge/` | public TLS entry point for a cluster behind a home/office router: Caddy with Let's Encrypt in front of Envoy | `mise run edge:up`; see `edge/README.md` |
 | `ansible/` | host bootstrap, compose-based deploy, and `local.yml` for the local cluster | see `ansible/README.md` |
 
 Traffic always enters through Envoy: the edge on 8080 (REST, SSE, GraphQL, WebSocket, gRPC)
@@ -18,6 +19,7 @@ Root-level `compose.yaml` runs the same images locally: `docker compose up --bui
 ## Deploy paths
 
 - **Local cluster** (the one with Grafana): `mise run local:up && mise run local:build && mise run local:deploy`, or `mise run ansible:local`. Envoy on 18080/15051, Grafana on 3000. See `docs/observability/README.md`.
+- **Local cluster, public**: forward 80/443 on the router and `mise run edge:up`; the API is then at `https://$PUBLIC_DOMAIN`. See `docs/local-cluster.md`.
 - **Compose**: `docker compose up --build`. Envoy on 8080 (edge) and 50051 (engine LB), admin on 9901.
 - **Single server**: `ansible/playbooks/bootstrap.yml` once, then `deploy.yml` with an explicit `image_tag`.
 - **Cluster**: pin `newTag` in `k8s/overlays/prod/kustomization.yaml`, then `kubectl apply -k`.

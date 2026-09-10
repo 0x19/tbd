@@ -29,6 +29,7 @@ use tower_http::trace::TraceLayer;
 
 pub use config::Config;
 pub use error::ApiError;
+pub use grpc::ENGINE_SERVICE;
 pub use state::AppState;
 
 /// Errors from starting or running the protocol.
@@ -100,6 +101,20 @@ pub async fn serve_on(
     Ok(())
 }
 
+/// Unmatched paths. tonic's router carries its own fallback (HTTP 200 with
+/// `grpc-status: 12`), which the merge would otherwise apply to every unknown
+/// REST path too; on a public edge that turns every scanner probe into a 200.
+/// gRPC callers keep the gRPC answer, everything else gets a JSON 404.
+async fn fallback(request: axum::extract::Request) -> axum::response::Response {
+    if observe::is_grpc(request.headers()) {
+        tonic::Status::unimplemented("unknown gRPC method").into_http()
+    } else {
+        axum::response::IntoResponse::into_response(ApiError::NotFound(
+            request.uri().path().to_owned(),
+        ))
+    }
+}
+
 /// The full router: REST, SSE, WebSocket, GraphQL and gRPC on one port, each
 /// request traced and measured.
 pub fn router(state: &AppState) -> Router {
@@ -109,6 +124,7 @@ pub fn router(state: &AppState) -> Router {
         .merge(graphql::routes(state))
         .with_state(state.clone())
         .merge(grpc::routes(state))
+        .fallback(fallback)
         .layer(axum::middleware::from_fn(observe::metrics))
         .layer(TraceLayer::new_for_http().make_span_with(observe::make_span))
 }

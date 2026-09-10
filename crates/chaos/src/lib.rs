@@ -14,5 +14,6 @@ pub mod load;
 pub mod scenario;
 pub mod service;
 pub mod stack;
+pub mod tls;
 pub mod topology;
 pub mod validate;

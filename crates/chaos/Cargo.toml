@@ -33,9 +33,12 @@ serde_json.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tokio-stream.workspace = true
-tokio-tungstenite.workspace = true
+tokio-tungstenite = { workspace = true, features = ["rustls-tls-webpki-roots"] }
 toml.workspace = true
-tonic.workspace = true
+tonic = { workspace = true, features = ["tls-ring", "tls-webpki-roots"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-pki-types = { version = "1", features = ["std"] }
+webpki-roots = "1"
 tonic-health.workspace = true
 tracing.workspace = true
 url.workspace = true

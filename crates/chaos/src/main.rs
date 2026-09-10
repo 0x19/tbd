@@ -63,6 +63,9 @@ enum Command {
         /// Per-check timeout.
         #[arg(long, default_value = "5s", value_parser = humantime::parse_duration)]
         timeout: Duration,
+        /// Extra PEM root to trust for https/wss targets (a staging edge, Caddy's internal CA).
+        #[arg(long, env = "CHAOS_CA_CERT")]
+        ca_cert: Option<PathBuf>,
         /// Emit JSON instead of text.
         #[arg(long)]
         json: bool,
@@ -101,12 +104,18 @@ async fn main() -> anyhow::Result<()> {
             protocol,
             engine,
             timeout,
+            ca_cert,
             json,
         } => {
+            let trust = match ca_cert {
+                Some(path) => tbd_chaos::tls::Trust::from_pem_file(&path)?,
+                None => tbd_chaos::tls::Trust::default(),
+            };
             let report = tbd_chaos::validate::run(tbd_chaos::validate::Targets {
                 protocol,
                 engine,
                 timeout,
+                trust,
             })
             .await;
             if json {

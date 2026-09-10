@@ -25,6 +25,8 @@ pub struct Targets {
     pub engine: String,
     /// Per-check timeout.
     pub timeout: Duration,
+    /// Roots for `https://` / `wss://` targets.
+    pub trust: crate::tls::Trust,
 }
 
 /// Outcome of one check.
@@ -151,12 +153,10 @@ pub async fn run(targets: Targets) -> Report {
     }
 }
 
-fn http() -> reqwest::Client {
-    reqwest::Client::builder().build().unwrap_or_default()
-}
-
 async fn http_healthz(t: Targets) -> Result<String, String> {
-    let r = http()
+    let r = t
+        .trust
+        .http(None)
         .get(format!("{}/healthz", t.protocol))
         .send()
         .await
@@ -171,7 +171,9 @@ async fn http_healthz(t: Targets) -> Result<String, String> {
 }
 
 async fn http_readyz(t: Targets) -> Result<String, String> {
-    let r = http()
+    let r = t
+        .trust
+        .http(None)
         .get(format!("{}/readyz", t.protocol))
         .send()
         .await
@@ -186,7 +188,9 @@ async fn http_readyz(t: Targets) -> Result<String, String> {
 }
 
 async fn rest_evaluate(t: Targets) -> Result<String, String> {
-    let v: Value = http()
+    let v: Value = t
+        .trust
+        .http(None)
         .post(format!("{}/v1/evaluate", t.protocol))
         .json(&json!({ "subject_id": "validate", "payload": "hi" }))
         .send()
@@ -205,7 +209,9 @@ async fn rest_evaluate(t: Targets) -> Result<String, String> {
 }
 
 async fn sse_events(t: Targets) -> Result<String, String> {
-    let r = http()
+    let r = t
+        .trust
+        .http(None)
         .get(format!("{}/v1/subjects/validate/events", t.protocol))
         .send()
         .await
@@ -228,7 +234,7 @@ async fn sse_events(t: Targets) -> Result<String, String> {
 }
 
 async fn graphql_evaluate(t: Targets) -> Result<String, String> {
-    let v: Value = http()
+    let v: Value = t.trust.http(None)
         .post(format!("{}/graphql", t.protocol))
         .json(&json!({ "query": "{ version engineReady evaluate(subjectId:\"validate\"){ stub modelVersion } }" }))
         .send()
@@ -251,9 +257,7 @@ async fn graphql_evaluate(t: Targets) -> Result<String, String> {
 
 async fn ws_echo(t: Targets) -> Result<String, String> {
     let url = t.protocol.replacen("http", "ws", 1) + "/ws";
-    let (mut ws, _) = tokio_tungstenite::connect_async(url)
-        .await
-        .map_err(|e| e.to_string())?;
+    let mut ws = t.trust.connect_ws(&url).await.map_err(|e| e.to_string())?;
     ws.send(Message::Text("validate".into()))
         .await
         .map_err(|e| e.to_string())?;
@@ -276,8 +280,9 @@ async fn ws_echo(t: Targets) -> Result<String, String> {
     }
 }
 
-async fn channel(url: &str) -> Result<Channel, String> {
-    tonic::transport::Endpoint::from_shared(url.to_owned())
+async fn channel(t: &Targets, url: &str) -> Result<Channel, String> {
+    t.trust
+        .endpoint(url)
         .map_err(|e| e.to_string())?
         .connect()
         .await
@@ -285,7 +290,7 @@ async fn channel(url: &str) -> Result<Channel, String> {
 }
 
 async fn grpc_engine_health(t: Targets) -> Result<String, String> {
-    let mut h = HealthClient::new(channel(&t.engine).await?);
+    let mut h = HealthClient::new(channel(&t, &t.engine).await?);
     let resp = h
         .check(HealthCheckRequest {
             service: "tbd.engine.v1.EngineService".into(),
@@ -301,7 +306,7 @@ async fn grpc_engine_health(t: Targets) -> Result<String, String> {
 }
 
 async fn grpc_engine_evaluate(t: Targets) -> Result<String, String> {
-    let mut c = EngineServiceClient::new(channel(&t.engine).await?);
+    let mut c = EngineServiceClient::new(channel(&t, &t.engine).await?);
     let r = c
         .evaluate(EvaluateRequest {
             subject_id: "validate".into(),
@@ -314,7 +319,7 @@ async fn grpc_engine_evaluate(t: Targets) -> Result<String, String> {
 }
 
 async fn grpc_engine_subscribe(t: Targets) -> Result<String, String> {
-    let mut c = EngineServiceClient::new(channel(&t.engine).await?);
+    let mut c = EngineServiceClient::new(channel(&t, &t.engine).await?);
     let mut s = c
         .subscribe(SubscribeRequest {
             subject_id: "validate".into(),
@@ -334,7 +339,7 @@ async fn grpc_engine_subscribe(t: Targets) -> Result<String, String> {
 }
 
 async fn grpc_protocol_health(t: Targets) -> Result<String, String> {
-    let mut h = HealthClient::new(channel(&t.protocol).await?);
+    let mut h = HealthClient::new(channel(&t, &t.protocol).await?);
     let resp = h
         .check(HealthCheckRequest {
             service: String::new(),
@@ -345,7 +350,7 @@ async fn grpc_protocol_health(t: Targets) -> Result<String, String> {
 }
 
 async fn grpc_protocol_ping(t: Targets) -> Result<String, String> {
-    let mut c = ProtocolServiceClient::new(channel(&t.protocol).await?);
+    let mut c = ProtocolServiceClient::new(channel(&t, &t.protocol).await?);
     let r = c
         .ping(PingRequest {
             message: "validate".into(),

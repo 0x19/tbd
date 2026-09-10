@@ -118,6 +118,7 @@ mise run k8s:render                 # KUBE_OVERLAY=dev|prod
 mise run ansible:bootstrap          # once per host
 mise run ansible:deploy             # IMAGE_TAG to ANSIBLE_INVENTORY hosts
 mise run ship                       # ci → docker:push → ansible:deploy
+mise run edge:up                    # public https:// api/grafana/logs/profiles/metrics.<base> in front of the local cluster
 ```
 
 Before the first real deploy a human fills in the hosts in `devops/ansible/inventory/`

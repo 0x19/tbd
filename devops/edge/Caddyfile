@@ -1,0 +1,81 @@
+# Public TLS edge for the local cluster. Runs on the host (docker compose) with
+# ports 80 and 443 forwarded from the router. Gets and renews Let's Encrypt
+# certificates itself, then hands everything to the cluster's host ports.
+#
+# One base domain, fixed subdomains:
+#   api.<base>       Envoy edge :18080  (REST, SSE, GraphQL, WebSocket, gRPC)   public
+#   grafana.<base>   Grafana :3000                                             basic auth
+#   logs.<base>      VictoriaLogs UI :9428                                     basic auth
+#   profiles.<base>  Pyroscope :4040                                           basic auth
+#   metrics.<base>   VictoriaMetrics UI :9090                                  basic auth
+#
+# Env: BASE_DOMAIN, ACME_EMAIL, OBS_USER, OBS_PASSWORD_HASH (caddy hash-password).
+{
+	email {$ACME_EMAIL}
+	servers {
+		protocols h1 h2 h3
+	}
+}
+
+# Everything the observability hosts share: one credential for all of them,
+# logs, and an HTTP/1.1 upstream (Grafana Live and the UIs use WebSockets).
+(observability) {
+	encode zstd gzip
+	basic_auth {
+		{$OBS_USER} {$OBS_PASSWORD_HASH}
+	}
+	log {
+		output stdout
+		format json
+	}
+}
+
+api.{$BASE_DOMAIN} {
+	encode zstd gzip
+
+	# gRPC needs an end-to-end HTTP/2 stream: clients arrive over h2 with TLS,
+	# Envoy takes h2c behind. Matched on content type so nothing else uses the
+	# h2c transport; Caddy cannot carry a WebSocket upgrade over it.
+	@grpc header Content-Type application/grpc*
+	reverse_proxy @grpc cluster:18080 {
+		transport http {
+			versions h2c
+		}
+		flush_interval -1
+		header_up X-Forwarded-Proto https
+	}
+
+	# REST, SSE, GraphQL and WebSocket upgrades go over HTTP/1.1.
+	# flush_interval -1 streams SSE without buffering.
+	reverse_proxy cluster:18080 {
+		flush_interval -1
+		header_up X-Forwarded-Proto https
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}
+
+grafana.{$BASE_DOMAIN} {
+	import observability
+	reverse_proxy cluster:3000
+}
+
+logs.{$BASE_DOMAIN} {
+	import observability
+	redir / /select/vmui/ 302
+	reverse_proxy cluster:9428
+}
+
+profiles.{$BASE_DOMAIN} {
+	import observability
+	reverse_proxy cluster:4040
+}
+
+metrics.{$BASE_DOMAIN} {
+	import observability
+	redir / /vmui/ 302
+	reverse_proxy cluster:9090
+}
