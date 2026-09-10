@@ -19,7 +19,7 @@ internet ──443──▶ router (port forward) ──▶ this host: caddy ─
 | `logs.<base>` | VictoriaLogs 9428 | HTTP basic | `/` redirects to `/select/vmui/` |
 | `profiles.<base>` | Pyroscope 4040 | HTTP basic | |
 | `metrics.<base>` | VictoriaMetrics 9090 | HTTP basic | `/` redirects to `/vmui/` |
-| `chaosadmin.<base>` | Envoy 18080 (`/chaos/`, `/api/chaos/`) | HTTP basic | the chaos admin UI and API; `/` redirects to `/chaos/` |
+| `chaosadmin.<base>` | Envoy 18080, `chaosadmin.*` virtual host | HTTP basic | the chaos admin UI at the root, API at `/api/chaos/v1/` |
 
 ## Setup
 

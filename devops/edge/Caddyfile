@@ -8,7 +8,7 @@
 #   logs.<base>      VictoriaLogs UI :9428                                     basic auth
 #   profiles.<base>  Pyroscope :4040                                           basic auth
 #   metrics.<base>   VictoriaMetrics UI :9090                                  basic auth
-#   chaosadmin.<base>  chaos admin UI + API, via Envoy :18080 (/chaos, /api/chaos)  basic auth
+#   chaosadmin.<base>  chaos admin UI (root) + API (/api/chaos/v1), via Envoy :18080    basic auth
 #
 # Env: BASE_DOMAIN, ACME_EMAIL, OBS_USER, OBS_PASSWORD_HASH (caddy hash-password).
 {
@@ -82,11 +82,10 @@ metrics.{$BASE_DOMAIN} {
 }
 
 # The chaos admin UI can stop instances and start load, so it sits behind the same
-# credential. It is served by Envoy under /chaos/ and /api/chaos/ on any host, so the
-# only thing this host adds is the redirect from / to the UI's prefix.
+# credential. Envoy's `chaosadmin.*` virtual host serves the UI at the root and the
+# API at /api/chaos/v1; the Host header passes through unchanged.
 chaosadmin.{$BASE_DOMAIN} {
 	import observability
-	redir / /chaos/ 302
 	reverse_proxy cluster:18080 {
 		flush_interval -1
 		header_up X-Forwarded-Proto https

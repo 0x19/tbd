@@ -7,11 +7,13 @@
 # Where `chaos serve` listens. In-cluster this is overridden to 0.0.0.0 by
 # CHAOS_LISTEN_ADDR.
 listen = "127.0.0.1:7700"
-# Prefix for every API route. Envoy forwards /api/chaos/ here.
-base_path = "/api/chaos"
-# Built UI to serve at `ui_path`. Empty: no UI, API only.
+# Prefix for every API route, versioned. Envoy forwards everything under /api/chaos/
+# here, so a v2 can sit next to v1 behind the same routes.
+base_path = "/api/chaos/v1"
+# Built UI to serve at `ui_path`. Empty ui_dir: no UI, API only.
+# Empty ui_path: the root of the host (http://localhost:7700/); the API keeps base_path.
 ui_dir = ""
-ui_path = "/chaos"
+ui_path = ""
 # Start the [paths].topology stack when `serve` starts.
 start_stack = true
 

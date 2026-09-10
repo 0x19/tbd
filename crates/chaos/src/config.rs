@@ -40,11 +40,11 @@ pub struct ChaosConfig {
 pub struct Serve {
     /// Listen address.
     pub listen: SocketAddr,
-    /// API prefix, e.g. `/api/chaos`.
+    /// API prefix, e.g. `/api/chaos/v1`.
     pub base_path: String,
     /// Built UI directory; empty for none.
     pub ui_dir: String,
-    /// Path the UI is served at.
+    /// Path the UI is served at; `""` is the root of the host.
     pub ui_path: String,
     /// Start the topology stack on boot.
     pub start_stack: bool,
@@ -169,15 +169,16 @@ impl ChaosConfig {
 
     /// Structural checks.
     pub fn check(&self) -> anyhow::Result<()> {
-        for (what, p) in [
-            ("serve.base_path", &self.serve.base_path),
-            ("serve.ui_path", &self.serve.ui_path),
-        ] {
-            anyhow::ensure!(
-                p.starts_with('/') && (p.len() == 1 || !p.ends_with('/')),
-                "{what} must start with / and not end with one, got {p:?}"
-            );
-        }
+        let p = &self.serve.base_path;
+        anyhow::ensure!(
+            p.starts_with('/') && p.len() > 1 && !p.ends_with('/'),
+            "serve.base_path must start with / and not end with one, got {p:?}"
+        );
+        let p = &self.serve.ui_path;
+        anyhow::ensure!(
+            p.is_empty() || (p.starts_with('/') && p.len() > 1 && !p.ends_with('/')),
+            "serve.ui_path must be empty (the root) or start with / and not end with one, got {p:?}"
+        );
         anyhow::ensure!(
             self.serve.base_path != self.serve.ui_path,
             "serve.base_path and serve.ui_path must differ"

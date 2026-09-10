@@ -54,7 +54,7 @@ services:
 
   chaos:
     # chaos API (and admin UI when ui/chaos/out was built into the image):
-    # http://localhost:8080/api/chaos/overview and http://localhost:8080/chaos/ via Envoy.
+    # http://localhost:8080/api/chaos/v1/overview and http://chaos.localhost:8080/ via Envoy.
     image: ${IMAGE_REGISTRY:-ghcr.io/0x19}/tbd-chaos:${IMAGE_TAG:-dev}
     build:
       context: .

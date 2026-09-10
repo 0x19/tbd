@@ -43,9 +43,9 @@ TBD_ENV=production chaos config    # production
 | Key | Default (`base.toml`) | Overridden by | Meaning |
 |---|---|---|---|
 | `serve.listen` | `127.0.0.1:7700` | `--listen`, `CHAOS_LISTEN_ADDR` | where `chaos serve` binds |
-| `serve.base_path` | `/api/chaos` | `--base-path`, `CHAOS_BASE_PATH` | prefix of every API route |
+| `serve.base_path` | `/api/chaos/v1` | `--base-path`, `CHAOS_BASE_PATH` | prefix of every API route |
 | `serve.ui_dir` | `""` | `--ui-dir`, `CHAOS_UI_DIR` | built UI to serve; empty for none |
-| `serve.ui_path` | `/chaos` | | where the UI is served |
+| `serve.ui_path` | `""` (root) | | where the UI is served; `""` is the root of the host, or a prefix such as `/chaos` |
 | `serve.start_stack` | `true` | `--no-stack` | run `paths.topology` in-process on start |
 | `paths.topology` | `topologies/dev.toml` | `--topology`, `CHAOS_TOPOLOGY` | stack for `up` and `serve` |
 | `paths.scenarios` | `scenarios` | `--scenarios`, `CHAOS_SCENARIOS_DIR` | scenario files the API lists and edits |
@@ -62,7 +62,8 @@ TBD_ENV=production chaos config    # production
 | `links.pyroscope` | `""` | | same |
 | `links.envoy_admin` | `""` | | same; never derived, the edge does not expose it |
 
-`serve.base_path` and `serve.ui_path` must start with `/`, not end with one, and differ.
+`serve.base_path` must start with `/` and not end with one; `serve.ui_path` is empty (the
+root) or the same shape; they must differ.
 `targets.*` must be absolute URLs.
 
 ## Per environment

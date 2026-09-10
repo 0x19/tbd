@@ -12,9 +12,9 @@ Public TLS edge for a cluster behind a home or office router. Read `README.md` f
   `$name` in env files, so a raw bcrypt hash arrives truncated and every login is 401.
   `mise run edge:password` prints it escaped; `docker inspect` on the container shows
   what Caddy actually got (60 characters, starting `$2a$14$`).
-- `chaosadmin.` goes through Envoy's prefix routes (`/chaos/`, `/api/chaos/`) on the
-  `*` virtual host, not Envoy's `chaos.*` host, whose prefix rewrite double-prefixes the
-  UI's `/chaos/_next/...` assets. Caddy only adds the `/` → `/chaos/` redirect.
+- `chaosadmin.` is matched by Envoy's own `chaos.*` / `chaosadmin.*` virtual host, which
+  serves the UI at the root; Caddy passes the Host header through unchanged and adds
+  nothing but TLS and the credential.
 - `mise run edge:up` runs `caddy reload` inside the container after `up -d`, because
   compose does not restart on a bind-mounted config change. The mount is the whole
   `devops/edge` directory at `/etc/caddy`: a single-file bind mount keeps the old inode

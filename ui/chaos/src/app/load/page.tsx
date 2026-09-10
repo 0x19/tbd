@@ -1,27 +1,38 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Play } from "lucide-react";
+import { Info, Play } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Field } from "@/components/field";
-import { PageHeader } from "@/components/page-header";
-import { RunsTable } from "@/components/runs-table";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from "@/components/ui/input-group";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { PageTitle, Sparkline, StatRow } from "@/components/kit";
+import { StatusBadge } from "@/components/status-badge";
 import { useChaos } from "@/components/shell/providers";
 import { api } from "@/lib/api/client";
 import { describe, useFetch } from "@/lib/api/hooks";
-import { OpKind, type LoadRequest } from "@/lib/api/schema";
+import { OpKind, type LoadRequest, type RunRecord } from "@/lib/api/schema";
+import { ago, ms, num, pct } from "@/lib/format";
+import { useEffect } from "react";
 
 const OPS = OpKind.options;
 
-/** An ad-hoc load run: the `[load]` table as a form, against the serve stack or any URL. */
+function secondsOf(s: string): number {
+  const m = /^(\d+(?:\.\d+)?)\s*(ms|s|m|h)?$/.exec(s.trim());
+  if (!m) return 0;
+  const n = Number(m[1]);
+  return m[2] === "ms" ? n / 1000 : m[2] === "m" ? n * 60 : m[2] === "h" ? n * 3600 : n;
+}
+
+/** The kit's delivery simulator: a policy rail on the left, the window and past results on the right. */
 export default function LoadPage() {
   const router = useRouter();
-  const { overview } = useChaos();
-  const recent = useFetch(() => api.runs(100), 5000);
+  const { overview, lastEvent } = useChaos();
+  const recent = useFetch(() => api.runs(200), 5000, [lastEvent]);
   const [name, setName] = useState("adhoc");
   const [rate, setRate] = useState("200");
   const [duration, setDuration] = useState("10s");
@@ -42,36 +53,33 @@ export default function LoadPage() {
   const [busy, setBusy] = useState(false);
 
   const stackProtocols = (overview?.stack ?? []).filter((i) => i.kind === "protocol" && i.running);
+  const dur = secondsOf(duration);
+  const r = Number(rate) || 0;
+  const expected = ramp ? Math.round(((Number(startRate) + Number(endRate)) / 2) * dur) : Math.round(r * dur);
+  const concurrency = Math.round((ramp ? Number(endRate) : r) * 0.01); // 10 ms per request at loopback
+  const capped = concurrency > (Number(maxInFlight) || 256);
+  const totalWeight = OPS.reduce((n, op) => n + (Number(weights[op]) || 0), 0);
 
   const request = (): LoadRequest => ({
     name: name || undefined,
     targets: targetMode === "url" && targetUrl ? [{ name: "url", http_url: targetUrl }] : [],
     load: {
-      rate: Number(rate),
+      rate: r,
       duration,
       warmup: warmup || undefined,
       timeout: timeout || undefined,
       max_in_flight: Number(maxInFlight) || undefined,
-      pattern: ramp
-        ? {
-            type: "ramp",
-            start_rate: Number(startRate),
-            end_rate: Number(endRate),
-          }
-        : undefined,
-      operations: OPS.map((op) => ({
-        op,
-        weight: Number(weights[op] ?? 0),
-      })).filter((o) => o.weight > 0),
+      pattern: ramp ? { type: "ramp", start_rate: Number(startRate), end_rate: Number(endRate) } : undefined,
+      operations: OPS.map((op) => ({ op, weight: Number(weights[op] ?? 0) })).filter((o) => o.weight > 0),
     },
   });
 
   const start = async () => {
     setBusy(true);
     try {
-      const summary = await api.runLoad(request());
-      toast.success(`started ${summary.name}`);
-      router.push(`/runs/view/?id=${summary.id}`);
+      const s = await api.runLoad(request());
+      toast.success(`started ${s.name}`);
+      router.push(`/runs/view/?id=${s.id}`);
     } catch (e) {
       toast.error(describe(e));
     } finally {
@@ -79,152 +87,324 @@ export default function LoadPage() {
     }
   };
 
+  const loadRuns = (recent.data ?? []).filter((x) => x.kind === "load").slice(0, 8);
+
   return (
     <>
-      <PageHeader
-        title="Load"
-        description="Open-loop load with live throughput, percentiles and error classes. Against the serve stack, or any protocol URL such as Envoy in the cluster."
+      <PageTitle
+        title="Run new load"
+        description="Model the shape before you push it: open-loop rate, duration, mix, concurrency cap. Then watch it live."
       >
         <Button
-          size="sm"
           onClick={start}
           disabled={
-            busy || (targetMode === "url" && !targetUrl) || (targetMode === "stack" && !stackProtocols.length)
+            busy ||
+            (targetMode === "url" && !targetUrl) ||
+            (targetMode === "stack" && !stackProtocols.length) ||
+            !totalWeight
           }
         >
-          <Play /> start
+          <Play /> Run load
         </Button>
-      </PageHeader>
-      <div className="grid gap-4 xl:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <CardTitle>Shape</CardTitle>
-            <CardDescription>The same keys as a scenario&apos;s [load] table.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-3">
-            <Field label="Name">
-              <Input value={name} onChange={(e) => setName(e.target.value)} />
-            </Field>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Rate (req/s)">
-                <Input
-                  value={rate}
-                  onChange={(e) => setRate(e.target.value)}
-                  inputMode="numeric"
-                  disabled={ramp}
-                />
+      </PageTitle>
+
+      <div className="grid gap-8 xl:grid-cols-[22rem_1fr]">
+        <div className="grid content-start gap-6">
+          <section>
+            <h2 className="mb-3 text-base font-semibold">Shape</h2>
+            <div className="grid gap-3 rounded-xl border p-4">
+              <Field label="Name" help="Shown in the run list.">
+                <InputGroup>
+                  <InputGroupInput value={name} onChange={(e) => setName(e.target.value)} />
+                </InputGroup>
               </Field>
-              <Field label="Duration">
-                <Input value={duration} onChange={(e) => setDuration(e.target.value)} placeholder="10s" />
-              </Field>
-              <Field label="Warmup">
-                <Input value={warmup} onChange={(e) => setWarmup(e.target.value)} placeholder="500ms" />
-              </Field>
-              <Field label="Timeout">
-                <Input value={timeout} onChange={(e) => setTimeoutValue(e.target.value)} placeholder="5s" />
-              </Field>
-              <Field label="Max in flight">
-                <Input
-                  value={maxInFlight}
-                  onChange={(e) => setMaxInFlight(e.target.value)}
-                  inputMode="numeric"
-                />
-              </Field>
-              <Field label="Pattern">
+              <Field
+                label="Pattern"
+                help="Constant holds the rate; ramp interpolates from start to end over the duration."
+              >
                 <select
-                  className="h-8 w-full rounded-md border bg-background px-2 text-sm"
+                  className="h-8 w-full rounded-lg border bg-background px-2 text-sm"
                   value={ramp ? "ramp" : "constant"}
                   onChange={(e) => setRamp(e.target.value === "ramp")}
                 >
-                  <option value="constant">constant</option>
-                  <option value="ramp">ramp</option>
+                  <option value="constant">Constant</option>
+                  <option value="ramp">Ramp</option>
                 </select>
               </Field>
               {ramp ? (
-                <>
-                  <Field label="Start rate">
-                    <Input
-                      value={startRate}
-                      onChange={(e) => setStartRate(e.target.value)}
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Start rate" help="Requests per second at t = 0.">
+                    <InputGroup>
+                      <InputGroupInput
+                        value={startRate}
+                        onChange={(e) => setStartRate(e.target.value)}
+                        inputMode="numeric"
+                      />
+                      <InputGroupAddon align="inline-end">
+                        <InputGroupText>req/s</InputGroupText>
+                      </InputGroupAddon>
+                    </InputGroup>
+                  </Field>
+                  <Field label="End rate" help="Requests per second at the end.">
+                    <InputGroup>
+                      <InputGroupInput
+                        value={endRate}
+                        onChange={(e) => setEndRate(e.target.value)}
+                        inputMode="numeric"
+                      />
+                      <InputGroupAddon align="inline-end">
+                        <InputGroupText>req/s</InputGroupText>
+                      </InputGroupAddon>
+                    </InputGroup>
+                  </Field>
+                </div>
+              ) : (
+                <Field
+                  label="Rate"
+                  help="Requests per second across every target, open loop: latency does not slow the pacer."
+                >
+                  <InputGroup>
+                    <InputGroupInput
+                      value={rate}
+                      onChange={(e) => setRate(e.target.value)}
                       inputMode="numeric"
                     />
-                  </Field>
-                  <Field label="End rate">
-                    <Input value={endRate} onChange={(e) => setEndRate(e.target.value)} inputMode="numeric" />
-                  </Field>
-                </>
+                    <InputGroupAddon align="inline-end">
+                      <InputGroupText>req/s</InputGroupText>
+                    </InputGroupAddon>
+                  </InputGroup>
+                </Field>
+              )}
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Duration" help="Measured window, excluding warmup.">
+                  <InputGroup>
+                    <InputGroupInput
+                      value={duration}
+                      onChange={(e) => setDuration(e.target.value)}
+                      placeholder="10s"
+                    />
+                  </InputGroup>
+                </Field>
+                <Field label="Warmup" help="Same load first; its numbers are discarded.">
+                  <InputGroup>
+                    <InputGroupInput
+                      value={warmup}
+                      onChange={(e) => setWarmup(e.target.value)}
+                      placeholder="500ms"
+                    />
+                  </InputGroup>
+                </Field>
+                <Field label="Timeout" help="Per request; a timeout counts as a failure.">
+                  <InputGroup>
+                    <InputGroupInput
+                      value={timeout}
+                      onChange={(e) => setTimeoutValue(e.target.value)}
+                      placeholder="5s"
+                    />
+                  </InputGroup>
+                </Field>
+                <Field label="Max in flight" help="Concurrency cap; the pacer stalls when reached.">
+                  <InputGroup>
+                    <InputGroupInput
+                      value={maxInFlight}
+                      onChange={(e) => setMaxInFlight(e.target.value)}
+                      inputMode="numeric"
+                    />
+                  </InputGroup>
+                </Field>
+              </div>
+              <div className="border-t pt-3 text-sm">
+                <div className="text-xs text-muted-foreground">Expected</div>
+                <div className="tabular-nums">
+                  ≈ {num(expected)} requests ·{" "}
+                  {capped ? (
+                    <span className="text-destructive">cap reached at ~10 ms latency</span>
+                  ) : (
+                    `~${concurrency || 1} in flight at 10 ms`
+                  )}
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section>
+            <h2 className="mb-3 text-base font-semibold">Operations</h2>
+            <div className="grid gap-3 rounded-xl border p-4">
+              {OPS.map((op) => (
+                <Field key={op} label={op} help="Relative weight in the mix; zero leaves it out.">
+                  <InputGroup>
+                    <InputGroupInput
+                      value={weights[op] ?? "0"}
+                      onChange={(e) => setWeights({ ...weights, [op]: e.target.value })}
+                      inputMode="numeric"
+                    />
+                    <InputGroupAddon align="inline-end">
+                      <InputGroupText>
+                        {totalWeight
+                          ? `${Math.round(((Number(weights[op]) || 0) / totalWeight) * 100)}%`
+                          : "–"}
+                      </InputGroupText>
+                    </InputGroupAddon>
+                  </InputGroup>
+                </Field>
+              ))}
+            </div>
+          </section>
+
+          <section>
+            <h2 className="mb-3 text-base font-semibold">Target</h2>
+            <div className="grid gap-3 rounded-xl border p-4">
+              <Field
+                label="Where"
+                help="The serve stack's protocols, or any protocol base URL such as Envoy."
+              >
+                <select
+                  className="h-8 w-full rounded-lg border bg-background px-2 text-sm"
+                  value={targetMode}
+                  onChange={(e) => setTargetMode(e.target.value as "stack" | "url")}
+                >
+                  <option value="stack">
+                    Serve stack ({stackProtocols.map((p) => p.name).join(", ") || "no protocol running"})
+                  </option>
+                  <option value="url">A protocol URL</option>
+                </select>
+              </Field>
+              {targetMode === "url" ? (
+                <Field
+                  label="Protocol base URL"
+                  help="From the chaos pod inside the cluster this is Envoy; from a serve on your machine it is the edge."
+                >
+                  <InputGroup>
+                    <InputGroupInput
+                      value={targetUrl}
+                      onChange={(e) => setTargetUrl(e.target.value)}
+                      placeholder={overview?.config.targets.protocol ?? "http://localhost:18080"}
+                    />
+                  </InputGroup>
+                </Field>
               ) : null}
             </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Operations</CardTitle>
-            <CardDescription>Relative weights; zero leaves an operation out.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-3">
-            {OPS.map((op) => (
-              <Field key={op} label={op}>
-                <Input
-                  value={weights[op] ?? "0"}
-                  onChange={(e) =>
-                    setWeights({
-                      ...weights,
-                      [op]: e.target.value,
-                    })
-                  }
-                  inputMode="numeric"
-                />
-              </Field>
-            ))}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Target</CardTitle>
-            <CardDescription>Where requests go.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-3">
-            <Field label="Mode">
-              <select
-                className="h-8 w-full rounded-md border bg-background px-2 text-sm"
-                value={targetMode}
-                onChange={(e) => setTargetMode(e.target.value as "stack" | "url")}
-              >
-                <option value="stack">
-                  serve stack ({stackProtocols.map((p) => p.name).join(", ") || "no protocol running"})
-                </option>
-                <option value="url">a protocol URL</option>
-              </select>
-            </Field>
-            {targetMode === "url" ? (
-              <Field label="Protocol base URL">
-                <Input
-                  value={targetUrl}
-                  onChange={(e) => setTargetUrl(e.target.value)}
-                  placeholder={overview?.config.targets.protocol ?? "http://localhost:18080"}
-                />
-              </Field>
-            ) : null}
-            <p className="text-xs text-muted-foreground">
-              Through Envoy the URL is the edge: locally <code>http://localhost:18080</code> from a serve on
-              this machine, or <code>{overview?.config.targets.protocol ?? "http://envoy:8080"}</code> from
-              the serve inside the cluster.
-            </p>
-            <pre className="overflow-x-auto rounded-md bg-muted p-2 text-xs">
-              {JSON.stringify(request(), null, 1)}
-            </pre>
-          </CardContent>
-        </Card>
+          </section>
+        </div>
+
+        <div className="grid content-start gap-8">
+          <section>
+            <h2 className="mb-1 flex items-center gap-2 text-base font-semibold">
+              Load window <Hint text="What this shape means before anything runs." />
+            </h2>
+            <StatRow
+              items={[
+                { label: "Warmup", value: warmup || "none" },
+                { label: "Measured", value: duration || "–" },
+                { label: "Requests", value: `≈ ${num(expected)}` },
+                { label: "Mix", value: `${OPS.filter((op) => Number(weights[op]) > 0).length} ops` },
+              ]}
+            />
+          </section>
+
+          <section>
+            <h2 className="mb-1 flex items-center gap-2 text-base font-semibold">
+              Previous load runs <Hint text="The last runs of this kind, with their per-second throughput." />
+            </h2>
+            <div className="overflow-x-auto rounded-xl border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Run</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Requests</TableHead>
+                    <TableHead className="text-right">Errors</TableHead>
+                    <TableHead className="text-right">p99</TableHead>
+                    <TableHead>Throughput</TableHead>
+                    <TableHead>When</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {loadRuns.map((run) => (
+                    <TableRow key={run.id}>
+                      <TableCell>
+                        <Link href={`/runs/view/?id=${run.id}`} className="font-medium hover:underline">
+                          {run.name}
+                        </Link>
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge status={run.status} />
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">{num(run.requests_total)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{pct(run.error_rate)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{ms(run.p99_ms)}</TableCell>
+                      <TableCell>
+                        <RunSpark id={run.id} />
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{ago(run.started_at)}</TableCell>
+                    </TableRow>
+                  ))}
+                  {!loadRuns.length ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                        No load runs yet.
+                      </TableCell>
+                    </TableRow>
+                  ) : null}
+                </TableBody>
+              </Table>
+            </div>
+          </section>
+
+          <Card size="sm">
+            <CardHeader>
+              <CardTitle>Request body</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <pre className="overflow-x-auto rounded-lg bg-muted p-3 text-xs">
+                {JSON.stringify(request(), null, 1)}
+              </pre>
+            </CardContent>
+          </Card>
+        </div>
       </div>
-      <Card>
-        <CardHeader>
-          <CardTitle>Previous load runs</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <RunsTable runs={(recent.data ?? []).filter((r) => r.kind === "load")} />
-        </CardContent>
-      </Card>
     </>
   );
+}
+
+function Field({ label, help, children }: { label: string; help?: string; children: React.ReactNode }) {
+  return (
+    <label className="grid gap-1.5">
+      <span className="flex items-center gap-1 text-sm font-medium">
+        {label}
+        {help ? <Hint text={help} /> : null}
+      </span>
+      {children}
+    </label>
+  );
+}
+
+function Hint({ text }: { text: string }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger render={<span className="inline-flex" />}>
+        <Info className="size-3.5 text-muted-foreground" />
+      </TooltipTrigger>
+      <TooltipContent>{text}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+/** Per-second throughput of a finished load run, as a tiny bar chart. */
+function RunSpark({ id }: { id: string }) {
+  const [record, setRecord] = useState<RunRecord | null>(null);
+  useEffect(() => {
+    api
+      .run(id)
+      .then(setRecord)
+      .catch(() => setRecord(null));
+  }, [id]);
+  const s = record?.samples ?? [];
+  if (!s.length) return <span className="text-xs text-muted-foreground">–</span>;
+  const values = s.map((x, i) => {
+    const p = i > 0 ? s[i - 1] : null;
+    const dt = p ? x.elapsed_s - p.elapsed_s : x.elapsed_s;
+    return dt > 0 ? (x.requests_total - (p?.requests_total ?? 0)) / dt : x.throughput_rps;
+  });
+  return <Sparkline values={values} />;
 }

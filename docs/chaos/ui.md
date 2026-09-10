@@ -4,26 +4,37 @@ A web front end for `chaos serve`: see the stack, stop and fault instances, writ
 push scenarios, run them and watch the numbers move, run validate against any target,
 and read what a failure means. It is a Next.js static export served by the chaos binary
 itself, so there is no Node.js process anywhere at runtime: one process, one port,
-`/chaos/` for the pages and `/api/chaos/` for the data.
+the pages at the root and `/api/chaos/v1/` for the data.
 
 ```
-http://localhost:7700/chaos/         chaos serve on this machine (mise run chaos:serve)
-http://localhost:18080/chaos/        the local cluster, through Envoy
-http://chaos.<domain>/               a real environment, Envoy virtual host
+http://localhost:7700/               chaos serve on this machine (mise run chaos:serve)
+http://chaos.localhost:18080/        the local cluster, through Envoy's chaos.* virtual host
+https://chaosadmin.<domain>/         a real environment, through the public edge
 ```
+
+`chaos.localhost` needs no DNS entry: browsers resolve every `*.localhost` name to
+loopback. From another machine on the LAN, one `/etc/hosts` line mapping any name that
+starts with `chaos.` to the server does the same. `curl` needs `-H 'Host: chaos.localhost'`.
 
 ## Pages
 
-| Page | What it is for |
-|---|---|
-| Overview | Stack up or down, last validate, last run, recent failures, links into Grafana, VictoriaLogs, VictoriaMetrics, Pyroscope (and Envoy admin locally) for this environment, derived from `[links] domain` behind the public edge. The first thing to open when something looks wrong. |
-| Stack | Every instance of the in-process topology with stop, start and a behaviour editor (healthy, slow, hang, error, delayed failure). Engine counters live. This is where a new feature gets exercised against faults by hand. |
-| Scenarios | The scenario files. New scenario opens a template; the editor checks the TOML on every pause and saves only what checks. Run goes straight to the live run page. |
-| Runs | Every run, filterable by kind, with requests, error rate, p99, checks passed and duration. Deleting a run removes its record. |
-| Run | One run: stat cards, the per-second chart (req/s, p50, p99, error %), assertions with bound and observed value, the timeline as it fired, per-operation and per-target breakdown, error classes. Live while running, replayed when opened late, complete when finished. Cancel stops load and tears down. |
-| Load | Ad-hoc load: rate, duration, warmup, timeout, concurrency, constant or ramp, operation weights, against the serve stack or any protocol URL. |
-| Validate | The eleven checks against the config targets or any pair of URLs, with latency and detail per check. |
-| Runbook | Symptom, what it means, where to look, what to do. Add an entry whenever a failure taught something. |
+| Page | Kit pattern | What it is for |
+|---|---|---|
+| Overview | Ecommerce dashboard 1 + Developers overview | KPI strip (stack health, last validate, runs and failure rate over 24 h with deltas against the previous day), throughput of the last scenario run over the previous run of the same scenario, latency p50/p90/p99 per scenario as stacked bars, stack list, live activity, where-to-look links, recent runs. |
+| Stack | Payments webhooks | Two summary cards (integrity bar per instance, engine traffic), an instance list with health dots and Stop / Start / Fault, and a detail sheet per instance with key/value rows and the session's activity. |
+| Scenarios | Ecommerce product list | Title with primary action, status tabs, search toolbar, table with last run chip and numbers, row menu (edit, runs, delete). |
+| Scenario | Ecommerce order detail | Back arrow, big name with status chips, a stage strip that previews setup / warmup / load + timeline / assert / teardown with the timeline actions, the TOML editor checked as you type, and a right rail with stack, load, assertions and last run. |
+| Runs | Developers events & logs | Filter rail (kind, status, scenario with counts), search, refresh and Live, table with a totals row. Sidebar sub-items deep-link by kind. |
+| Run | Payments delivery simulator + order lifecycle | Lifecycle strip, stat row, the per-second chart, assertions, timeline with OK/ERROR chips, a latency heat grid per operation (darker is slower), error classes, per target and service. Live while running, replayed when opened late. |
+| Load | Payments delivery simulator | A policy rail (shape, operations, target; unit suffixes and info tooltips; expected requests and concurrency computed live), a load window stat row, previous load runs with a throughput sparkline, the request body. |
+| Validate | Developers events & logs | Targets form, stat row, filter rail by surface and result, PASS / FAIL chips with latency and detail, totals row, previous validate runs. |
+| Runbook | Original settings | Vertical section nav with observability links, titled entries with "look at" and "then" columns. |
+
+The shell is the kit's: a workspace block and grouped, collapsible navigation in the
+sidebar with an environment block at the bottom; an app bar with ⌘K search,
+notifications (finished runs of this session), theme toggle and the environment pill;
+a breadcrumb bar with the command search. ⌘K opens a command palette with pages,
+"run scenario …" for every scenario that checks, and actions.
 
 Every number on these pages comes from the API described in [api.md](api.md). The UI
 holds no state of its own beyond what is on screen.
@@ -36,14 +47,14 @@ mise run ui:dev           # terminal 2: Next.js dev server on :3001, talks to :7
 ```
 
 `next dev` runs on 3001 because Grafana takes 3000 on this machine. In development the
-pages call `http://127.0.0.1:7700/api/chaos` (set `NEXT_PUBLIC_CHAOS_API` to point
-elsewhere); in a build they call `/api/chaos` on their own origin, which is why one
-export works under `chaos serve`, Envoy's prefix routes and the `chaos.<domain>` host.
+pages call `http://127.0.0.1:7700/api/chaos/v1` (set `NEXT_PUBLIC_CHAOS_API` to point
+elsewhere); in a build they call `/api/chaos/v1` on their own origin, which is why one
+export works under `chaos serve`, Envoy's `chaos.*` host and the public edge.
 
 ```sh
 mise run ui:check         # prettier, eslint (React Compiler rules), tsc
 mise run ui:build         # static export into ui/chaos/out
-mise run chaos:serve      # picks ui/chaos/out up and serves it at /chaos
+mise run chaos:serve      # picks ui/chaos/out up and serves it at /
 ```
 
 `mise run local:build` builds the UI first, so the chaos image in the local cluster
@@ -54,7 +65,7 @@ same plus a build.
 `ui/chaos/e2e/smoke.mjs`): every page renders real data, a fault applies from the
 dialog, an engine stops and starts, a scenario run streams to the end, an ad-hoc load run
 cancels, validate passes, dark mode toggles, and no console error occurs. It targets
-`http://localhost:18080/chaos` (the local cluster) unless `UI_BASE` says otherwise, and
+`http://chaos.localhost:18080` (the local cluster) unless `UI_BASE` says otherwise, and
 leaves screenshots under `ui/chaos/e2e/shots/`. It is not in CI because it needs a
 running cluster.
 
@@ -68,21 +79,22 @@ ui/chaos/src
 │   ├── stack/  scenarios/  scenarios/view/  runs/  runs/view/  load/  validate/  runbook/
 ├── components/
 │   ├── ui/                    shadcn/ui primitives (generated; regenerate, do not hand-edit)
-│   ├── shell/                 app-sidebar, site-header, providers (overview + live feed context), nav
-│   ├── instances-table.tsx    stack table with stop/start/fault
+│   ├── shell/                 app-sidebar, site-header, command-menu (⌘K), providers (overview, live feed, activity), nav
+│   ├── kit.tsx                the kit's building blocks: PageTitle, KpiStrip, StatRow, StageBar, FilterRail, HeatGrid, Sparkline, DetailList, LevelChip
+│   ├── charts.tsx             monochrome recharts: CompareChart, RunChart, LatencyBars, ChartHeadline, Legend
 │   ├── behavior-dialog.tsx    the behaviour form; emits the same JSON a timeline uses
-│   ├── load-chart.tsx         recharts line chart over LoadSnapshot samples
-│   ├── runs-table.tsx, stat-card.tsx, status-badge.tsx, page-header.tsx
+│   ├── runs-table.tsx, status-badge.tsx, instances-table.tsx (describeBehavior)
 └── lib/
     ├── api/schema.ts          Zod schemas, one per type in api.md
     ├── api/client.ts          fetch wrapper (parses through Zod) and SSE subscribe
     ├── api/hooks.ts           useFetch (poll), useGlobalFeed, useStack, useRunFeed
+    ├── runs.ts                windows, deltas, latest run per scenario
     └── format.ts              ms, pct, ago, ...
 ```
 
 Stack: Next.js 16 App Router with `output: "export"`, React 19, Tailwind CSS 4, shadcn/ui
 (Base UI primitives, `render` prop instead of `asChild`), Recharts, Zod, Lucide,
-next-themes, sonner. No server components do work: every page is `"use client"` and
+next-themes, sonner, cmdk. Fonts are Inter and JetBrains Mono, as in the kit. No server components do work: every page is `"use client"` and
 fetches from the API, which is what makes the static export possible.
 
 Rules the code follows:
@@ -101,8 +113,13 @@ Rules the code follows:
 
 ## Layout
 
-The shell is the shadcn sidebar layout used by admin dashboards such as the shadcnblocks
-Admin Kit: collapsible icon sidebar with grouped navigation and a footer status, a header
-with breadcrumb and theme toggle, content as cards on a responsive grid. The kit itself is
-a paid download and is not vendored here; its blocks can be dropped into
-`components/` later without changing the data layer.
+The pages reproduce the shadcnblocks Admin Kit (https://www.shadcnblocks.com/admin-dashboard)
+pattern by pattern, taken from its live demo and its 139 page screenshots: Inter, the
+two-tier header, the grouped collapsible sidebar with workspace and identity blocks, one
+KPI card split by dividers with a "previous" line and a coloured delta, monochrome charts
+with a big number and an uppercase caption, list pages with a filter rail and a toolbar,
+detail pages with a big id, chips and a lifecycle strip, and the simulator layout with a
+form rail and a heat grid. The building blocks live in `components/kit.tsx` and
+`components/charts.tsx`. The kit itself is a paid ZIP (Premium) and is not vendored;
+once available, its components replace `components/ui/` and `kit.tsx` without touching
+the data layer.

@@ -97,7 +97,7 @@ Start with [docs/chaos/README.md](docs/chaos/README.md). Writing scenarios:
 [docs/chaos/config.md](docs/chaos/config.md).
 
 In the local cluster `chaos serve` runs as a pod behind Envoy:
-`http://localhost:18080/api/chaos/overview`, UI at `http://localhost:18080/chaos/`.
+`http://localhost:18080/api/chaos/v1/overview`, UI at `http://chaos.localhost:18080/`.
 The UI (`ui/chaos`, Next.js static export served by the chaos binary) is described in
 [docs/chaos/ui.md](docs/chaos/ui.md); `mise run chaos:serve` plus `mise run ui:dev`
 is the development loop.

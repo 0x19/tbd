@@ -3,13 +3,13 @@
 `chaos serve` keeps the tool running as an HTTP API so the admin UI (`ui/chaos`) and
 scripts can do everything the CLI does, plus hold a stack up between calls and follow
 runs live. This page is the contract. Every path below is relative to
-`[serve] base_path`, default `/api/chaos`; through Envoy that is
-`http://localhost:18080/api/chaos/...` locally and `chaos.api.<domain>/...` where a
+`[serve] base_path`, default `/api/chaos/v1`; through Envoy that is
+`http://localhost:18080/api/chaos/v1/...` locally and `chaos.api.<domain>/v1/...` where a
 domain exists (see [devops/envoy/README.md](../../devops/envoy/README.md)).
 
 ```
 chaos serve                          # 127.0.0.1:7700, dev topology in-process
-curl -s localhost:7700/api/chaos/overview | jq .
+curl -s localhost:7700/api/chaos/v1/overview | jq .
 ```
 
 Errors are `{"error": "<message>"}` with `404` (unknown instance, scenario or run),
@@ -174,8 +174,9 @@ finished run answers with its `finished` frame only.
 | `request` | what started it: the load request, or validate's targets |
 
 `RunSummary` is the list view: `id`, `kind`, `name`, `scenario_id`, `status`,
-`started_at`, `finished_at`, `duration_s`, `requests_total`, `error_rate`, `p99_ms`,
-`passed` (`[passed, total]` assertions or checks), `error`.
+`started_at`, `finished_at`, `duration_s`, `requests_total`, `error_rate`,
+`throughput_rps`, `p50_ms`, `p90_ms`, `p99_ms`, `passed` (`[passed, total]` assertions or
+checks), `error`.
 
 Records are JSON files, one per run, under `[paths] results` (default
 `.chaos/results/`, gitignored). Serve indexes the directory on start; a record still
@@ -184,16 +185,18 @@ Records are JSON files, one per run, under `[paths] results` (default
 ## UI
 
 With `[serve] ui_dir` (or `--ui-dir`) pointing at the built UI (`ui/chaos/out`), serve
-also serves it at `[serve] ui_path` (default `/chaos`) with `index.html` as the fallback
+also serves it at `[serve] ui_path` (default `""`, the root of the host) with `index.html` as the fallback
 for client-side routes. `mise run chaos:serve` passes `--ui-dir ui/chaos/out`.
 
 ## Through Envoy
 
-Envoy forwards `/api/chaos/` and `/chaos/` on the edge listener to the `chaos` cluster
-with no stream timeout, so SSE works through it. The virtual hosts `chaos.api.*` and
-`chaos.*` map a dedicated host to the same two prefixes. In the local cluster:
+Envoy forwards `/api/chaos/` (every version) on the edge listener, on any host, to the `chaos` cluster
+with no stream timeout, so SSE works through it. The UI has its own virtual host,
+`chaos.*` or `chaosadmin.*`, served at the root (`http://chaos.localhost:18080/` in the
+local cluster; browsers resolve `*.localhost` to loopback by themselves), and
+`chaos.api.*` maps a dedicated host to the API prefix. In the local cluster:
 
 ```sh
-curl -s http://localhost:18080/api/chaos/overview | jq .stack
-curl -s -N http://localhost:18080/api/chaos/events
+curl -s http://localhost:18080/api/chaos/v1/overview | jq .stack
+curl -s -N http://localhost:18080/api/chaos/v1/events
 ```

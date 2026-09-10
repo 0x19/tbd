@@ -186,7 +186,7 @@ chaos serve [--listen ADDR] [--base-path PATH] [--ui-dir DIR] [--topology FILE]
 | Flag | Env | Default |
 |---|---|---|
 | `--listen` | `CHAOS_LISTEN_ADDR` | `[serve] listen`, `127.0.0.1:7700` |
-| `--base-path` | `CHAOS_BASE_PATH` | `[serve] base_path`, `/api/chaos` |
+| `--base-path` | `CHAOS_BASE_PATH` | `[serve] base_path`, `/api/chaos/v1` |
 | `--ui-dir` | `CHAOS_UI_DIR` | `[serve] ui_dir`, none |
 | `--topology` | `CHAOS_TOPOLOGY` | `[paths] topology` |
 | `--scenarios` | `CHAOS_SCENARIOS_DIR` | `[paths] scenarios` |

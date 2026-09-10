@@ -122,7 +122,7 @@ dir = "ui/chaos"
 run = "pnpm build"
 
 [tasks."ui:e2e"]
-description = "Browser smoke of the deployed UI through Envoy (UI_BASE=http://localhost:18080/chaos); downloads Chromium once"
+description = "Browser smoke of the deployed UI through Envoy (UI_BASE=http://chaos.localhost:18080); downloads Chromium once"
 depends = ["ui:install"]
 dir = "ui/chaos"
 run = "pnpm e2e"
@@ -313,8 +313,8 @@ kubectl -n tbd rollout status deployment/engine deployment/protocol deployment/c
 run = """
 echo "edge (REST/WS/GraphQL/gRPC)  http://localhost:18080"
 echo "engine LB (gRPC)             http://localhost:15051"
-echo "chaos API                    http://localhost:18080/api/chaos/overview"
-echo "chaos UI                     http://localhost:18080/chaos/"
+echo "chaos API                    http://localhost:18080/api/chaos/v1/overview"
+echo "chaos UI                     http://chaos.localhost:18080/   (browsers resolve *.localhost themselves)"
 echo "grafana (admin/admin)        http://localhost:3000"
 echo "victoria-metrics             http://localhost:9090"
 echo "otlp into the collector      http://localhost:14317"

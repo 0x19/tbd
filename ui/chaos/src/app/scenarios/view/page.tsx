@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
-import { Play, Save, Trash2 } from "lucide-react";
+import { ArrowLeft, Play, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { ErrorNote, PageHeader } from "@/components/page-header";
+import { DetailList, PageTitle, StageBar } from "@/components/kit";
 import { StatusBadge } from "@/components/status-badge";
 import { api } from "@/lib/api/client";
 import { describe } from "@/lib/api/hooks";
@@ -60,6 +60,20 @@ max_p99_ms = 100
 min_requests = 200
 `;
 
+type Parsed = {
+  scenario?: { name?: string; description?: string; skip?: boolean };
+  stack?: { engines?: Record<string, unknown>; protocols?: Record<string, { engine?: string }> };
+  load?: {
+    rate?: number;
+    duration?: string;
+    warmup?: string;
+    operations?: { op: string; weight: number }[];
+    pattern?: { type: string };
+  };
+  timeline?: { at: string; action: string; service?: string; message?: string }[];
+  assertions?: Record<string, unknown>;
+};
+
 export default function ScenarioViewPage() {
   return (
     <Suspense fallback={<Skeleton className="h-40" />}>
@@ -68,6 +82,7 @@ export default function ScenarioViewPage() {
   );
 }
 
+/** The kit's order-detail layout: back arrow, big id with status chips, a stage strip, content plus a right rail. */
 function ScenarioView() {
   const params = useSearchParams();
   const router = useRouter();
@@ -92,7 +107,6 @@ function ScenarioView() {
       .catch((e: unknown) => setError(describe(e)));
   }, [requested, isNew]);
 
-  // Check on every pause in typing; never writes.
   useEffect(() => {
     if (!text.trim()) return;
     const t = setTimeout(() => {
@@ -104,6 +118,7 @@ function ScenarioView() {
     return () => clearTimeout(t);
   }, [text]);
 
+  const parsed = (check?.parsed ?? null) as Parsed | null;
   const dirty = detail ? text !== detail.text : true;
 
   const save = async () => {
@@ -116,10 +131,7 @@ function ScenarioView() {
       await api.scenarioSave(id.trim(), text);
       toast.success(`saved scenarios/${id.trim()}.toml`);
       if (isNew) router.replace(`/scenarios/view/?id=${encodeURIComponent(id.trim())}`);
-      else {
-        const d = await api.scenario(id);
-        setDetail(d);
-      }
+      else setDetail(await api.scenario(id));
     } catch (e) {
       toast.error(describe(e));
     } finally {
@@ -131,8 +143,8 @@ function ScenarioView() {
     setBusy(true);
     try {
       if (dirty) await api.scenarioSave(id.trim(), text);
-      const summary = await api.runScenario(id.trim());
-      router.push(`/runs/view/?id=${summary.id}`);
+      const s = await api.runScenario(id.trim());
+      router.push(`/runs/view/?id=${s.id}`);
     } catch (e) {
       toast.error(describe(e));
     } finally {
@@ -144,75 +156,133 @@ function ScenarioView() {
     if (!confirm(`Delete scenarios/${id}.toml?`)) return;
     try {
       await api.scenarioDelete(id);
-      toast.success("deleted");
       router.push("/scenarios/");
     } catch (e) {
       toast.error(describe(e));
     }
   };
 
+  const timeline = parsed?.timeline ?? [];
+  const engines = Object.keys(parsed?.stack?.engines ?? {});
+  const protocols = Object.entries(parsed?.stack?.protocols ?? {});
+  const load = parsed?.load;
+  const assertions = Object.entries(parsed?.assertions ?? {}).filter(
+    ([k, v]) => k !== "services" && v !== null,
+  );
+  const serviceAssertions = Object.entries(
+    (parsed?.assertions?.services as Record<string, Record<string, unknown>> | undefined) ?? {},
+  );
+
   return (
     <>
-      <PageHeader
-        title={isNew ? "New scenario" : (detail?.name ?? requested)}
+      <PageTitle
+        back={
+          <Button variant="outline" size="icon" render={<Link href="/scenarios/" />} aria-label="Back">
+            <ArrowLeft />
+          </Button>
+        }
+        title={
+          <span className="flex flex-wrap items-center gap-3">
+            {isNew ? "New scenario" : (parsed?.scenario?.name ?? detail?.name ?? requested)}
+            {check ? (
+              check.ok ? (
+                <Badge variant="outline" className="text-emerald-600 dark:text-emerald-400">
+                  checks
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="text-destructive">
+                  does not check
+                </Badge>
+              )
+            ) : null}
+            {parsed?.scenario?.skip ? <Badge variant="outline">skipped in CI</Badge> : null}
+            {dirty && !isNew ? <Badge variant="outline">unsaved</Badge> : null}
+          </span>
+        }
         description={
-          isNew
-            ? "Write the TOML, check it as you type, save it into the scenarios directory, run it."
-            : detail?.description || detail?.file
+          isNew ? (
+            "Write the TOML, it is checked as you type; save it into the scenarios directory, then run it."
+          ) : (
+            <>
+              <span className="font-mono">{detail?.file ?? requested}</span>
+              {parsed?.scenario?.description ? ` · ${parsed.scenario.description}` : ""}
+              {detail?.last_run ? ` · last run ${ago(detail.last_run.started_at)}` : ""}
+            </>
+          )
         }
       >
         {!isNew ? (
-          <Button variant="outline" size="sm" onClick={remove}>
-            <Trash2 /> delete
+          <Button variant="ghost" size="sm" onClick={remove}>
+            <Trash2 /> Delete
           </Button>
         ) : null}
         <Button variant="outline" size="sm" onClick={save} disabled={busy || !check?.ok}>
-          <Save /> {isNew ? "save" : dirty ? "save changes" : "saved"}
+          <Save /> {isNew ? "Save" : dirty ? "Save changes" : "Saved"}
         </Button>
         <Button size="sm" onClick={run} disabled={busy || !check?.ok || !id.trim()}>
-          <Play /> {dirty ? "save and run" : "run"}
+          <Play /> {dirty ? "Save and run" : "Run"}
         </Button>
-      </PageHeader>
-      <ErrorNote message={error} />
-      <div className="grid gap-4 xl:grid-cols-3">
-        <Card className="xl:col-span-2">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              {isNew ? (
-                <Input
-                  value={id}
-                  onChange={(e) => setId(e.target.value)}
-                  placeholder="id, e.g. ws/burst → scenarios/ws/burst.toml"
-                  className="max-w-sm font-mono text-xs"
-                />
-              ) : (
-                <span className="font-mono text-xs">{detail?.file ?? requested}</span>
-              )}
-              {check ? (
-                check.ok ? (
-                  <Badge variant="outline" className="text-emerald-600 dark:text-emerald-400">
-                    checks
-                  </Badge>
-                ) : (
-                  <Badge variant="outline" className="text-destructive">
-                    does not check
-                  </Badge>
-                )
-              ) : null}
-            </CardTitle>
-            {check && !check.ok ? (
-              <CardDescription className="text-destructive">{check.error}</CardDescription>
-            ) : null}
-          </CardHeader>
-          <CardContent>
-            <Textarea
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              spellCheck={false}
-              className="min-h-[32rem] font-mono text-xs leading-5"
+      </PageTitle>
+      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+
+      <div className="grid gap-6 xl:grid-cols-[1fr_20rem]">
+        <div className="grid content-start gap-6">
+          <div className="rounded-xl border bg-muted/30 p-4">
+            <div className="mb-3 flex flex-wrap justify-between gap-2 text-sm">
+              <span>
+                Stack <b>{engines.length}</b> engine{engines.length === 1 ? "" : "s"},{" "}
+                <b>{protocols.length}</b> protocol{protocols.length === 1 ? "" : "s"}
+              </span>
+              <span className="text-muted-foreground">
+                {load
+                  ? `${load.rate ?? 50} req/s for ${load.duration ?? "?"}${load.warmup ? `, warmup ${load.warmup}` : ""}`
+                  : "no load, timeline only"}
+              </span>
+            </div>
+            <StageBar
+              stages={["Setup", load?.warmup ? "Warmup" : "Ready", "Load + timeline", "Assert", "Teardown"]}
+              current={-1}
             />
-          </CardContent>
-        </Card>
+            {timeline.length ? (
+              <ol className="mt-4 grid gap-1 text-xs text-muted-foreground">
+                {timeline.map((t, i) => (
+                  <li key={i} className="flex gap-3">
+                    <span className="w-14 font-mono tabular-nums">{t.at}</span>
+                    <span className="font-mono">
+                      {t.action}
+                      {t.service ? ` ${t.service}` : ""}
+                      {t.message ? ` "${t.message}"` : ""}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            ) : null}
+          </div>
+
+          {isNew ? (
+            <div className="grid gap-1.5">
+              <span className="text-xs text-muted-foreground">Id, becomes scenarios/&lt;id&gt;.toml</span>
+              <Input
+                value={id}
+                onChange={(e) => setId(e.target.value)}
+                placeholder="ws/burst"
+                className="max-w-sm font-mono text-xs"
+              />
+            </div>
+          ) : null}
+          {check && !check.ok ? (
+            <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+              {check.error}
+            </div>
+          ) : null}
+          <Textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            spellCheck={false}
+            className="min-h-[34rem] font-mono text-xs leading-5"
+          />
+        </div>
+
         <div className="grid content-start gap-4">
           {detail?.last_run ? (
             <Card size="sm">
@@ -220,55 +290,73 @@ function ScenarioView() {
                 <CardTitle>Last run</CardTitle>
                 <CardDescription>{ago(detail.last_run.started_at)}</CardDescription>
               </CardHeader>
-              <CardContent className="flex items-center gap-2 text-sm">
+              <CardContent className="flex items-center justify-between">
                 <StatusBadge status={detail.last_run.status} />
-                <Link className="underline" href={`/runs/view/?id=${detail.last_run.id}`}>
-                  open
-                </Link>
+                <Button
+                  variant="outline"
+                  size="xs"
+                  render={<Link href={`/runs/view/?id=${detail.last_run.id}`} />}
+                >
+                  Open
+                </Button>
               </CardContent>
             </Card>
           ) : null}
           <Card size="sm">
             <CardHeader>
-              <CardTitle>What a scenario proves</CardTitle>
-              <CardDescription>Read it top down.</CardDescription>
+              <CardTitle>Stack</CardTitle>
             </CardHeader>
-            <CardContent className="grid gap-2 text-sm text-muted-foreground">
-              <p>
-                <b className="text-foreground">[stack]</b> is what gets started, on free ports. Names are what
-                the timeline and the assertions refer to.
-              </p>
-              <p>
-                <b className="text-foreground">[load]</b> is open loop: the rate is held whatever the latency
-                does, up to <code>max_in_flight</code>.
-              </p>
-              <p>
-                <b className="text-foreground">[[timeline]]</b> fires at offsets from load start:{" "}
-                <code>set_behavior</code>, <code>stop</code>, <code>start</code>, <code>log</code>.
-              </p>
-              <p>
-                <b className="text-foreground">[assertions]</b> are bounds on the whole window; per-service
-                ones use the engine&apos;s own counters.
-              </p>
-              <p>
-                Bounds come from what the scenario proves, not the fastest machine: loopback p99 is about 3
-                ms, CI is slower.
-              </p>
+            <CardContent>
+              <DetailList
+                rows={[
+                  ...engines.map((e) => ({ k: e, v: "engine" })),
+                  ...protocols.map(([p, spec]) => ({ k: p, v: `protocol → ${spec.engine ?? "?"}` })),
+                ]}
+              />
             </CardContent>
           </Card>
-          {check?.parsed ? (
-            <Card size="sm">
-              <CardHeader>
-                <CardTitle>Parsed</CardTitle>
-                <CardDescription>What the executor will run.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <pre className="max-h-80 overflow-auto rounded-md bg-muted p-2 text-xs">
-                  {JSON.stringify(check.parsed, null, 1)}
-                </pre>
-              </CardContent>
-            </Card>
-          ) : null}
+          <Card size="sm">
+            <CardHeader>
+              <CardTitle>Load</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {load ? (
+                <DetailList
+                  rows={[
+                    { k: "Rate", v: `${load.rate ?? 50} req/s` },
+                    { k: "Duration", v: load.duration ?? "–" },
+                    { k: "Pattern", v: load.pattern?.type ?? "constant" },
+                    ...(load.operations ?? []).map((o) => ({ k: o.op, v: `weight ${o.weight}` })),
+                  ]}
+                />
+              ) : (
+                <p className="text-sm text-muted-foreground">No [load] table.</p>
+              )}
+            </CardContent>
+          </Card>
+          <Card size="sm">
+            <CardHeader>
+              <CardTitle>Assertions</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {assertions.length || serviceAssertions.length ? (
+                <DetailList
+                  rows={[
+                    ...assertions.map(([k, v]) => ({ k, v: String(v) })),
+                    ...serviceAssertions.flatMap(([svc, m]) =>
+                      Object.entries(m)
+                        .filter(([, v]) => v !== null && v !== undefined)
+                        .map(([k, v]) => ({ k: `${svc}.${k}`, v: String(v) })),
+                    ),
+                  ]}
+                />
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No assertions; the run passes if nothing breaks.
+                </p>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </div>
     </>

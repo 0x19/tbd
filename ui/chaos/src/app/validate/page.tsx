@@ -1,31 +1,30 @@
 "use client";
 
 import { useState } from "react";
-import { Play } from "lucide-react";
+import { Play, Search } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Field } from "@/components/field";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { ChecksTable } from "@/app/runs/view/page";
-import { Empty, PageHeader } from "@/components/page-header";
+import { FilterRail, PageTitle, StatRow } from "@/components/kit";
 import { RunsTable } from "@/components/runs-table";
-import { StatCard } from "@/components/stat-card";
 import { useChaos } from "@/components/shell/providers";
 import { api } from "@/lib/api/client";
 import { describe, useFetch } from "@/lib/api/hooks";
 import type { RunRecord } from "@/lib/api/schema";
 import { seconds, when } from "@/lib/format";
 
-/** `chaos validate` from the browser, against the config's targets or any pair of URLs. */
+/** Events & Logs layout: filter rail for surfaces and results, a table with level chips and a totals row. */
 export default function ValidatePage() {
-  const { overview, reload } = useChaos();
-  const history = useFetch(() => api.runs(100), 5000);
+  const { overview, reload, lastEvent } = useChaos();
+  const history = useFetch(() => api.runs(100), 5000, [lastEvent]);
   const [protocol, setProtocol] = useState("");
   const [engine, setEngine] = useState("");
   const [timeout, setTimeoutValue] = useState("");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<RunRecord | null>(null);
+  const [selected, setSelected] = useState<Record<string, string[]>>({});
+  const [q, setQ] = useState("");
 
   const run = async () => {
     setBusy(true);
@@ -47,74 +46,127 @@ export default function ValidatePage() {
     }
   };
 
-  const shown = result;
+  const checks = result?.validate?.checks ?? [];
+  const surfaces = [...new Set(checks.map((c) => c.surface))].map((s) => ({
+    value: s,
+    label: s.toUpperCase(),
+    count: checks.filter((c) => c.surface === s).length,
+  }));
+  const shown = checks.filter((c) => {
+    if (selected.Surface?.length && !selected.Surface.includes(c.surface)) return false;
+    if (selected.Result?.length && !selected.Result.includes(c.passed ? "pass" : "fail")) return false;
+    if (q && !`${c.name} ${c.detail}`.toLowerCase().includes(q.toLowerCase())) return false;
+    return true;
+  });
+
   return (
     <>
-      <PageHeader
+      <PageTitle
         title="Validate"
         description="Eleven checks, one per surface, run concurrently with a timeout each. Green means the stack answers on every protocol the way the contract says."
       >
-        <Button size="sm" onClick={run} disabled={busy}>
-          <Play /> {busy ? "running…" : "run validate"}
+        <Button onClick={run} disabled={busy}>
+          <Play /> {busy ? "Running…" : "Run validate"}
         </Button>
-      </PageHeader>
-      <Card size="sm">
-        <CardHeader>
-          <CardTitle>Targets</CardTitle>
-          <CardDescription>
-            Empty fields use the config: {overview?.config.targets.protocol} and{" "}
-            {overview?.config.targets.engine}
-            {overview?.env ? ` (${overview.env})` : ""}.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-3 md:grid-cols-3">
-          <Field label="Protocol base URL">
-            <Input
+      </PageTitle>
+
+      <div className="grid gap-3 rounded-xl border p-4 md:grid-cols-3">
+        <label className="grid gap-1.5 text-sm">
+          <span className="font-medium">Protocol base URL</span>
+          <InputGroup>
+            <InputGroupInput
               value={protocol}
               onChange={(e) => setProtocol(e.target.value)}
               placeholder={overview?.config.targets.protocol}
             />
-          </Field>
-          <Field label="Engine gRPC URL">
-            <Input
+          </InputGroup>
+        </label>
+        <label className="grid gap-1.5 text-sm">
+          <span className="font-medium">Engine gRPC URL</span>
+          <InputGroup>
+            <InputGroupInput
               value={engine}
               onChange={(e) => setEngine(e.target.value)}
               placeholder={overview?.config.targets.engine}
             />
-          </Field>
-          <Field label="Per-check timeout">
-            <Input
+          </InputGroup>
+        </label>
+        <label className="grid gap-1.5 text-sm">
+          <span className="font-medium">Per-check timeout</span>
+          <InputGroup>
+            <InputGroupInput
               value={timeout}
               onChange={(e) => setTimeoutValue(e.target.value)}
               placeholder={overview?.config.validate.timeout}
             />
-          </Field>
-        </CardContent>
-      </Card>
-      {shown?.validate ? (
+          </InputGroup>
+        </label>
+        <p className="text-xs text-muted-foreground md:col-span-3">
+          Empty fields use the config for <b>{overview?.env}</b>, as seen from chaos serve. Targets may be
+          http:// (h2c) or https://; a private root goes in <code>[validate] ca_cert</code>.
+        </p>
+      </div>
+
+      {result?.validate ? (
         <>
-          <div className="grid gap-4 md:grid-cols-3">
-            <StatCard label="Passed" value={shown.validate.passed} tone="good" />
-            <StatCard
-              label="Failed"
-              value={shown.validate.failed}
-              tone={shown.validate.failed ? "bad" : "good"}
+          <StatRow
+            items={[
+              { label: "Passed", value: result.validate.passed, tone: "good" },
+              {
+                label: "Failed",
+                value: result.validate.failed,
+                tone: result.validate.failed ? "bad" : undefined,
+              },
+              { label: "Took", value: seconds(result.duration_s) },
+              {
+                label: "Ran",
+                value: <span className="text-base font-normal">{when(result.started_at)}</span>,
+              },
+            ]}
+          />
+          <div className="grid gap-6 lg:grid-cols-[16rem_1fr]">
+            <FilterRail
+              groups={[
+                { title: "Surface", options: surfaces },
+                {
+                  title: "Result",
+                  options: [
+                    { value: "pass", label: "Pass", count: checks.filter((c) => c.passed).length },
+                    { value: "fail", label: "Fail", count: checks.filter((c) => !c.passed).length },
+                  ],
+                },
+              ]}
+              selected={selected}
+              onChange={(g, v) => setSelected({ ...selected, [g]: v })}
+              onReset={() => setSelected({})}
             />
-            <StatCard label="Took" value={seconds(shown.duration_s)} hint={when(shown.started_at)} />
+            <div className="grid content-start gap-3">
+              <InputGroup className="max-w-sm">
+                <InputGroupAddon>
+                  <Search />
+                </InputGroupAddon>
+                <InputGroupInput
+                  placeholder="Search checks"
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                />
+              </InputGroup>
+              <ChecksTable checks={shown} />
+            </div>
           </div>
-          <ChecksTable checks={shown.validate.checks} />
         </>
       ) : (
-        <Empty>Run validate to see each check.</Empty>
+        <div className="rounded-xl border border-dashed p-10 text-center text-sm text-muted-foreground">
+          Run validate to see each check with its latency and what it observed.
+        </div>
       )}
-      <Card>
-        <CardHeader>
-          <CardTitle>Previous validate runs</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <RunsTable runs={(history.data ?? []).filter((r) => r.kind === "validate")} />
-        </CardContent>
-      </Card>
+
+      <section>
+        <h2 className="mb-3 text-base font-semibold">Previous validate runs</h2>
+        <div className="rounded-xl border">
+          <RunsTable runs={(history.data ?? []).filter((r) => r.kind === "validate").slice(0, 10)} />
+        </div>
+      </section>
     </>
   );
 }

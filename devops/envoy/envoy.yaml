@@ -13,10 +13,11 @@
 # one file is used unchanged everywhere. STRICT_DNS re-resolves every 5 s, so
 # scale-out and pod churn are picked up without a restart.
 #
-# chaos (the chaos API and admin UI) is reachable two ways: by prefix on any
-# host (`/api/chaos/...`, `/chaos/...`) and by its own host names
-# (`chaos.<domain>` for the UI, `chaos.api.<domain>` for the API, rewritten to
-# the same prefixes). Where chaos is not deployed the cluster has no endpoints
+# chaos: the API is reachable by prefix on any host (`/api/chaos/...`, versioned
+# below it: `/api/chaos/v1/...`) and on
+# its own host `chaos.api.<domain>` (rewritten to the prefix); the admin UI is
+# served at the root of the `chaos.<domain>` / `chaosadmin.<domain>` hosts
+# (`chaos.localhost` locally: browsers resolve *.localhost to loopback). Where chaos is not deployed the cluster has no endpoints
 # and Envoy answers 503, which is the intended "not here".
 #
 # Observability: JSON access logs to stdout with the trace id, Prometheus stats on
@@ -106,10 +107,11 @@ static_resources:
                             cluster: chaos
                             prefix_rewrite: "/api/chaos/"
                             timeout: 0s
-                    # chaos UI on its own host: chaos.<domain>/... -> /chaos/...;
-                    # the UI calls the API by absolute path, which the same host serves.
+                    # chaos UI on its own host, served at the root; the UI calls the
+                    # API at /api/chaos/v1 on the same host. No rewrite: the static export
+                    # links its assets by absolute path.
                     - name: chaos-ui
-                      domains: ["chaos.*"]
+                      domains: ["chaos.*", "chaosadmin.*"]
                       routes:
                         - match: { prefix: "/api/chaos/" }
                           route:
@@ -118,12 +120,11 @@ static_resources:
                         - match: { prefix: "/" }
                           route:
                             cluster: chaos
-                            prefix_rewrite: "/chaos/"
-                            timeout: 0s
+                            timeout: 15s
                     - name: all
                       domains: ["*"]
                       routes:
-                        # chaos API and UI by prefix. Streams (SSE) get no timeout.
+                        # chaos API by prefix. Streams (SSE) get no timeout.
                         - match: { prefix: "/api/chaos/" }
                           route:
                             cluster: chaos
@@ -132,14 +133,6 @@ static_resources:
                           route:
                             cluster: chaos
                             timeout: 0s
-                        - match: { prefix: "/chaos/" }
-                          route:
-                            cluster: chaos
-                            timeout: 15s
-                        - match: { path: "/chaos" }
-                          route:
-                            cluster: chaos
-                            timeout: 15s
                         # gRPC: engine service straight to the engines.
                         - match: { prefix: "/tbd.engine.v1.EngineService/", grpc: {} }
                           route:
@@ -305,7 +298,7 @@ static_resources:
           unhealthy_threshold: 2
           healthy_threshold: 1
           http_health_check:
-            path: /api/chaos/healthz
+            path: /api/chaos/v1/healthz
 
     - name: otel-collector
       type: STRICT_DNS

@@ -7,14 +7,14 @@ this file is the non-obvious part.
   `--build-arg BIN=engine|protocol|chaos` and `--build-arg PORT=`. cargo-chef caches
   dependencies; the runtime image is distroless with no shell, so there are no
   in-container health commands. Health is the orchestrator's job: gRPC probe on the
-  engine, `/healthz` and `/readyz` on the protocol, `/api/chaos/healthz` on chaos.
+  engine, `/healthz` and `/readyz` on the protocol, `/api/chaos/v1/healthz` on chaos.
 - The runtime stage has `WORKDIR /app` and copies `configs/`, `scenarios/` and
   `topologies/` so chaos finds them at its default relative paths; `ui/chaos/out` is
   copied to `/app/ui` when it exists (glob on the first path segment, so the COPY is
   valid without it). `.dockerignore` is an allowlist; a new top-level directory the
   build needs must be added there.
 - `k8s/chaos/` is its own kustomization (not in `base/`), pulled in by the `local` and
-  `dev` overlays only. Envoy routes `/api/chaos/` and `/chaos/` to the headless `chaos`
+  `dev` overlays only. Envoy routes `/api/chaos/` (any version) and the `chaos.*`/`chaosadmin.*` hosts to the headless `chaos`
   Service; where the pod is absent Envoy answers 503. `TBD_ENV` in `tbd-env` selects
   `configs/chaos/<env>.toml` (`production` in base, overridden per overlay).
 - Protos compile inside the image without `protoc` (protox). Do not add protoc to the

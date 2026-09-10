@@ -1,7 +1,7 @@
 # Local k3d cluster: images imported from the docker daemon, Envoy exposed on
 # host ports 18080/15051 through envoy-lb.yaml and k3d's load balancer,
 # two protocol replicas and two engines so Envoy has something to balance,
-# plus chaos serve (API + UI) reachable through Envoy at /api/chaos and /chaos.
+# plus chaos serve (API + UI) reachable through Envoy at /api/chaos/v1 and http://chaos.localhost:18080/.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:

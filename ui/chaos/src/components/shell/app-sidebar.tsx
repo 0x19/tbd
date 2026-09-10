@@ -2,7 +2,16 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ExternalLink, Flame } from "lucide-react";
+import { ChevronRight, ChevronsUpDown, ExternalLink, Flame, Globe } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Sidebar,
   SidebarContent,
@@ -12,19 +21,23 @@ import {
   SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
-  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
   SidebarRail,
 } from "@/components/ui/sidebar";
-import { Badge } from "@/components/ui/badge";
-import { NAV } from "./nav";
+import { NAV, isActive } from "./nav";
 import { useChaos } from "./providers";
 
+/**
+ * The kit's sidebar: a workspace block on top, labelled groups with
+ * collapsible items, external tools, and an identity block at the bottom.
+ */
 export function AppSidebar() {
   const pathname = usePathname();
   const { overview, connected } = useChaos();
-  const active = overview?.active_run;
   const links = overview?.config.links;
   const external = [
     { title: "Grafana", href: links?.grafana },
@@ -32,13 +45,9 @@ export function AppSidebar() {
     { title: "Metrics", href: links?.metrics },
     { title: "Profiles", href: links?.pyroscope },
     { title: "Envoy admin", href: links?.envoy_admin },
-  ].filter((l) => l.href);
-
-  const isActive = (href: string) => {
-    const clean = pathname.replace(/\/$/, "") || "/";
-    const target = href.replace(/\/$/, "") || "/";
-    return target === "/" ? clean === "/" : clean === target || clean.startsWith(`${target}/`);
-  };
+  ].filter((l): l is { title: string; href: string } => Boolean(l.href));
+  const env = overview?.env ?? "…";
+  const domain = overview?.config.links.domain || "local machine";
 
   return (
     <Sidebar collapsible="icon">
@@ -46,14 +55,12 @@ export function AppSidebar() {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" render={<Link href="/" />}>
-              <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+              <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
                 <Flame className="size-4" />
               </div>
               <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-semibold">chaos</span>
-                <span className="truncate text-xs text-muted-foreground">
-                  {overview ? `${overview.env} · v${overview.version}` : "connecting…"}
-                </span>
+                <span className="truncate font-semibold">Chaos Admin</span>
+                <span className="truncate text-xs text-muted-foreground">tbd · chaos serve</span>
               </div>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -65,23 +72,60 @@ export function AppSidebar() {
             <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                {group.items.map((item) => (
-                  <SidebarMenuItem key={item.href}>
-                    <SidebarMenuButton
-                      isActive={isActive(item.href)}
-                      tooltip={item.title}
-                      render={<Link href={item.href} />}
+                {group.items.map((item) =>
+                  item.children ? (
+                    <Collapsible
+                      key={item.href}
+                      defaultOpen={isActive(pathname, item.href)}
+                      className="group/collapsible"
                     >
-                      <item.icon />
-                      <span>{item.title}</span>
-                    </SidebarMenuButton>
-                    {item.href === "/runs/" && active ? (
-                      <SidebarMenuBadge>
-                        <span className="size-2 animate-pulse rounded-full bg-emerald-500" />
-                      </SidebarMenuBadge>
-                    ) : null}
-                  </SidebarMenuItem>
-                ))}
+                      <SidebarMenuItem>
+                        <CollapsibleTrigger
+                          render={
+                            <SidebarMenuButton
+                              tooltip={item.title}
+                              isActive={isActive(pathname, item.href)}
+                            />
+                          }
+                        >
+                          <item.icon />
+                          <span>{item.title}</span>
+                          <ChevronRight className="ml-auto transition-transform duration-200 group-data-[panel-open]/collapsible:rotate-90" />
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <SidebarMenuSub>
+                            {item.children.map((leaf) => (
+                              <SidebarMenuSubItem key={leaf.href}>
+                                <SidebarMenuSubButton
+                                  isActive={
+                                    leaf.href.includes("?")
+                                      ? false
+                                      : isActive(pathname, leaf.href) &&
+                                        pathname.replace(/\/$/, "") === leaf.href.replace(/\/$/, "")
+                                  }
+                                  render={<Link href={leaf.href} />}
+                                >
+                                  <span>{leaf.title}</span>
+                                </SidebarMenuSubButton>
+                              </SidebarMenuSubItem>
+                            ))}
+                          </SidebarMenuSub>
+                        </CollapsibleContent>
+                      </SidebarMenuItem>
+                    </Collapsible>
+                  ) : (
+                    <SidebarMenuItem key={item.href}>
+                      <SidebarMenuButton
+                        isActive={isActive(pathname, item.href)}
+                        tooltip={item.title}
+                        render={<Link href={item.href} />}
+                      >
+                        <item.icon />
+                        <span>{item.title}</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ),
+                )}
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
@@ -108,15 +152,45 @@ export function AppSidebar() {
         ) : null}
       </SidebarContent>
       <SidebarFooter>
-        <div className="flex items-center gap-2 px-2 text-xs text-muted-foreground group-data-[collapsible=icon]:hidden">
-          <span className={`size-2 rounded-full ${connected ? "bg-emerald-500" : "bg-amber-500"}`} />
-          {connected ? "live feed connected" : "live feed off"}
-          {overview?.stack ? (
-            <Badge variant="outline" className="ml-auto">
-              {overview.stack.filter((i) => i.running).length}/{overview.stack.length} up
-            </Badge>
-          ) : null}
-        </div>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <DropdownMenu>
+              <DropdownMenuTrigger render={<SidebarMenuButton size="lg" />}>
+                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-muted">
+                  <Globe className="size-4" />
+                </div>
+                <div className="grid flex-1 text-left text-sm leading-tight">
+                  <span className="truncate font-semibold">{env}</span>
+                  <span className="truncate text-xs text-muted-foreground">{domain}</span>
+                </div>
+                <span className={`size-2 rounded-full ${connected ? "bg-emerald-500" : "bg-amber-500"}`} />
+                <ChevronsUpDown className="ml-1 size-4" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent side="top" align="start" className="w-64">
+                <DropdownMenuLabel>Environment</DropdownMenuLabel>
+                <DropdownMenuItem className="text-xs">
+                  <span className="text-muted-foreground">config</span>
+                  <span className="ml-auto truncate font-mono">
+                    {overview?.config_files.map((f) => f.split("/").pop()).join(" + ")}
+                  </span>
+                </DropdownMenuItem>
+                <DropdownMenuItem className="text-xs">
+                  <span className="text-muted-foreground">version</span>
+                  <span className="ml-auto font-mono">{overview?.version}</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem className="text-xs">
+                  <span className="text-muted-foreground">live feed</span>
+                  <span className="ml-auto">{connected ? "connected" : "off"}</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem className="text-xs">
+                  <span className="text-muted-foreground">API</span>
+                  <span className="ml-auto font-mono">{overview?.config.serve.base_path}</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </SidebarMenuItem>
+        </SidebarMenu>
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>
