@@ -11,6 +11,7 @@
 //! generation, timelines, assertions and reports.
 
 pub mod api;
+pub mod auth;
 pub mod config;
 pub mod load;
 pub mod scenario;

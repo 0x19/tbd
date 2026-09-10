@@ -13,6 +13,12 @@ belongs in the engine.
   every unknown REST path with HTTP 200 + `grpc-status: 12`. Unknown paths are a JSON
   404 (`ApiError::NotFound`) with route label `unmatched`; unknown gRPC methods keep the
   gRPC answer.
+- `subject.rs`: the caller identity. Envoy verifies the JWT and forwards the claims in
+  `x-jwt-payload` (base64url JSON) and strips that header from clients; `attach`
+  middleware puts `Subject(sub)` in the request extensions and the span (`enduser.id`),
+  handlers take `Subject` as an extractor (401 `unauthenticated` when absent), `/v1/me`
+  returns it. The protocol never verifies tokens: services are reachable only through
+  Envoy, and a second check would be a second implementation to keep in sync.
 - `error.rs`: `ApiError` maps `tonic::Code` to HTTP status. This mapping is what the
   chaos error classes (`http 503` etc.) reflect; change it and update
   `docs/chaos/scenarios.md`.

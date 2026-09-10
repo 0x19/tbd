@@ -53,6 +53,7 @@ clap = { version = "4.6", features = ["derive", "env"] }
 
 # errors
 thiserror = "2"
+base64            = "0.22"
 anyhow    = "1"
 
 # observability

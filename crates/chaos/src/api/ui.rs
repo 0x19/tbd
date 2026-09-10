@@ -1,4 +1,5 @@
-//! Serves the built UI (a Next.js static export) under `[serve] ui_path`.
+//! Serves the built UI (a Next.js static export) under `[serve] ui_path`,
+//! the root of the host when that is empty.
 //!
 //! Not `ServeDir`: that redirects `/chaos/runs` to `/runs/` (it does not
 //! know the nest prefix) and a static export wants `runs/index.html` served
@@ -18,26 +19,41 @@ use axum::{
 use tower::ServiceExt;
 use tower_http::services::ServeFile;
 
+use super::ApiError;
+
 #[derive(Clone)]
 struct Ui {
     dir: PathBuf,
     prefix: String,
+    api_prefix: String,
 }
 
-/// A router that serves `dir` for every path under `ui_path`.
-pub fn router(ui_path: &str, dir: &Path) -> Router {
+/// A router that serves `dir` for every path under `ui_path` (every path at
+/// all when `ui_path` is empty). Known API routes still win, being more
+/// specific than the wildcard; an unknown path under `api_prefix` would not,
+/// so the handler answers those with the API's JSON 404 itself.
+pub fn router(ui_path: &str, dir: &Path, api_prefix: &str) -> Router {
     let state = Ui {
         dir: dir.to_path_buf(),
         prefix: ui_path.to_owned(),
+        api_prefix: api_prefix.to_owned(),
     };
-    Router::new()
-        .route(ui_path, get(serve))
-        .route(&format!("{ui_path}/"), get(serve))
+    let router = if ui_path.is_empty() {
+        Router::new().route("/", get(serve))
+    } else {
+        Router::new()
+            .route(ui_path, get(serve))
+            .route(&format!("{ui_path}/"), get(serve))
+    };
+    router
         .route(&format!("{ui_path}/{{*rest}}"), get(serve))
         .with_state(state)
 }
 
 async fn serve(State(ui): State<Ui>, uri: Uri, req: Request) -> Response {
+    if uri.path() == ui.api_prefix || uri.path().starts_with(&format!("{}/", ui.api_prefix)) {
+        return ApiError::not_found("no such route").into_response();
+    }
     let Some(rel) = relative(uri.path(), &ui.prefix, &ui.dir) else {
         return StatusCode::NOT_FOUND.into_response();
     };
@@ -117,5 +133,17 @@ mod tests {
         assert_eq!(relative("/chaos/../etc", "/chaos", dir), None);
         assert_eq!(relative("/chaos/%2e%2e/etc", "/chaos", dir), None);
         assert_eq!(relative("/other", "/chaos", dir), None);
+    }
+
+    #[test]
+    fn an_empty_prefix_is_the_root() {
+        let dir = Path::new("/srv/ui");
+        assert_eq!(relative("/", "", dir), Some(dir.to_path_buf()));
+        assert_eq!(relative("/runs/", "", dir), Some(dir.join("runs")));
+        assert_eq!(
+            relative("/_next/static/x.js", "", dir),
+            Some(dir.join("_next").join("static").join("x.js"))
+        );
+        assert_eq!(relative("/../etc", "", dir), None);
     }
 }

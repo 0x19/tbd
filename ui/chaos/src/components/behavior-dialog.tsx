@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+
+import { Field } from "@/components/field";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -11,7 +13,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Field } from "@/components/field";
 import type { Behavior, ErrorKind } from "@/lib/api/schema";
 
 type Kind = Behavior["type"];
@@ -106,7 +107,7 @@ export function BehaviorDialog({
 
   const select = (
     <select
-      className="h-8 w-full rounded-md border bg-background px-2 text-sm"
+      className="bg-background h-8 w-full rounded-md border px-2 text-sm"
       value={kind}
       onChange={(e) => setKind(e.target.value as Kind)}
     >
@@ -162,8 +163,8 @@ export function BehaviorDialog({
               </Field>
             </div>
           ) : null}
-          <pre className="overflow-x-auto rounded-md bg-muted p-2 text-xs">{JSON.stringify(build())}</pre>
-          {err ? <p className="text-sm text-destructive">{err}</p> : null}
+          <pre className="bg-muted overflow-x-auto rounded-md p-2 text-xs">{JSON.stringify(build())}</pre>
+          {err ? <p className="text-destructive text-sm">{err}</p> : null}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
@@ -181,7 +182,7 @@ export function BehaviorDialog({
 function KindSelect({ value, onChange }: { value: ErrorKind; onChange: (k: ErrorKind) => void }) {
   return (
     <select
-      className="h-8 w-full rounded-md border bg-background px-2 text-sm"
+      className="bg-background h-8 w-full rounded-md border px-2 text-sm"
       value={value}
       onChange={(e) => onChange(e.target.value as ErrorKind)}
     >

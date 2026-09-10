@@ -19,6 +19,9 @@ pub enum ApiError {
     /// No route matches the path.
     #[error("no route for {0}")]
     NotFound(String),
+    /// The route needs a caller identity and Envoy forwarded none.
+    #[error("authentication required")]
+    Unauthenticated,
 }
 
 #[derive(Serialize)]
@@ -33,6 +36,7 @@ impl ApiError {
         match self {
             Self::BadRequest(_) => StatusCode::BAD_REQUEST,
             Self::NotFound(_) => StatusCode::NOT_FOUND,
+            Self::Unauthenticated => StatusCode::UNAUTHORIZED,
             Self::Engine(s) => match s.code() {
                 C::InvalidArgument | C::OutOfRange => StatusCode::BAD_REQUEST,
                 C::NotFound => StatusCode::NOT_FOUND,
@@ -53,6 +57,7 @@ impl ApiError {
         match self {
             Self::BadRequest(_) => "bad_request",
             Self::NotFound(_) => "not_found",
+            Self::Unauthenticated => "unauthenticated",
             Self::Engine(s) => match s.code() {
                 tonic::Code::Unavailable => "engine_unavailable",
                 _ => "engine_error",

@@ -1,0 +1,42 @@
+# Runs seed-clients.sh: registers the OAuth2 clients this repo relies on
+# (update if present, create otherwise). Secrets and the domain come from
+# auth-secrets and auth-env. `mise run auth:deploy` deletes the finished job
+# before applying, because a finished Job's spec is immutable.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: seed-clients
+spec:
+  backoffLimit: 6
+  ttlSecondsAfterFinished: 600
+  template:
+    spec:
+      restartPolicy: OnFailure
+      automountServiceAccountToken: false
+      containers:
+        - name: seed
+          image: curlimages/curl:8.16.0
+          envFrom:
+            - configMapRef:
+                name: auth-env
+          env:
+            - name: HYDRA_ADMIN
+              value: http://hydra-admin.auth.svc:4445
+            - name: CLIENT_UI_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: auth-secrets
+                  key: client-ui-secret
+            - name: CLIENT_CHAOS_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: auth-secrets
+                  key: client-chaos-secret
+          command: ["sh", "-e", "/seed/seed-clients.sh"]
+          volumeMounts:
+            - name: seed
+              mountPath: /seed
+      volumes:
+        - name: seed
+          configMap:
+            name: seed-clients

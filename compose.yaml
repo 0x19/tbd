@@ -1,7 +1,11 @@
-# Local stack: engine (gRPC) + protocol (HTTP/WS/GraphQL protocol) + Envoy + chaos serve.
+# Local stack: engine (gRPC) + protocol (HTTP/WS/GraphQL protocol) + Envoy + chaos serve
+# + the identity stack (Postgres, Ory Hydra, Ory Kratos, login UI) that Envoy verifies
+# tokens against. Sign in at http://auth.localhost:8080/, API at http://localhost:8080.
 #
 #   docker compose up --build
 #   docker compose down -v
+#
+# The secrets below default to local-only values; set them in .env for anything shared.
 #
 # Images are distroless (no shell, no curl), so compose-level healthchecks cannot exec inside
 # the container. Readiness here is "process is up"; real probes live in devops/k8s. The
@@ -54,7 +58,7 @@ services:
 
   chaos:
     # chaos API (and admin UI when ui/chaos/out was built into the image):
-    # http://localhost:8080/api/chaos/overview and http://localhost:8080/chaos/ via Envoy.
+    # http://localhost:8080/api/chaos/v1/overview and http://chaos.localhost:8080/ via Envoy.
     image: ${IMAGE_REGISTRY:-ghcr.io/0x19}/tbd-chaos:${IMAGE_TAG:-dev}
     build:
       context: .
@@ -75,6 +79,10 @@ services:
       CHAOS_UI_DIR: /app/ui
       # Base domain of the public edge (devops/edge); empty keeps localhost links.
       CHAOS_PUBLIC_DOMAIN: ${BASE_DOMAIN:-}
+      # Tokens for validate/load through Envoy (docs/auth/README.md).
+      CHAOS_AUTH_TOKEN_URL: http://hydra:4444/oauth2/token
+      CHAOS_AUTH_CLIENT_ID: tbd-chaos
+      CHAOS_AUTH_CLIENT_SECRET: ${AUTH_CLIENT_CHAOS_SECRET:-local-chaos-secret}
     volumes:
       - chaos-results:/data
     tmpfs:
@@ -83,9 +91,25 @@ services:
 
   envoy:
     image: envoyproxy/envoy:v1.39.1
-    command: ["-c", "/etc/envoy/envoy.yaml", "--service-cluster", "envoy", "--service-node", "compose"]
+    # Renders the one environment-specific value (the browser-facing auth URL) and
+    # the OAuth2 filter's file-based secrets, then starts Envoy.
+    command:
+      - sh
+      - -ec
+      - |
+        sed "s|__AUTH_PUBLIC_URL__|$$AUTH_PUBLIC_URL|g" /template/envoy.yaml > /tmp/envoy.yaml
+        mkdir -p /etc/envoy/secrets
+        for n in token hmac; do
+          v=$$(eval echo "\$$OAUTH_$${n}_SECRET")
+          printf 'resources:\n  - "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.Secret\n    name: oauth-%s-secret\n    generic_secret:\n      secret: { inline_string: "%s" }\n' "$$n" "$$v" > /etc/envoy/secrets/$$n.yaml
+        done
+        exec envoy -c /tmp/envoy.yaml --service-cluster envoy --service-node compose
+    environment:
+      AUTH_PUBLIC_URL: ${AUTH_PUBLIC_URL:-http://auth.localhost:8080}
+      OAUTH_token_SECRET: ${AUTH_CLIENT_UI_SECRET:-local-ui-secret}
+      OAUTH_hmac_SECRET: ${ENVOY_OAUTH_HMAC:-local-hmac-secret-change-me}
     volumes:
-      - ./devops/envoy/envoy.yaml:/etc/envoy/envoy.yaml:ro
+      - ./devops/envoy/envoy.yaml:/template/envoy.yaml:ro
     ports:
       - "8080:8080"    # edge: REST, SSE, GraphQL, WebSocket, gRPC
       - "50051:50051"  # engine load balancer
@@ -94,7 +118,111 @@ services:
       - engine
       - protocol
       - chaos
+      - hydra
+      - kratos
+      - auth-ui
     restart: unless-stopped
+
+  # ---- identity stack: the same config files as devops/k8s/auth, rendered the same way.
+  postgres:
+    image: postgres:17.6-alpine
+    environment:
+      POSTGRES_USER: auth
+      POSTGRES_PASSWORD: ${AUTH_POSTGRES_PASSWORD:-local-postgres}
+    volumes:
+      - auth-postgres:/var/lib/postgresql/data
+      - ./devops/k8s/auth/postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U auth"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  hydra:
+    image: oryd/hydra:v26.2.0
+    command:
+      - sh
+      - -ec
+      - |
+        sed "s|__AUTH_PUBLIC_URL__|$$AUTH_PUBLIC_URL|g; s|__BASE_DOMAIN__|$$BASE_DOMAIN|g" /template/hydra.yml > /tmp/hydra.yml
+        hydra migrate sql -e --yes -c /tmp/hydra.yml
+        exec hydra serve all -c /tmp/hydra.yml --dev
+    environment:
+      AUTH_PUBLIC_URL: ${AUTH_PUBLIC_URL:-http://auth.localhost:8080}
+      BASE_DOMAIN: ${BASE_DOMAIN:-localhost}
+      DSN: postgres://auth:${AUTH_POSTGRES_PASSWORD:-local-postgres}@postgres:5432/hydra?sslmode=disable&max_conns=20&max_idle_conns=4
+      SECRETS_SYSTEM: ${HYDRA_SYSTEM_SECRET:-local-hydra-system-secret-change-me}
+    volumes:
+      - ./devops/k8s/auth/config:/template:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  kratos:
+    image: oryd/kratos:v26.2.0
+    command:
+      - sh
+      - -ec
+      - |
+        sed "s|__AUTH_PUBLIC_URL__|$$AUTH_PUBLIC_URL|g; s|__BASE_DOMAIN__|$$BASE_DOMAIN|g; s|hydra-admin.auth.svc|hydra|g; s|kratos-admin.auth.svc|kratos|g" /template/kratos.yml > /tmp/kratos.yml
+        cp /template/identity.schema.json /template/oidc.*.jsonnet /tmp/
+        sed "s|/config/oidc.yml|/tmp/oidc.yml|" /template/oidc.sh | sh
+        sed -i "s|/etc/config/kratos/|/tmp/|g" /tmp/kratos.yml /tmp/oidc.yml
+        kratos migrate sql -e --yes -c /tmp/kratos.yml -c /tmp/oidc.yml
+        exec kratos serve all -c /tmp/kratos.yml -c /tmp/oidc.yml --dev
+    environment:
+      AUTH_PUBLIC_URL: ${AUTH_PUBLIC_URL:-http://auth.localhost:8080}
+      BASE_DOMAIN: ${BASE_DOMAIN:-localhost}
+      DSN: postgres://auth:${AUTH_POSTGRES_PASSWORD:-local-postgres}@postgres:5432/kratos?sslmode=disable&max_conns=20&max_idle_conns=4
+      SECRETS_COOKIE: ${KRATOS_COOKIE_SECRET:-local-kratos-cookie-secret-change}
+      SECRETS_CIPHER: ${KRATOS_CIPHER_SECRET:-local-kratos-cipher-32-chars-xx}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+    volumes:
+      - ./devops/k8s/auth/config:/template:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  auth-ui:
+    image: oryd/kratos-selfservice-ui-node:v26.2.0
+    environment:
+      PORT: "3000"
+      KRATOS_PUBLIC_URL: http://kratos:4433
+      KRATOS_ADMIN_URL: http://kratos:4434
+      KRATOS_BROWSER_URL: ${AUTH_PUBLIC_URL:-http://auth.localhost:8080}
+      HYDRA_ADMIN_URL: http://hydra:4445
+      COOKIE_SECRET: ${UI_COOKIE_SECRET:-local-ui-cookie-secret-change-me}
+      CSRF_COOKIE_NAME: tbd_auth_csrf
+      CSRF_COOKIE_SECRET: ${UI_CSRF_SECRET:-local-ui-csrf-secret-change-me}
+      TRUSTED_CLIENT_IDS: tbd-ui,tbd-app
+      DANGEROUSLY_DISABLE_SECURE_CSRF_COOKIES: "true"
+    depends_on:
+      - kratos
+      - hydra
+    restart: unless-stopped
+
+  # Registers the OAuth2 clients (same script as devops/k8s/auth/seed-clients.yaml).
+  seed-clients:
+    image: curlimages/curl:8.16.0
+    environment:
+      HYDRA_ADMIN: http://hydra:4445
+      AUTH_PUBLIC_URL: ${AUTH_PUBLIC_URL:-http://auth.localhost:8080}
+      BASE_DOMAIN: ${BASE_DOMAIN:-localhost}
+      CLIENT_UI_SECRET: ${AUTH_CLIENT_UI_SECRET:-local-ui-secret}
+      CLIENT_CHAOS_SECRET: ${AUTH_CLIENT_CHAOS_SECRET:-local-chaos-secret}
+    volumes:
+      - ./devops/k8s/auth/seed-clients.sh:/seed.sh:ro
+    command: ["sh", "-e", "/seed.sh"]
+    depends_on:
+      - hydra
+    restart: on-failure
 
 volumes:
   chaos-results:
+  auth-postgres:

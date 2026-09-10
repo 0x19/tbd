@@ -3,8 +3,9 @@
 // Data hooks: polling for lists, SSE for anything live. Small on purpose;
 // swap for TanStack Query when the page count justifies it.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ApiError, api, feeds } from "./client";
-import type { GlobalEvent, InstanceInfo, RunFeed, RunRecord, LoadSnapshot } from "./schema";
+
+import { api, ApiError, feeds } from "./client";
+import type { GlobalEvent, InstanceInfo, LoadSnapshot, RunFeed, RunRecord } from "./schema";
 
 export type Loadable<T> = {
   data: T | null;

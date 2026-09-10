@@ -3215,6 +3215,7 @@ dependencies = [
  "async-graphql",
  "async-graphql-axum",
  "axum",
+ "base64 0.22.1",
  "clap",
  "futures",
  "http",

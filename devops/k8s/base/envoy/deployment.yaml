@@ -25,12 +25,28 @@ spec:
         runAsGroup: 101
         seccompProfile:
           type: RuntimeDefault
+      initContainers:
+        # envoy.yaml carries one environment-specific value, the browser-facing
+        # authorization URL (__AUTH_PUBLIC_URL__); rendered here from tbd-edge.
+        - name: render-config
+          image: busybox:1.37
+          command: ["sh", "-c"]
+          args:
+            - 'test -n "$AUTH_PUBLIC_URL" && sed "s|__AUTH_PUBLIC_URL__|$AUTH_PUBLIC_URL|g" /template/envoy.yaml > /rendered/envoy.yaml'
+          envFrom:
+            - configMapRef:
+                name: tbd-edge
+          volumeMounts:
+            - name: config
+              mountPath: /template
+            - name: rendered
+              mountPath: /rendered
       containers:
         - name: envoy
           image: envoyproxy/envoy:v1.39.1
           args:
             - -c
-            - /etc/envoy/envoy.yaml
+            - /rendered/envoy.yaml
             - --service-cluster
             - envoy
             - --service-node
@@ -73,10 +89,25 @@ spec:
             capabilities:
               drop: ["ALL"]
           volumeMounts:
-            - name: config
-              mountPath: /etc/envoy
+            - name: rendered
+              mountPath: /rendered
+              readOnly: true
+            # OAuth2 client secret and cookie HMAC key for the browser login, as
+            # file-based SDS resources (`mise run auth:envoy-secrets`).
+            - name: oauth-secrets
+              mountPath: /etc/envoy/secrets
               readOnly: true
       volumes:
         - name: config
           configMap:
             name: envoy-config
+        - name: rendered
+          emptyDir: {}
+        - name: oauth-secrets
+          secret:
+            secretName: envoy-oauth
+            items:
+              - key: token.yaml
+                path: token.yaml
+              - key: hmac.yaml
+                path: hmac.yaml

@@ -40,6 +40,12 @@ Gotchas:
 - `chaos check` runs `ScenarioFile::check`; add cross-checks there, not in the executor.
 - WebSocket connections are opened via `load::ops::connect_ws`, which sets
   `TCP_NODELAY`; `connect_async` does not and adds 40 ms to the first frame.
+- `auth.rs` + `tls.rs`: the bearer token rides on `Trust`. `Trust::snapshot().await`
+  fetches it once (client credentials, cached, refreshed a minute before expiry) and
+  every client built from that snapshot sends it: reqwest default header, WebSocket
+  handshake header, tonic interceptor (`tls::Grpc`). `validate::run` and
+  `load::run_with` snapshot at the start of a run; the executor's in-process stacks use
+  `Trust::default()` (no Envoy, no token). Never build a reqwest/tonic client elsewhere.
 - `tls.rs` is the one place that decides what `https://`/`wss://` targets trust: web PKI
   roots always, plus `--ca-cert` for validate. It builds the tonic endpoint, the reqwest
   client and the WebSocket connector; do not construct those elsewhere or a target

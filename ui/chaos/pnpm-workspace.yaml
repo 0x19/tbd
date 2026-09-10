@@ -1,3 +1,7 @@
+packages:
+  - "."
+
+# Build scripts are opt-in; unrs-resolver (a native speed-up for the ESLint import
+# resolver) is not needed and stays denied.
 allowBuilds:
-  sharp: false
   unrs-resolver: false

@@ -26,3 +26,62 @@ metadata:
 spec:
   type: ExternalName
   externalName: otel-collector.observability.svc.cluster.local
+---
+# The identity stack lives in the `auth` namespace (devops/k8s/auth); these
+# give Envoy the same short names in every environment.
+apiVersion: v1
+kind: Service
+metadata:
+  name: hydra
+spec:
+  type: ExternalName
+  externalName: hydra-public.auth.svc.cluster.local
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kratos
+spec:
+  type: ExternalName
+  externalName: kratos-public.auth.svc.cluster.local
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-ui
+spec:
+  type: ExternalName
+  externalName: auth-ui.auth.svc.cluster.local
+---
+# Observability UIs, served through Envoy's gated virtual hosts.
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+spec:
+  type: ExternalName
+  externalName: grafana.observability.svc.cluster.local
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: victoria-logs
+spec:
+  type: ExternalName
+  externalName: victoria-logs.observability.svc.cluster.local
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pyroscope
+spec:
+  type: ExternalName
+  externalName: pyroscope.observability.svc.cluster.local
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: victoria-metrics
+spec:
+  type: ExternalName
+  externalName: victoria-metrics.observability.svc.cluster.local

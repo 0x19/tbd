@@ -1,15 +1,29 @@
 "use client";
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { PageHeader } from "@/components/page-header";
-import { useChaos } from "@/components/shell/providers";
+import { Activity, ExternalLink, FlaskConical, ListChecks, type LucideIcon, MonitorCog } from "lucide-react";
+import { useState } from "react";
+
+import { useChaos } from "@/app/providers";
+import { PageTitle } from "@/components/kit";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 type Entry = { symptom: string; means: string; look: string; then: string };
+type Section = {
+  id: string;
+  title: string;
+  icon: LucideIcon;
+  blurb: string;
+  entries: Entry[];
+};
 
-const ENTRIES: { group: string; items: Entry[] }[] = [
+const SECTIONS: Section[] = [
   {
-    group: "Validate",
-    items: [
+    id: "validate",
+    title: "Validate",
+    icon: ListChecks,
+    blurb: "One check per surface. A failing check names the surface that is broken.",
+    entries: [
       {
         symptom: "http_readyz fails, http_healthz passes",
         means: "The protocol is up but cannot reach its engine. Through Envoy: no healthy engine endpoint.",
@@ -18,8 +32,8 @@ const ENTRIES: { group: string; items: Entry[] }[] = [
       },
       {
         symptom: "Every gRPC check fails with transport error",
-        means: "Nothing listens on the engine URL, or it is HTTP/1.1 only (gRPC needs h2c).",
-        look: "The engine URL in Targets; `grpcurl -plaintext <host:port> list`.",
+        means: "Nothing listens on the engine URL, or it is HTTP/1.1 only (gRPC needs h2c or TLS).",
+        look: "The engine URL in Targets; grpcurl -plaintext <host:port> list.",
         then: "Point at the engine LB (:15051 locally) not the edge; check the port map in docs/local-cluster.md.",
       },
       {
@@ -27,7 +41,7 @@ const ENTRIES: { group: string; items: Entry[] }[] = [
         means:
           "Streams are cut before two events arrive: a proxy with a stream timeout, or a heartbeat longer than the check timeout.",
         look: "Envoy route timeouts (SSE and gRPC routes must be 0s), engine heartbeat setting.",
-        then: "Raise --timeout, or fix the route. The two streaming checks take about one heartbeat interval.",
+        then: "Raise the timeout, or fix the route. The two streaming checks take about one heartbeat interval.",
       },
       {
         symptom: "ws_echo fails, everything else passes",
@@ -38,19 +52,22 @@ const ENTRIES: { group: string; items: Entry[] }[] = [
     ],
   },
   {
-    group: "Scenarios",
-    items: [
+    id: "scenarios",
+    title: "Scenarios",
+    icon: FlaskConical,
+    blurb: "A run is setup, load with a timeline, assertions, teardown. Each part fails differently.",
+    entries: [
       {
         symptom: "Run status error, message starts with setup:",
         means:
           "The stack did not start: a fixed port is taken, or a protocol references an engine that never became ready.",
-        look: "The error text; `ss -ltnp` for the port; the scenario's [stack] names.",
-        then: "Scenarios should not use fixed ports. Free the port or drop `listen`.",
+        look: "The error text; ss -ltnp for the port; the scenario's [stack] names.",
+        then: "Scenarios should not use fixed ports. Free the port or drop listen.",
       },
       {
         symptom: "max_error_rate fails, errors are all http 503",
         means: "The engine was down or returning UNAVAILABLE for longer than the scenario allows.",
-        look: "The timeline table: a stop without a start, or a start that errored. Per-service counters.",
+        look: "The timeline: a stop without a start, or a start that errored. Per-service counters.",
         then: "Check the timeline offsets against the load duration; widen the bound only if the scenario proves something else.",
       },
       {
@@ -63,7 +80,7 @@ const ENTRIES: { group: string; items: Entry[] }[] = [
         symptom: "Timeline event has an error",
         means: "The action could not be applied: unknown instance, already running, or no fault injection.",
         look: "The action text; only engines have fault injection.",
-        then: "Fix the instance name or the action; `chaos check` catches references before running.",
+        then: "Fix the instance name or the action; chaos check catches references before running.",
       },
       {
         symptom: "Throughput is far below rate",
@@ -74,17 +91,20 @@ const ENTRIES: { group: string; items: Entry[] }[] = [
     ],
   },
   {
-    group: "Serve and UI",
-    items: [
+    id: "serve",
+    title: "Serve and UI",
+    icon: MonitorCog,
+    blurb: "The API behind this page and the pod it runs in.",
+    entries: [
       {
         symptom: "chaos API unreachable in the header",
         means:
-          "The browser cannot reach /api/chaos: serve is down, or `next dev` is talking to the wrong port.",
-        look: "`curl <api>/healthz`; NEXT_PUBLIC_CHAOS_API in dev; Envoy's chaos cluster in the cluster.",
-        then: "Start `mise run chaos:serve`, or set the API URL.",
+          "The browser cannot reach /api/chaos: serve is down, or next dev is talking to the wrong port.",
+        look: "curl <api>/healthz; NEXT_PUBLIC_CHAOS_API in dev; Envoy's chaos cluster in the cluster.",
+        then: "Start mise run chaos:serve, or set the API URL.",
       },
       {
-        symptom: "Live feed off in the sidebar",
+        symptom: "Live feed off in the footer",
         means: "The SSE connection dropped: a proxy timed the stream out, or serve restarted.",
         look: "Envoy route for /api/chaos/ must have timeout 0s; serve logs.",
         then: "The page reconnects on its own; reload if it does not.",
@@ -103,82 +123,106 @@ const ENTRIES: { group: string; items: Entry[] }[] = [
       },
     ],
   },
+  {
+    id: "observability",
+    title: "Observability",
+    icon: Activity,
+    blurb:
+      "Every request carries a trace id: logs, traces and profiles for the same second are one click apart.",
+    entries: [
+      {
+        symptom: "A run failed and you want the server side",
+        means: "The engine and protocol logged every failure with the trace id of the request.",
+        look: "Logs, filtered by time of the run and level error; Grafana's tbd/protocol and tbd/engine dashboards.",
+        then: "Take a trace_id from a log line into Explore (Tempo) to see the whole request across Envoy, protocol and engine.",
+      },
+      {
+        symptom: "Latency is high and nothing errors",
+        means: "CPU or lock contention, not failures.",
+        look: "Profiles (Pyroscope) for the run's minute; Envoy upstream time in the tbd/envoy dashboard.",
+        then: "Compare the flame graph against a healthy minute; the hot frame names the code.",
+      },
+    ],
+  },
 ];
 
+/** The kit's Settings page: a vertical nav on the left, titled rows with dividers on the right. */
 export default function RunbookPage() {
   const { overview } = useChaos();
   const links = overview?.config.links;
+  const [active, setActive] = useState(SECTIONS[0].id);
+  const section = SECTIONS.find((s) => s.id === active) ?? SECTIONS[0];
+
   return (
     <>
-      <PageHeader
+      <PageTitle
         title="Runbook"
-        description="What a failure means, where to look, what to do. Written for the base stack; add entries as the product grows."
+        description="What a failure means, where to look, what to do. Add an entry whenever a failure taught something."
       />
-      {links && (links.grafana || links.victorialogs || links.pyroscope) ? (
-        <Card size="sm">
-          <CardHeader>
-            <CardTitle>Look deeper</CardTitle>
-            <CardDescription>
-              Every request carries a trace id: logs, traces and profiles for the same second are one click
-              apart.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-wrap gap-3 text-sm">
-            {links.grafana ? (
-              <a className="underline" href={`${links.grafana}/dashboards`} target="_blank" rel="noreferrer">
-                Grafana dashboards (tbd/*)
-              </a>
-            ) : null}
-            {links.grafana ? (
-              <a className="underline" href={`${links.grafana}/explore`} target="_blank" rel="noreferrer">
-                Traces in Explore (Tempo)
-              </a>
-            ) : null}
-            {links.victorialogs ? (
-              <a className="underline" href={links.victorialogs} target="_blank" rel="noreferrer">
-                Logs (VictoriaLogs, query by trace_id)
-              </a>
-            ) : null}
-            {links.pyroscope ? (
-              <a className="underline" href={links.pyroscope} target="_blank" rel="noreferrer">
-                Profiles (Pyroscope)
-              </a>
-            ) : null}
-            {links.envoy_admin ? (
-              <a
-                className="underline"
-                href={`${links.envoy_admin}/clusters`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Envoy clusters
-              </a>
-            ) : null}
-          </CardContent>
-        </Card>
-      ) : null}
-      {ENTRIES.map((g) => (
-        <Card key={g.group}>
-          <CardHeader>
-            <CardTitle>{g.group}</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-4">
-            {g.items.map((e) => (
-              <div key={e.symptom} className="grid gap-1 border-l-2 pl-3 text-sm">
-                <div className="font-medium">{e.symptom}</div>
-                <div className="grid gap-1 text-muted-foreground md:grid-cols-[6rem_1fr]">
-                  <span>means</span>
-                  <span>{e.means}</span>
-                  <span>look at</span>
-                  <span>{e.look}</span>
-                  <span>then</span>
-                  <span>{e.then}</span>
+      <div className="grid gap-8 lg:grid-cols-[14rem_1fr]">
+        <nav className="grid content-start gap-1">
+          {SECTIONS.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              onClick={() => setActive(s.id)}
+              className={cn(
+                "hover:bg-muted flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm",
+                s.id === active && "bg-muted font-medium",
+              )}
+            >
+              <s.icon className="size-4" />
+              {s.title}
+            </button>
+          ))}
+          {links && (links.grafana || links.victorialogs || links.pyroscope) ? (
+            <div className="mt-4 grid gap-1 border-t pt-4">
+              <div className="text-muted-foreground px-3 text-xs font-medium uppercase">Open</div>
+              {[
+                {
+                  t: "Dashboards",
+                  h: links.grafana ? `${links.grafana}/dashboards` : "",
+                },
+                {
+                  t: "Traces",
+                  h: links.grafana ? `${links.grafana}/explore` : "",
+                },
+                { t: "Logs", h: links.victorialogs },
+                { t: "Metrics", h: links.metrics },
+                { t: "Profiles", h: links.pyroscope },
+              ]
+                .filter((l) => l.h)
+                .map((l) => (
+                  <Button key={l.t} variant="ghost" size="sm" className="justify-start" asChild>
+                    <a href={l.h} target="_blank" rel="noreferrer">
+                      <ExternalLink /> {l.t}
+                    </a>
+                  </Button>
+                ))}
+            </div>
+          ) : null}
+        </nav>
+        <div>
+          <h2 className="text-lg font-semibold">{section.title}</h2>
+          <p className="text-muted-foreground text-sm">{section.blurb}</p>
+          <div className="mt-4 divide-y border-t">
+            {section.entries.map((e) => (
+              <div key={e.symptom} className="grid gap-4 py-5 md:grid-cols-[1fr_2fr]">
+                <div>
+                  <div className="font-medium">{e.symptom}</div>
+                  <div className="text-muted-foreground mt-1 text-sm">{e.means}</div>
                 </div>
+                <dl className="grid gap-2 text-sm md:grid-cols-[5rem_1fr]">
+                  <dt className="text-muted-foreground">Look at</dt>
+                  <dd>{e.look}</dd>
+                  <dt className="text-muted-foreground">Then</dt>
+                  <dd>{e.then}</dd>
+                </dl>
               </div>
             ))}
-          </CardContent>
-        </Card>
-      ))}
+          </div>
+        </div>
+      </div>
     </>
   );
 }

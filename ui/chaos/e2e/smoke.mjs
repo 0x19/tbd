@@ -1,11 +1,12 @@
 // Browser smoke of the built UI: every page renders real data, no console
 // errors, a scenario run streams to the end, a fault applies, load cancels.
 // Run with `mise run ui:e2e` against the local cluster (UI_BASE overrides).
+import { mkdirSync } from "node:fs";
+
 import { chromium } from "playwright";
 
-const BASE = process.env.UI_BASE ?? "http://localhost:18080/chaos";
+const BASE = process.env.UI_BASE ?? "http://chaos.localhost:18080";
 const SHOTS = process.env.SHOTS ?? "e2e/shots";
-import { mkdirSync } from "node:fs";
 mkdirSync(SHOTS, { recursive: true });
 
 const browser = await chromium.launch();
@@ -30,21 +31,21 @@ async function step(name, fn) {
   }
 }
 
-await step("overview renders stack and env", async () => {
+await step("overview renders the KPI strip, stack and charts", async () => {
   await page.goto(`${BASE}/`);
-  await page.getByText("live feed connected").waitFor({ timeout: 15000 });
+  await page.getByText("Stack health").waitFor({ timeout: 15000 });
   await page.getByText("engine-1").first().waitFor();
-  await page.getByText("local · v0.1.0").waitFor();
+  await page.getByText("Throughput").first().waitFor();
   await page.screenshot({ path: `${SHOTS}/overview.png`, fullPage: true });
 });
 
 await step("stack: fault dialog applies an error behaviour", async () => {
   await page.goto(`${BASE}/stack/`);
+  await page.getByText("Stack integrity").waitFor({ timeout: 15000 });
   await page
-    .getByRole("cell", { name: /engine-1/ })
+    .getByRole("button", { name: /^fault$/i })
     .first()
-    .waitFor();
-  await page.getByRole("button", { name: /fault/ }).first().click();
+    .click();
   await page.getByRole("dialog").waitFor();
   await page.getByRole("dialog").locator("select").first().selectOption("error");
   await page.getByRole("button", { name: "Apply" }).click();
@@ -53,18 +54,32 @@ await step("stack: fault dialog applies an error behaviour", async () => {
     .first()
     .waitFor({ timeout: 10000 });
   await page.screenshot({ path: `${SHOTS}/stack-fault.png`, fullPage: true });
-  await page.getByRole("button", { name: /fault/ }).first().click();
+  await page
+    .getByRole("button", { name: /^fault$/i })
+    .first()
+    .click();
   await page.getByRole("dialog").locator("select").first().selectOption("healthy");
   await page.getByRole("button", { name: "Apply" }).click();
-  await page.getByText("healthy", { exact: true }).first().waitFor({ timeout: 10000 });
+  await page.waitForFunction(() => !document.body.innerText.includes("error unavailable 50%"), null, {
+    timeout: 10000,
+  });
 });
 
 await step("stack: stop and start the engine", async () => {
-  await page.getByRole("button", { name: /stop/ }).first().click();
-  await page.getByText("stopped", { exact: true }).first().waitFor({ timeout: 10000 });
-  await page.screenshot({ path: `${SHOTS}/stack-stopped.png`, fullPage: true });
-  await page.getByRole("button", { name: /start/ }).first().click();
-  await page.waitForFunction(() => !document.body.innerText.includes("stopped"), null, { timeout: 15000 });
+  await page
+    .getByRole("button", { name: /^stop$/i })
+    .first()
+    .click();
+  await page.getByText("Stopped").first().waitFor({ timeout: 10000 });
+  await page.screenshot({
+    path: `${SHOTS}/stack-stopped.png`,
+    fullPage: true,
+  });
+  await page
+    .getByRole("button", { name: /^start$/i })
+    .first()
+    .click();
+  await page.waitForFunction(() => !document.body.innerText.includes("Stopped"), null, { timeout: 15000 });
 });
 
 await step("scenarios list and editor check", async () => {
@@ -78,9 +93,9 @@ await step("scenarios list and editor check", async () => {
 await step("run a scenario live to the end", async () => {
   await page.goto(`${BASE}/scenarios/`);
   const row = page.getByRole("row", { name: /error_injection/ });
-  await row.getByRole("button", { name: /run/ }).click();
+  await row.getByRole("button", { name: /^run$/i }).click();
   await page.waitForURL(/runs\/view\/\?id=/, { timeout: 10000 });
-  await page.getByText(/phase:/).waitFor({ timeout: 10000 });
+  await page.getByText("Lifecycle").waitFor({ timeout: 10000 });
   await page.screenshot({ path: `${SHOTS}/run-live.png`, fullPage: true });
   await page.getByText("passed", { exact: true }).first().waitFor({ timeout: 30000 });
   await page.getByText("max_error_rate").waitFor();
@@ -88,33 +103,35 @@ await step("run a scenario live to the end", async () => {
     .getByText(/set_behavior engine-1/)
     .first()
     .waitFor();
+  await page.getByText("Latency grid").waitFor();
   await page.screenshot({ path: `${SHOTS}/run-done.png`, fullPage: true });
 });
 
-await step("runs list shows it", async () => {
-  await page.goto(`${BASE}/runs/`);
+await step("runs list filters by kind from the sidebar link", async () => {
+  await page.goto(`${BASE}/runs/?kind=scenario`);
   await page
     .getByRole("row", { name: /error_injection/ })
     .first()
     .waitFor({ timeout: 10000 });
+  await page.getByText("Filters").waitFor();
   await page.screenshot({ path: `${SHOTS}/runs.png`, fullPage: true });
 });
 
 await step("load page starts and cancels a run", async () => {
   await page.goto(`${BASE}/load/`);
-  await page.getByLabel("Duration").fill("30s");
-  await page.getByRole("button", { name: /start/ }).click();
+  await page.getByLabel(/Duration/).fill("30s");
+  await page.getByRole("button", { name: /run load/i }).click();
   await page.waitForURL(/runs\/view\/\?id=/, { timeout: 10000 });
-  await page.getByRole("button", { name: /cancel/ }).waitFor({ timeout: 10000 });
+  await page.getByRole("button", { name: /cancel run/i }).waitFor({ timeout: 10000 });
   await page.waitForTimeout(2500);
   await page.screenshot({ path: `${SHOTS}/load-live.png`, fullPage: true });
-  await page.getByRole("button", { name: /cancel/ }).click();
+  await page.getByRole("button", { name: /cancel run/i }).click();
   await page.getByText("cancelled", { exact: true }).first().waitFor({ timeout: 20000 });
 });
 
 await step("validate runs against the deployed stack", async () => {
   await page.goto(`${BASE}/validate/`);
-  await page.getByRole("button", { name: /run validate/ }).click();
+  await page.getByRole("button", { name: /run validate/i }).click();
   await page.getByText("grpc_protocol_ping").waitFor({ timeout: 20000 });
   await page.screenshot({ path: `${SHOTS}/validate.png`, fullPage: true });
 });
@@ -122,13 +139,25 @@ await step("validate runs against the deployed stack", async () => {
 await step("runbook renders with links", async () => {
   await page.goto(`${BASE}/runbook/`);
   await page.getByText("http_readyz fails").waitFor();
-  await page.getByText("Grafana dashboards").waitFor({ timeout: 10000 });
+  await page.getByText("Dashboards").first().waitFor({ timeout: 10000 });
+});
+
+await step("command palette opens with ctrl+k and lists scenarios", async () => {
+  await page.keyboard.press("Control+k");
+  await page.getByPlaceholder("Type a command or search...").waitFor({ timeout: 5000 });
+  await page.getByText("Run a scenario").waitFor();
+  await page.screenshot({ path: `${SHOTS}/command.png` });
+  await page.keyboard.press("Escape");
 });
 
 await step("dark mode toggles", async () => {
   await page.getByRole("button", { name: "Toggle theme" }).click();
+  await page.getByRole("menuitem", { name: /^dark/i }).click();
   await page.waitForFunction(() => document.documentElement.classList.contains("dark"));
-  await page.screenshot({ path: `${SHOTS}/runbook-dark.png`, fullPage: true });
+  await page.screenshot({
+    path: `${SHOTS}/runbook-dark.png`,
+    fullPage: true,
+  });
 });
 
 await browser.close();

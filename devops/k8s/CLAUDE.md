@@ -41,3 +41,8 @@ Read `README.md` here first. Non-obvious facts:
   copies `.cargo/`). A stripped build shows `[unknown]` frames.
 - Service pods mount an `emptyDir` at `/tmp`: the in-process profiler creates temp
   files and the root filesystem is read-only. Removing it silently disables profiling.
+- `../auth/` is its own kustomization (the identity stack, Ory Hydra + Kratos);
+  `base/envoy/service.yaml` holds the ExternalName Services that let Envoy reach it by
+  short name (`hydra`, `kratos`, `auth-ui`). Hydra rejects a client whose
+  `post_logout_redirect_uris` host is not among its `redirect_uris`; the global
+  `urls.post_logout_redirect` covers logout instead.

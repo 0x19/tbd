@@ -26,12 +26,24 @@ impl Drop for TempDir {
 }
 
 async fn boot() -> Server {
+    boot_with_ui(false).await
+}
+
+/// `with_ui` serves a two-file stand-in for the built UI at the root, the way
+/// the image does.
+async fn boot_with_ui(with_ui: bool) -> Server {
     let dir = std::env::temp_dir().join(format!(
         "chaos-api-{}-{}",
         std::process::id(),
         rand::random::<u32>()
     ));
     std::fs::create_dir_all(dir.join("scenarios")).unwrap();
+    if with_ui {
+        std::fs::create_dir_all(dir.join("ui/runs")).unwrap();
+        std::fs::write(dir.join("ui/index.html"), "<title>chaos</title>").unwrap();
+        std::fs::write(dir.join("ui/runs/index.html"), "<title>runs</title>").unwrap();
+        std::fs::write(dir.join("ui/404.html"), "<title>404</title>").unwrap();
+    }
     std::fs::write(
         dir.join("scenarios/quick.toml"),
         r#"
@@ -76,6 +88,10 @@ min_requests = 50
     config.paths.topology = dir.join("topology.toml");
     config.paths.scenarios = dir.join("scenarios");
     config.paths.results = dir.join("results");
+    if with_ui {
+        config.serve.ui_dir = dir.join("ui").to_string_lossy().into_owned();
+        config.serve.ui_path = String::new();
+    }
     let state = api::state(
         config,
         Source {
@@ -95,7 +111,7 @@ min_requests = 50
             .unwrap();
     });
     Server {
-        base: format!("http://{addr}/api/chaos"),
+        base: format!("http://{addr}/api/chaos/v1"),
         http: reqwest::Client::new(),
         state,
         _dir: TempDir(dir),
@@ -333,6 +349,37 @@ async fn scenarios_can_be_checked_written_and_deleted() {
     assert_eq!(status, 204);
     let (status, _) = s.get("/scenarios/sub/new").await;
     assert_eq!(status, 404);
+}
+
+/// The API keeps its JSON error shape for unknown routes, with and without
+/// the UI's root wildcard on the same host.
+#[tokio::test]
+async fn unknown_api_route_is_a_json_404() {
+    for with_ui in [false, true] {
+        let s = boot_with_ui(with_ui).await;
+        let (status, body) = s.get("/nope/at/all").await;
+        assert_eq!(status, 404, "with_ui={with_ui}");
+        assert_eq!(body["error"], "no such route", "with_ui={with_ui}: {body}");
+    }
+}
+
+/// With the UI at the root: pages serve their `index.html`, unknown pages the
+/// `404.html`, and the API stays reachable under its prefix.
+#[tokio::test]
+async fn ui_at_the_root_serves_pages_next_to_the_api() {
+    let s = boot_with_ui(true).await;
+    let origin = s.base.trim_end_matches("/api/chaos/v1").to_owned();
+    for (path, status, needle) in [
+        ("/", 200, "<title>chaos</title>"),
+        ("/runs/", 200, "<title>runs</title>"),
+        ("/nope/", 404, "<title>404</title>"),
+    ] {
+        let r = s.http.get(format!("{origin}{path}")).send().await.unwrap();
+        assert_eq!(r.status().as_u16(), status, "{path}");
+        assert!(r.text().await.unwrap().contains(needle), "{path}");
+    }
+    let (status, body) = s.get("/healthz").await;
+    assert_eq!(status, 200, "{body}");
 }
 
 #[tokio::test]

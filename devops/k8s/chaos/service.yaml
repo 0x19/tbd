@@ -6,7 +6,7 @@ metadata:
     app.kubernetes.io/name: chaos
 spec:
   # Headless like the other upstreams: Envoy resolves the pod and routes
-  # /api/chaos and /chaos to it.
+  # /api/chaos/ and the chaos.* host to it.
   clusterIP: None
   selector:
     app.kubernetes.io/name: chaos

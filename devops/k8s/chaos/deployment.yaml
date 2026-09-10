@@ -65,15 +65,27 @@ spec:
               value: /app/ui
             - name: OTEL_SERVICE_NAME
               value: chaos
+            # Bearer tokens for validate/load through Envoy: client credentials
+            # against Hydra (the `hydra` ExternalName), secret from chaos-auth
+            # (`mise run auth:envoy-secrets`).
+            - name: CHAOS_AUTH_TOKEN_URL
+              value: http://hydra:4444/oauth2/token
+            - name: CHAOS_AUTH_CLIENT_ID
+              value: tbd-chaos
+            - name: CHAOS_AUTH_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: chaos-auth
+                  key: CHAOS_AUTH_CLIENT_SECRET
           livenessProbe:
             httpGet:
-              path: /api/chaos/healthz
+              path: /api/chaos/v1/healthz
               port: http
             initialDelaySeconds: 3
             periodSeconds: 10
           readinessProbe:
             httpGet:
-              path: /api/chaos/healthz
+              path: /api/chaos/v1/healthz
               port: http
             initialDelaySeconds: 1
             periodSeconds: 5

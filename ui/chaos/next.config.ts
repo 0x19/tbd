@@ -1,11 +1,12 @@
 import type { NextConfig } from "next";
 
-// Static export: the built `out/` is served by `chaos serve` at /chaos and by
-// Envoy in the cluster. Everything is a client component talking to the API,
-// so no Node.js runtime is needed anywhere.
+// Static export: the built `out/` is served at the root of its host by
+// `chaos serve` (http://localhost:7700/) and, in a cluster, by Envoy's
+// `chaos.*` / `chaosadmin.*` virtual host (http://chaos.localhost:18080/).
+// Everything is a client component talking to the API at /api/chaos on the
+// same origin, so no Node.js runtime is needed anywhere.
 const nextConfig: NextConfig = {
   output: "export",
-  basePath: "/chaos",
   trailingSlash: true,
   images: { unoptimized: true },
 };

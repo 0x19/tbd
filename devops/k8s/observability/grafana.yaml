@@ -45,12 +45,27 @@ spec:
               value: admin
             - name: GF_SECURITY_ADMIN_PASSWORD
               value: admin
+            # No anonymous access: people arrive through Envoy's OAuth2 login, which
+            # sets the identity headers below (auth proxy); the admin form stays for
+            # the LAN port 3000 and break-glass.
             - name: GF_AUTH_ANONYMOUS_ENABLED
+              value: "false"
+            - name: GF_AUTH_PROXY_ENABLED
               value: "true"
-            - name: GF_AUTH_ANONYMOUS_ORG_ROLE
-              # Editor locally so Explore and the Drilldown apps work without signing in.
-              # Production: Viewer, behind the identity provider.
-              value: Editor
+            - name: GF_AUTH_PROXY_HEADER_NAME
+              value: X-WEBAUTH-USER
+            - name: GF_AUTH_PROXY_HEADER_PROPERTY
+              value: email
+            - name: GF_AUTH_PROXY_HEADERS
+              value: "Name:X-WEBAUTH-NAME Role:X-WEBAUTH-ROLE"
+            - name: GF_AUTH_PROXY_AUTO_SIGN_UP
+              value: "true"
+            - name: GF_AUTH_PROXY_ENABLE_LOGIN_TOKEN
+              value: "true"
+            # Only the pod network may present the headers; Envoy strips them from
+            # clients, this is the second layer. Override per environment.
+            - name: GF_AUTH_PROXY_WHITELIST
+              value: "10.0.0.0/8"
             - name: GF_USERS_DEFAULT_THEME
               value: dark
             - name: GF_INSTALL_PLUGINS

@@ -57,6 +57,7 @@ pub fn make_span(request: &http::Request<axum::body::Body>) -> tracing::Span {
             rpc.system = "grpc",
             rpc.method = %route.trim_start_matches('/'),
             trace_id = tracing::field::Empty,
+            enduser.id = tracing::field::Empty,
         )
     } else {
         tracing::info_span!(
@@ -64,6 +65,7 @@ pub fn make_span(request: &http::Request<axum::body::Body>) -> tracing::Span {
             http.request.method = %request.method(),
             http.route = %route,
             trace_id = tracing::field::Empty,
+            enduser.id = tracing::field::Empty,
         )
     };
     if let Some(id) = propagation::adopt_parent(&span, &Headers(request.headers())) {

@@ -139,6 +139,9 @@ export const RunSummary = z.object({
   duration_s: z.number(),
   requests_total: z.number().nullable(),
   error_rate: z.number().nullable(),
+  throughput_rps: z.number().nullable(),
+  p50_ms: z.number().nullable(),
+  p90_ms: z.number().nullable(),
   p99_ms: z.number().nullable(),
   passed: z.tuple([z.number(), z.number()]).nullable(),
   error: z.string().nullable(),
@@ -148,6 +151,9 @@ export type RunSummary = z.infer<typeof RunSummary>;
 export const RunRecord = RunSummary.omit({
   requests_total: true,
   error_rate: true,
+  throughput_rps: true,
+  p50_ms: true,
+  p90_ms: true,
   p99_ms: true,
   passed: true,
 }).extend({

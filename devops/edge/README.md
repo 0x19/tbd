@@ -5,21 +5,28 @@ router. Caddy on the host terminates TLS with automatic Let's Encrypt certificat
 forwards each subdomain to one of the cluster's host ports. Nothing else is exposed.
 
 ```
-internet ──443──▶ router (port forward) ──▶ this host: caddy ──┬─▶ envoy :18080        api.<base>
-                                                               ├─▶ grafana :3000       grafana.<base>   basic auth
-                                                               ├─▶ victoria-logs :9428 logs.<base>      basic auth
-                                                               ├─▶ pyroscope :4040     profiles.<base>  basic auth
-                                                               └─▶ victoria-metrics :9090  metrics.<base>  basic auth
+internet ──443──▶ router (port forward) ──▶ this host: caddy (TLS only) ──▶ envoy :18080
+                                                                           ├─ api.<base>        bearer JWT
+                                                                           ├─ grafana.<base>    browser sign-in
+                                                                           ├─ logs.<base>       browser sign-in
+                                                                           ├─ profiles.<base>   browser sign-in
+                                                                           ├─ metrics.<base>    browser sign-in
+                                                                           ├─ chaosadmin.<base> browser sign-in
+                                                                           └─ auth.<base>       the sign-in itself
 ```
 
 | Host | Upstream | Auth | Notes |
 |---|---|---|---|
 | `api.<base>` | Envoy edge 18080 | none (the API's own, later) | REST, SSE, GraphQL, WebSocket, gRPC |
-| `grafana.<base>` | Grafana 3000 | HTTP basic | Grafana itself still has `admin`/`admin` + anonymous Editor locally |
-| `logs.<base>` | VictoriaLogs 9428 | HTTP basic | `/` redirects to `/select/vmui/` |
-| `profiles.<base>` | Pyroscope 4040 | HTTP basic | |
-| `metrics.<base>` | VictoriaMetrics 9090 | HTTP basic | `/` redirects to `/vmui/` |
-| `chaosadmin.<base>` | Envoy 18080 (`/chaos/`, `/api/chaos/`) | HTTP basic | the chaos admin UI and API; `/` redirects to `/chaos/` |
+| `grafana.<base>` | Envoy 18080 | sign-in through Envoy (Ory) | Grafana signs the person in from the verified identity |
+| `logs.<base>` | Envoy 18080 | sign-in through Envoy | VictoriaLogs UI |
+| `profiles.<base>` | Envoy 18080 | sign-in through Envoy | Pyroscope |
+| `metrics.<base>` | Envoy 18080 | sign-in through Envoy | VictoriaMetrics UI |
+| `chaosadmin.<base>` | Envoy 18080 | sign-in through Envoy | the chaos admin UI at the root, API at `/api/chaos/v1/` |
+| `auth.<base>` | Envoy 18080 | none (it is the sign-in) | Ory Hydra, Ory Kratos and the login/registration/consent pages |
+
+Caddy adds TLS and nothing else: every host is one `reverse_proxy` to Envoy, and Envoy
+decides who gets in ([docs/auth/README.md](../../docs/auth/README.md)).
 
 ## Setup
 
@@ -31,14 +38,13 @@ internet ──443──▶ router (port forward) ──▶ this host: caddy ─
 2. On the router, forward TCP 80 and TCP 443 (and UDP 443 for HTTP/3) to this machine.
    80 is needed for the certificate challenge and redirects to 443.
 3. `cp devops/edge/.env.example devops/edge/.env`, fill in `BASE_DOMAIN` and
-   `ACME_EMAIL`, run `mise run edge:password` and paste the hash line as printed (its
-   `$` are doubled because compose expands variables inside `.env`).
+   `ACME_EMAIL`.
 4. `mise run edge:up` (also after any Caddyfile change: it reloads the running Caddy
    gracefully). The first start requests one certificate per host;
    `mise run edge:logs` shows them being issued. A host whose DNS does not resolve yet
    keeps retrying in the background without affecting the others.
-5. `chaos validate --protocol https://api.<base> --engine https://api.<base>` from
-   anywhere; the observability hosts prompt for the basic-auth credential.
+5. `chaos validate --protocol https://api.<base> --engine https://api.<base>` with a
+   token (see docs/auth) from anywhere; the UI hosts send the browser to `auth.<base>`.
 
 ## Behind Cloudflare
 
@@ -57,17 +63,8 @@ through the proxy. Three zone settings matter:
 Access logs then show Cloudflare's addresses as `remote_ip`; the client is in
 `Cf-Connecting-Ip`. Trace and metric labels are unaffected.
 
-For the observability hosts, Cloudflare Access (Zero Trust → Applications, free for a
-handful of users) in front of `grafana`, `logs`, `profiles` and `metrics` is the better
-lock: identity-based login, and the basic-auth credential becomes the second layer.
-
-## What the basic auth does and does not cover
-
-It stops the internet from reaching Grafana, VictoriaLogs, Pyroscope and VictoriaMetrics
-without the credential. It does not change what those tools allow once inside: local
-Grafana is configured with anonymous Editor and `admin`/`admin`. For a shared or long-lived
-deployment, set a real Grafana admin password and turn anonymous access off in
-`devops/k8s/observability/grafana.yaml` before handing out the credential.
+Cloudflare Access (Zero Trust → Applications) can sit in front of the UI hosts as an
+additional layer; the sign-in through Envoy is the one that counts.
 
 ## Notes
 

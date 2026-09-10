@@ -128,6 +128,32 @@ async fn graphql_evaluate() {
     assert_eq!(resp["data"]["evaluate"]["stub"], true);
 }
 
+/// `/v1/me` answers with the subject Envoy forwarded in the verified payload
+/// header, and 401 without one.
+#[tokio::test]
+async fn me_reads_the_subject_envoy_forwarded() {
+    use base64::Engine as _;
+    let stack = support::start().await;
+    let http = reqwest::Client::new();
+
+    let res = http.get(stack.url("/v1/me")).send().await.unwrap();
+    assert_eq!(res.status(), 401);
+    let body: Value = res.json().await.unwrap();
+    assert_eq!(body["code"], "unauthenticated");
+
+    let payload = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .encode(br#"{"sub":"person-42","aud":["tbd-api"],"scp":["tbd.api"]}"#);
+    let res = http
+        .get(stack.url("/v1/me"))
+        .header("x-jwt-payload", payload)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+    let body: Value = res.json().await.unwrap();
+    assert_eq!(body["subject"], "person-42");
+}
+
 /// Unknown paths are 404s, not tonic's "unimplemented" 200. gRPC callers of an
 /// unknown method still get the gRPC answer.
 #[tokio::test]

@@ -5,7 +5,7 @@
 //! files that can be read, checked, written and run, run records that are
 //! kept on disk, and live progress over Server-Sent Events.
 //!
-//! Routes are mounted under `[serve] base_path` (default `/api/chaos`); the
+//! Routes are mounted under `[serve] base_path` (default `/api/chaos/v1`); the
 //! contract is `docs/chaos/api.md`. The built UI, when configured, is served
 //! at `[serve] ui_path`.
 
@@ -33,14 +33,23 @@ pub async fn state(config: ChaosConfig, source: Source) -> anyhow::Result<Arc<Ap
 }
 
 /// The full router: API under `base_path`, UI under `ui_path` when set.
+///
+/// Unknown paths under `base_path` answer the API's JSON 404, not the UI's
+/// 404 page: with the UI at the root its wildcard would otherwise catch them.
 pub fn router(state: &Arc<AppState>) -> Router {
     let base = state.config.serve.base_path.clone();
-    let api = routes::router().layer(CorsLayer::permissive());
+    let api = routes::router()
+        .fallback(|| async { ApiError::not_found("no such route") })
+        .layer(CorsLayer::permissive());
     let mut app = Router::new().nest(&base, api.with_state(Arc::clone(state)));
     if !state.config.serve.ui_dir.is_empty() {
         let dir = Path::new(&state.config.serve.ui_dir);
         if dir.is_dir() {
-            app = app.merge(ui::router(&state.config.serve.ui_path, dir));
+            app = app.merge(ui::router(
+                &state.config.serve.ui_path,
+                dir,
+                &state.config.serve.base_path,
+            ));
         } else {
             tracing::warn!(dir = %dir.display(), "ui_dir does not exist; UI not served");
         }

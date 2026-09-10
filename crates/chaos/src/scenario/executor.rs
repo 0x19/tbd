@@ -219,7 +219,16 @@ pub async fn run_scenario_with(file: &ScenarioFile, hooks: &Hooks) -> ScenarioRe
             progress: Some(tx),
             cancel: hooks.cancel.clone(),
         };
-        result.load = Some(load::run_with(load_config, &targets, metrics, &load_hooks).await);
+        result.load = Some(
+            load::run_with(
+                load_config,
+                &targets,
+                metrics,
+                &load_hooks,
+                &crate::tls::Trust::default(),
+            )
+            .await,
+        );
         drop(load_hooks);
         let _ = forward.await;
     } else if let Some(last) = file

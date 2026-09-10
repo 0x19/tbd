@@ -13,6 +13,7 @@ project as-is.
 | **protocol** | One port, four surfaces: REST and SSE under `/v1`, WebSocket at `/ws`, GraphQL at `/graphql`, gRPC over h2c. Forwards to the engine, owns no logic. Port 8080. |
 | **envoy** | The load balancer in front of everything: edge on 8080 for REST, SSE, GraphQL, WebSocket and gRPC; engine load balancer on 50051. One config for compose, Ansible and Kubernetes. |
 | **chaos** | Runs both services in one process, validates every surface, generates load, injects faults on a timeline and asserts. Used for development and in CI. |
+| **auth** | Ory Hydra + Kratos: OAuth2/OIDC, passkeys, one sign-in host; Envoy verifies every token, services trust only Envoy. |
 | **observability** | Prometheus metrics, OpenTelemetry traces, JSON logs with trace ids and continuous CPU profiles from every service and Envoy, into VictoriaMetrics, Tempo, VictoriaLogs and Pyroscope, with Grafana dashboards. |
 | **devops** | One Dockerfile, kustomize overlays including a local k3d cluster, Ansible playbooks, compose. |
 
@@ -97,7 +98,7 @@ Start with [docs/chaos/README.md](docs/chaos/README.md). Writing scenarios:
 [docs/chaos/config.md](docs/chaos/config.md).
 
 In the local cluster `chaos serve` runs as a pod behind Envoy:
-`http://localhost:18080/api/chaos/overview`, UI at `http://localhost:18080/chaos/`.
+`http://localhost:18080/api/chaos/v1/overview`, UI at `http://chaos.localhost:18080/`.
 The UI (`ui/chaos`, Next.js static export served by the chaos binary) is described in
 [docs/chaos/ui.md](docs/chaos/ui.md); `mise run chaos:serve` plus `mise run ui:dev`
 is the development loop.

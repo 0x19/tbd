@@ -122,7 +122,7 @@ dir = "ui/chaos"
 run = "pnpm build"
 
 [tasks."ui:e2e"]
-description = "Browser smoke of the deployed UI through Envoy (UI_BASE=http://localhost:18080/chaos); downloads Chromium once"
+description = "Browser smoke of the deployed UI through Envoy (UI_BASE=http://chaos.localhost:18080); downloads Chromium once"
 depends = ["ui:install"]
 dir = "ui/chaos"
 run = "pnpm e2e"
@@ -282,8 +282,97 @@ k3d image import -m direct -c "$K3D_CLUSTER" $IMAGE_REGISTRY/tbd-engine:dev $IMA
 hide = true
 run = """
 domain="${BASE_DOMAIN:-$(grep -s '^BASE_DOMAIN=' devops/edge/.env | cut -d= -f2- | tr -d '"')}"
-echo "CHAOS_PUBLIC_DOMAIN=$domain" > devops/k8s/overlays/local/edge.env
+auth_url="${domain:+https://auth.$domain}"; auth_url="${auth_url:-http://auth.localhost:18080}"
+printf 'CHAOS_PUBLIC_DOMAIN=%s\nAUTH_PUBLIC_URL=%s\n' "$domain" "$auth_url" > devops/k8s/overlays/local/edge.env
 echo "chaos UI links: ${domain:-localhost (no devops/edge/.env and BASE_DOMAIN unset)}"
+# The identity stack's public URL: the edge when there is one, else the local host name.
+if [ -n "$domain" ]; then
+  printf 'AUTH_PUBLIC_URL=https://auth.%s\nBASE_DOMAIN=%s\nAUTH_INSECURE_COOKIES=false\n' "$domain" "$domain" > devops/k8s/auth/auth.env
+else
+  printf 'AUTH_PUBLIC_URL=http://auth.localhost:18080\nBASE_DOMAIN=localhost\nAUTH_INSECURE_COOKIES=true\n' > devops/k8s/auth/auth.env
+fi
+echo "auth: $(head -1 devops/k8s/auth/auth.env | cut -d= -f2)"
+"""
+
+[tasks."auth:secrets"]
+description = "Create the auth-secrets Secret in the cluster once (random values; never on disk)"
+run = """
+kubectl apply -f devops/k8s/auth/namespace.yaml >/dev/null
+if kubectl -n auth get secret auth-secrets >/dev/null 2>&1; then echo "auth-secrets exists; leaving it"; exit 0; fi
+pg=$(openssl rand -hex 16)
+kubectl -n auth create secret generic auth-secrets \
+  --from-literal=postgres-password="$pg" \
+  --from-literal=hydra-dsn="postgres://auth:$pg@postgres.auth.svc:5432/hydra?sslmode=disable&max_conns=20&max_idle_conns=4" \
+  --from-literal=kratos-dsn="postgres://auth:$pg@postgres.auth.svc:5432/kratos?sslmode=disable&max_conns=20&max_idle_conns=4" \
+  --from-literal=hydra-system="$(openssl rand -hex 32)" \
+  --from-literal=kratos-cookie="$(openssl rand -hex 32)" \
+  --from-literal=kratos-cipher="$(openssl rand -hex 16)" \
+  --from-literal=ui-cookie="$(openssl rand -hex 32)" \
+  --from-literal=ui-csrf="$(openssl rand -hex 32)" \
+  --from-literal=client-ui-secret="$(openssl rand -hex 24)" \
+  --from-literal=client-chaos-secret="$(openssl rand -hex 24)"
+echo "auth-secrets created"
+"""
+
+[tasks."auth:oidc"]
+description = "Store social sign-in credentials and restart Kratos: mise run auth:oidc google <client-id> <client-secret> (also: github)"
+usage = '''
+arg "<provider>" help="google or github"
+arg "<id>" help="OAuth client id from the provider's console"
+arg "<secret>" help="OAuth client secret"
+'''
+run = '''
+provider="$usage_provider"; id="$usage_id"; secret="$usage_secret"
+case "$provider" in google|github) ;; *) echo "unknown provider $provider (google, github)"; exit 1;; esac
+kubectl -n auth patch secret auth-secrets --type merge -p "$(printf '{"stringData":{"oidc-%s-id":"%s","oidc-%s-secret":"%s"}}' "$provider" "$id" "$provider" "$secret")"
+kubectl -n auth rollout restart deployment/kratos
+kubectl -n auth rollout status deployment/kratos --timeout=180s
+kubectl -n auth logs deployment/kratos -c render-config | tail -1
+'''
+
+[tasks."auth:envoy-secrets"]
+description = "Give Envoy and chaos their OAuth2 client secrets in the app namespace (from auth-secrets)"
+run = """
+ui=$(kubectl -n auth get secret auth-secrets -o jsonpath='{.data.client-ui-secret}' | base64 -d)
+chaos=$(kubectl -n auth get secret auth-secrets -o jsonpath='{.data.client-chaos-secret}' | base64 -d)
+hmac=$(kubectl -n tbd get secret envoy-oauth -o jsonpath='{.data.hmac}' 2>/dev/null | base64 -d || true)
+hmac="${hmac:-$(openssl rand -hex 32)}"
+sds() { printf 'resources:\n  - "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.Secret\n    name: oauth-%s-secret\n    generic_secret:\n      secret: { inline_string: "%s" }\n' "$1" "$2"; }
+kubectl apply -f devops/k8s/base/namespace.yaml >/dev/null 2>&1 || true
+kubectl -n tbd create secret generic envoy-oauth --from-literal=hmac="$hmac" --from-literal=token.yaml="$(sds token "$ui")" --from-literal=hmac.yaml="$(sds hmac "$hmac")" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+kubectl -n tbd create secret generic chaos-auth --from-literal=CHAOS_AUTH_CLIENT_SECRET="$chaos" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+echo "envoy-oauth and chaos-auth secrets in tbd are current"
+"""
+
+[tasks."auth:deploy"]
+description = "Apply the identity stack (Postgres, Hydra, Kratos, login UI, seeded clients) and wait for it"
+depends = ["local:edge-env", "auth:secrets"]
+run = """
+kubectl -n auth delete job seed-clients --ignore-not-found >/dev/null
+kubectl apply -k devops/k8s/auth
+kubectl -n auth rollout status statefulset/postgres --timeout=180s
+kubectl -n auth rollout status deployment/hydra deployment/kratos deployment/auth-ui --timeout=300s
+kubectl -n auth wait --for=condition=complete job/seed-clients --timeout=180s
+kubectl -n auth logs job/seed-clients | tail -3
+"""
+
+[tasks."auth:e2e"]
+description = "Browser check of sign-up + authorization code (PKCE) + token exchange against auth.<domain> (AUTH_URL overrides)"
+depends = ["ui:install"]
+dir = "ui/chaos"
+run = """
+export AUTH_URL="${AUTH_URL:-$(grep -s '^AUTH_PUBLIC_URL=' ../../devops/k8s/auth/auth.env | cut -d= -f2-)}"
+pnpm exec playwright install chromium >/dev/null
+node e2e/auth.mjs
+"""
+
+[tasks."auth:token"]
+description = "Print a client-credentials access token for the chaos client (AUTH_URL defaults to auth.env)"
+run = """
+url="${AUTH_URL:-$(grep -s '^AUTH_PUBLIC_URL=' devops/k8s/auth/auth.env | cut -d= -f2-)}"
+secret=$(kubectl -n auth get secret auth-secrets -o jsonpath='{.data.client-chaos-secret}' | base64 -d)
+curl -fsS -u "tbd-chaos:$secret" -d grant_type=client_credentials -d scope=tbd.api -d audience=tbd-api "$url/oauth2/token"
+echo
 """
 
 [tasks."local:deploy"]
@@ -292,6 +381,8 @@ depends = ["local:edge-env"]
 run = """
 kubectl apply -k devops/k8s/observability
 kubectl apply -f devops/k8s/observability/local-services.yaml
+mise run auth:deploy
+mise run auth:envoy-secrets
 kubectl apply -k devops/k8s/overlays/local
 kubectl -n observability rollout status statefulset/victoria-metrics statefulset/victoria-logs statefulset/tempo --timeout=180s
 kubectl -n observability rollout status statefulset/pyroscope deployment/otel-collector deployment/grafana --timeout=300s
@@ -313,14 +404,15 @@ kubectl -n tbd rollout status deployment/engine deployment/protocol deployment/c
 run = """
 echo "edge (REST/WS/GraphQL/gRPC)  http://localhost:18080"
 echo "engine LB (gRPC)             http://localhost:15051"
-echo "chaos API                    http://localhost:18080/api/chaos/overview"
-echo "chaos UI                     http://localhost:18080/chaos/"
+echo "chaos API                    http://localhost:18080/api/chaos/v1/overview"
+echo "chaos UI                     http://chaos.localhost:18080/   (browsers resolve *.localhost themselves)"
+echo "sign-in (Hydra/Kratos)       $(grep -s '^AUTH_PUBLIC_URL=' devops/k8s/auth/auth.env | cut -d= -f2-)/login   discovery: /.well-known/openid-configuration"
 echo "grafana (admin/admin)        http://localhost:3000"
 echo "victoria-metrics             http://localhost:9090"
 echo "otlp into the collector      http://localhost:14317"
 echo "victoria-logs UI             http://localhost:9428/select/vmui"
 echo "pyroscope UI                 http://localhost:4040"
-echo "validate:  chaos validate --protocol http://localhost:18080 --engine http://localhost:15051"
+echo "validate:  chaos validate --protocol http://localhost:18080 --engine http://localhost:15051   (needs a token: CHAOS_AUTH_CLIENT_SECRET from 'kubectl -n tbd get secret chaos-auth', or --token \"$(mise run auth:token | jq -r .access_token)\")"
 """
 
 [tasks."local:status"]
@@ -347,16 +439,6 @@ gql()  { while [ $(date +%s) -lt $end ]; do curl -s -o /dev/null -X POST http://
 for i in 1 2 3; do rest & done; for i in 1 2 3; do grpc & done; for i in 1 2; do gql & done
 echo "loading for ${secs}s (8 workers) ..."; wait; echo "done"
 """
-
-[tasks."edge:password"]
-description = "Print a random password once and the OBS_PASSWORD_HASH line for devops/edge/.env"
-run = '''
-pw=$(openssl rand -base64 24 | tr -d '/+=' | cut -c1-24)
-hash=$(docker run --rm caddy:2 caddy hash-password --plaintext "$pw")
-echo "password: $pw"
-# docker compose expands $ in .env files; bcrypt hashes are full of them, so double each.
-echo "OBS_PASSWORD_HASH=$(printf '%s' "$hash" | sed 's/\$/$$/g')"
-'''
 
 [tasks."edge:up"]
 description = "Public TLS edge on the host: Caddy with Let's Encrypt for api/grafana/logs/profiles/metrics.<BASE_DOMAIN> (settings in devops/edge/.env)"
@@ -391,8 +473,14 @@ echo "http://localhost:3000/dashboards?tag=tbd"
 """
 
 [tasks."envoy:validate"]
-description = "Check devops/envoy/envoy.yaml with Envoy itself"
-run = "docker run --rm -v $PWD/devops/envoy/envoy.yaml:/e.yaml:ro envoyproxy/envoy:v1.39.1 --mode validate -c /e.yaml"
+description = "Check devops/envoy/envoy.yaml with Envoy itself (placeholder auth URL and OAuth secrets substituted)"
+run = """
+d=$(mktemp -d); mkdir -p "$d/secrets"
+sed 's|__AUTH_PUBLIC_URL__|http://auth.localhost:18080|g' devops/envoy/envoy.yaml > "$d/envoy.yaml"
+for n in token hmac; do printf 'resources:\n  - "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.Secret\n    name: oauth-%s-secret\n    generic_secret:\n      secret: { inline_string: "placeholder" }\n' "$n" > "$d/secrets/$n.yaml"; done
+docker run --rm -v "$d/envoy.yaml:/e.yaml:ro" -v "$d/secrets:/etc/envoy/secrets:ro" envoyproxy/envoy:v1.39.1 --mode validate -c /e.yaml
+rm -rf "$d"
+"""
 
 # -------------------------------------------------------------- ansible ----
 

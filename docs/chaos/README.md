@@ -16,7 +16,7 @@ the runner, the load generator, the timeline, the assertions and the reports unc
 | `chaos run` | execute scenarios: load, faults on a timeline, assertions | [commands.md](commands.md#chaos-run) |
 | `chaos check` | validate scenario files without running them | [commands.md](commands.md#chaos-check) |
 | `chaos serve` | run the tool as an HTTP API for the admin UI: stack, scenarios, runs, live progress | [api.md](api.md) |
-| the admin UI | the same, in a browser: `ui/chaos`, served at `/chaos` | [ui.md](ui.md) |
+| the admin UI | the same, in a browser: `ui/chaos`, served at the root of its host | [ui.md](ui.md) |
 | `chaos config` | print the effective `configs/chaos/` configuration for an environment | [config.md](config.md) |
 
 Further reading: [scenarios.md](scenarios.md) for writing scenarios,
@@ -39,7 +39,7 @@ chaos run scenarios/latency.toml   # one scenario
 chaos check scenarios/*.toml       # parse and cross-check without running
 
 mise run chaos:serve               # API on :7700 + dev stack; the admin UI when built
-curl -s localhost:7700/api/chaos/overview | jq .
+curl -s localhost:7700/api/chaos/v1/overview | jq .
 ```
 
 What a passing scenario looks like:

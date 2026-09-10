@@ -7,21 +7,43 @@
 #                     so engine replicas are a pure scale-out.
 #   :9901  admin      /ready, /stats/prometheus, /clusters, /config_dump.
 #
-# Clusters resolve by DNS name: `engine`, `protocol`, `chaos`, `otel-collector`.
+# Clusters resolve by DNS name: `engine`, `protocol`, `chaos`, `otel-collector`,
+# `hydra`, `kratos`, `auth-ui`, `grafana`, `victoria-logs`, `pyroscope`,
+# `victoria-metrics`.
+#
+# Authentication happens here and nowhere else (docs/auth/README.md):
+#   - API hosts (`api.<domain>`, the catch-all): every route except health needs a
+#     bearer JWT from Hydra (audience tbd-api), verified against Hydra's JWKS.
+#   - UI hosts (`grafana.`, `logs.`, `profiles.`, `metrics.`, `chaosadmin.`): the
+#     oauth2 filter logs the browser in through Hydra and stores an ID token cookie,
+#     which the same JWT filter verifies (audience tbd-ui). A bearer token passes
+#     straight through, so scripts work on those hosts too.
+#   - `auth.<domain>` and the local `chaos.*` host are open.
+# One value is environment-specific: the browser-facing authorization URL. The
+# file carries __AUTH_PUBLIC_URL__; the Envoy pod's init container and the compose
+# service substitute it (devops/k8s/base/envoy, compose.yaml). Envoy validation
+# substitutes a placeholder too (`mise run envoy:validate`).
 # In compose those are service names; in Kubernetes they are headless Services
 # (engine, protocol, chaos) and an ExternalName Service (otel-collector), so this
 # one file is used unchanged everywhere. STRICT_DNS re-resolves every 5 s, so
 # scale-out and pod churn are picked up without a restart.
 #
-# chaos (the chaos API and admin UI) is reachable two ways: by prefix on any
-# host (`/api/chaos/...`, `/chaos/...`) and by its own host names
-# (`chaos.<domain>` for the UI, `chaos.api.<domain>` for the API, rewritten to
-# the same prefixes). Where chaos is not deployed the cluster has no endpoints
+# chaos: the API is reachable by prefix on any host (`/api/chaos/...`, versioned
+# below it: `/api/chaos/v1/...`) and on
+# its own host `chaos.api.<domain>` (rewritten to the prefix); the admin UI is
+# served at the root of the `chaos.<domain>` / `chaosadmin.<domain>` hosts
+# (`chaos.localhost` locally: browsers resolve *.localhost to loopback). Where chaos is not deployed the cluster has no endpoints
 # and Envoy answers 503, which is the intended "not here".
 #
 # Observability: JSON access logs to stdout with the trace id, Prometheus stats on
 # the admin port, OpenTelemetry tracing to the collector with W3C traceparent
 # propagation, so an Envoy span is the root of every trace.
+
+# Required by the file-based SDS that feeds the OAuth2 filter its secrets; the
+# compose service's --service-node/--service-cluster flags override it.
+node:
+  id: envoy
+  cluster: envoy
 
 admin:
   address:
@@ -48,6 +70,10 @@ static_resources:
                 codec_type: AUTO
                 generate_request_id: true
                 use_remote_address: true
+                # One trusted proxy in front (the TLS edge, devops/edge): its
+                # X-Forwarded-For / X-Forwarded-Proto are kept, so the OAuth2 filter
+                # builds https:// redirect URIs and access logs show the real client.
+                xff_num_trusted_hops: 1
                 # Long-lived streams (SSE, gRPC, WebSocket) must not be idled out
                 # by the connection manager; per-route timeouts handle unary calls.
                 stream_idle_timeout: 0s
@@ -91,25 +117,170 @@ static_resources:
                           trace_id: "%TRACE_ID%"
                           user_agent: "%REQ(USER-AGENT)%"
                 http_filters:
+                  # Identity headers are set by the JWT filter below and by nothing
+                  # else: whatever a client sends in them is dropped first.
+                  - name: envoy.filters.http.header_mutation
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.header_mutation.v3.HeaderMutation
+                      mutations:
+                        request_mutations:
+                          - remove: x-jwt-payload
+                          - remove: x-user-sub
+                          - remove: x-user-email
+                          - remove: x-user-name
+                          - remove: x-webauth-user
+                          - remove: x-webauth-name
+                          - remove: x-webauth-role
+                  # Browser login for the UI hosts. Only routes that opt in with
+                  # per-route config use it; everything else has it disabled.
+                  - name: envoy.filters.http.oauth2
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.oauth2.v3.OAuth2
+                      config:
+                        token_endpoint:
+                          cluster: hydra
+                          uri: http://hydra:4444/oauth2/token
+                          timeout: 5s
+                        authorization_endpoint: __AUTH_PUBLIC_URL__/oauth2/auth
+                        redirect_uri: "%REQ(x-forwarded-proto)%://%REQ(:authority)%/oauth2/callback"
+                        redirect_path_matcher:
+                          path: { exact: /oauth2/callback }
+                        signout_path:
+                          path: { exact: /oauth2/signout }
+                        credentials:
+                          client_id: tbd-ui
+                          token_secret:
+                            name: oauth-token-secret
+                            sds_config:
+                              path_config_source: { path: /etc/envoy/secrets/token.yaml }
+                          hmac_secret:
+                            name: oauth-hmac-secret
+                            sds_config:
+                              path_config_source: { path: /etc/envoy/secrets/hmac.yaml }
+                          cookie_names:
+                            bearer_token: tbd_access
+                            oauth_hmac: tbd_hmac
+                            oauth_expires: tbd_expires
+                            id_token: tbd_id
+                            refresh_token: tbd_refresh
+                        auth_scopes: [openid, offline_access, email, profile]
+                        use_refresh_token: true
+                        forward_bearer_token: false
+                        # Scripts with their own bearer token skip the browser login.
+                        pass_through_matcher:
+                          - name: authorization
+                            string_match: { prefix: "Bearer " }
+                  # Verifies JWTs from Hydra: bearer tokens on the API (audience
+                  # tbd-api), the ID-token cookie on the UI hosts (audience tbd-ui).
+                  # Routes name the requirement they need; unnamed routes are open.
+                  - name: envoy.filters.http.jwt_authn
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.JwtAuthentication
+                      providers:
+                        api-bearer:
+                          audiences: [tbd-api]
+                          from_headers:
+                            - name: authorization
+                              value_prefix: "Bearer "
+                          forward: true
+                          forward_payload_header: x-jwt-payload
+                          claim_to_headers:
+                            - { header_name: x-user-sub, claim_name: sub }
+                          remote_jwks: &hydra_jwks
+                            http_uri:
+                              uri: http://hydra:4444/.well-known/jwks.json
+                              cluster: hydra
+                              timeout: 5s
+                            cache_duration: 600s
+                            async_fetch: { fast_listener: true }
+                            retry_policy:
+                              num_retries: 3
+                        ui-cookie:
+                          audiences: [tbd-ui]
+                          from_cookies: [tbd_id]
+                          claim_to_headers:
+                            - { header_name: x-user-sub, claim_name: sub }
+                            - { header_name: x-user-email, claim_name: email }
+                            - { header_name: x-user-name, claim_name: name }
+                          remote_jwks: *hydra_jwks
+                        ui-bearer:
+                          audiences: [tbd-ui, tbd-api]
+                          from_headers:
+                            - name: authorization
+                              value_prefix: "Bearer "
+                          claim_to_headers:
+                            - { header_name: x-user-sub, claim_name: sub }
+                            - { header_name: x-user-email, claim_name: email }
+                          remote_jwks: *hydra_jwks
+                      requirement_map:
+                        api:
+                          provider_name: api-bearer
+                        ui:
+                          requires_any:
+                            requirements:
+                              - provider_name: ui-cookie
+                              - provider_name: ui-bearer
                   - name: envoy.filters.http.router
                     typed_config:
                       "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
                 route_config:
                   name: edge
                   virtual_hosts:
+                    # auth.<domain>: the identity stack on one host. Hydra's OAuth2/OIDC
+                    # endpoints and Kratos' self-service API by path, the login /
+                    # registration / consent pages for everything else. No auth filter:
+                    # this is where people come to sign in.
+                    - name: auth
+                      domains: ["auth.*"]
+                      typed_per_filter_config: &ui_open
+                        envoy.filters.http.oauth2:
+                          "@type": type.googleapis.com/envoy.config.route.v3.FilterConfig
+                          disabled: true
+                      routes:
+                        - match: { prefix: "/oauth2/" }
+                          route: { cluster: hydra, timeout: 15s }
+                        - match: { prefix: "/userinfo" }
+                          route: { cluster: hydra, timeout: 15s }
+                        - match: { path: "/.well-known/jwks.json" }
+                          route: { cluster: hydra, timeout: 15s }
+                        - match: { path: "/.well-known/openid-configuration" }
+                          route: { cluster: hydra, timeout: 15s }
+                        - match: { path: "/.well-known/oauth-authorization-server" }
+                          route: { cluster: hydra, timeout: 15s }
+                        - match: { prefix: "/self-service/" }
+                          route: { cluster: kratos, timeout: 15s }
+                        - match: { prefix: "/sessions/" }
+                          route: { cluster: kratos, timeout: 15s }
+                        - match: { prefix: "/schemas/" }
+                          route: { cluster: kratos, timeout: 15s }
+                        - match: { prefix: "/.well-known/ory/" }
+                          route: { cluster: kratos, timeout: 15s }
+                        - match: { prefix: "/" }
+                          route: { cluster: auth-ui, timeout: 15s }
                     # chaos API on its own host: chaos.api.<domain>/... -> /api/chaos/...
                     - name: chaos-api
                       domains: ["chaos.api.*"]
+                      typed_per_filter_config: &api_gated
+                        envoy.filters.http.oauth2:
+                          "@type": type.googleapis.com/envoy.config.route.v3.FilterConfig
+                          disabled: true
+                        envoy.filters.http.jwt_authn:
+                          "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.PerRouteConfig
+                          requirement_name: api
                       routes:
                         - match: { prefix: "/" }
                           route:
                             cluster: chaos
                             prefix_rewrite: "/api/chaos/"
                             timeout: 0s
-                    # chaos UI on its own host: chaos.<domain>/... -> /chaos/...;
-                    # the UI calls the API by absolute path, which the same host serves.
-                    - name: chaos-ui
+                    # chaos UI on its own host, served at the root; the UI calls the
+                    # API at /api/chaos/v1 on the same host. No rewrite: the static export
+                    # links its assets by absolute path. `chaos.*` is the open local
+                    # name (chaos.localhost); `chaosadmin.*` is the public one, behind
+                    # the browser login.
+                    - name: chaos-ui-local
                       domains: ["chaos.*"]
+                      typed_per_filter_config: *ui_open
                       routes:
                         - match: { prefix: "/api/chaos/" }
                           route:
@@ -118,12 +289,95 @@ static_resources:
                         - match: { prefix: "/" }
                           route:
                             cluster: chaos
-                            prefix_rewrite: "/chaos/"
+                            timeout: 15s
+                    - name: chaos-ui
+                      domains: ["chaosadmin.*"]
+                      typed_per_filter_config: &ui_gated
+                        envoy.filters.http.jwt_authn:
+                          "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.PerRouteConfig
+                          requirement_name: ui
+                      routes:
+                        - match: { prefix: "/api/chaos/" }
+                          route:
+                            cluster: chaos
                             timeout: 0s
+                        - match: { prefix: "/" }
+                          route:
+                            cluster: chaos
+                            timeout: 15s
+                    # Observability UIs, one host each, behind the browser login. Grafana
+                    # trusts the identity headers (auth proxy) and creates the user.
+                    - name: grafana
+                      domains: ["grafana.*"]
+                      typed_per_filter_config: *ui_gated
+                      request_headers_to_add:
+                        - header: { key: X-WEBAUTH-USER, value: "%REQ(x-user-email)%" }
+                          append_action: OVERWRITE_IF_EXISTS_OR_ADD
+                        - header: { key: X-WEBAUTH-NAME, value: "%REQ(x-user-name)%" }
+                          append_action: OVERWRITE_IF_EXISTS_OR_ADD
+                        - header: { key: X-WEBAUTH-ROLE, value: "Editor" }
+                          append_action: OVERWRITE_IF_EXISTS_OR_ADD
+                      routes:
+                        - match: { prefix: "/" }
+                          route:
+                            cluster: grafana
+                            timeout: 0s
+                            upgrade_configs:
+                              - upgrade_type: websocket
+                    - name: logs
+                      domains: ["logs.*"]
+                      typed_per_filter_config: *ui_gated
+                      routes:
+                        - match: { path: "/" }
+                          redirect: { path_redirect: /select/vmui/ }
+                        - match: { prefix: "/" }
+                          route:
+                            cluster: victoria-logs
+                            timeout: 0s
+                    - name: profiles
+                      domains: ["profiles.*"]
+                      typed_per_filter_config: *ui_gated
+                      routes:
+                        - match: { prefix: "/" }
+                          route:
+                            cluster: pyroscope
+                            timeout: 0s
+                    - name: metrics
+                      domains: ["metrics.*"]
+                      typed_per_filter_config: *ui_gated
+                      routes:
+                        - match: { path: "/" }
+                          redirect: { path_redirect: /vmui/ }
+                        - match: { prefix: "/" }
+                          route:
+                            cluster: victoria-metrics
+                            timeout: 0s
+                    # The API: api.<domain> publicly, localhost:18080 locally. Every
+                    # route needs a bearer token except the health endpoints, which
+                    # probes, Envoy's own health checks and uptime monitors call.
                     - name: all
                       domains: ["*"]
+                      typed_per_filter_config: *api_gated
                       routes:
-                        # chaos API and UI by prefix. Streams (SSE) get no timeout.
+                        - match: { path: "/healthz" }
+                          typed_per_filter_config: &open
+                            envoy.filters.http.jwt_authn:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.PerRouteConfig
+                              disabled: true
+                          route:
+                            cluster: protocol
+                            timeout: 5s
+                        - match: { path: "/readyz" }
+                          typed_per_filter_config: *open
+                          route:
+                            cluster: protocol
+                            timeout: 5s
+                        - match: { path: "/api/chaos/v1/healthz" }
+                          typed_per_filter_config: *open
+                          route:
+                            cluster: chaos
+                            timeout: 5s
+                        # chaos API by prefix. Streams (SSE) get no timeout.
                         - match: { prefix: "/api/chaos/" }
                           route:
                             cluster: chaos
@@ -132,14 +386,6 @@ static_resources:
                           route:
                             cluster: chaos
                             timeout: 0s
-                        - match: { prefix: "/chaos/" }
-                          route:
-                            cluster: chaos
-                            timeout: 15s
-                        - match: { path: "/chaos" }
-                          route:
-                            cluster: chaos
-                            timeout: 15s
                         # gRPC: engine service straight to the engines.
                         - match: { prefix: "/tbd.engine.v1.EngineService/", grpc: {} }
                           route:
@@ -305,8 +551,117 @@ static_resources:
           unhealthy_threshold: 2
           healthy_threshold: 1
           http_health_check:
-            path: /api/chaos/healthz
+            path: /api/chaos/v1/healthz
 
+    # Observability UIs (devops/k8s/observability), reached by short name through
+    # ExternalName Services like the identity stack below.
+    - name: grafana
+      type: STRICT_DNS
+      dns_lookup_family: V4_ONLY
+      dns_refresh_rate: 5s
+      lb_policy: ROUND_ROBIN
+      connect_timeout: 1s
+      load_assignment:
+        cluster_name: grafana
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address: { address: grafana, port_value: 3000 }
+    - name: victoria-logs
+      type: STRICT_DNS
+      dns_lookup_family: V4_ONLY
+      dns_refresh_rate: 5s
+      lb_policy: ROUND_ROBIN
+      connect_timeout: 1s
+      load_assignment:
+        cluster_name: victoria-logs
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address: { address: victoria-logs, port_value: 9428 }
+    - name: pyroscope
+      type: STRICT_DNS
+      dns_lookup_family: V4_ONLY
+      dns_refresh_rate: 5s
+      lb_policy: ROUND_ROBIN
+      connect_timeout: 1s
+      load_assignment:
+        cluster_name: pyroscope
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address: { address: pyroscope, port_value: 4040 }
+    - name: victoria-metrics
+      type: STRICT_DNS
+      dns_lookup_family: V4_ONLY
+      dns_refresh_rate: 5s
+      lb_policy: ROUND_ROBIN
+      connect_timeout: 1s
+      load_assignment:
+        cluster_name: victoria-metrics
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address: { address: victoria-metrics, port_value: 8428 }
+    # The identity stack (devops/k8s/auth). Names resolve through ExternalName
+    # Services in the app namespace, like otel-collector.
+    - name: hydra
+      type: STRICT_DNS
+      dns_lookup_family: V4_ONLY
+      dns_refresh_rate: 5s
+      lb_policy: ROUND_ROBIN
+      connect_timeout: 1s
+      load_assignment:
+        cluster_name: hydra
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address: { address: hydra, port_value: 4444 }
+      health_checks:
+        - timeout: 1s
+          interval: 5s
+          unhealthy_threshold: 2
+          healthy_threshold: 1
+          http_health_check:
+            path: /health/ready
+    - name: kratos
+      type: STRICT_DNS
+      dns_lookup_family: V4_ONLY
+      dns_refresh_rate: 5s
+      lb_policy: ROUND_ROBIN
+      connect_timeout: 1s
+      load_assignment:
+        cluster_name: kratos
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address: { address: kratos, port_value: 4433 }
+      health_checks:
+        - timeout: 1s
+          interval: 5s
+          unhealthy_threshold: 2
+          healthy_threshold: 1
+          http_health_check:
+            path: /health/ready
+    - name: auth-ui
+      type: STRICT_DNS
+      dns_lookup_family: V4_ONLY
+      dns_refresh_rate: 5s
+      lb_policy: ROUND_ROBIN
+      connect_timeout: 1s
+      load_assignment:
+        cluster_name: auth-ui
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address: { address: auth-ui, port_value: 3000 }
     - name: otel-collector
       type: STRICT_DNS
       dns_lookup_family: V4_ONLY

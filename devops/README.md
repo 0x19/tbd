@@ -6,6 +6,7 @@
 | `envoy/` | the load balancer config, one file for every environment | `mise run envoy:validate`; see `envoy/README.md` |
 | `k8s/` | kustomize base (engine, protocol, envoy) plus `local`, `dev` and `prod` overlays, `chaos/` (API + admin UI, local and dev only) and the `observability/` stack | `kubectl apply -k devops/k8s/overlays/<env>` |
 | `grafana/` | datasources and dashboards, provisioned into the cluster as ConfigMaps | `mise run grafana:reload` |
+| `k8s/auth/` | the identity stack: Postgres, Ory Hydra, Ory Kratos, login UI, seeded OAuth2 clients | `mise run auth:deploy`; see `docs/auth/README.md` |
 | `edge/` | public TLS entry point for a cluster behind a home/office router: Caddy with Let's Encrypt in front of Envoy | `mise run edge:up`; see `edge/README.md` |
 | `ansible/` | host bootstrap, compose-based deploy, and `local.yml` for the local cluster | see `ansible/README.md` |
 

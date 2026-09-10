@@ -117,6 +117,12 @@ pub struct RunSummary {
     pub requests_total: Option<u64>,
     /// Error rate, when load ran.
     pub error_rate: Option<f64>,
+    /// Throughput in requests per second, when load ran.
+    pub throughput_rps: Option<f64>,
+    /// p50 in ms, when load ran.
+    pub p50_ms: Option<f64>,
+    /// p90 in ms, when load ran.
+    pub p90_ms: Option<f64>,
     /// p99 in ms, when load ran.
     pub p99_ms: Option<f64>,
     /// Assertions or checks: passed and total.
@@ -182,6 +188,9 @@ impl RunRecord {
             duration_s: self.duration_s,
             requests_total: load.map(|l| l.requests_total),
             error_rate: load.map(|l| l.error_rate),
+            throughput_rps: load.map(|l| l.throughput_rps),
+            p50_ms: load.map(|l| l.latency.p50_ms),
+            p90_ms: load.map(|l| l.latency.p90_ms),
             p99_ms: load.map(|l| l.latency.p99_ms),
             passed,
             error: self.error.clone(),

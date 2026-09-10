@@ -16,7 +16,7 @@ use futures::{Stream, StreamExt};
 use serde::{Deserialize, Serialize};
 use tbd_proto::engine::v1::{EvaluateRequest, SubscribeRequest, subscribe_response};
 
-use crate::{ApiError, AppState};
+use crate::{ApiError, AppState, subject::Subject};
 use tbd_common::metrics::StreamGuard;
 
 pub fn routes() -> Router<AppState> {
@@ -24,12 +24,23 @@ pub fn routes() -> Router<AppState> {
         .route("/healthz", get(healthz))
         .route("/readyz", get(readyz))
         .route("/v1/evaluate", post(evaluate))
+        .route("/v1/me", get(me))
         .route("/v1/subjects/{subject_id}/events", get(events))
 }
 
 /// Liveness: the process is up.
 async fn healthz() -> &'static str {
     "ok"
+}
+
+/// Who the verified caller is; 401 when Envoy forwarded no identity.
+async fn me(subject: Subject) -> Json<Me> {
+    Json(Me { subject: subject.0 })
+}
+
+#[derive(Serialize)]
+struct Me {
+    subject: String,
 }
 
 /// Readiness: the engine answers its health check.

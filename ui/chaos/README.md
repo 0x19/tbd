@@ -1,6 +1,7 @@
 # ui/chaos
 
-The chaos admin UI: a Next.js static export served by `chaos serve` at `/chaos`. Full
+The chaos admin UI: the shadcnblocks Admin Kit reduced to one product, built as a Next.js static
+export and served by `chaos serve` at the root of its host. Full
 documentation in [docs/chaos/ui.md](../../docs/chaos/ui.md); the API it talks to in
 [docs/chaos/api.md](../../docs/chaos/api.md).
 

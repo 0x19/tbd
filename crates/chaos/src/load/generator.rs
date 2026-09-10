@@ -14,6 +14,7 @@ use super::{
     LoadConfig, LoadSnapshot, Metrics,
     ops::{Clients, Operation, Target},
 };
+use crate::tls::Trust;
 
 /// How often [`Hooks::progress`] receives a snapshot.
 pub const PROGRESS_INTERVAL: Duration = Duration::from_secs(1);
@@ -33,7 +34,14 @@ pub struct Hooks {
 /// A warmup phase, if configured, runs first with the same shape and its
 /// metrics are discarded.
 pub async fn run(config: &LoadConfig, targets: &[Target], metrics: Arc<Metrics>) -> LoadSnapshot {
-    run_with(config, targets, metrics, &Hooks::default()).await
+    run_with(
+        config,
+        targets,
+        metrics,
+        &Hooks::default(),
+        &Trust::default(),
+    )
+    .await
 }
 
 /// [`run`] with progress reporting and cancellation.
@@ -42,8 +50,18 @@ pub async fn run_with(
     targets: &[Target],
     metrics: Arc<Metrics>,
     hooks: &Hooks,
+    trust: &Trust,
 ) -> LoadSnapshot {
-    let clients = Arc::new(Clients::new(config.timeout));
+    // The token is fetched once per run; a failure is logged and the run goes
+    // on without it, which shows up as 401s in the error classes.
+    let trust = match trust.snapshot().await {
+        Ok(t) => t,
+        Err(error) => {
+            tracing::error!(%error, "no bearer token for the load run");
+            trust.clone()
+        }
+    };
+    let clients = Arc::new(Clients::with_trust(config.timeout, trust));
     let ops: Vec<(Arc<dyn Operation>, u32)> = config
         .operations
         .iter()

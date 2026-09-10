@@ -1,21 +1,22 @@
 "use client";
 
+import { ArrowLeft, Square } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
-import { Square } from "lucide-react";
 import { toast } from "sonner";
+
+import { ChartHeadline, Legend, RunChart } from "@/components/charts";
+import { DetailList, HeatGrid, LevelChip, PageTitle, StageBar, StatRow } from "@/components/kit";
+import { BoolBadge, StatusBadge } from "@/components/status-badge";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { LoadChart } from "@/components/load-chart";
-import { Empty, ErrorNote, PageHeader } from "@/components/page-header";
-import { StatCard } from "@/components/stat-card";
-import { BoolBadge, StatusBadge } from "@/components/status-badge";
 import { api } from "@/lib/api/client";
 import { describe, useRunFeed } from "@/lib/api/hooks";
-import type { LoadSnapshot, RunRecord } from "@/lib/api/schema";
+import type { CheckResult, LoadSnapshot, RunRecord } from "@/lib/api/schema";
 import { ms, num, pct, seconds, when } from "@/lib/format";
 
 export default function RunViewPage() {
@@ -26,6 +27,25 @@ export default function RunViewPage() {
   );
 }
 
+const STAGES = ["Setup", "Load + timeline", "Assert", "Teardown", "Done"];
+
+function stageIndex(phase: string | null, finished: boolean, record: RunRecord | null) {
+  if (finished || (record && record.status !== "running")) return STAGES.length;
+  switch (phase) {
+    case "setup":
+      return 0;
+    case "load":
+      return 1;
+    case "assert":
+      return 2;
+    case "teardown":
+      return 3;
+    default:
+      return record ? 1 : 0;
+  }
+}
+
+/** The kit's detail layout: back, big title with chips, lifecycle strip, stats, chart, tables. */
 function RunView() {
   const id = useSearchParams().get("id");
   const live = useRunFeed(id);
@@ -47,76 +67,186 @@ function RunView() {
     }
   };
 
-  if (!id) return <Empty>No run id.</Empty>;
+  if (!id) return <p className="text-muted-foreground text-sm">No run id.</p>;
 
   return (
     <>
-      <PageHeader
-        title={record?.name ?? "Run"}
+      <PageTitle
+        back={
+          <Button variant="outline" size="icon" aria-label="Back" asChild>
+            <Link href="/runs/">
+              <ArrowLeft />
+            </Link>
+          </Button>
+        }
+        title={
+          <span className="flex flex-wrap items-center gap-3">
+            {record?.name ?? "Run"}
+            {record ? <StatusBadge status={running ? "running" : record.status} /> : null}
+            {record?.kind ? (
+              <Badge variant="outline" className="capitalize">
+                {record.kind}
+              </Badge>
+            ) : null}
+          </span>
+        }
         description={
-          record
-            ? `${record.kind}${record.scenario_id ? ` · scenarios/${record.scenario_id}.toml` : ""} · started ${when(record.started_at)}${running && live.phase ? ` · phase: ${live.phase}` : ""}`
-            : id
+          record ? (
+            <>
+              <span className="font-mono text-xs">{record.id}</span> · started {when(record.started_at)}
+              {record.scenario_id ? (
+                <>
+                  {" "}
+                  · from{" "}
+                  <Link
+                    className="underline"
+                    href={`/scenarios/view/?id=${encodeURIComponent(record.scenario_id)}`}
+                  >
+                    scenarios/{record.scenario_id}.toml
+                  </Link>
+                </>
+              ) : null}
+            </>
+          ) : (
+            id
+          )
         }
       >
-        {record ? <StatusBadge status={running ? "running" : record.status} /> : null}
-        {record?.scenario_id ? (
-          <Button
-            variant="outline"
-            size="sm"
-            render={<Link href={`/scenarios/view/?id=${encodeURIComponent(record.scenario_id)}`} />}
-          >
-            open scenario
-          </Button>
-        ) : null}
         {running ? (
           <Button variant="destructive" size="sm" onClick={cancel} disabled={cancelling}>
-            <Square /> cancel
+            <Square /> Cancel run
           </Button>
         ) : null}
-      </PageHeader>
-      <ErrorNote message={live.error} />
-      {record?.error ? <ErrorNote message={record.error} /> : null}
+      </PageTitle>
+      {live.error ? <p className="text-destructive text-sm">{live.error}</p> : null}
+      {record?.error ? (
+        <div className="border-destructive/30 bg-destructive/5 text-destructive rounded-lg border px-3 py-2 text-sm">
+          {record.error}
+        </div>
+      ) : null}
 
       {record?.kind === "validate" && record.validate ? (
         <ValidateView record={record} />
       ) : (
         <>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-            <StatCard
-              label="Requests"
-              value={num(latest?.requests_total)}
-              hint={latest ? `${num(latest.requests_failed)} failed` : undefined}
-            />
-            <StatCard
-              label="Error rate"
-              value={pct(latest?.error_rate)}
-              tone={latest ? (latest.error_rate > 0 ? "bad" : "good") : undefined}
-            />
-            <StatCard label="Throughput" value={latest ? `${Math.round(latest.throughput_rps)} rps` : "–"} />
-            <StatCard
-              label="p50 / p99"
-              value={latest ? `${ms(latest.latency.p50_ms)} / ${ms(latest.latency.p99_ms)}` : "–"}
-            />
-            <StatCard
-              label="Took"
-              value={running ? seconds(latest?.elapsed_s) : seconds(record?.duration_s)}
-              hint={running ? "running" : record ? when(record.finished_at) : undefined}
-            />
-          </div>
+          {record?.kind !== "load" ? (
+            <div className="bg-muted/30 rounded-xl border p-4">
+              <div className="mb-3 flex justify-between text-sm">
+                <span>
+                  Lifecycle
+                  {running && live.phase ? (
+                    <span className="text-muted-foreground"> · in {live.phase}</span>
+                  ) : null}
+                </span>
+                <span className="text-muted-foreground">
+                  {running ? `${seconds(latest?.elapsed_s)} elapsed` : `took ${seconds(record?.duration_s)}`}
+                </span>
+              </div>
+              <StageBar stages={STAGES} current={stageIndex(live.phase, live.finished, record)} />
+            </div>
+          ) : null}
+
+          <StatRow
+            items={[
+              {
+                label: "Requests",
+                value: num(latest?.requests_total),
+                sub: latest ? `${num(latest.requests_failed)} failed` : undefined,
+              },
+              {
+                label: "Error rate",
+                value: pct(latest?.error_rate),
+                tone: latest ? (latest.error_rate > 0 ? "bad" : "good") : undefined,
+              },
+              {
+                label: "Throughput",
+                value: latest ? `${Math.round(latest.throughput_rps)} rps` : "–",
+              },
+              {
+                label: "p50 / p99",
+                value: latest ? `${ms(latest.latency.p50_ms)} / ${ms(latest.latency.p99_ms)}` : "–",
+              },
+            ]}
+          />
+
           <Card>
             <CardHeader>
               <CardTitle>Load over time</CardTitle>
               <CardDescription>
-                One sample per second: requests per second, p50 and p99 in ms, error percent.
+                <Legend
+                  items={[
+                    {
+                      label: "req/s",
+                      color: "var(--foreground)",
+                    },
+                    {
+                      label: "p50 ms",
+                      color: "var(--chart-2)",
+                    },
+                    {
+                      label: "p99 ms",
+                      color: "var(--chart-4)",
+                    },
+                    {
+                      label: "error %",
+                      color: "var(--destructive)",
+                    },
+                  ]}
+                />
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <LoadChart samples={live.samples} />
+              <ChartHeadline
+                value={latest ? `${Math.round(latest.throughput_rps)} req/s` : "–"}
+                caption={
+                  record?.kind === "load"
+                    ? "ad-hoc load, one sample per second"
+                    : "this run, one sample per second"
+                }
+              />
+              <RunChart samples={live.samples} />
             </CardContent>
           </Card>
+
           <div className="grid gap-4 xl:grid-cols-2">
-            {record?.scenario ? <Assertions record={record} /> : null}
+            {record?.scenario ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Assertions</CardTitle>
+                  <CardDescription>Each bound and what was observed.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {record.scenario.assertions.length ? (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Assertion</TableHead>
+                          <TableHead>Expected</TableHead>
+                          <TableHead>Actual</TableHead>
+                          <TableHead />
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {record.scenario.assertions.map((a) => (
+                          <TableRow key={a.name}>
+                            <TableCell className="font-mono text-xs">{a.name}</TableCell>
+                            <TableCell className="tabular-nums">{a.expected}</TableCell>
+                            <TableCell className="tabular-nums">{a.actual}</TableCell>
+                            <TableCell className="text-right">
+                              <BoolBadge ok={a.passed} />
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  ) : (
+                    <p className="text-muted-foreground text-sm">
+                      {running ? "Evaluated when load ends." : "No assertions in this scenario."}
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            ) : null}
             <Card>
               <CardHeader>
                 <CardTitle>Timeline</CardTitle>
@@ -124,80 +254,30 @@ function RunView() {
               </CardHeader>
               <CardContent>
                 {live.events.length ? (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-20">At</TableHead>
-                        <TableHead>Action</TableHead>
-                        <TableHead>Result</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {live.events.map((e, i) => (
-                        <TableRow key={i}>
-                          <TableCell className="tabular-nums">{e.at_s.toFixed(2)} s</TableCell>
-                          <TableCell className="font-mono text-xs">{e.action}</TableCell>
-                          <TableCell>
-                            {e.error ? <span className="text-destructive">{e.error}</span> : "ok"}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                  <ol className="divide-y">
+                    {live.events.map((e, i) => (
+                      <li key={i} className="flex items-start gap-3 py-2.5 text-sm">
+                        <span className="text-muted-foreground w-16 font-mono text-xs tabular-nums">
+                          {e.at_s.toFixed(2)} s
+                        </span>
+                        <span className="flex-1 font-mono text-xs">{e.action}</span>
+                        {e.error ? <LevelChip level="error" /> : <LevelChip level="ok" />}
+                      </li>
+                    ))}
+                  </ol>
                 ) : (
-                  <Empty>
+                  <p className="text-muted-foreground text-sm">
                     {record?.kind === "load" ? "Ad-hoc load has no timeline." : "No timeline events yet."}
-                  </Empty>
+                  </p>
                 )}
               </CardContent>
             </Card>
           </div>
+
           {latest ? <Breakdown snapshot={latest} services={record?.scenario?.services} /> : null}
         </>
       )}
     </>
-  );
-}
-
-function Assertions({ record }: { record: RunRecord }) {
-  const s = record.scenario!;
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Assertions</CardTitle>
-        <CardDescription>Each bound and what was observed.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        {s.assertions.length ? (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Assertion</TableHead>
-                <TableHead>Expected</TableHead>
-                <TableHead>Actual</TableHead>
-                <TableHead />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {s.assertions.map((a) => (
-                <TableRow key={a.name}>
-                  <TableCell className="font-mono text-xs">{a.name}</TableCell>
-                  <TableCell className="tabular-nums">{a.expected}</TableCell>
-                  <TableCell className="tabular-nums">{a.actual}</TableCell>
-                  <TableCell>
-                    <BoolBadge ok={a.passed} />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        ) : (
-          <Empty>
-            {record.status === "running" ? "Evaluated when load ends." : "No assertions in this scenario."}
-          </Empty>
-        )}
-      </CardContent>
-    </Card>
   );
 }
 
@@ -208,88 +288,106 @@ function Breakdown({
   snapshot: LoadSnapshot;
   services?: Record<string, { total: number; failed: number }>;
 }) {
+  const ops = Object.keys(snapshot.per_op);
+  const metrics = ["p50", "p90", "p99", "max"] as const;
   return (
     <div className="grid gap-4 xl:grid-cols-3">
-      <Card size="sm">
+      <Card className="xl:col-span-2">
         <CardHeader>
-          <CardTitle>Per operation</CardTitle>
+          <CardTitle>Latency grid</CardTitle>
+          <CardDescription>Milliseconds per operation. Darker is slower.</CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Op</TableHead>
-                <TableHead className="text-right">Sent</TableHead>
-                <TableHead className="text-right">Failed</TableHead>
-                <TableHead className="text-right">p50</TableHead>
-                <TableHead className="text-right">p99</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {Object.entries(snapshot.per_op).map(([op, s]) => (
-                <TableRow key={op}>
-                  <TableCell className="font-mono text-xs">{op}</TableCell>
-                  <TableCell className="text-right tabular-nums">{num(s.total)}</TableCell>
-                  <TableCell className={`text-right tabular-nums ${s.failed ? "text-destructive" : ""}`}>
-                    {num(s.failed)}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">{ms(s.latency.p50_ms)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{ms(s.latency.p99_ms)}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-      <Card size="sm">
-        <CardHeader>
-          <CardTitle>Errors by class</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {Object.keys(snapshot.errors).length ? (
+          <HeatGrid
+            rows={ops}
+            cols={[...metrics]}
+            cell={(op, m) => {
+              const l = snapshot.per_op[op]?.latency;
+              if (!l) return null;
+              return m === "p50" ? l.p50_ms : m === "p90" ? l.p90_ms : m === "p99" ? l.p99_ms : l.max_ms;
+            }}
+            format={(v) => `${v.toFixed(2)} ms`}
+          />
+          <div className="mt-4 overflow-x-auto">
             <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Operation</TableHead>
+                  <TableHead className="text-right">Sent</TableHead>
+                  <TableHead className="text-right">Failed</TableHead>
+                  <TableHead className="text-right">Share</TableHead>
+                </TableRow>
+              </TableHeader>
               <TableBody>
-                {Object.entries(snapshot.errors).map(([k, v]) => (
-                  <TableRow key={k}>
-                    <TableCell className="font-mono text-xs">{k}</TableCell>
-                    <TableCell className="text-right tabular-nums">{num(v)}</TableCell>
-                  </TableRow>
-                ))}
+                {ops.map((op) => {
+                  const s = snapshot.per_op[op];
+                  return (
+                    <TableRow key={op}>
+                      <TableCell className="font-mono text-xs">{op}</TableCell>
+                      <TableCell className="text-right tabular-nums">{num(s.total)}</TableCell>
+                      <TableCell className={`text-right tabular-nums ${s.failed ? "text-destructive" : ""}`}>
+                        {num(s.failed)}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {snapshot.requests_total
+                          ? `${((s.total / snapshot.requests_total) * 100).toFixed(0)}%`
+                          : "–"}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
-          ) : (
-            <Empty>No failures.</Empty>
-          )}
+          </div>
         </CardContent>
       </Card>
-      <Card size="sm">
-        <CardHeader>
-          <CardTitle>Per target and service</CardTitle>
-          <CardDescription>Client side per protocol; engine side from its counters.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableBody>
-              {Object.entries(snapshot.per_target).map(([k, v]) => (
-                <TableRow key={`t-${k}`}>
-                  <TableCell className="font-mono text-xs">{k}</TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {num(v.total)} sent, {num(v.failed)} failed
-                  </TableCell>
-                </TableRow>
-              ))}
-              {Object.entries(services ?? {}).map(([k, v]) => (
-                <TableRow key={`s-${k}`}>
-                  <TableCell className="font-mono text-xs">{k}</TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {num(v.total)} served, {num(v.failed)} failed
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      <div className="grid content-start gap-4">
+        <Card>
+          <CardHeader>
+            <CardTitle>Errors by class</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {Object.keys(snapshot.errors).length ? (
+              <DetailList
+                rows={Object.entries(snapshot.errors).map(([k, v]) => ({
+                  k,
+                  v: <span className="tabular-nums">{num(v)}</span>,
+                }))}
+              />
+            ) : (
+              <p className="text-muted-foreground text-sm">No failures.</p>
+            )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Per target and service</CardTitle>
+            <CardDescription>Client side per protocol; engine side from its counters.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <DetailList
+              rows={[
+                ...Object.entries(snapshot.per_target).map(([k, v]) => ({
+                  k,
+                  v: (
+                    <span className="tabular-nums">
+                      {num(v.total)} sent · {num(v.failed)} failed
+                    </span>
+                  ),
+                })),
+                ...Object.entries(services ?? {}).map(([k, v]) => ({
+                  k,
+                  v: (
+                    <span className="tabular-nums">
+                      {num(v.total)} served · {num(v.failed)} failed
+                    </span>
+                  ),
+                })),
+              ]}
+            />
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
@@ -298,29 +396,45 @@ function ValidateView({ record }: { record: RunRecord }) {
   const r = record.validate!;
   return (
     <>
-      <div className="grid gap-4 md:grid-cols-3">
-        <StatCard label="Passed" value={r.passed} tone="good" />
-        <StatCard label="Failed" value={r.failed} tone={r.failed ? "bad" : "good"} />
-        <StatCard label="Took" value={seconds(record.duration_s)} hint={JSON.stringify(record.request)} />
-      </div>
+      <StatRow
+        items={[
+          { label: "Passed", value: r.passed, tone: "good" },
+          {
+            label: "Failed",
+            value: r.failed,
+            tone: r.failed ? "bad" : undefined,
+          },
+          { label: "Took", value: seconds(record.duration_s) },
+          {
+            label: "Targets",
+            value: (
+              <span className="text-sm font-normal">
+                {String(
+                  (
+                    record.request as {
+                      protocol?: string;
+                    } | null
+                  )?.protocol ?? "",
+                )}
+              </span>
+            ),
+          },
+        ]}
+      />
       <ChecksTable checks={r.checks} />
     </>
   );
 }
 
-export function ChecksTable({
-  checks,
-}: {
-  checks: RunRecord["validate"] extends infer V ? (V extends { checks: infer C } ? C : never) : never;
-}) {
+export function ChecksTable({ checks }: { checks: CheckResult[] }) {
   return (
-    <div className="overflow-x-auto rounded-lg border">
+    <div className="overflow-x-auto rounded-xl border">
       <Table>
         <TableHeader>
           <TableRow>
             <TableHead>Check</TableHead>
             <TableHead>Surface</TableHead>
-            <TableHead />
+            <TableHead>Level</TableHead>
             <TableHead className="text-right">Latency</TableHead>
             <TableHead>Detail</TableHead>
           </TableRow>
@@ -329,9 +443,9 @@ export function ChecksTable({
           {checks.map((c) => (
             <TableRow key={c.name}>
               <TableCell className="font-mono text-xs">{c.name}</TableCell>
-              <TableCell className="text-muted-foreground">{c.surface}</TableCell>
+              <TableCell className="text-muted-foreground uppercase">{c.surface}</TableCell>
               <TableCell>
-                <BoolBadge ok={c.passed} yes="pass" no="fail" />
+                <LevelChip level={c.passed ? "pass" : "fail"} />
               </TableCell>
               <TableCell className="text-right tabular-nums">{ms(c.latency_ms)}</TableCell>
               <TableCell
@@ -342,6 +456,12 @@ export function ChecksTable({
               </TableCell>
             </TableRow>
           ))}
+          <TableRow className="bg-muted/40 font-medium">
+            <TableCell>Total</TableCell>
+            <TableCell colSpan={4} className="text-muted-foreground">
+              {checks.filter((c) => c.passed).length} of {checks.length} passed
+            </TableCell>
+          </TableRow>
         </TableBody>
       </Table>
     </div>

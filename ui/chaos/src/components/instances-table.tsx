@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
 import { Pause, Play, Wand2 } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
+
+import { BehaviorDialog } from "@/components/behavior-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { BehaviorDialog } from "@/components/behavior-dialog";
 import { api } from "@/lib/api/client";
 import { describe } from "@/lib/api/hooks";
 import type { Behavior, InstanceInfo } from "@/lib/api/schema";
@@ -76,7 +77,7 @@ export function InstancesTable({
                 <TableCell className="font-medium">
                   {i.name}
                   {i.depends_on.length ? (
-                    <span className="ml-2 text-xs text-muted-foreground">→ {i.depends_on.join(", ")}</span>
+                    <span className="text-muted-foreground ml-2 text-xs">→ {i.depends_on.join(", ")}</span>
                   ) : null}
                 </TableCell>
                 <TableCell className="text-muted-foreground">{i.kind}</TableCell>

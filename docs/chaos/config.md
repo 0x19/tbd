@@ -43,9 +43,15 @@ TBD_ENV=production chaos config    # production
 | Key | Default (`base.toml`) | Overridden by | Meaning |
 |---|---|---|---|
 | `serve.listen` | `127.0.0.1:7700` | `--listen`, `CHAOS_LISTEN_ADDR` | where `chaos serve` binds |
-| `serve.base_path` | `/api/chaos` | `--base-path`, `CHAOS_BASE_PATH` | prefix of every API route |
+| `serve.base_path` | `/api/chaos/v1` | `--base-path`, `CHAOS_BASE_PATH` | prefix of every API route |
 | `serve.ui_dir` | `""` | `--ui-dir`, `CHAOS_UI_DIR` | built UI to serve; empty for none |
-| `serve.ui_path` | `/chaos` | | where the UI is served |
+| `auth.token` | `""` | `--token`, `CHAOS_TOKEN` | a fixed bearer token for validate and load runs; wins over the fields below |
+| `auth.token_url` | `""` | `--auth-token-url`, `CHAOS_AUTH_TOKEN_URL` | OAuth2 token endpoint for the client-credentials grant; empty sends no token |
+| `auth.client_id` | `tbd-chaos` | `--auth-client-id`, `CHAOS_AUTH_CLIENT_ID` | client id |
+| `auth.client_secret` | `""` | `--auth-client-secret`, `CHAOS_AUTH_CLIENT_SECRET` | client secret; environment only, never a file |
+| `auth.scope` | `tbd.api` | | requested scope |
+| `auth.audience` | `tbd-api` | | requested audience (Envoy checks it) |
+| `serve.ui_path` | `""` (root) | | where the UI is served; `""` is the root of the host, or a prefix such as `/chaos` |
 | `serve.start_stack` | `true` | `--no-stack` | run `paths.topology` in-process on start |
 | `paths.topology` | `topologies/dev.toml` | `--topology`, `CHAOS_TOPOLOGY` | stack for `up` and `serve` |
 | `paths.scenarios` | `scenarios` | `--scenarios`, `CHAOS_SCENARIOS_DIR` | scenario files the API lists and edits |
@@ -62,7 +68,8 @@ TBD_ENV=production chaos config    # production
 | `links.pyroscope` | `""` | | same |
 | `links.envoy_admin` | `""` | | same; never derived, the edge does not expose it |
 
-`serve.base_path` and `serve.ui_path` must start with `/`, not end with one, and differ.
+`serve.base_path` must start with `/` and not end with one; `serve.ui_path` is empty (the
+root) or the same shape; they must differ.
 `targets.*` must be absolute URLs.
 
 ## Per environment

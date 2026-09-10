@@ -46,6 +46,11 @@ services:
       CHAOS_SCENARIOS_SEED: /app/scenarios
       CHAOS_UI_DIR: /app/ui
       CHAOS_PUBLIC_DOMAIN: "{{ base_domain | default('') }}"
+      # Tokens for validate/load through Envoy; the identity stack itself is not part of
+      # this compose (see docs/auth/README.md), so point at the environment's Hydra.
+      CHAOS_AUTH_TOKEN_URL: "{{ chaos_auth_token_url | default('') }}"
+      CHAOS_AUTH_CLIENT_ID: tbd-chaos
+      CHAOS_AUTH_CLIENT_SECRET: "{{ chaos_auth_client_secret | default('') }}"
       OTEL_EXPORTER_OTLP_ENDPOINT: "{{ otlp_endpoint | default('') }}"
     volumes:
       - chaos-results:/data

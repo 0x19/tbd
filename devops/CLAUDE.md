@@ -7,14 +7,14 @@ this file is the non-obvious part.
   `--build-arg BIN=engine|protocol|chaos` and `--build-arg PORT=`. cargo-chef caches
   dependencies; the runtime image is distroless with no shell, so there are no
   in-container health commands. Health is the orchestrator's job: gRPC probe on the
-  engine, `/healthz` and `/readyz` on the protocol, `/api/chaos/healthz` on chaos.
+  engine, `/healthz` and `/readyz` on the protocol, `/api/chaos/v1/healthz` on chaos.
 - The runtime stage has `WORKDIR /app` and copies `configs/`, `scenarios/` and
   `topologies/` so chaos finds them at its default relative paths; `ui/chaos/out` is
   copied to `/app/ui` when it exists (glob on the first path segment, so the COPY is
   valid without it). `.dockerignore` is an allowlist; a new top-level directory the
   build needs must be added there.
 - `k8s/chaos/` is its own kustomization (not in `base/`), pulled in by the `local` and
-  `dev` overlays only. Envoy routes `/api/chaos/` and `/chaos/` to the headless `chaos`
+  `dev` overlays only. Envoy routes `/api/chaos/` (any version) and the `chaos.*`/`chaosadmin.*` hosts to the headless `chaos`
   Service; where the pod is absent Envoy answers 503. `TBD_ENV` in `tbd-env` selects
   `configs/chaos/<env>.toml` (`production` in base, overridden per overlay).
 - Protos compile inside the image without `protoc` (protox). Do not add protoc to the
@@ -50,6 +50,18 @@ this file is the non-obvious part.
 
 CI builds both images on every push and pushes on `main`; `release.yml` pushes on `v*`
 tags. See `docs/ci.md`.
+- `k8s/auth/` is the identity stack (Ory Hydra + Kratos). Envoy is the only thing that
+  verifies tokens; services never do. Its public host is `auth.<domain>`; the URL is the
+  token issuer, so it is deploy-time config (`auth.env`), not a runtime default.
+- `envoy/envoy.yaml` gates everything (docs/auth/README.md): bearer JWT on the API,
+  browser login (oauth2 filter + ID-token cookie) on the UI hosts, nothing on `auth.*`
+  and `chaos.*`. It contains one placeholder, `__AUTH_PUBLIC_URL__`, rendered by the
+  Envoy pod's init container (from the `tbd-edge` ConfigMap, written by `local:edge-env`)
+  and by the compose service. The OAuth2 secrets are file-based SDS from the `envoy-oauth`
+  Secret (`mise run auth:envoy-secrets`). Every overlay must provide `tbd-edge` with
+  `AUTH_PUBLIC_URL` and that Secret, or Envoy will not start.
+- Env vars added for auth: `CHAOS_TOKEN`, `CHAOS_AUTH_TOKEN_URL`, `CHAOS_AUTH_CLIENT_ID`,
+  `CHAOS_AUTH_CLIENT_SECRET` (chaos deployment, compose, ansible template).
 - `edge/` is the only thing that faces the internet from a home/office deployment. Caddy
   terminates TLS and forwards to Envoy's edge on the host port (18080 for the local
   cluster). gRPC is matched on `Content-Type: application/grpc*` and gets the h2c

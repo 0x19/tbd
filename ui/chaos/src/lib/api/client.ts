@@ -1,32 +1,33 @@
 // One fetch layer for the chaos API (docs/chaos/api.md). Every response is
 // parsed through its Zod schema so pages never touch untyped JSON.
 import type { z } from "zod";
+
 import {
+  type Behavior,
   CheckReply,
   GlobalEvent,
   InstanceInfo,
+  type LoadRequest,
   Overview,
   RunFeed,
   RunRecord,
   RunSummary,
   ScenarioDetail,
   ScenarioEntry,
-  type Behavior,
-  type LoadRequest,
 } from "./schema";
 
 /**
  * Where the API is. Same origin in every deployment (chaos serve and Envoy
- * both serve the UI at /chaos and the API at /api/chaos). `next dev` has no
+ * both serve the UI at the root and the API at /api/chaos/v1). `next dev` has no
  * API of its own, so it talks to `chaos serve` on its default port unless
  * NEXT_PUBLIC_CHAOS_API says otherwise.
  */
 export function apiBase(): string {
   const configured = process.env.NEXT_PUBLIC_CHAOS_API;
   if (configured) return configured.replace(/\/$/, "");
-  if (process.env.NODE_ENV === "development") return "http://127.0.0.1:7700/api/chaos";
-  if (typeof window !== "undefined") return `${window.location.origin}/api/chaos`;
-  return "/api/chaos";
+  if (process.env.NODE_ENV === "development") return "http://127.0.0.1:7700/api/chaos/v1";
+  if (typeof window !== "undefined") return `${window.location.origin}/api/chaos/v1`;
+  return "/api/chaos/v1";
 }
 
 export class ApiError extends Error {
