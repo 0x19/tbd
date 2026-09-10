@@ -15,7 +15,8 @@ name. If you add a check, add it in both places; this page lists the mapping.
 | `test` | `test` | any failing test, `cargo nextest` plus doctests |
 | `doc` | `doc` | any rustdoc warning, broken intra-doc links included |
 | `chaos:run` | `scenarios` | any scenario under `scenarios/` failing an assertion or timeline action |
-| not in the gate | `docker` | either image failing to build; on `main` also failing to push |
+| `ui:check` | `ui` | `ui/chaos`: prettier drift, an eslint finding (React Compiler rules included), a type error; CI also runs `pnpm build` |
+| not in the gate | `docker` | any of the three images failing to build; on `main` also failing to push. The chaos image build runs `pnpm build` first so it carries the UI |
 
 Locally the steps run in that order, cheapest first, so a typo or format slip fails in
 under two seconds without a compile. They run sequentially on purpose: parallel cargo
@@ -31,6 +32,7 @@ mise run lint           # or: cargo clippy --locked --workspace --all-targets --
 mise run test           # or: cargo nextest run --workspace --all-features && cargo test --workspace --doc
 mise run doc            # or: cargo doc --workspace --all-features --no-deps
 mise run chaos:run      # or: cargo run -p tbd-chaos -- run --dir scenarios
+mise run ui:check       # or, in ui/chaos: pnpm format:check && pnpm lint && pnpm typecheck
 mise run ci             # all of the above, in order
 ```
 
@@ -50,12 +52,14 @@ commands above still work if those tools are on `PATH`.
 | `lint` buf | protos follow buf's STANDARD rules: directory matches package, services end in `Service`, RPC messages are `<Rpc>Request` / `<Rpc>Response` |
 | `doc` | usually a `[`Name`]` link to a private or renamed item |
 | `scenarios` | run `mise run chaos:run` locally; the report says which assertion failed and by how much. See [chaos/scenarios.md](chaos/scenarios.md) |
+| `ui` prettier | `cd ui/chaos && pnpm format` |
+| `ui` eslint `set-state-in-effect` | derive the value or move the `setState` into the callback that learns the news; see `src/lib/api/hooks.ts` |
 
 ## Images
 
-The `docker` job builds `ghcr.io/<ORG>/tbd-engine` and `ghcr.io/<ORG>/tbd-protocol`
-from `devops/docker/Dockerfile` on every push and pull request, and pushes them only on
-`main`, tagged with the short commit SHA and `main`. `release.yml` runs on `v*` tags and
+The `docker` job builds `ghcr.io/<ORG>/tbd-engine`, `ghcr.io/<ORG>/tbd-protocol` and
+`ghcr.io/<ORG>/tbd-chaos` from `devops/docker/Dockerfile` on every push and pull
+request, and pushes them only on `main`, tagged with the short commit SHA and `main`. `release.yml` runs on `v*` tags and
 pushes the semver tag plus `latest`.
 
 `ORG` defaults to the repository owner. Override it with a repository variable named
