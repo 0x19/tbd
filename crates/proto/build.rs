@@ -1,33 +1,53 @@
 //! Compiles every `.proto` under `/proto` with `protox` (pure Rust, no `protoc`)
 //! and generates tonic clients and servers plus a file descriptor set for
 //! reflection.
+//!
+//! The files are discovered at run time, and the proto root is read from the
+//! environment rather than baked in with `env!`: `mise run tbd:selfcheck` builds
+//! a copy of the tree into the shared target directory, and Cargo gives a path
+//! package the same build-script binary wherever it lives. A script that knew
+//! its file list or its path at compile time would then serve the wrong tree.
 
 use std::{env, fs, path::PathBuf};
 
 use prost::Message;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Read at run time, not `env!`: the self-check builds a copy of the tree into
-    // the shared target dir, and a baked-in path would point at the deleted copy.
     let proto_root = PathBuf::from(env::var("CARGO_MANIFEST_DIR")?).join("../../proto");
-    let files = [
-        "tbd/engine/v1/engine.proto",
-        "tbd/protocol/v1/protocol.proto",
-        "tbd/ledger/v1/ledger.proto",
-    ];
     let out_dir = PathBuf::from(env::var("OUT_DIR")?);
 
-    let fds = protox::compile(files, [proto_root.as_path()])?;
+    // `tbd/<name>/v1/<name>.proto`, sorted so the generated code is stable.
+    let mut files: Vec<String> = Vec::new();
+    for pkg in fs::read_dir(proto_root.join("tbd"))? {
+        let pkg = pkg?;
+        if !pkg.file_type()?.is_dir() {
+            continue;
+        }
+        let name = pkg.file_name().to_string_lossy().into_owned();
+        for entry in fs::read_dir(pkg.path().join("v1"))? {
+            let entry = entry?;
+            if entry.path().extension().is_some_and(|e| e == "proto") {
+                let file = entry.file_name().to_string_lossy().into_owned();
+                files.push(format!("tbd/{name}/v1/{file}"));
+            }
+        }
+    }
+    files.sort();
+    if files.is_empty() {
+        return Err(format!("no .proto files under {}", proto_root.display()).into());
+    }
+
+    let fds = protox::compile(&files, [proto_root.as_path()])?;
 
     // `compile_fds` does not write descriptor sets itself; reflection needs them.
     // One set per package so each service advertises only what it serves. The
     // package name is the second path segment: `tbd/<name>/v1/<name>.proto`.
-    for file in files {
+    for file in &files {
         let name = file
             .split('/')
             .nth(1)
             .ok_or_else(|| format!("{file}: expected tbd/<name>/v1/<name>.proto"))?;
-        let set = protox::compile([file], [proto_root.as_path()])?;
+        let set = protox::compile([file.as_str()], [proto_root.as_path()])?;
         fs::write(
             out_dir.join(format!("{name}_descriptor.bin")),
             set.encode_to_vec(),

@@ -132,14 +132,7 @@ pub fn registrations(service: &Service) -> Result<Vec<Registration>, TemplateErr
         },
     );
 
-    // 3. Proto build and module.
-    b.after(
-        "proto:build",
-        "crates/proto/build.rs",
-        Anchor::line(exact("        \"tbd/protocol/v1/protocol.proto\",")),
-        "        \"@@proto_path@@\",",
-        "@@proto_path@@",
-    )?;
+    // 3. Proto module. `crates/proto/build.rs` discovers the files itself.
     let module = b.r(templates::snippet("proto-mod"))?;
     b.push(
         "proto:module",

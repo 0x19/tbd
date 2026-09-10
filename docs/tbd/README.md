@@ -60,7 +60,6 @@ when the file exists with different content, unless `--force`.
 | `create:*` | the files above | | identical content |
 | `cargo:default-members` | `Cargo.toml` | `default-members = [` … before `]` | `"crates/<name>"` |
 | `cargo:dependency` | `Cargo.toml` | after the last `tbd-` line | `tbd-<name> ` |
-| `proto:build` | `crates/proto/build.rs` | after the protocol proto line | the proto path |
 | `proto:module` | `crates/proto/src/lib.rs` | end of file | `pub mod <name> ` |
 | `chaos:module`, `chaos:kind`, `chaos:dependency` | `crates/chaos/src/kinds/mod.rs`, `crates/chaos/Cargo.toml` | after the last `pub mod` (rustfmt sorts them at apply time), before the `// tbd:kinds-end` marker in `ALL`, after `tbd-protocol.workspace` | `pub mod <name>;`, `&<name>::KIND,`, the dependency line |
 | `chaos:topology` | `topologies/dev.toml` | end of file | `[stack.<name>s.` |
