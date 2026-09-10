@@ -8,7 +8,6 @@ use std::fmt;
 /// that would collide with paths the scaffold writes.
 pub const RESERVED: &[&str] = &[
     "engine", "protocol", "chaos", "common", "proto", "cli", "envoy", "auth", "base", "tbd",
-    "humans",
 ];
 
 /// Why a name was rejected.

@@ -22,7 +22,7 @@ mise run tbd -- service list                    # every binary crate and its sta
 | any | `--repo PATH` (`TBD_REPO`): the workspace root; default is the one above the current directory | |
 
 A name is 2 to 24 lowercase letters and digits starting with a letter. Reserved:
-`engine protocol chaos common proto cli envoy auth base tbd humans`.
+`engine protocol chaos common proto cli envoy auth base tbd`.
 
 ## What a generated gRPC service contains
 
