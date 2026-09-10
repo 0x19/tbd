@@ -45,7 +45,8 @@ or `500`. Every body is JSON; `PUT`/`POST` bodies reject unknown fields.
 ```
 
 `config` is the effective configuration ([config.md](config.md)); `config.links` holds
-the Grafana, VictoriaLogs, Pyroscope and Envoy admin URLs the UI links to. `stack` is
+the Grafana, VictoriaLogs, VictoriaMetrics, Pyroscope and (locally) Envoy admin URLs the
+UI links to, derived from `[links] domain` behind the public edge. `stack` is
 `null` when serve runs with `--no-stack`.
 
 `GET /events` frames, `event:` is the `type`, `data:` the JSON:

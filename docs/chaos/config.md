@@ -55,10 +55,12 @@ TBD_ENV=production chaos config    # production
 | `targets.engine` | `http://127.0.0.1:50051` | `--engine`, `CHAOS_ENGINE_URL` | same, engine gRPC |
 | `validate.timeout` | `5s` | `--timeout` | per-check timeout |
 | `validate.ca_cert` | `""` | `--ca-cert`, `CHAOS_CA_CERT` | extra PEM root for `https://` / `wss://` targets; empty means the public roots only |
-| `links.grafana` | `""` | | UI link; empty hides it |
-| `links.victorialogs` | `""` | | UI link |
-| `links.pyroscope` | `""` | | UI link |
-| `links.envoy_admin` | `""` | | UI link |
+| `links.domain` | `""` | `--public-domain`, `CHAOS_PUBLIC_DOMAIN` | public base domain; when set the links below are derived from the edge's hosts (`grafana.`, `logs.`, `profiles.`, `metrics.`) and `envoy_admin` is cleared |
+| `links.grafana` | `""` | | UI link when there is no domain; empty hides it |
+| `links.victorialogs` | `""` | | same |
+| `links.metrics` | `""` | | same |
+| `links.pyroscope` | `""` | | same |
+| `links.envoy_admin` | `""` | | same; never derived, the edge does not expose it |
 
 `serve.base_path` and `serve.ui_path` must start with `/`, not end with one, and differ.
 `targets.*` must be absolute URLs.
@@ -66,7 +68,12 @@ TBD_ENV=production chaos config    # production
 ## Per environment
 
 `local.toml` adds only the links (`http://localhost:3000` and friends, the port map of
-[docs/local-cluster.md](../local-cluster.md)). Targets stay at `127.0.0.1:8080` and
+[docs/local-cluster.md](../local-cluster.md)). Behind the public edge
+(`devops/edge`) those are wrong for anyone but this machine, so `mise run local:deploy`
+and `local:restart` copy `BASE_DOMAIN` from `devops/edge/.env` into
+`devops/k8s/overlays/local/edge.env`, which becomes the `tbd-edge` ConfigMap and sets
+`CHAOS_PUBLIC_DOMAIN` on the chaos pod. The UI then links to `https://grafana.<domain>`
+and friends. Targets stay at `127.0.0.1:8080` and
 `:50051`, which is both `chaos up` and the compose stack; against the k3d cluster pass
 `--protocol http://localhost:18080 --engine http://localhost:15051`, as `mise run
 local:traffic` does.

@@ -1,8 +1,11 @@
 # Local: a developer machine, with or without the k3d cluster from
 # `mise run local:up`. Ports match mise.toml `local:up`.
 
+# Links for a browser on this machine. Behind the public edge the chaos pod gets
+# CHAOS_PUBLIC_DOMAIN instead and these are ignored.
 [links]
 grafana = "http://localhost:3000"
-victorialogs = "http://localhost:9428/select/vmui"
+victorialogs = "http://localhost:9428/select/vmui/"
+metrics = "http://localhost:9090/vmui/"
 pyroscope = "http://localhost:4040"
 envoy_admin = "http://localhost:9901"

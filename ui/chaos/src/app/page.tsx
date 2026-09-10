@@ -123,14 +123,14 @@ export default function OverviewPage() {
           </CardHeader>
           <CardContent className="grid gap-2 text-sm">
             <Row
-              k="validate targets"
+              k="validate targets (as seen from chaos serve)"
               v={`${overview.config.targets.protocol} · ${overview.config.targets.engine}`}
             />
             <Row k="scenarios" v={overview.config.paths.scenarios} />
             <Row k="run records" v={overview.config.paths.results} />
             <Row k="API" v={overview.config.serve.base_path} />
             {Object.entries(overview.config.links)
-              .filter(([, v]) => v)
+              .filter(([k, v]) => v && k !== "domain")
               .map(([k, v]) => (
                 <Row
                   key={k}

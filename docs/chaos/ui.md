@@ -16,7 +16,7 @@ http://chaos.<domain>/               a real environment, Envoy virtual host
 
 | Page | What it is for |
 |---|---|
-| Overview | Stack up or down, last validate, last run, recent failures, links into Grafana, VictoriaLogs, Pyroscope and Envoy for this environment. The first thing to open when something looks wrong. |
+| Overview | Stack up or down, last validate, last run, recent failures, links into Grafana, VictoriaLogs, VictoriaMetrics, Pyroscope (and Envoy admin locally) for this environment, derived from `[links] domain` behind the public edge. The first thing to open when something looks wrong. |
 | Stack | Every instance of the in-process topology with stop, start and a behaviour editor (healthy, slow, hang, error, delayed failure). Engine counters live. This is where a new feature gets exercised against faults by hand. |
 | Scenarios | The scenario files. New scenario opens a template; the editor checks the TOML on every pause and saves only what checks. Run goes straight to the live run page. |
 | Runs | Every run, filterable by kind, with requests, error rate, p99, checks passed and duration. Deleting a run removes its record. |

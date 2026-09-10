@@ -23,6 +23,10 @@ struct Cli {
     /// Directory holding `base.toml` and one file per environment.
     #[arg(long, env = "CHAOS_CONFIG_DIR", default_value = config::DEFAULT_DIR, global = true)]
     config_dir: PathBuf,
+    /// Public base domain the UI links to (`grafana.<domain>`, `logs.<domain>`, ...).
+    /// Default: `[links] domain`.
+    #[arg(long, env = "CHAOS_PUBLIC_DOMAIN", global = true)]
+    public_domain: Option<String>,
 }
 
 /// Flags that override `[targets]` in the config.
@@ -34,6 +38,68 @@ struct TargetArgs {
     /// Engine gRPC URL.
     #[arg(long, env = "CHAOS_ENGINE_URL")]
     engine: Option<String>,
+}
+
+/// Flags of `chaos serve`; each overrides one config field.
+#[derive(Args, Debug)]
+struct ServeArgs {
+    /// Listen address. Default: `[serve] listen`.
+    #[arg(long, env = "CHAOS_LISTEN_ADDR")]
+    listen: Option<SocketAddr>,
+    /// API prefix. Default: `[serve] base_path`.
+    #[arg(long, env = "CHAOS_BASE_PATH")]
+    base_path: Option<String>,
+    /// Built UI directory. Default: `[serve] ui_dir`.
+    #[arg(long, env = "CHAOS_UI_DIR")]
+    ui_dir: Option<String>,
+    /// Topology to run in-process. Default: `[paths] topology`.
+    #[arg(long, env = "CHAOS_TOPOLOGY")]
+    topology: Option<PathBuf>,
+    /// Scenario directory. Default: `[paths] scenarios`.
+    #[arg(long, env = "CHAOS_SCENARIOS_DIR")]
+    scenarios: Option<PathBuf>,
+    /// Copied into the scenario directory when it is missing or empty.
+    /// Default: `[paths] scenarios_seed`.
+    #[arg(long, env = "CHAOS_SCENARIOS_SEED")]
+    scenarios_seed: Option<PathBuf>,
+    /// Run records directory. Default: `[paths] results`.
+    #[arg(long, env = "CHAOS_RESULTS_DIR")]
+    results: Option<PathBuf>,
+    /// Do not start the topology stack; API only.
+    #[arg(long)]
+    no_stack: bool,
+    #[command(flatten)]
+    targets: TargetArgs,
+}
+
+impl ServeArgs {
+    fn apply(self, config: &mut ChaosConfig) {
+        self.targets.apply(config);
+        if let Some(v) = self.listen {
+            config.serve.listen = v;
+        }
+        if let Some(v) = self.base_path {
+            config.serve.base_path = v;
+        }
+        if let Some(v) = self.ui_dir {
+            config.serve.ui_dir = v;
+        }
+        if let Some(v) = self.topology {
+            config.paths.topology = v;
+        }
+        if let Some(v) = self.scenarios {
+            config.paths.scenarios = v;
+        }
+        if let Some(v) = self.scenarios_seed {
+            config.paths.scenarios_seed = v;
+        }
+        if let Some(v) = self.results {
+            config.paths.results = v;
+        }
+        if self.no_stack {
+            config.serve.start_stack = false;
+        }
+    }
 }
 
 #[derive(Subcommand)]
@@ -78,35 +144,7 @@ enum Command {
         json: bool,
     },
     /// Serve the HTTP API (and the UI when built) until Ctrl-C.
-    Serve {
-        /// Listen address. Default: `[serve] listen`.
-        #[arg(long, env = "CHAOS_LISTEN_ADDR")]
-        listen: Option<SocketAddr>,
-        /// API prefix. Default: `[serve] base_path`.
-        #[arg(long, env = "CHAOS_BASE_PATH")]
-        base_path: Option<String>,
-        /// Built UI directory. Default: `[serve] ui_dir`.
-        #[arg(long, env = "CHAOS_UI_DIR")]
-        ui_dir: Option<String>,
-        /// Topology to run in-process. Default: `[paths] topology`.
-        #[arg(long, env = "CHAOS_TOPOLOGY")]
-        topology: Option<PathBuf>,
-        /// Scenario directory. Default: `[paths] scenarios`.
-        #[arg(long, env = "CHAOS_SCENARIOS_DIR")]
-        scenarios: Option<PathBuf>,
-        /// Copied into the scenario directory when it is missing or empty.
-        /// Default: `[paths] scenarios_seed`.
-        #[arg(long, env = "CHAOS_SCENARIOS_SEED")]
-        scenarios_seed: Option<PathBuf>,
-        /// Run records directory. Default: `[paths] results`.
-        #[arg(long, env = "CHAOS_RESULTS_DIR")]
-        results: Option<PathBuf>,
-        /// Do not start the topology stack; API only.
-        #[arg(long)]
-        no_stack: bool,
-        #[command(flatten)]
-        targets: TargetArgs,
-    },
+    Serve(ServeArgs),
     /// Print the effective configuration for the environment as TOML.
     Config,
 }
@@ -124,6 +162,10 @@ async fn main() -> anyhow::Result<()> {
     }
     let _telemetry = tbd_common::telemetry::init(&cli.telemetry, "chaos")?;
     let (mut config, source) = ChaosConfig::load(&cli.config_dir, &cli.env)?;
+    if let Some(domain) = cli.public_domain {
+        config.links.domain = domain;
+    }
+    config.links = config.links.resolved();
     tracing::info!(env = %source.env, files = ?source.files, "config");
 
     match cli.command {
@@ -170,42 +212,8 @@ async fn main() -> anyhow::Result<()> {
                 std::process::exit(1)
             }
         }
-        Command::Serve {
-            listen,
-            base_path,
-            ui_dir,
-            topology,
-            scenarios,
-            scenarios_seed,
-            results,
-            no_stack,
-            targets,
-        } => {
-            targets.apply(&mut config);
-            if let Some(v) = listen {
-                config.serve.listen = v;
-            }
-            if let Some(v) = base_path {
-                config.serve.base_path = v;
-            }
-            if let Some(v) = ui_dir {
-                config.serve.ui_dir = v;
-            }
-            if let Some(v) = topology {
-                config.paths.topology = v;
-            }
-            if let Some(v) = scenarios {
-                config.paths.scenarios = v;
-            }
-            if let Some(v) = scenarios_seed {
-                config.paths.scenarios_seed = v;
-            }
-            if let Some(v) = results {
-                config.paths.results = v;
-            }
-            if no_stack {
-                config.serve.start_stack = false;
-            }
+        Command::Serve(args) => {
+            args.apply(&mut config);
             config.check()?;
             serve(config, source).await
         }

@@ -39,8 +39,14 @@ timeout = "5s"
 ca_cert = ""
 
 [links]
-# Shown by the UI and the overview endpoint. Empty: link hidden.
+# Where the UI sends people. Set `domain` and every link is derived from the
+# public edge's fixed hosts (devops/edge/Caddyfile): grafana.<domain>,
+# logs.<domain>, profiles.<domain>, metrics.<domain>; envoy_admin is never
+# public. Without a domain the explicit URLs below are used; empty hides a link.
+# In the cluster CHAOS_PUBLIC_DOMAIN (from devops/edge/.env BASE_DOMAIN) sets it.
+domain = ""
 grafana = ""
 victorialogs = ""
+metrics = ""
 pyroscope = ""
 envoy_admin = ""

@@ -100,18 +100,48 @@ impl Validate {
     }
 }
 
-/// `[links]`
+/// `[links]`: where the UI sends people. Either a public `domain`, from which
+/// the edge's fixed host names are derived (`grafana.<domain>`,
+/// `logs.<domain>`, `profiles.<domain>`, `metrics.<domain>`, see
+/// `devops/edge/Caddyfile`), or explicit URLs for environments without one.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Links {
+    /// Public base domain. When set, every link below is derived from it and
+    /// the explicit values are ignored; `envoy_admin` is cleared because the
+    /// edge never exposes it.
+    #[serde(default)]
+    pub domain: String,
     /// Grafana root.
     pub grafana: String,
     /// `VictoriaLogs` UI.
     pub victorialogs: String,
+    /// `VictoriaMetrics` UI.
+    #[serde(default)]
+    pub metrics: String,
     /// Pyroscope UI.
     pub pyroscope: String,
     /// Envoy admin.
     pub envoy_admin: String,
+}
+
+impl Links {
+    /// The links as the UI should show them: derived from `domain` when set.
+    #[must_use]
+    pub fn resolved(&self) -> Self {
+        let d = self.domain.trim().trim_matches('.');
+        if d.is_empty() {
+            return self.clone();
+        }
+        Self {
+            domain: d.to_owned(),
+            grafana: format!("https://grafana.{d}"),
+            victorialogs: format!("https://logs.{d}/select/vmui/"),
+            metrics: format!("https://metrics.{d}/vmui/"),
+            pyroscope: format!("https://profiles.{d}"),
+            envoy_admin: String::new(),
+        }
+    }
 }
 
 /// Where the config came from, for the overview.
@@ -159,5 +189,41 @@ impl ChaosConfig {
             url::Url::parse(u).map_err(|e| anyhow::anyhow!("{what}: {e}"))?;
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Links;
+
+    #[test]
+    fn a_domain_derives_the_edge_hosts_and_drops_envoy_admin() {
+        let links = Links {
+            domain: "example.org.".into(),
+            grafana: "http://localhost:3000".into(),
+            victorialogs: String::new(),
+            metrics: String::new(),
+            pyroscope: String::new(),
+            envoy_admin: "http://localhost:9901".into(),
+        }
+        .resolved();
+        assert_eq!(links.grafana, "https://grafana.example.org");
+        assert_eq!(links.victorialogs, "https://logs.example.org/select/vmui/");
+        assert_eq!(links.metrics, "https://metrics.example.org/vmui/");
+        assert_eq!(links.pyroscope, "https://profiles.example.org");
+        assert_eq!(links.envoy_admin, "");
+    }
+
+    #[test]
+    fn no_domain_keeps_explicit_links() {
+        let links = Links {
+            domain: String::new(),
+            grafana: "http://localhost:3000".into(),
+            victorialogs: String::new(),
+            metrics: String::new(),
+            pyroscope: String::new(),
+            envoy_admin: "http://localhost:9901".into(),
+        };
+        assert_eq!(links.resolved().envoy_admin, "http://localhost:9901");
     }
 }
