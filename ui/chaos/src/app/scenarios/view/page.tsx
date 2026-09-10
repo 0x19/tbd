@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import { useChaos } from "@/app/providers";
 import { DetailList, PageTitle, StageBar } from "@/components/kit";
 import { ScenarioReference } from "@/components/scenario-reference";
 import { StatusBadge } from "@/components/status-badge";
@@ -20,6 +21,7 @@ import { api } from "@/lib/api/client";
 import { describe } from "@/lib/api/hooks";
 import type { CheckReply, ScenarioDetail } from "@/lib/api/schema";
 import { ago } from "@/lib/format";
+import { kindOfPlural } from "@/lib/kinds";
 
 const TEMPLATE = `# New scenario. Every table rejects unknown keys; open Reference (top right) for every key.
 [scenario]
@@ -65,10 +67,8 @@ min_requests = 200
 
 type Parsed = {
   scenario?: { name?: string; description?: string; skip?: boolean };
-  stack?: {
-    engines?: Record<string, unknown>;
-    protocols?: Record<string, { engine?: string }>;
-  };
+  /** `[stack.<plural>.<name>]`: one table per kind, keyed by the kind's plural. */
+  stack?: Record<string, Record<string, Record<string, unknown>>>;
   load?: {
     rate?: number;
     duration?: string;
@@ -95,6 +95,7 @@ export default function ScenarioViewPage() {
 
 /** The kit's order-detail layout: back arrow, big id with status chips, a stage strip, content plus a right rail. */
 function ScenarioView() {
+  const { kinds } = useChaos();
   const params = useSearchParams();
   const router = useRouter();
   const requested = params.get("id") ?? "new";
@@ -176,8 +177,20 @@ function ScenarioView() {
   };
 
   const timeline = parsed?.timeline ?? [];
-  const engines = Object.keys(parsed?.stack?.engines ?? {});
-  const protocols = Object.entries(parsed?.stack?.protocols ?? {});
+  // One row per instance whatever its kind; the dependency field, if any, is shown after an arrow.
+  const stackRows = Object.entries(parsed?.stack ?? {}).flatMap(([plural, instances]) => {
+    const kind = kindOfPlural(kinds, plural);
+    const dep = kind.fields.find((f) => f.kind === "instance_of");
+    return Object.entries(instances ?? {}).map(([name, spec]) => ({
+      k: name,
+      v: dep ? `${kind.name} → ${String(spec?.[dep.name] ?? "?")}` : kind.name,
+    }));
+  });
+  const stackCounts = Object.entries(parsed?.stack ?? {}).map(([plural, instances]) => {
+    const n = Object.keys(instances ?? {}).length;
+    const kind = kindOfPlural(kinds, plural);
+    return `${n} ${n === 1 ? kind.name : kind.plural}`;
+  });
   const load = parsed?.load;
   const assertions = Object.entries(parsed?.assertions ?? {}).filter(
     ([k, v]) => k !== "services" && v !== null,
@@ -247,11 +260,7 @@ function ScenarioView() {
         <div className="grid content-start gap-6">
           <div className="bg-muted/30 rounded-xl border p-4">
             <div className="mb-3 flex flex-wrap justify-between gap-2 text-sm">
-              <span>
-                Stack <b>{engines.length}</b> engine
-                {engines.length === 1 ? "" : "s"}, <b>{protocols.length}</b> protocol
-                {protocols.length === 1 ? "" : "s"}
-              </span>
+              <span>Stack {stackCounts.length ? stackCounts.join(", ") : "empty"}</span>
               <span className="text-muted-foreground">
                 {load
                   ? `${load.rate ?? 50} req/s for ${load.duration ?? "?"}${load.warmup ? `, warmup ${load.warmup}` : ""}`
@@ -323,18 +332,7 @@ function ScenarioView() {
               <CardTitle>Stack</CardTitle>
             </CardHeader>
             <CardContent>
-              <DetailList
-                rows={[
-                  ...engines.map((e) => ({
-                    k: e,
-                    v: "engine",
-                  })),
-                  ...protocols.map(([p, spec]) => ({
-                    k: p,
-                    v: `protocol → ${spec.engine ?? "?"}`,
-                  })),
-                ]}
-              />
+              <DetailList rows={stackRows} />
             </CardContent>
           </Card>
           <Card>

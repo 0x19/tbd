@@ -52,14 +52,46 @@ export const InstanceInfo = z.object({
 });
 export type InstanceInfo = z.infer<typeof InstanceInfo>;
 
-/** Body of `POST /stack`: a new engine or protocol. */
-export type AddInstance = {
-  kind: "engine" | "protocol";
-  name?: string;
-  engine?: string;
-  heartbeat?: string;
-  behavior?: Behavior;
-};
+/** One key of a kind's `[stack.<plural>.X]` table, as `GET /overview` describes it. */
+export const KindField = z.object({
+  name: z.string(),
+  label: z.string(),
+  kind: z.enum(["text", "duration", "instance_of"]),
+  of_kind: z.string().nullable(),
+  required: z.boolean(),
+  default: z.string().nullable(),
+});
+export type KindField = z.infer<typeof KindField>;
+
+/** A registered service kind (docs/chaos/kinds.md). */
+export const KindDescriptor = z.object({
+  name: z.string(),
+  label: z.string(),
+  plural: z.string(),
+  surface: z.string(),
+  fault: z.boolean(),
+  counters: z.boolean(),
+  load_target: z.boolean(),
+  addable: z.boolean(),
+  target: z.boolean(),
+  dependency_kind: z.string().nullable(),
+  fields: z.array(KindField),
+});
+export type KindDescriptor = z.infer<typeof KindDescriptor>;
+
+/** One validate check of the catalogue. */
+export const CheckInfo = z.object({
+  name: z.string(),
+  surface: z.string(),
+  kind: z.string(),
+});
+export type CheckInfo = z.infer<typeof CheckInfo>;
+
+/** Body of `POST /stack`: a kind, an optional name, and the kind's own fields. */
+export type AddInstance = { kind: string; name?: string } & Record<string, string | undefined>;
+
+/** Body of `POST /validate`: a URL per kind with a target, and the timeout. Null means the config's. */
+export type ValidateRequest = Record<string, string | null | undefined>;
 
 export const Latency = z.object({
   p50_ms: z.number(),
@@ -196,30 +228,14 @@ export type RunFeed = z.infer<typeof RunFeed>;
 
 /** A queued or scheduled unit of work, the API's `Job` shape. */
 export type Job =
-  | { scenario: string }
-  | "all_scenarios"
-  | { load: LoadRequest }
-  | {
-      validate: {
-        protocol?: string | null;
-        engine?: string | null;
-        ledger?: string | null;
-        timeout?: string | null;
-      };
-    };
+  { scenario: string } | "all_scenarios" | { load: LoadRequest } | { validate: ValidateRequest };
 
 export const Job: z.ZodType<Job> = z.union([
   z.literal("all_scenarios"),
   z.object({ scenario: z.string() }),
   z.object({ load: z.custom<LoadRequest>((v) => typeof v === "object" && v !== null && "load" in v) }),
-  z.object({
-    // The API writes absent fields as null.
-    validate: z.object({
-      protocol: z.string().nullish(),
-      engine: z.string().nullish(),
-      timeout: z.string().nullish(),
-    }),
-  }),
+  // The API writes absent keys as null; the keys are the kinds with a target plus `timeout`.
+  z.object({ validate: z.record(z.string(), z.string().nullish()) }),
 ]);
 
 export const QueuedRun = z.object({
@@ -308,7 +324,8 @@ export const ChaosConfig = z.object({
     results: z.string(),
     schedules: z.string(),
   }),
-  targets: z.object({ protocol: z.string(), engine: z.string(), ledger: z.string() }),
+  // One URL per kind with a validate target, resolved (defaults filled in).
+  targets: z.record(z.string(), z.string()),
   validate: z.object({ timeout: z.string() }),
   links: Links,
 });
@@ -320,6 +337,8 @@ export const Overview = z.object({
   config_files: z.array(z.string()),
   config: ChaosConfig,
   stack: z.array(InstanceInfo).nullable(),
+  kinds: z.array(KindDescriptor),
+  validate: z.object({ checks: z.array(CheckInfo) }),
   active_run: RunSummary.nullable(),
   queue: z.array(QueuedRun),
   recent_runs: z.array(RunSummary),

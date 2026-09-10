@@ -6,7 +6,8 @@ import SearchProvider from "@/components/search-provider";
 import { ThemeProvider } from "@/components/theme-provider";
 import { api } from "@/lib/api/client";
 import { useFetch, useGlobalFeed } from "@/lib/api/hooks";
-import type { GlobalEvent, Overview, QueuedRun } from "@/lib/api/schema";
+import type { GlobalEvent, KindDescriptor, Overview, QueuedRun } from "@/lib/api/schema";
+import { kindOf } from "@/lib/kinds";
 
 export type ActivityItem = { at: number; event: GlobalEvent };
 
@@ -20,6 +21,10 @@ type ChaosContext = {
   activity: ActivityItem[];
   /** What waits for the active slot, front first. */
   queue: QueuedRun[];
+  /** The registered service kinds, registry order; empty until the overview loads. */
+  kinds: KindDescriptor[];
+  /** The descriptor of a kind by name; synthesised when the API did not list it. */
+  kindOf: (name: string) => KindDescriptor;
 };
 
 const Ctx = createContext<ChaosContext>({
@@ -30,6 +35,8 @@ const Ctx = createContext<ChaosContext>({
   lastEvent: null,
   activity: [],
   queue: [],
+  kinds: [],
+  kindOf: (name) => kindOf([], name),
 });
 
 export function useChaos() {
@@ -78,6 +85,8 @@ function ChaosProvider({ children }: Props) {
   });
   const overviewQueue = overview.data?.queue;
   const queue = useMemo(() => liveQueue ?? overviewQueue ?? [], [liveQueue, overviewQueue]);
+  const overviewKinds = overview.data?.kinds;
+  const kinds = useMemo(() => overviewKinds ?? [], [overviewKinds]);
   const value = useMemo<ChaosContext>(
     () => ({
       overview: overview.data,
@@ -87,8 +96,10 @@ function ChaosProvider({ children }: Props) {
       lastEvent,
       activity,
       queue,
+      kinds,
+      kindOf: (name: string) => kindOf(kinds, name),
     }),
-    [overview.data, overview.error, overview.reload, connected, lastEvent, activity, queue],
+    [overview.data, overview.error, overview.reload, connected, lastEvent, activity, queue, kinds],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

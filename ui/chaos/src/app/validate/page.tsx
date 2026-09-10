@@ -14,14 +14,14 @@ import { api } from "@/lib/api/client";
 import { describe, useFetch } from "@/lib/api/hooks";
 import type { RunRecord } from "@/lib/api/schema";
 import { seconds, when } from "@/lib/format";
+import { targetKinds, targetLabel } from "@/lib/kinds";
 
 /** Events & Logs layout: filter rail for surfaces and results, a table with level chips and a totals row. */
 export default function ValidatePage() {
-  const { overview, reload, lastEvent } = useChaos();
+  const { overview, kinds, reload, lastEvent } = useChaos();
   const history = useFetch(() => api.runs(100), 5000, [lastEvent]);
-  const [protocol, setProtocol] = useState("");
-  const [engine, setEngine] = useState("");
-  const [ledger, setLedger] = useState("");
+  // One URL per kind with a validate target; empty means the config's.
+  const [targets, setTargets] = useState<Record<string, string>>({});
   const [timeout, setTimeoutValue] = useState("");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<RunRecord | null>(null);
@@ -32,9 +32,7 @@ export default function ValidatePage() {
     setBusy(true);
     try {
       const record = await api.validate({
-        protocol: protocol || undefined,
-        engine: engine || undefined,
-        ledger: ledger || undefined,
+        ...Object.fromEntries(Object.entries(targets).filter(([, v]) => v.trim())),
         timeout: timeout || undefined,
       });
       setResult(record);
@@ -49,6 +47,9 @@ export default function ValidatePage() {
     }
   };
 
+  const catalogue = overview?.validate.checks ?? [];
+  const surfaceCount = new Set(catalogue.map((c) => c.surface)).size;
+  const targetInputs = targetKinds(kinds);
   const checks = result?.validate?.checks ?? [];
   const surfaces = [...new Set(checks.map((c) => c.surface))].map((s) => ({
     value: s,
@@ -66,44 +67,30 @@ export default function ValidatePage() {
     <>
       <PageTitle
         title="Validate"
-        description="Twelve checks, one per surface, run concurrently with a timeout each. Green means the stack answers on every protocol the way the contract says."
+        description={`${catalogue.length || "Every"} check${catalogue.length === 1 ? "" : "s"} over ${surfaceCount || "every"} surface${surfaceCount === 1 ? "" : "s"}, run concurrently with a timeout each. Green means the stack answers on every protocol the way the contract says.`}
       >
         <Button onClick={run} disabled={busy}>
           <Play /> {busy ? "Running…" : "Run validate"}
         </Button>
       </PageTitle>
 
-      <div className="grid gap-3 rounded-xl border p-4 md:grid-cols-4">
-        <label className="grid gap-1.5 text-sm">
-          <span className="font-medium">Protocol base URL</span>
-          <InputGroup>
-            <InputGroupInput
-              value={protocol}
-              onChange={(e) => setProtocol(e.target.value)}
-              placeholder={overview?.config.targets.protocol}
-            />
-          </InputGroup>
-        </label>
-        <label className="grid gap-1.5 text-sm">
-          <span className="font-medium">Engine gRPC URL</span>
-          <InputGroup>
-            <InputGroupInput
-              value={engine}
-              onChange={(e) => setEngine(e.target.value)}
-              placeholder={overview?.config.targets.engine}
-            />
-          </InputGroup>
-        </label>
-        <label className="grid gap-1.5 text-sm">
-          <span className="font-medium">Ledger gRPC URL</span>
-          <InputGroup>
-            <InputGroupInput
-              value={ledger}
-              onChange={(e) => setLedger(e.target.value)}
-              placeholder={overview?.config.targets.ledger}
-            />
-          </InputGroup>
-        </label>
+      <div
+        className="grid gap-3 rounded-xl border p-4"
+        style={{ gridTemplateColumns: `repeat(auto-fit, minmax(14rem, 1fr))` }}
+      >
+        {targetInputs.map((k) => (
+          <label key={k.name} className="grid gap-1.5 text-sm">
+            <span className="font-medium">{targetLabel(k)}</span>
+            <InputGroup>
+              <InputGroupInput
+                data-testid={`target-${k.name}`}
+                value={targets[k.name] ?? ""}
+                onChange={(e) => setTargets({ ...targets, [k.name]: e.target.value })}
+                placeholder={overview?.config.targets[k.name]}
+              />
+            </InputGroup>
+          </label>
+        ))}
         <label className="grid gap-1.5 text-sm">
           <span className="font-medium">Per-check timeout</span>
           <InputGroup>
@@ -114,9 +101,10 @@ export default function ValidatePage() {
             />
           </InputGroup>
         </label>
-        <p className="text-muted-foreground text-xs md:col-span-3">
-          Empty fields use the config for <b>{overview?.env}</b>, as seen from chaos serve. Targets may be
-          http:// (h2c) or https://; a private root goes in <code>[validate] ca_cert</code>.
+        <p className="text-muted-foreground text-xs" style={{ gridColumn: "1 / -1" }}>
+          One target per service kind; every check of that kind runs against it. Empty fields use the config
+          for <b>{overview?.env}</b>, as seen from chaos serve. Targets may be http:// (h2c) or https://; a
+          private root goes in <code>[validate] ca_cert</code>.
         </p>
       </div>
 

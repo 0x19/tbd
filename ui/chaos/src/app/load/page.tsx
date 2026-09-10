@@ -19,6 +19,7 @@ import { api } from "@/lib/api/client";
 import { describe, useFetch } from "@/lib/api/hooks";
 import { type LoadRequest, OpKind, type RunRecord } from "@/lib/api/schema";
 import { ago, ms, num, pct } from "@/lib/format";
+import { listKinds, withCapability } from "@/lib/kinds";
 
 const OPS = OpKind.options;
 
@@ -32,7 +33,7 @@ function secondsOf(s: string): number {
 /** The kit's delivery simulator: a policy rail on the left, the window and past results on the right. */
 export default function LoadPage() {
   const router = useRouter();
-  const { overview, lastEvent } = useChaos();
+  const { overview, kinds, lastEvent } = useChaos();
   const recent = useFetch(() => api.runs(200), 5000, [lastEvent]);
   const [name, setName] = useState("adhoc");
   const [rate, setRate] = useState("200");
@@ -53,7 +54,13 @@ export default function LoadPage() {
   const [targetUrl, setTargetUrl] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const stackProtocols = (overview?.stack ?? []).filter((i) => i.kind === "protocol" && i.running);
+  // Load goes to running instances of the kinds that take it (protocols), per the registry.
+  const loadKinds = withCapability(kinds, "load_target");
+  const loadKindNames = listKinds(loadKinds);
+  const stackProtocols = (overview?.stack ?? []).filter(
+    (i) => i.running && loadKinds.some((k) => k.name === i.kind),
+  );
+  const firstTarget = loadKinds[0]?.name ?? "protocol";
   const dur = secondsOf(duration);
   const r = Number(rate) || 0;
   const expected = ramp ? Math.round(((Number(startRate) + Number(endRate)) / 2) * dur) : Math.round(r * dur);
@@ -271,7 +278,7 @@ export default function LoadPage() {
             <div className="grid gap-3 rounded-xl border p-4">
               <Field
                 label="Where"
-                help="The serve stack's protocols, or any protocol base URL such as Envoy."
+                help={`The serve stack's ${loadKindNames}, or any ${firstTarget} base URL such as Envoy.`}
               >
                 <select
                   className="bg-background h-8 w-full rounded-lg border px-2 text-sm"
@@ -279,21 +286,22 @@ export default function LoadPage() {
                   onChange={(e) => setTargetMode(e.target.value as "stack" | "url")}
                 >
                   <option value="stack">
-                    Serve stack ({stackProtocols.map((p) => p.name).join(", ") || "no protocol running"})
+                    Serve stack ({stackProtocols.map((p) => p.name).join(", ") || `no ${firstTarget} running`}
+                    )
                   </option>
-                  <option value="url">A protocol URL</option>
+                  <option value="url">A {firstTarget} URL</option>
                 </select>
               </Field>
               {targetMode === "url" ? (
                 <Field
-                  label="Protocol base URL"
+                  label={`${firstTarget.charAt(0).toUpperCase()}${firstTarget.slice(1)} base URL`}
                   help="From the chaos pod inside the cluster this is Envoy; from a serve on your machine it is the edge."
                 >
                   <InputGroup>
                     <InputGroupInput
                       value={targetUrl}
                       onChange={(e) => setTargetUrl(e.target.value)}
-                      placeholder={overview?.config.targets.protocol ?? "http://localhost:18080"}
+                      placeholder={overview?.config.targets[firstTarget] ?? "http://localhost:18080"}
                     />
                   </InputGroup>
                 </Field>

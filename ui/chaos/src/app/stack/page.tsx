@@ -19,6 +19,7 @@ import { api } from "@/lib/api/client";
 import { describe, useStack } from "@/lib/api/hooks";
 import type { Behavior, InstanceInfo } from "@/lib/api/schema";
 import { ago, num } from "@/lib/format";
+import { listKinds, withCapability } from "@/lib/kinds";
 
 /**
  * The kit's Webhooks page: two summary cards, a filter-less list of
@@ -26,7 +27,9 @@ import { ago, num } from "@/lib/format";
  */
 export default function StackPage() {
   const stack = useStack();
-  const { activity } = useChaos();
+  const { activity, kinds } = useChaos();
+  const faultKinds = listKinds(withCapability(kinds, "fault"));
+  const loadKinds = listKinds(withCapability(kinds, "load_target"));
   const [selected, setSelected] = useState<string | null>(null);
   const [editing, setEditing] = useState<InstanceInfo | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -62,7 +65,7 @@ export default function StackPage() {
     <>
       <PageTitle
         title="Stack"
-        description="The topology this serve runs in-process. Stop, start, inject faults, add replicas or new instances, and watch the protocol react."
+        description="The topology this serve runs in-process. Stop, start, inject faults, add replicas or new instances of any kind, and watch the dependants react."
       >
         <Badge variant="outline">
           {up}/{instances.length} running
@@ -127,7 +130,9 @@ export default function StackPage() {
                     </Button>
                   ))
               ) : (
-                <span className="text-muted-foreground">no running engine to inject into</span>
+                <span className="text-muted-foreground">
+                  no running instance with fault injection ({faultKinds})
+                </span>
               )}
             </div>
           </CardContent>
@@ -135,7 +140,7 @@ export default function StackPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Activity className="size-4" /> Engine traffic
+              <Activity className="size-4" /> Service traffic
             </CardTitle>
             <CardDescription className="text-[11px] tracking-widest uppercase">
               Requests served · since start
@@ -174,7 +179,7 @@ export default function StackPage() {
 
       <SectionTitle
         title="Instances"
-        description="Dependencies start first; a stopped instance keeps its port. Replica adds the same service on a fresh port; load with no explicit targets spreads over every running protocol."
+        description={`Dependencies start first; a stopped instance keeps its port. Replica adds the same service on a fresh port; load with no explicit targets spreads over every running ${loadKinds === "none" ? "load target" : loadKinds.replace(/s$/, "")}.`}
       />
       {!stack.data ? (
         <Skeleton className="h-40" />

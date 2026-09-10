@@ -99,6 +99,15 @@ await step("stack: stop and start the engine", async () => {
   await page.waitForFunction(() => !document.body.innerText.includes("Stopped"), null, { timeout: 15000 });
 });
 
+/** The overview as the page sees it: the registered kinds and the check catalogue drive the assertions below. */
+const overview = await page.evaluate(async () => {
+  const r = await fetch("/api/chaos/v1/overview", { headers: { accept: "application/json" } });
+  return r.json();
+});
+const addableKinds = overview.kinds.filter((k) => k.addable);
+const targetKinds = overview.kinds.filter((k) => k.target);
+const lastCheck = overview.validate.checks[overview.validate.checks.length - 1].name;
+
 await step("stack: a protocol replica comes up on a fresh port and can be removed", async () => {
   await page.goto(`${BASE}/stack/`);
   const p1 = page.getByTestId("instance-protocol-1");
@@ -111,6 +120,10 @@ await step("stack: a protocol replica comes up on a fresh port and can be remove
   await shot({ path: `${SHOTS}/stack-replica.png`, fullPage: true });
   await page.getByRole("button", { name: "Add instance" }).click();
   await page.getByRole("dialog").waitFor();
+  // The kind picker lists every addable kind the API registers.
+  await page.getByRole("combobox", { name: "Kind" }).click();
+  for (const k of addableKinds) await page.getByRole("option", { name: k.label }).waitFor();
+  await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Add and start" }).click();
   await page.getByTestId("instance-protocol-3").waitFor({ timeout: 15000 });
   await page.getByRole("button", { name: "Remove protocol-3" }).click();
@@ -246,8 +259,11 @@ await step("load page starts and cancels a run", async () => {
 
 await step("validate runs against the deployed stack", async () => {
   await page.goto(`${BASE}/validate/`);
+  // One input per kind with a validate target, and the check count in the copy.
+  for (const k of targetKinds) await page.getByTestId(`target-${k.name}`).waitFor();
+  await page.getByText(`${overview.validate.checks.length} checks`).waitFor();
   await page.getByRole("button", { name: /run validate/i }).click();
-  await page.getByText("grpc_protocol_ping").waitFor({ timeout: 20000 });
+  await page.getByText(lastCheck).waitFor({ timeout: 20000 });
   await shot({ path: `${SHOTS}/validate.png`, fullPage: true });
 });
 

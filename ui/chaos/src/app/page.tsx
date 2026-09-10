@@ -115,7 +115,9 @@ export default function OverviewPage() {
           {
             icon: ListChecks,
             label: "Last validate",
-            previous: lv ? `${ago(lv.started_at)} against ${overview.config.targets.protocol}` : "never run",
+            previous: lv
+              ? `${ago(lv.started_at)} against ${Object.values(overview.config.targets)[0] ?? "the config targets"}`
+              : "never run",
             value: lv?.passed ? `${lv.passed[0]}/${lv.passed[1]}` : (lv?.status ?? "–"),
             hint: lv ? `${lv.status} in ${lv.duration_s.toFixed(1)} s` : "run one from Validate",
           },
@@ -347,8 +349,11 @@ export default function OverviewPage() {
                   k: "Validate hits",
                   v: (
                     <span className="grid font-mono text-xs">
-                      <span>{overview.config.targets.protocol}</span>
-                      <span className="text-muted-foreground">{overview.config.targets.engine}</span>
+                      {Object.entries(overview.config.targets).map(([kind, url], i) => (
+                        <span key={kind} className={i ? "text-muted-foreground" : ""}>
+                          {url} <span className="text-muted-foreground">({kind})</span>
+                        </span>
+                      ))}
                     </span>
                   ),
                 },

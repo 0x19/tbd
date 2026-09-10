@@ -2,38 +2,15 @@
 
 import { Plus } from "lucide-react";
 
+import { useChaos } from "@/app/providers";
 import { Markdown, outline } from "@/components/markdown";
 import { Button } from "@/components/ui/button";
-import { scenariosDoc } from "@/generated/docs";
+import { kindsDoc, scenariosDoc } from "@/generated/docs";
+import { stackSnippets } from "@/lib/kinds";
 
-/** Blocks the editor can insert; each is a complete, checking piece of a scenario. */
+/** Blocks the editor can insert; each is a complete, checking piece of a scenario. The
+ *  Stack group is generated from the registered kinds (`stackSnippets`). */
 export const SNIPPETS: { group: string; items: { title: string; toml: string }[] }[] = [
-  {
-    group: "Stack",
-    items: [
-      {
-        title: "Engine",
-        toml: `[stack.engines.engine-2]
-heartbeat = "100ms"
-`,
-      },
-      {
-        title: "Engine with an initial behaviour",
-        toml: `[stack.engines.engine-2]
-heartbeat = "100ms"
-[stack.engines.engine-2.behavior]
-type = "slow"
-latency = "20ms"
-`,
-      },
-      {
-        title: "Protocol",
-        toml: `[stack.protocols.protocol-2]
-engine = "engine-1"
-`,
-      },
-    ],
-  },
   {
     group: "Load",
     items: [
@@ -180,7 +157,9 @@ min_requests = 100
 
 /** The scenario file reference (docs/chaos/scenarios.md, bundled) with insertable snippets. */
 export function ScenarioReference({ onInsert }: { onInsert?: (toml: string) => void }) {
-  const toc = outline(scenariosDoc);
+  const { kinds } = useChaos();
+  const toc = [...outline(scenariosDoc), ...outline(kindsDoc)];
+  const snippets = [{ group: "Stack", items: stackSnippets(kinds) }, ...SNIPPETS];
   return (
     <div className="grid min-w-0 [grid-template-columns:minmax(0,1fr)] gap-6">
       {onInsert ? (
@@ -190,7 +169,7 @@ export function ScenarioReference({ onInsert }: { onInsert?: (toml: string) => v
             Each block goes in at the cursor. Rename services to match your stack.
           </p>
           <div className="grid gap-3">
-            {SNIPPETS.map((g) => (
+            {snippets.map((g) => (
               <div key={g.group}>
                 <div className="text-muted-foreground mb-1 text-[11px] font-medium tracking-wide uppercase">
                   {g.group}
@@ -228,6 +207,7 @@ export function ScenarioReference({ onInsert }: { onInsert?: (toml: string) => v
       </nav>
 
       <Markdown text={scenariosDoc} />
+      <Markdown text={kindsDoc} />
     </div>
   );
 }

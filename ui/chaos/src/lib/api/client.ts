@@ -20,6 +20,7 @@ import {
   ScenarioEntry,
   Schedule,
   type ScheduleSpec,
+  type ValidateRequest,
 } from "./schema";
 
 /**
@@ -123,8 +124,7 @@ export const api = {
   runLoad: (req: LoadRequest) => call(RunSummary, "/runs", { method: "POST", json: req }),
   runCancel: (id: string) => call(none, `/runs/${id}/cancel`, { method: "POST" }),
   runDelete: (id: string) => call(none, `/runs/${id}`, { method: "DELETE" }),
-  validate: (body?: { protocol?: string; engine?: string; ledger?: string; timeout?: string }) =>
-    call(RunRecord, "/validate", { method: "POST", json: body ?? {} }),
+  validate: (body?: ValidateRequest) => call(RunRecord, "/validate", { method: "POST", json: body ?? {} }),
   queue: () => call(QueuedRun.array(), "/queue"),
   enqueue: (jobs: Job[]) => call(QueuedRun.array(), "/queue", { method: "POST", json: { jobs } }),
   queueRemove: (id: string) => call(none, `/queue/${id}`, { method: "DELETE" }),

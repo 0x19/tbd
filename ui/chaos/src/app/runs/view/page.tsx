@@ -408,14 +408,14 @@ function ValidateView({ record }: { record: RunRecord }) {
           {
             label: "Targets",
             value: (
-              <span className="text-sm font-normal">
-                {String(
-                  (
-                    record.request as {
-                      protocol?: string;
-                    } | null
-                  )?.protocol ?? "",
-                )}
+              <span className="grid text-sm font-normal">
+                {Object.entries((record.request as Record<string, unknown> | null) ?? {})
+                  .filter(([k, v]) => k !== "timeout" && typeof v === "string")
+                  .map(([k, v]) => (
+                    <span key={k}>
+                      {String(v)} <span className="text-muted-foreground">({k})</span>
+                    </span>
+                  ))}
               </span>
             ),
           },

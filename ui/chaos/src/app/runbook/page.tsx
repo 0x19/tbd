@@ -79,7 +79,7 @@ const SECTIONS: Section[] = [
       {
         symptom: "Timeline event has an error",
         means: "The action could not be applied: unknown instance, already running, or no fault injection.",
-        look: "The action text; only engines have fault injection.",
+        look: "The action text; only kinds with fault injection take set_behavior (the Stack page's Fault buttons show which).",
         then: "Fix the instance name or the action; chaos check catches references before running.",
       },
       {
