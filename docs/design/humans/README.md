@@ -1,6 +1,9 @@
 # Humans plane
 
-> **Status, 2026-09-10:** proposed, awaiting approval. Nothing here is built. This
+> **Status, 2026-09-11:** proposed, awaiting approval. The `ledger` service exists as
+> a scaffolded stub (`crates/ledger`, [docs/ledger](../../ledger/README.md)): health,
+> metrics, tracing, one labelled `Ping`; none of the facts model below is built, and
+> Q2/Q3 still gate it. This
 > directory is the Engine plane the top-level [README](../README.md) listed as
 > "not yet", under the name we actually use for it. Reviewed once against every
 > other design doc; the findings are folded in.
@@ -37,10 +40,23 @@ Identity (id plane, one per verified human)
   ([id/005 D9](../id/005-decisions.md)), keyed by an opaque id; the derived
   pseudonym never enters this plane ([id/006](../id/006-legal-erasure.md),
   requirement 1).
-- **The `humans` service** (a new crate, behind Envoy like the engine) owns the
-  ledger and presence, and enforces scoping on every read. The protocol forwards
+- **Two crates, one process.** `ledger` is the generic substrate: append-only facts
+  about an opaque subject, with provenance, scope ids, tombstones, the erasure
+  cascade and the outbox, on Postgres, with no dependency on identity concepts,
+  personas, Redis or anything human. `humans` embeds it and adds everything
+  human-specific: the path registry for people, presence, per-persona projections,
+  resolution of `sub` against the id plane, and the JSON surface. The `humans`
+  service (behind Envoy like the engine) is the one process; the protocol forwards
   to it; the engine reads and writes through it and owns no storage. It stores no
   grants and no pseudonyms: both are resolved from the id plane per read.
+- **Promotion rule.** `ledger` becomes its own service when a non-human subject
+  type exists or a consumer other than `humans` needs it directly. Not before: a
+  network hop between the two on every cache miss would sit on top of the key
+  calls [005](005-encryption.md) already adds to the 10 ms budget in
+  [002](002-storage.md), for no gain, and the two reasons the id plane earned its
+  own process (compliance blast radius, different hardware,
+  [id/README](../id/README.md)) do not apply between them. The crate API is the
+  trait a gRPC implementation satisfies later, so promotion changes no caller.
 - **Engine** (the crate) computes facts: inference from journal and photos, the
   symbolic readings, compatibility. It writes `inferred` and `symbolic` facts.
 - **API** exposes the Human as JSON only, with provenance on every field
@@ -55,9 +71,12 @@ Identity (id plane, one per verified human)
   observed are five different claims about the same path and are returned as such.
 - **A reading is not a measurement.** Symbolic facts carry no confidence and are
   never presented as probabilities.
-- **Grants are data the id plane owns.** A read is scoped by the organisation's
-  grant and persona, resolved from the id plane, never from a token scope alone
-  ([003](003-consent-and-erasure.md)).
+- **Grants are data the id plane owns, and keys.** A read is scoped by the
+  organisation's grant and persona, resolved from the id plane, never from a token
+  scope alone ([003](003-consent-and-erasure.md)); every fact value is encrypted
+  under a per-fact key wrapped per `(human, scope, persona)`, released by the id
+  plane against the grant, so the ledger and its backups are ciphertext to anyone
+  without one ([005](005-encryption.md)).
 - **Erasure is a cascade the database proves in Postgres**, asynchronous and
   verified elsewhere, with the residue stated store by store
   ([003](003-consent-and-erasure.md)).
@@ -68,6 +87,22 @@ Identity (id plane, one per verified human)
   Approving [002](002-storage.md) closes the storage line of Q6 there, and that
   document gets the note in the same change.
 
+## Asks of the id plane
+
+Recorded here rather than edited into `../id/`, which is that plane's record:
+
+- A **key service**: holds human keys and scope private keys wrapped by the one
+  KMS root, releases a scope private key to `humans` for a valid
+  `(principal, human, scope)` against its permission graph, offers a batch release
+  for the engine principal and the `analytics` principal (the outbox consumer
+  inside `humans`), re-wraps DEKs on rotation without releasing the retiring key,
+  and destroys a human key on request ([005](005-encryption.md)). Its key table's
+  backup retention is 24 hours.
+- A resolution call returning `(human_id, grant, persona)` for a `sub`
+  ([003](003-consent-and-erasure.md), [004](004-surface.md)).
+- The engine recorded as Client #1 in the permission graph, with per-person
+  `engine.<capability>` grants ([003](003-consent-and-erasure.md)).
+
 ## Documents
 
 | # | Document | Status |
@@ -77,4 +112,14 @@ Identity (id plane, one per verified human)
 | 002 | [Storage](002-storage.md) — Postgres ledger, Redis projection, ClickHouse later | open, proposed |
 | 003 | [Consent and erasure](003-consent-and-erasure.md) — scoping reads, cascading deletes | open, proposed |
 | 004 | [Surface](004-surface.md) — JSON only, provenance on every field | open, proposed |
-| 005 | Lenses — the symbolic readings and their one vocabulary | not written |
+| 005 | [Encryption](005-encryption.md) — a value is readable only with the key its scope grants | open, proposed |
+| 006 | Lenses — the symbolic readings and their one vocabulary | not written |
+
+## Crate boundary
+
+| | `ledger` | `humans` |
+|---|---|---|
+| Knows | subject id (opaque), path, source, origin, scope ids, time, tombstones, erasure cascade, outbox, envelope encryption per (subject, scope) | the human path registry, presence, projections, personas, the id plane, the JSON surface |
+| Stores | Postgres | the Redis projection and presence |
+| Depends on | nothing in the domain; the path registry and scope ids are injected | `ledger`, the id plane |
+| Reusable for | any subject type: a venue, an event, an organisation | people only |

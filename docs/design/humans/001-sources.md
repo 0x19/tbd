@@ -27,16 +27,18 @@ time keeps the bands changeable; a number frozen into every row would not be.
 
 **verified.** Written only from the id plane's provider outcome, with `origin`
 holding `provider_id`, `assurance_level`, `expires_at` and the vendor `evidence_ref`
-pointer from [id/002](../id/002-providers.md). Never a copy of a document. A fact
-past `origin.expires_at` is excluded from `current` and the projection, and a job
-appends its tombstone ([000](000-facts-ledger.md)). Served to organisations by the
+pointer from [id/002](../id/002-providers.md). Never a copy of a document.
+`origin.expires_at` is mirrored into the clear `expires_at` column at write time;
+a fact past it is excluded from `current` and the projection, and a job appends
+its tombstone ([000](000-facts-ledger.md)). Served to organisations by the
 id plane, not from here ([003](003-consent-and-erasure.md)).
 
 **declared.** The person owns it and can change or retract it at any time
 (retraction: [000](000-facts-ledger.md)). `journal.*` facts hold the reference to an
 entry (content hash, kind, written_at) and any structured signal; the text itself
-is an input, encrypted at rest with a per-human key, readable by the engine for
-inference and by the person, never by an organisation, never in any projection.
+is an input, encrypted at rest under the `inputs` scope key
+([005](005-encryption.md)), readable by the engine for inference and by the
+person, never by an organisation, never in any projection.
 This is the "Signals to the algorithm" idea from apex
 (`apex/docs/system/profile-system.md`, section 3.2) that
 [../000-premise.md](../000-premise.md) keeps, given a home.
@@ -66,7 +68,7 @@ is a new document, and it is the "Journal tension" Q5 in
 **symbolic.** Computed by deterministic code from `birth.*` and `profile.name`,
 never by a model. The lens inventory carried over is apex's "cosmic data"
 (`apex/docs/system/profile-system.md:359-364`: birth date, time and place to chart;
-life path from the date) plus the frameworks a later document defines. Chart
+life path from the date) plus the frameworks 006 defines. Chart
 positions are tested against an independent ephemeris as the oracle (Swiss
 Ephemeris, whatever library computes ours). Presented everywhere as a reading.
 Weighted into matching only for people who opted the lens in.
@@ -77,10 +79,10 @@ without this source the matcher is apex again, a formula nobody can evaluate.
 
 ## Raw inputs
 
-Photos and journal text are inputs, not facts. They are stored encrypted with a
-per-human key, referenced from facts by content hash, and go with the human at
-erasure, the key destroyed after the grace window
-([003](003-consent-and-erasure.md)). They are kept after inference so that a better
+Photos and journal text are inputs, not facts. They are stored encrypted, one key
+per input wrapped under the `inputs` scope key ([005](005-encryption.md)),
+referenced from facts by content hash, and go with the human at erasure, the
+human key destroyed after the grace window ([003](003-consent-and-erasure.md)). They are kept after inference so that a better
 model can recompute `traits.*` later.
 
 ## Unrecoverable if wrong

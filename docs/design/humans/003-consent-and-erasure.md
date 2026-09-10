@@ -26,13 +26,17 @@ A read is `(reader, persona, grant, human)`:
   Client #1 in that graph: `engine.base` is its standing grant and each
   `engine.<capability>` opt-in is a grant a person adds for it there. **The token's
   scope claim is not the grant.** The service asks the id plane for
-  `(human_id, grant, persona)` in one call and caches it for at most 30 seconds,
-  so revocation takes effect within 30 seconds; that number is the guarantee and
-  the scenario. No grant is stored in this plane.
+  `(human_id, grant, persona)` in one call and caches it for at most 30 seconds.
+  Revocation is the id plane refusing to release the scope key
+  ([005](005-encryption.md)); reads stop within the 30-second cache TTL plus the id
+  plane's propagation, and the scenario measures both. No grant is stored in this
+  plane.
 
 Every fact carries `consent`, a list of registry scope ids; the store returns only
-facts whose ids intersect the grant. Batch jobs read under `engine.base` with the
-same intersection. There is no other read path.
+facts whose ids intersect the grant, and each value's key is wrapped for every
+scope that admits it, so a read outside the grant yields ciphertext
+([005](005-encryption.md)). Batch jobs read under `engine.base` with the same
+intersection. There is no other read path, by construction.
 
 | Scope id | Who may read | Default for |
 |---|---|---|
@@ -41,6 +45,8 @@ same intersection. There is no other read path.
 | `engine.<capability>` | the engine, one capability at a time, by explicit opt-in the person sees the output of ([001](001-sources.md) rule 2; each lens's `readings.*`) | none until opted in |
 | `tier2`, `tier3` | organisations, through the persona | `profile.*` projections |
 | `engine_representation` | organisations granted tier 4 through the persona by the **separate consent flow** [id/005 D8](../id/005-decisions.md) requires; never a token scope, and a token carrying it is rejected | `traits.*` |
+| `inputs` | the person and the engine | raw photos and journal text ([005](005-encryption.md)) |
+| `analytics` | the outbox consumer that feeds ClickHouse | `outcomes.*` values; `relations.*` as ids only |
 
 What never reaches an organisation, and why:
 
@@ -68,11 +74,13 @@ A person deletes their account:
    recovery is clearing `erased_at` and rebuilding the projection. This is a
    choice against instant shredding and is flagged below.
 2. **At window end.** One Postgres transaction cascades from `humans` through every
-   fact, both sides of every relation via `counterparty_id`, `fact_inputs`,
-   `facts_current`, `inputs` and `outbox`, and appends a tombstone on the surviving
+   fact, `fact_keys`, both sides of every relation via `counterparty_id`,
+   `fact_inputs`, `facts_current`, `inputs`, `input_keys`, `embeddings` and
+   `outbox`, and appends a tombstone on the surviving
    side of each relation with `counterparty_id: null` (the erasure cascade is the
    one place a tombstone has no counterparty).
-3. The key is destroyed. `human.erased` is published from the `erasures` row,
+3. The human key is destroyed, which makes every ciphertext copy anywhere
+   unreadable ([005](005-encryption.md)). `human.erased` is published from the `erasures` row,
    delivered at least once and retried, not guaranteed. Counterparties' Redis
    projections are rebuilt through the outbox.
 4. What survives is the residue table in [002](002-storage.md) for its stated
@@ -91,7 +99,9 @@ the latency ones, on every route in [004](004-surface.md), at load:
 - A `tier2` or `engine_representation` reader connected through persona P receives
   only the projection P exposes.
 - A token carrying `engine_representation` is rejected.
-- A revoked grant stops reads within 30 seconds.
+- A revoked grant stops reads within the 30-second TTL plus measured propagation.
+- A read of the `facts`, `fact_keys` or `inputs` tables that bypasses the service
+  yields no plaintext value; a `tier2` key for persona P opens nothing outside P.
 - No response, event or webhook body contains a ledger uuid, `person_id` or anchor
   value.
 - At the request: reads denied, presence gone. After the window: zero rows for the
@@ -100,7 +110,8 @@ the latency ones, on every route in [004](004-surface.md), at load:
   prove that re-verifying with the same anchor yields the same `sub`
   ([id/005](../id/005-decisions.md), next action 2).
 - An inferred fact is tombstoned when its last input is retracted or deleted.
-- A silent person's location is gone from Redis after the presence retention.
+- A silent person's location is gone from Redis after the presence retention, and
+  the Redis data directory holds no snapshot ([005](005-encryption.md)).
 
 ## Not a boolean
 

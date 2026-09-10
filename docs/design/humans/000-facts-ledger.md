@@ -14,9 +14,9 @@ Every piece of knowledge about a person is one **fact**:
 Fact {
     human_id,          // opaque uuid minted at enrolment; never person_id, never sub
     path,              // "traits.warmth", "identity.age.over_18", "birth.time", "relations.match.<id>"
-    value,             // JSON; the schema of the value is owned by the path; null is a tombstone
+    value,             // JSON, encrypted under a per-fact key wrapped per (human, scope, persona) (005); null is a tombstone
     source,            // verified | declared | inferred | symbolic | observed   (001)
-    origin,            // who or what produced it; for inferred: { model, inputs: { facts: [id], inputs: [hash] } }
+    origin,            // who or what produced it; encrypted with value; for inferred: { model, inputs: { facts: [id], inputs: [hash] } }
     confidence,        // the producer's confidence in the assertion, 0..1; absent for symbolic and verified (001)
     counterparty_id,   // the other human for relations.* and pair facts; null otherwise
     observed_at,       // when it was true
@@ -26,9 +26,11 @@ Fact {
 }
 ```
 
-The ledger key never leaves the `humans` service; the identifier on the public
-surface is the caller's pairwise `sub` ([004](004-surface.md)). The service holds
-no `sub` of its own: resolution is a call to the id plane.
+The ledger itself is a generic crate that knows the subject only as an opaque id;
+`humans` is what makes the subject a person (plane [README](README.md), "Crate
+boundary"). The ledger key never leaves the `humans` service; the identifier on
+the public surface is the caller's pairwise `sub` ([004](004-surface.md)). The
+service holds no `sub` of its own: resolution is a call to the id plane.
 
 This ledger holds what **our own app** (Resource Server #1 under
 [id/008](../id/008-federation.md)) knows. Other organisations' data is brokered,
@@ -36,7 +38,8 @@ never copied here.
 
 Facts are never updated in place. A new value is a new fact; `current` is the
 latest fact per `(human_id, path, source)`, materialised, excluding facts whose
-`origin.expires_at` has passed. History is the ledger.
+clear `expires_at` column (mirrored from `origin.expires_at` at write time) has
+passed. History is the ledger.
 
 **Retraction is the one exception to append-only.** When a person deletes a
 declared fact, or an inferred fact loses its last input, the rows are physically
@@ -86,7 +89,7 @@ Reserved namespaces for v1:
 | `profile.*` | photo references, bio, basics, intentions | declared |
 | `journal.*` | references to entries (content hash, kind, written_at) and signals; the text lives in `inputs` ([002](002-storage.md)) | declared |
 | `traits.*` | what the engine infers: disposition, communication style, warmth | inferred |
-| `readings.*` | chart positions, numerology, the lens outputs (005, not written) | symbolic |
+| `readings.*` | chart positions, numerology, the lens outputs (006, not written) | symbolic |
 | `relations.*` | matches, blocks, sparks, pair values, one fact per side with `counterparty_id` | observed, declared, inferred |
 | `outcomes.*` | what happened: met, rated, returned | observed |
 
@@ -98,7 +101,7 @@ apex promised never to keep ([../000-premise.md](../000-premise.md), "What we dr
 
 A match between A and B is two facts, `relations.match.<id>` on each human, each
 with the other as `counterparty_id` and the same `origin`. Pair values
-(compatibility and whatever 005 defines) are facts on both sides with
+(compatibility and whatever 006 defines) are facts on both sides with
 `source: inferred`. `counterparty_id` is a foreign key that cascades, so erasing A
 removes the pair from both sides in Postgres at commit, with a tombstone appended
 on B's side (`counterparty_id: null`). B's Redis projection is rebuilt through the
@@ -128,4 +131,4 @@ outbox afterwards; the [003](003-consent-and-erasure.md) scenario asserts both.
 Which sources may write which paths ([001](001-sources.md)); where it is stored
 ([002](002-storage.md)); how grants scope a read and what erasure removes
 ([003](003-consent-and-erasure.md)); how it is exposed ([004](004-surface.md));
-the lenses (005, not written).
+how values are encrypted ([005](005-encryption.md)); the lenses (006, not written).
