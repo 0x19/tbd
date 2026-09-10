@@ -26,12 +26,16 @@ impl Drop for TempDir {
 }
 
 async fn boot() -> Server {
-    boot_with_ui(false).await
+    boot_with(false, "").await
+}
+
+async fn boot_with_ui(with_ui: bool) -> Server {
+    boot_with(with_ui, "").await
 }
 
 /// `with_ui` serves a two-file stand-in for the built UI at the root, the way
-/// the image does.
-async fn boot_with_ui(with_ui: bool) -> Server {
+/// the image does; `slack` is a webhook URL for `[notify.slack]`.
+async fn boot_with(with_ui: bool, slack: &str) -> Server {
     let dir = std::env::temp_dir().join(format!(
         "chaos-api-{}-{}",
         std::process::id(),
@@ -89,6 +93,9 @@ min_requests = 50
     config.paths.scenarios = dir.join("scenarios");
     config.paths.results = dir.join("results");
     config.paths.schedules = dir.join("schedules.json");
+    config.paths.stack = dir.join("stack.json");
+    config.notify.slack.webhook = slack.to_owned();
+    "#chaos-test".clone_into(&mut config.notify.slack.channel);
     if with_ui {
         config.serve.ui_dir = dir.join("ui").to_string_lossy().into_owned();
         config.serve.ui_path = String::new();
@@ -553,4 +560,270 @@ async fn schedules_persist_fire_on_their_own_and_run_on_demand() {
     assert_eq!(status, 404);
     let (_, list) = s.get("/schedules").await;
     assert!(list.as_array().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn me_reflects_the_identity_headers_envoy_sets() {
+    let s = boot().await;
+    let (status, me) = s.get("/me").await;
+    assert_eq!(status, 200);
+    assert!(me["user"].is_null(), "{me}");
+    assert_eq!(me["signout"], "/oauth2/signout");
+
+    let r = s
+        .http
+        .get(format!("{}/me", s.base))
+        .header("x-user-sub", "u-1")
+        .header("x-user-email", "ops@example.test")
+        .header("x-user-name", "Ops")
+        .header("x-user-role", "admin")
+        .send()
+        .await
+        .unwrap();
+    let me: Value = r.json().await.unwrap();
+    assert_eq!(me["user"]["email"], "ops@example.test");
+    assert_eq!(me["user"]["name"], "Ops");
+    assert_eq!(me["user"]["role"], "admin");
+}
+
+/// A stand-in Slack webhook: records every body it receives.
+async fn slack_stub() -> (String, Arc<tokio::sync::Mutex<Vec<Value>>>) {
+    use axum::{Json, Router, extract::State, routing::post};
+    let seen: Arc<tokio::sync::Mutex<Vec<Value>>> = Arc::default();
+    let app = Router::new()
+        .route(
+            "/hook",
+            post(
+                |State(seen): State<Arc<tokio::sync::Mutex<Vec<Value>>>>,
+                 Json(body): Json<Value>| async move {
+                    seen.lock().await.push(body);
+                    "ok"
+                },
+            ),
+        )
+        .with_state(Arc::clone(&seen));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    (format!("http://{addr}/hook"), seen)
+}
+
+#[tokio::test]
+async fn failed_runs_are_posted_to_slack_and_passed_ones_are_not() {
+    let (hook, seen) = slack_stub().await;
+    let s = boot_with(false, &hook).await;
+    let (_, overview) = s.get("/overview").await;
+    assert_eq!(overview["notify"]["enabled"], true, "{overview}");
+    assert_eq!(overview["notify"]["channel"], "#chaos-test");
+
+    // The hello.
+    let (status, _) = s.post("/notify/test", json!({})).await;
+    assert_eq!(status, 204);
+
+    // A scenario that cannot pass: it wants more requests than 1 s at 100 req/s gives.
+    std::fs::write(
+        s.state.config.paths.scenarios.join("doomed.toml"),
+        r#"
+[scenario]
+name = "doomed"
+[stack.engines.engine-1]
+[stack.protocols.protocol-1]
+engine = "engine-1"
+[load]
+rate = 100
+duration = "1s"
+[assertions]
+min_requests = 100000
+"#,
+    )
+    .unwrap();
+    let (status, run) = s.post("/runs", json!({"scenario": "doomed"})).await;
+    assert_eq!(status, 202, "{run}");
+    s.follow(run["id"].as_str().unwrap()).await;
+    let (status, run) = s.post("/runs", json!({"scenario": "quick"})).await;
+    assert_eq!(status, 202, "{run}");
+    s.follow(run["id"].as_str().unwrap()).await;
+
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    loop {
+        let got = seen.lock().await.clone();
+        if got.len() >= 2 {
+            assert_eq!(got.len(), 2, "passed run must not post: {got:?}");
+            assert!(
+                got[0]["text"]
+                    .as_str()
+                    .unwrap()
+                    .contains("can reach this channel")
+            );
+            let msg = got[1].to_string();
+            assert!(msg.contains("*doomed* failed on *test*"), "{msg}");
+            assert!(msg.contains("min_requests"), "{msg}");
+            assert_eq!(got[1]["channel"], "#chaos-test");
+            break;
+        }
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "no slack post: {got:?}"
+        );
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert_eq!(seen.lock().await.len(), 2, "the passed run posted");
+}
+
+#[tokio::test]
+async fn instances_can_be_replicated_added_and_removed_at_runtime() {
+    let s = boot().await;
+    let names = |v: &Value| -> Vec<String> {
+        v.as_array()
+            .unwrap()
+            .iter()
+            .map(|i| i["name"].as_str().unwrap().to_owned())
+            .collect()
+    };
+
+    // A replica of the protocol: same engine, fresh port, marked added.
+    let (status, body) = s.post("/stack/protocol-1/clone", json!({})).await;
+    assert_eq!(status, 201, "{body}");
+    assert_eq!(names(&body), ["engine-1", "protocol-1", "protocol-2"]);
+    let p2 = body
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|i| i["name"] == "protocol-2")
+        .unwrap();
+    assert_eq!(p2["running"], true);
+    assert_eq!(p2["added"], true);
+    assert_eq!(p2["depends_on"], json!(["engine-1"]));
+    let p1 = body
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|i| i["name"] == "protocol-1")
+        .unwrap();
+    assert_ne!(p1["addr"], p2["addr"]);
+    assert_eq!(p1["added"], false);
+
+    // Two engine replicas at once, then a new protocol on one of them.
+    let (status, body) = s.post("/stack/engine-1/clone", json!({"count": 2})).await;
+    assert_eq!(status, 201, "{body}");
+    assert!(names(&body).contains(&"engine-3".to_owned()));
+    let (status, body) = s
+        .post("/stack", json!({"kind": "protocol", "engine": "engine-3"}))
+        .await;
+    assert_eq!(status, 201, "{body}");
+    assert!(names(&body).contains(&"protocol-3".to_owned()));
+    let (status, body) = s
+        .post(
+            "/stack",
+            json!({"kind": "engine", "name": "spare", "heartbeat": "50ms"}),
+        )
+        .await;
+    assert_eq!(status, 201, "{body}");
+    let (status, _) = s
+        .post("/stack", json!({"kind": "protocol", "engine": "nope"}))
+        .await;
+    assert_eq!(status, 409, "unknown engine dependency");
+    let (status, _) = s
+        .post("/stack", json!({"kind": "engine", "name": "engine-1"}))
+        .await;
+    assert_eq!(status, 409, "duplicate name");
+
+    // Load with no explicit targets spreads over every running protocol.
+    let (status, run) = s
+        .post(
+            "/runs",
+            json!({"name": "spread", "load": {"rate": 100, "duration": "1s"}}),
+        )
+        .await;
+    assert_eq!(status, 202, "{run}");
+    s.follow(run["id"].as_str().unwrap()).await;
+    let (_, record) = s
+        .get(&format!("/runs/{}", run["id"].as_str().unwrap()))
+        .await;
+    let targets = record["load"]["per_target"].as_object().unwrap();
+    assert_eq!(targets.len(), 3, "{targets:?}");
+
+    // Removal: dependents first, topology instances never.
+    let (status, _) = s
+        .send(reqwest::Method::DELETE, "/stack/engine-3", None)
+        .await;
+    assert_eq!(status, 409, "protocol-3 still needs it");
+    let (status, _) = s
+        .send(reqwest::Method::DELETE, "/stack/protocol-3", None)
+        .await;
+    assert_eq!(status, 200);
+    let (status, _) = s
+        .send(reqwest::Method::DELETE, "/stack/engine-3", None)
+        .await;
+    assert_eq!(status, 200);
+    let (status, _) = s
+        .send(reqwest::Method::DELETE, "/stack/engine-1", None)
+        .await;
+    assert_eq!(status, 409, "from the topology");
+    let (status, _) = s.send(reqwest::Method::DELETE, "/stack/nope", None).await;
+    assert_eq!(status, 404);
+    let (_, body) = s.get("/stack").await;
+    assert_eq!(
+        names(&body),
+        ["engine-1", "engine-2", "protocol-1", "protocol-2", "spare"]
+    );
+}
+
+#[tokio::test]
+async fn added_instances_come_back_after_a_restart() {
+    let s = boot().await;
+    let (status, _) = s.post("/stack/protocol-1/clone", json!({})).await;
+    assert_eq!(status, 201);
+    let (status, _) = s
+        .post(
+            "/stack",
+            json!({"kind": "engine", "name": "spare", "heartbeat": "50ms"}),
+        )
+        .await;
+    assert_eq!(status, 201);
+    let (status, _) = s
+        .post(
+            "/stack",
+            json!({"kind": "protocol", "name": "on-spare", "engine": "spare"}),
+        )
+        .await;
+    assert_eq!(status, 201);
+    let file = std::fs::read_to_string(&s.state.config.paths.stack).unwrap();
+    assert!(
+        file.contains("protocol-2") && file.contains("on-spare"),
+        "{file}"
+    );
+
+    // A second serve on the same files: everything added is running again,
+    // engines before the protocols that need them.
+    let config = s.state.config.clone();
+    s.state.shutdown().await;
+    let again = api::state(
+        config,
+        Source {
+            env: "test".into(),
+            files: vec![],
+        },
+    )
+    .await
+    .unwrap();
+    let info = again.stack_info().await.unwrap();
+    let running: Vec<(String, bool)> = info
+        .iter()
+        .filter(|i| i.added)
+        .map(|i| (i.name.clone(), i.running))
+        .collect();
+    assert_eq!(
+        running,
+        [
+            ("on-spare".to_owned(), true),
+            ("protocol-2".to_owned(), true),
+            ("spare".to_owned(), true)
+        ]
+    );
+    again.remove_instance("on-spare").await.unwrap();
+    let file = std::fs::read_to_string(&again.config.paths.stack).unwrap();
+    assert!(!file.contains("on-spare"), "{file}");
+    again.shutdown().await;
 }

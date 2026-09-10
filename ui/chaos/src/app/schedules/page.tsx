@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarClock, MoreHorizontal, Play, Plus } from "lucide-react";
+import { BellRing, CalendarClock, MoreHorizontal, Play, Plus } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
@@ -13,6 +13,7 @@ import { ScheduleDialog, type SchedulePreset } from "@/components/schedule-dialo
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -59,7 +60,9 @@ function SchedulesFromUrl() {
 
 /** The kit's list page: title with primary action, a table with a switch per row and a row menu. */
 function Schedules({ preset }: { preset: SchedulePreset | null }) {
-  const { lastEvent } = useChaos();
+  const { lastEvent, overview } = useChaos();
+  const notify = overview?.notify;
+  const [testing, setTesting] = useState(false);
   const list = useFetch(() => api.schedules(), 15_000, [lastEvent]);
   const scenarios = useFetch(() => api.scenarios(), 0);
   const runs = useFetch(() => api.runs(300), 15_000, [lastEvent]);
@@ -72,7 +75,7 @@ function Schedules({ preset }: { preset: SchedulePreset | null }) {
 
   const toggle = async (s: Schedule, enabled: boolean) => {
     try {
-      await api.scheduleUpdate(s.id, { name: s.name, cron: s.cron, job: s.job, enabled });
+      await api.scheduleUpdate(s.id, { name: s.name, cron: s.cron, job: s.job, enabled, notify: s.notify });
       list.reload();
     } catch (e) {
       toast.error(describe(e));
@@ -99,6 +102,18 @@ function Schedules({ preset }: { preset: SchedulePreset | null }) {
   const items = list.data ?? [];
   const enabled = items.filter((s) => s.enabled).length;
 
+  const sendTest = async () => {
+    setTesting(true);
+    try {
+      await api.notifyTest();
+      toast.success(`posted to ${notify?.channel || "Slack"}`);
+    } catch (e) {
+      toast.error(describe(e));
+    } finally {
+      setTesting(false);
+    }
+  };
+
   return (
     <>
       <PageTitle
@@ -111,6 +126,36 @@ function Schedules({ preset }: { preset: SchedulePreset | null }) {
       </PageTitle>
 
       <QueuePanel />
+
+      <Card data-testid="notify-card">
+        <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
+          <div className="space-y-1.5">
+            <CardTitle className="flex items-center gap-2">
+              <BellRing className="size-4" /> Slack notifications
+            </CardTitle>
+            <CardDescription>
+              {notify?.enabled ? (
+                <>
+                  Finished runs on <b>{notify.env}</b> post to{" "}
+                  <b>{notify.channel || "the webhook's channel"}</b> when they end {notify.on.join(", ")}{" "}
+                  (kinds: {notify.kinds.join(", ")}). A schedule can post every outcome or none.
+                </>
+              ) : (
+                <>
+                  Off: no webhook for <b>{notify?.env ?? "this environment"}</b>. Set{" "}
+                  <span className="font-mono">CHAOS_SLACK_WEBHOOK</span> on chaos serve (locally in{" "}
+                  <span className="font-mono">.env</span>; in the cluster{" "}
+                  <span className="font-mono">mise run chaos:slack URL</span>). Channel and outcomes come from{" "}
+                  <span className="font-mono">configs/chaos/{notify?.env ?? "<env>"}.toml</span>.
+                </>
+              )}
+            </CardDescription>
+          </div>
+          <Button variant="outline" size="sm" onClick={sendTest} disabled={!notify?.enabled || testing}>
+            Send a test message
+          </Button>
+        </CardHeader>
+      </Card>
 
       {!list.data ? (
         <Skeleton className="h-40" />
@@ -130,6 +175,7 @@ function Schedules({ preset }: { preset: SchedulePreset | null }) {
                 <TableHead>Every</TableHead>
                 <TableHead>Next</TableHead>
                 <TableHead>Last run</TableHead>
+                <TableHead>Slack</TableHead>
                 <TableHead className="text-right">Fired</TableHead>
                 <TableHead className="w-24 text-right" />
               </TableRow>
@@ -180,6 +226,11 @@ function Schedules({ preset }: { preset: SchedulePreset | null }) {
                       ) : (
                         <span className="text-muted-foreground text-xs">never</span>
                       )}
+                    </TableCell>
+                    <TableCell>
+                      <span className="text-muted-foreground text-xs">
+                        {s.notify === "always" ? "every outcome" : s.notify === "off" ? "never" : "failures"}
+                      </span>
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
                       {s.fired}

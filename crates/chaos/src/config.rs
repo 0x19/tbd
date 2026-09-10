@@ -31,8 +31,52 @@ pub struct ChaosConfig {
     /// `[auth]`
     #[serde(default)]
     pub auth: AuthConfig,
+    /// `[notify]`
+    #[serde(default)]
+    pub notify: NotifyConfig,
     /// `[links]`
     pub links: Links,
+}
+
+/// `[notify]`: where finished runs are announced.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct NotifyConfig {
+    /// `[notify.slack]`
+    pub slack: SlackConfig,
+}
+
+/// `[notify.slack]`: one incoming webhook per environment.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct SlackConfig {
+    /// Incoming webhook URL. Environment only (`CHAOS_SLACK_WEBHOOK`); empty
+    /// means notifications are off.
+    #[serde(skip_serializing)]
+    pub webhook: String,
+    /// Channel shown in the UI and sent with the message. Modern incoming
+    /// webhooks are bound to a channel and ignore it; legacy ones honour it.
+    pub channel: String,
+    /// Outcomes that post: `failed`, `error`, `cancelled`, `passed`, `completed`.
+    /// A schedule with `notify = "always"` posts every outcome regardless.
+    pub on: Vec<crate::api::RunStatus>,
+    /// Kinds that post: `scenario`, `load`, `validate`.
+    pub kinds: Vec<crate::api::RunKind>,
+}
+
+impl Default for SlackConfig {
+    fn default() -> Self {
+        Self {
+            webhook: String::new(),
+            channel: String::new(),
+            on: vec![crate::api::RunStatus::Failed, crate::api::RunStatus::Error],
+            kinds: vec![
+                crate::api::RunKind::Scenario,
+                crate::api::RunKind::Load,
+                crate::api::RunKind::Validate,
+            ],
+        }
+    }
 }
 
 /// `[auth]`: the bearer token `validate` and load runs send to a deployed
@@ -110,6 +154,14 @@ pub struct Paths {
     /// Schedules file (`chaos serve` cron jobs). Missing: no schedules yet.
     #[serde(default = "default_schedules")]
     pub schedules: PathBuf,
+    /// Instances added to the serve stack at runtime (replicas, new engines
+    /// and protocols), re-added on start. Missing: none yet.
+    #[serde(default = "default_stack_file")]
+    pub stack: PathBuf,
+}
+
+fn default_stack_file() -> PathBuf {
+    PathBuf::from(".chaos/stack.json")
 }
 
 fn default_schedules() -> PathBuf {
@@ -174,6 +226,14 @@ pub struct Links {
     pub pyroscope: String,
     /// Envoy admin.
     pub envoy_admin: String,
+    /// The public admin UI itself (`https://chaosadmin.<domain>`): run links in
+    /// notifications. Empty: no links.
+    #[serde(default)]
+    pub chaos: String,
+    /// The sign-in host (`https://auth.<domain>`): global sign-out from the
+    /// user menu. Empty: no such link.
+    #[serde(default)]
+    pub auth: String,
 }
 
 impl Links {
@@ -191,6 +251,8 @@ impl Links {
             metrics: format!("https://metrics.{d}/vmui/"),
             pyroscope: format!("https://profiles.{d}"),
             envoy_admin: String::new(),
+            chaos: format!("https://chaosadmin.{d}"),
+            auth: format!("https://auth.{d}"),
         }
     }
 }
@@ -274,6 +336,8 @@ mod tests {
             metrics: String::new(),
             pyroscope: String::new(),
             envoy_admin: "http://localhost:9901".into(),
+            chaos: String::new(),
+            auth: String::new(),
         }
         .resolved();
         assert_eq!(links.grafana, "https://grafana.example.org");
@@ -281,6 +345,8 @@ mod tests {
         assert_eq!(links.metrics, "https://metrics.example.org/vmui/");
         assert_eq!(links.pyroscope, "https://profiles.example.org");
         assert_eq!(links.envoy_admin, "");
+        assert_eq!(links.chaos, "https://chaosadmin.example.org");
+        assert_eq!(links.auth, "https://auth.example.org");
     }
 
     #[test]
@@ -292,6 +358,8 @@ mod tests {
             metrics: String::new(),
             pyroscope: String::new(),
             envoy_admin: "http://localhost:9901".into(),
+            chaos: String::new(),
+            auth: String::new(),
         };
         assert_eq!(links.resolved().envoy_admin, "http://localhost:9901");
     }

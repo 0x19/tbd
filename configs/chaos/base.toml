@@ -30,6 +30,9 @@ scenarios_seed = ""
 results = ".chaos/results"
 # Schedules (cron jobs created in the UI or through the API), one JSON file.
 schedules = ".chaos/schedules.json"
+# Instances added to the serve stack at runtime (replicas, new engines and
+# protocols); re-added on the next start. One JSON file.
+stack = ".chaos/stack.json"
 
 [targets]
 # Defaults for `chaos validate` and for API load runs against an external stack.
@@ -58,6 +61,16 @@ client_secret = ""
 scope = "tbd.api"
 audience = "tbd-api"
 
+[notify.slack]
+# Finished runs go to one Slack incoming webhook per environment. The URL only
+# ever comes from CHAOS_SLACK_WEBHOOK (or --slack-webhook); empty means off.
+# `channel` is shown in the UI and sent along (legacy webhooks honour it, app
+# webhooks are bound to their channel). `on` lists the outcomes that post;
+# a schedule with notify = "always" posts every outcome, "off" never.
+channel = ""
+on = ["failed", "error"]
+kinds = ["scenario", "load", "validate"]
+
 [links]
 # Where the UI sends people. Set `domain` and every link is derived from the
 # public edge's fixed hosts (devops/edge/Caddyfile): grafana.<domain>,
@@ -70,3 +83,5 @@ victorialogs = ""
 metrics = ""
 pyroscope = ""
 envoy_admin = ""
+chaos = ""
+auth = ""

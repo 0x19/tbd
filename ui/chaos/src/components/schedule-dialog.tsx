@@ -18,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { api } from "@/lib/api/client";
 import { describe } from "@/lib/api/hooks";
-import type { Job, ScenarioEntry, Schedule } from "@/lib/api/schema";
+import type { Job, NotifyMode, ScenarioEntry, Schedule } from "@/lib/api/schema";
 import { CRON_PRESETS, type JobKind, jobKind, loadJob } from "@/lib/jobs";
 
 export type SchedulePreset = { kind: JobKind; scenario?: string };
@@ -67,6 +67,7 @@ export function ScheduleDialog({ open, onOpenChange, schedule, preset, scenarios
   const [presetCron, setPresetCron] = useState(presetOf ? presetOf.cron : CUSTOM);
   const [cron, setCron] = useState(schedule?.cron ?? CRON_PRESETS[1]!.cron);
   const [enabled, setEnabled] = useState(schedule?.enabled ?? true);
+  const [notify, setNotify] = useState<NotifyMode>(schedule?.notify ?? "failures");
   const [busy, setBusy] = useState(false);
 
   const ready = scenarios.filter((s) => s.ok && !s.skip);
@@ -87,7 +88,7 @@ export function ScheduleDialog({ open, onOpenChange, schedule, preset, scenarios
   const save = async () => {
     setBusy(true);
     try {
-      const spec = { name: name.trim(), cron: cron.trim(), job: job(), enabled };
+      const spec = { name: name.trim(), cron: cron.trim(), job: job(), enabled, notify };
       const saved = schedule ? await api.scheduleUpdate(schedule.id, spec) : await api.scheduleCreate(spec);
       toast.success(schedule ? `saved ${saved.name}` : `scheduled ${saved.name}`);
       onSaved(saved);
@@ -214,10 +215,24 @@ export function ScheduleDialog({ open, onOpenChange, schedule, preset, scenarios
             </Field>
           </div>
 
-          <label className="flex items-center gap-3 text-sm">
-            <Switch checked={enabled} onCheckedChange={setEnabled} aria-label="Enabled" />
-            {enabled ? "Enabled" : "Paused: kept, never fires"}
-          </label>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Slack">
+              <Select value={notify} onValueChange={(v) => setNotify(v as NotifyMode)}>
+                <SelectTrigger aria-label="Slack">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="failures">Failures (as configured)</SelectItem>
+                  <SelectItem value="always">Every outcome</SelectItem>
+                  <SelectItem value="off">Never</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+            <label className="flex items-center gap-3 self-end pb-2 text-sm">
+              <Switch checked={enabled} onCheckedChange={setEnabled} aria-label="Enabled" />
+              {enabled ? "Enabled" : "Paused: kept, never fires"}
+            </label>
+          </div>
         </div>
 
         <DialogFooter>

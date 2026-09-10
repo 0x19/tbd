@@ -80,6 +80,8 @@ const none: z.ZodType<void> = {
 
 export const api = {
   overview: () => call(Overview, "/overview"),
+  me: () => call(Me, "/me"),
+  notifyTest: () => call(none, "/notify/test", { method: "POST", json: {} }),
   stack: () => call(InstanceInfo.array(), "/stack"),
   stackStart: (name: string) =>
     call(InstanceInfo.array(), `/stack/${encodeURIComponent(name)}/start`, {

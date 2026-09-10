@@ -3,7 +3,11 @@
 
 # Links for a browser on this machine. Behind the public edge the chaos pod gets
 # CHAOS_PUBLIC_DOMAIN instead and these are ignored.
+[notify.slack]
+channel = "#chaos-local"
+
 [links]
+chaos = "http://chaos.localhost:18080"
 grafana = "http://localhost:3000"
 victorialogs = "http://localhost:9428/select/vmui/"
 metrics = "http://localhost:9090/vmui/"

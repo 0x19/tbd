@@ -4,7 +4,7 @@
 //! lifecycle, nothing about what the services are.
 
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     net::{Ipv4Addr, SocketAddr},
     sync::Arc,
     time::Duration,
@@ -32,6 +32,10 @@ pub struct InstanceInfo {
     pub behavior: Option<Behavior>,
     /// Request counters, when the service exposes them.
     pub requests: Option<RequestCounts>,
+    /// Added at runtime (a replica or a new instance) rather than from the
+    /// topology; only these can be removed.
+    #[serde(default)]
+    pub added: bool,
 }
 
 /// One entry in a topology: a service and where to bind it.
@@ -76,12 +80,36 @@ pub enum StackError {
     /// Instance has no fault injection.
     #[error("{0:?} has no fault injection")]
     NoFaults(String),
+    /// An instance with that name already exists.
+    #[error("{0:?} already exists")]
+    Exists(String),
+    /// A dependency is not running.
+    #[error("{name:?} needs {dep:?} running first")]
+    DependencyDown {
+        /// Instance being started.
+        name: String,
+        /// The dependency.
+        dep: String,
+    },
+    /// Others depend on it.
+    #[error("{name:?} is needed by {by:?}; remove those first")]
+    InUse {
+        /// Instance being removed.
+        name: String,
+        /// Who depends on it.
+        by: Vec<String>,
+    },
+    /// Only instances added at runtime can be removed.
+    #[error("{0:?} comes from the topology; stop it instead of removing it")]
+    FromTopology(String),
 }
 
 /// A running (or partially running) stack.
 pub struct Stack {
     launchers: BTreeMap<String, Launcher>,
     instances: BTreeMap<String, Instance>,
+    /// Names added after start (replicas, new instances).
+    added: BTreeSet<String>,
     ready_timeout: Duration,
 }
 
@@ -104,6 +132,7 @@ impl Stack {
         let mut stack = Self {
             launchers,
             instances: BTreeMap::new(),
+            added: BTreeSet::new(),
             ready_timeout: Duration::from_secs(10),
         };
         let mut pending: Vec<String> = stack.launchers.keys().cloned().collect();
@@ -176,6 +205,91 @@ impl Stack {
         Ok(())
     }
 
+    /// Add a launcher at runtime and start it. The name must be new and every
+    /// dependency running. Added instances are marked `added` and can be
+    /// removed again.
+    pub async fn add_instance(
+        &mut self,
+        name: &str,
+        launcher: Launcher,
+    ) -> Result<&Instance, StackError> {
+        if self.launchers.contains_key(name) {
+            return Err(StackError::Exists(name.to_owned()));
+        }
+        if let Some(dep) = launcher
+            .service
+            .depends_on()
+            .into_iter()
+            .find(|d| !self.instances.contains_key(d))
+        {
+            return Err(StackError::DependencyDown {
+                name: name.to_owned(),
+                dep,
+            });
+        }
+        self.launchers.insert(name.to_owned(), launcher);
+        self.added.insert(name.to_owned());
+        match self.start_instance(name).await {
+            Ok(_) => Ok(&self.instances[name]),
+            Err(e) => {
+                self.launchers.remove(name);
+                self.added.remove(name);
+                Err(e)
+            }
+        }
+    }
+
+    /// The next free replica name for `name`: `<base>-<n>` for the smallest
+    /// free `n` from 2, where `<base>` is `name` without a trailing `-<digits>`
+    /// (`engine-1` gives `engine-2`, `spare` gives `spare-2`).
+    pub fn next_name(&self, name: &str) -> String {
+        let base = name
+            .rsplit_once('-')
+            .filter(|(_, n)| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()))
+            .map_or(name, |(b, _)| b);
+        (2..=10_000)
+            .map(|n| format!("{base}-{n}"))
+            .find(|candidate| !self.launchers.contains_key(candidate))
+            .unwrap_or_else(|| format!("{base}-2"))
+    }
+
+    /// Whether a launcher with this name exists (running or not).
+    pub fn has(&self, name: &str) -> bool {
+        self.launchers.contains_key(name)
+    }
+
+    /// Stop and forget an instance added at runtime. Topology instances and
+    /// instances others depend on are refused.
+    pub async fn remove_instance(&mut self, name: &str) -> Result<(), StackError> {
+        if !self.launchers.contains_key(name) {
+            return Err(StackError::Unknown(name.to_owned()));
+        }
+        if !self.added.contains(name) {
+            return Err(StackError::FromTopology(name.to_owned()));
+        }
+        let by: Vec<String> = self
+            .launchers
+            .iter()
+            .filter(|(other, l)| {
+                other.as_str() != name && l.service.depends_on().iter().any(|d| d == name)
+            })
+            .map(|(other, _)| other.clone())
+            .collect();
+        if !by.is_empty() {
+            return Err(StackError::InUse {
+                name: name.to_owned(),
+                by,
+            });
+        }
+        if self.instances.contains_key(name) {
+            self.stop_instance(name).await?;
+        }
+        self.launchers.remove(name);
+        self.added.remove(name);
+        tracing::info!(instance = name, "removed");
+        Ok(())
+    }
+
     /// A running instance.
     pub fn get(&self, name: &str) -> Option<&Instance> {
         self.instances.get(name)
@@ -205,6 +319,7 @@ impl Stack {
                     depends_on: l.service.depends_on(),
                     behavior: instance.and_then(|i| i.fault().map(|f| f.get())),
                     requests: instance.and_then(Instance::requests),
+                    added: self.added.contains(name),
                 }
             })
             .collect()

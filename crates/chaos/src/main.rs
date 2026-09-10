@@ -105,6 +105,12 @@ struct ServeArgs {
     /// Schedules file. Default: `[paths] schedules`.
     #[arg(long, env = "CHAOS_SCHEDULES_FILE")]
     schedules: Option<PathBuf>,
+    /// File of instances added to the stack at runtime. Default: `[paths] stack`.
+    #[arg(long, env = "CHAOS_STACK_FILE")]
+    stack_file: Option<PathBuf>,
+    /// Slack incoming webhook for run notifications. Default: `[notify.slack] webhook`, none.
+    #[arg(long, env = "CHAOS_SLACK_WEBHOOK", hide_env_values = true)]
+    slack_webhook: Option<String>,
     /// Do not start the topology stack; API only.
     #[arg(long)]
     no_stack: bool,
@@ -142,6 +148,12 @@ impl ServeArgs {
         if let Some(v) = self.schedules {
             config.paths.schedules = v;
         }
+        if let Some(v) = self.stack_file {
+            config.paths.stack = v;
+        }
+        if let Some(v) = self.slack_webhook {
+            config.notify.slack.webhook = v;
+        }
         if self.no_stack {
             config.serve.start_stack = false;
         }
@@ -149,6 +161,8 @@ impl ServeArgs {
 }
 
 #[derive(Subcommand)]
+// `Serve` carries every serve flag; the others are a few paths. Built once, never moved.
+#[allow(clippy::large_enum_variant)]
 enum Command {
     /// Start the stack described in a topology file and keep it running until Ctrl-C.
     Up {

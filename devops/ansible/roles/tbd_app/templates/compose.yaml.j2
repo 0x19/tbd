@@ -55,6 +55,8 @@ services:
       CHAOS_LEDGER_URL: http://ledger:{{ ledger_port }}
       CHAOS_RESULTS_DIR: /data/results
       CHAOS_SCHEDULES_FILE: /data/schedules.json
+      CHAOS_STACK_FILE: /data/stack.json
+      CHAOS_SLACK_WEBHOOK: "{{ chaos_slack_webhook | default('') }}"
       CHAOS_SCENARIOS_DIR: /data/scenarios
       CHAOS_SCENARIOS_SEED: /app/scenarios
       CHAOS_UI_DIR: /app/ui

@@ -24,6 +24,8 @@ or `500`. Every body is JSON; `PUT`/`POST` bodies reject unknown fields.
 | `GET /healthz` | `{"status":"ok","version":"0.1.0"}` |
 | `GET /overview` | everything the overview page needs, in one call (below) |
 | `GET /events` | Server-Sent Events: the global feed (below) |
+| `GET /me` | `{"user": {"sub","email","name","role"} or null, "signout": "/oauth2/signout", "signout_all": "https://auth.<domain>/logout" or ""}`: who Envoy says is calling, from the identity headers it sets after verifying the ID-token cookie ([docs/auth](../auth/README.md)); `null` on the open local host |
+| `POST /notify/test` | `204` after posting a hello to the Slack webhook; `422` with the reason when there is none or Slack refused |
 
 `GET /overview`:
 
@@ -44,7 +46,8 @@ or `500`. Every body is JSON; `PUT`/`POST` bodies reject unknown fields.
   "runs": 17,
   "schedules": 2,
   "schedules_enabled": 1,
-  "next_schedule": "…Schedule with the earliest next_at, or null"
+  "next_schedule": "…Schedule with the earliest next_at, or null",
+  "notify": { "enabled": true, "channel": "#chaos-local", "on": ["failed", "error"], "kinds": ["scenario", "load", "validate"], "env": "local" }
 }
 ```
 
@@ -194,8 +197,9 @@ dropped, not replayed.
 | `DELETE /schedules/{id}` | | `204` |
 | `POST /schedules/{id}/run` | | `202` + `[QueuedRun]`: queue its job now, whatever the cron says, enabled or not |
 
-`ScheduleSpec`: `{"name", "cron", "job": Job, "enabled": true}` (`enabled` defaults to
-`true`). `Schedule` adds `id`, `created_at`, `updated_at`, `next_at` (`null` when
+`ScheduleSpec`: `{"name", "cron", "job": Job, "enabled": true, "notify": "failures"}`
+(`enabled` defaults to `true`; `notify` is `failures` (post the outcomes in
+`[notify.slack] on`), `always` (every outcome) or `off`). `Schedule` adds `id`, `created_at`, `updated_at`, `next_at` (`null` when
 disabled), `last_fired_at`, `last_skipped_at`, `fired`, `skipped`. Runs started by a
 schedule carry its id in `schedule_id`, so `GET /runs` filtered on it is the
 schedule's history.
@@ -253,6 +257,17 @@ finished run answers with its `finished` frame only.
 `started_at`, `finished_at`, `duration_s`, `requests_total`, `error_rate`,
 `throughput_rps`, `p50_ms`, `p90_ms`, `p99_ms`, `passed` (`[passed, total]` assertions or
 checks), `error`.
+
+## Notifications
+
+Every finished run, however it started, can post to Slack: one incoming webhook per
+environment from `CHAOS_SLACK_WEBHOOK` (never a file), the channel and the outcome and
+kind filters from `[notify.slack]` in `configs/chaos/<env>.toml`
+([config.md](config.md#keys)), and a per-schedule override (`notify` above). The message
+names the environment, the run, the failed assertions or checks with bound and observed
+value, the error if any, and links to the run on `[links] chaos` when set. Posting is
+fire and forget; a refused post is a warning in serve's log, never a failed run.
+`POST /notify/test` checks the wiring from the Schedules page.
 
 Records are JSON files, one per run, under `[paths] results` (default
 `.chaos/results/`, gitignored). Serve indexes the directory on start; a record still

@@ -19,6 +19,7 @@ use tbd_common::fault::Behavior;
 use tokio_stream::wrappers::BroadcastStream;
 
 use super::{
+    added::AddedSpec,
     error::ApiError,
     jobs::{Job, QueuedRun, Schedule, ScheduleSpec},
     runs::{RunFeed, RunKind, RunRecord, RunSummary},
@@ -33,9 +34,13 @@ type Result<T> = std::result::Result<T, ApiError>;
 pub fn router() -> Router<Shared> {
     Router::new()
         .route("/healthz", get(healthz))
+        .route("/me", get(me))
+        .route("/notify/test", post(notify_test))
         .route("/overview", get(overview))
         .route("/events", get(events))
-        .route("/stack", get(stack))
+        .route("/stack", get(stack).post(stack_add))
+        .route("/stack/{name}", axum::routing::delete(stack_remove))
+        .route("/stack/{name}/clone", post(stack_clone))
         .route("/stack/{name}/start", post(stack_start))
         .route("/stack/{name}/stop", post(stack_stop))
         .route("/stack/{name}/behavior", axum::routing::put(stack_behavior))
@@ -83,6 +88,7 @@ struct Overview {
     schedules: usize,
     schedules_enabled: usize,
     next_schedule: Option<Schedule>,
+    notify: serde_json::Value,
 }
 
 async fn overview(State(state): State<Shared>) -> Json<Overview> {
@@ -119,7 +125,66 @@ async fn overview(State(state): State<Shared>) -> Json<Overview> {
             .filter(|s| s.next_at.is_some())
             .min_by(|a, b| a.next_at.cmp(&b.next_at))
             .cloned(),
+        notify: state.notifier.describe(),
     })
+}
+
+/// `GET /me`: who Envoy says is calling, from the identity headers it sets
+/// after verifying the ID-token cookie (docs/auth/README.md). `user` is
+/// `null` on the open local host, where there is no login.
+#[derive(Serialize)]
+struct Me {
+    user: Option<User>,
+    /// This host's sign-out path, handled by Envoy's `OAuth2` filter.
+    signout: &'static str,
+    /// Global sign-out on the auth host, when a domain is configured.
+    signout_all: String,
+}
+
+#[derive(Serialize)]
+struct User {
+    sub: String,
+    email: String,
+    name: String,
+    role: String,
+}
+
+async fn me(State(state): State<Shared>, headers: axum::http::HeaderMap) -> Json<Me> {
+    let h = |name: &str| {
+        headers
+            .get(name)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("")
+            .to_owned()
+    };
+    let sub = h("x-user-sub");
+    let email = h("x-user-email");
+    let user = if sub.is_empty() && email.is_empty() {
+        None
+    } else {
+        Some(User {
+            sub,
+            email,
+            name: h("x-user-name"),
+            role: h("x-user-role"),
+        })
+    };
+    let auth = state.config.links.resolved().auth;
+    Json(Me {
+        user,
+        signout: "/oauth2/signout",
+        signout_all: if auth.is_empty() {
+            String::new()
+        } else {
+            format!("{auth}/logout")
+        },
+    })
+}
+
+/// `POST /notify/test`: post a hello to the configured Slack webhook.
+async fn notify_test(State(state): State<Shared>) -> Result<StatusCode> {
+    state.notifier.test().await.map_err(ApiError::invalid)?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 /// `GET /events`: the global feed.
@@ -160,6 +225,89 @@ async fn stack_stop(
         })
         .await
         .map(Json)
+}
+
+/// Body of `POST /stack`: a new instance, the same keys as the topology's
+/// `[stack.engines.X]` / `[stack.protocols.X]` tables plus `kind` and `name`.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AddInstance {
+    /// `engine` or `protocol`.
+    kind: String,
+    /// Omit for the next free `<kind>-<n>`.
+    #[serde(default)]
+    name: Option<String>,
+    /// Protocols: the engine to forward to.
+    #[serde(default)]
+    engine: Option<String>,
+    /// Engines: heartbeat interval.
+    #[serde(default, with = "humantime_serde")]
+    heartbeat: Option<std::time::Duration>,
+    /// Engines: initial behaviour.
+    #[serde(default)]
+    behavior: Option<Behavior>,
+}
+
+async fn stack_add(
+    State(state): State<Shared>,
+    Json(body): Json<AddInstance>,
+) -> Result<(StatusCode, Json<Vec<InstanceInfo>>)> {
+    let name = body.name.filter(|n| !n.trim().is_empty());
+    if let Some(n) = &name
+        && !n
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.')
+    {
+        return Err(ApiError::invalid(format!(
+            "name {n:?}: use letters, digits, `_`, `-` and `.`"
+        )));
+    }
+    let spec = match body.kind.as_str() {
+        "engine" => AddedSpec::Engine {
+            heartbeat: body.heartbeat.unwrap_or(std::time::Duration::from_secs(1)),
+            behavior: body.behavior.unwrap_or_default(),
+        },
+        "protocol" => AddedSpec::Protocol {
+            engine: body
+                .engine
+                .filter(|e| !e.trim().is_empty())
+                .ok_or_else(|| {
+                    ApiError::invalid("a protocol needs `engine`: the engine it forwards to")
+                })?,
+        },
+        other => {
+            return Err(ApiError::invalid(format!(
+                "kind {other:?}: engine or protocol"
+            )));
+        }
+    };
+    let info = state.add_instance(spec, name, None).await?;
+    Ok((StatusCode::CREATED, Json(info)))
+}
+
+/// Body of `POST /stack/{name}/clone`.
+#[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields, default)]
+struct CloneRequest {
+    /// How many replicas to add. Default 1, at most 16 at a time.
+    count: usize,
+}
+
+async fn stack_clone(
+    State(state): State<Shared>,
+    Path(name): Path<String>,
+    body: Option<Json<CloneRequest>>,
+) -> Result<(StatusCode, Json<Vec<InstanceInfo>>)> {
+    let count = body.map_or(1, |Json(b)| b.count);
+    let info = state.clone_instance(&name, count).await?;
+    Ok((StatusCode::CREATED, Json(info)))
+}
+
+async fn stack_remove(
+    State(state): State<Shared>,
+    Path(id): Path<String>,
+) -> Result<Json<Vec<InstanceInfo>>> {
+    Ok(Json(state.remove_instance(&id).await?))
 }
 
 async fn stack_behavior(

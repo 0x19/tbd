@@ -5,7 +5,13 @@
 [targets]
 protocol = "https://api.example.invalid"
 engine = "https://engine.api.example.invalid"
+# Internal only; not reachable from the edge.
 ledger = "https://engine.api.example.invalid"
 
 [serve]
 start_stack = false
+
+[notify.slack]
+channel = "#chaos-prod"
+# Production is loud: cancelled runs are worth a look too.
+on = ["failed", "error", "cancelled"]

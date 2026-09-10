@@ -40,7 +40,14 @@ Where things are:
   after every enqueue and every run end, boxed because it recurses through the run
   task) and the schedules file (cron via `croner`, UTC, checked once a second by the
   loop `api::state` spawns; a due schedule whose last job is still queued or running is
-  skipped, not stacked).
+  skipped, not stacked). `notify.rs` posts finished runs to one Slack webhook per
+  environment (`[notify.slack]`, URL from the environment only); `AppState::notify`
+  runs after every record is final, decides with the schedule's mode, and posts in a
+  task so a slow Slack never delays a run. `added.rs` is the file of instances added to
+  the serve stack at runtime (`[paths] stack`): `AppState::{add,clone,remove}_instance`
+  go through it and `AppState::new` replays it after the topology starts. The generic
+  `Stack` only knows `add_instance`/`remove_instance`/`next_name`; what an instance is
+  (engine heartbeat, protocol's engine) is `AddedSpec`, built from the topology types.
 
 Gotchas:
 - Every config struct is `deny_unknown_fields`. `TimelineEvent` is an internally tagged

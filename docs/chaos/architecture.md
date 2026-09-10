@@ -47,7 +47,10 @@ so engines come up before the protocols that name them. After each start it poll
 `ready()` up to ten seconds. On the first start of an instance bound to port 0 the chosen
 port is written back into the launcher, so `stop_instance` followed by `start_instance`
 lands on the same address. `shutdown` stops leaves first: anything no running instance
-depends on.
+depends on. `add_instance`, `clone_instance` and `remove_instance` change the launcher
+set at runtime (what `chaos serve` exposes as replicas): a new launcher is built from
+the same spec on a fresh port, and only instances added this way can be removed.
+`api/added.rs` writes them to `[paths] stack` so a restart re-adds them.
 
 Both adapters run the real service's library entry point on a tokio task and stop it
 through the same graceful-shutdown future `main` uses. The engine adapter builds a

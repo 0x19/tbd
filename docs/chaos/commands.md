@@ -192,8 +192,9 @@ in-process, until Ctrl-C. The API is documented in [api.md](api.md).
 
 ```
 chaos serve [--listen ADDR] [--base-path PATH] [--ui-dir DIR] [--topology FILE]
-            [--scenarios DIR] [--results DIR] [--schedules FILE] [--no-stack]
-            [--protocol URL] [--engine URL]
+            [--scenarios DIR] [--results DIR] [--schedules FILE] [--stack-file FILE]
+            [--slack-webhook URL]
+            [--no-stack] [--protocol URL] [--engine URL]
 ```
 
 | Flag | Env | Default |
@@ -206,8 +207,9 @@ chaos serve [--listen ADDR] [--base-path PATH] [--ui-dir DIR] [--topology FILE]
 | `--scenarios-seed` | `CHAOS_SCENARIOS_SEED` | `[paths] scenarios_seed`, none; seeds `--scenarios` when empty |
 | `--results` | `CHAOS_RESULTS_DIR` | `[paths] results`, `.chaos/results` |
 | `--schedules` | `CHAOS_SCHEDULES_FILE` | `[paths] schedules`, `.chaos/schedules.json` |
+| `--stack-file` | `CHAOS_STACK_FILE` | `[paths] stack`, `.chaos/stack.json` |
+| `--slack-webhook` | `CHAOS_SLACK_WEBHOOK` | `[notify.slack] webhook`, none: run notifications off |
 | `--no-stack` | | off; sets `[serve] start_stack = false` |
-| `--protocol`, `--engine` | `CHAOS_PROTOCOL_URL`, `CHAOS_ENGINE_URL` | `[targets]`, the defaults for API validate |
 | `--protocol`, `--engine`, `--ledger` | `CHAOS_PROTOCOL_URL`, `CHAOS_ENGINE_URL`, `CHAOS_LEDGER_URL` | `[targets]`, the defaults for API validate |
 
 On start it prints the API URL, the UI URL when configured, and each stack instance,

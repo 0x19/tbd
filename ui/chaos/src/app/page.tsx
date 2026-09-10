@@ -11,7 +11,7 @@ import {
   Server,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { useChaos } from "@/app/providers";
 import { ChartHeadline, CompareChart, LatencyBars, Legend } from "@/components/charts";
@@ -30,6 +30,22 @@ import { delta, failed, inWindow, latestPerScenario } from "@/lib/runs";
 
 export default function OverviewPage() {
   const { overview, error, reload, lastEvent, activity } = useChaos();
+  const [allActivity, setAllActivity] = useState(false);
+  // Consecutive queue changes collapse into the newest one: a sweep of ten
+  // scenarios would otherwise fill the card with "queue changed".
+  const feed = useMemo(
+    () =>
+      activity.filter(
+        (a, i) => !(a.event.type === "queue_changed" && activity[i - 1]?.event.type === "queue_changed"),
+      ),
+    [activity],
+  );
+  const visibleActivity = useMemo(() => {
+    if (allActivity) return feed;
+    const cutoff = Date.now() - ACTIVITY_WINDOW_MS;
+    return feed.filter((a) => a.at >= cutoff).slice(0, ACTIVITY_ROWS);
+  }, [feed, allActivity]);
+  const hiddenActivity = feed.length - visibleActivity.length;
   const runs = useFetch(() => api.runs(300), 15_000, [lastEvent]);
   const all = runs.data ?? [];
 
@@ -239,12 +255,14 @@ export default function OverviewPage() {
         <Card>
           <CardHeader>
             <CardTitle>Recent activity</CardTitle>
-            <CardDescription>Live feed of this session.</CardDescription>
+            <CardDescription>
+              Live feed of this session; the last ten minutes, older on request.
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            {activity.length ? (
+            {feed.length ? (
               <ul className="divide-y">
-                {activity.slice(0, 6).map((a) => (
+                {visibleActivity.map((a) => (
                   <li key={a.at} className="flex items-start gap-3 py-2.5 text-sm">
                     {a.event.type === "stack_changed" ? (
                       <>
@@ -295,10 +313,18 @@ export default function OverviewPage() {
                     <span className="text-muted-foreground text-xs">{ago(new Date(a.at).toISOString())}</span>
                   </li>
                 ))}
+                {!visibleActivity.length ? (
+                  <li className="text-muted-foreground py-2.5 text-sm">Quiet for the last ten minutes.</li>
+                ) : null}
               </ul>
             ) : (
               <p className="text-muted-foreground text-sm">Nothing yet. Start a run and it shows up here.</p>
             )}
+            {hiddenActivity > 0 || allActivity ? (
+              <Button variant="ghost" size="sm" className="mt-2" onClick={() => setAllActivity((v) => !v)}>
+                {allActivity ? "Show less" : `Show ${hiddenActivity} more`}
+              </Button>
+            ) : null}
           </CardContent>
         </Card>
         <Card>
@@ -310,12 +336,21 @@ export default function OverviewPage() {
             <DetailList
               rows={[
                 {
-                  k: "Validate targets",
-                  v: <span className="font-mono text-xs">{overview.config.targets.protocol}</span>,
+                  k: "Serve stack",
+                  v: (
+                    <Link href="/stack/" className="text-xs hover:underline">
+                      {overview.stack ? describeStack(overview.stack) : "not started (--no-stack)"}
+                    </Link>
+                  ),
                 },
                 {
-                  k: "Engine target",
-                  v: <span className="font-mono text-xs">{overview.config.targets.engine}</span>,
+                  k: "Validate hits",
+                  v: (
+                    <span className="grid font-mono text-xs">
+                      <span>{overview.config.targets.protocol}</span>
+                      <span className="text-muted-foreground">{overview.config.targets.engine}</span>
+                    </span>
+                  ),
                 },
                 {
                   k: "Scenarios",
@@ -326,7 +361,7 @@ export default function OverviewPage() {
                   v: <span className="font-mono text-xs">{overview.config.paths.results}</span>,
                 },
                 ...Object.entries(overview.config.links)
-                  .filter(([k, v]) => v && k !== "domain")
+                  .filter(([k, v]) => v && !["domain", "chaos", "auth"].includes(k))
                   .map(([k, v]) => ({
                     k: k.replace("_", " "),
                     v: (
@@ -396,4 +431,16 @@ function ThroughputCompare({
       <CompareChart current={cur?.samples ?? []} previous={prevSamples} />
     </>
   );
+}
+
+const ACTIVITY_WINDOW_MS = 10 * 60_000;
+const ACTIVITY_ROWS = 6;
+
+/** "2 engines, 1 protocol · 3/3 running", counted live from the stack. */
+function describeStack(stack: { kind: string; running: boolean }[]): string {
+  const byKind = new Map<string, number>();
+  for (const i of stack) byKind.set(i.kind, (byKind.get(i.kind) ?? 0) + 1);
+  const parts = [...byKind.entries()].map(([k, n]) => `${n} ${k}${n === 1 ? "" : "s"}`);
+  const up = stack.filter((i) => i.running).length;
+  return `${parts.join(", ")} · ${up}/${stack.length} running`;
 }

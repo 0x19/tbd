@@ -239,6 +239,7 @@ export const Schedule = z.object({
   cron: z.string(),
   job: Job,
   enabled: z.boolean(),
+  notify: z.enum(["failures", "always", "off"]),
   created_at: z.string(),
   updated_at: z.string(),
   next_at: z.string().nullable(),
@@ -249,7 +250,26 @@ export const Schedule = z.object({
 });
 export type Schedule = z.infer<typeof Schedule>;
 
-export type ScheduleSpec = { name: string; cron: string; job: Job; enabled: boolean };
+export const NotifyMode = z.enum(["failures", "always", "off"]);
+export type NotifyMode = z.infer<typeof NotifyMode>;
+
+export type ScheduleSpec = { name: string; cron: string; job: Job; enabled: boolean; notify: NotifyMode };
+
+export const Me = z.object({
+  user: z.object({ sub: z.string(), email: z.string(), name: z.string(), role: z.string() }).nullable(),
+  signout: z.string(),
+  signout_all: z.string(),
+});
+export type Me = z.infer<typeof Me>;
+
+export const NotifyState = z.object({
+  enabled: z.boolean(),
+  channel: z.string(),
+  on: z.array(RunStatus),
+  kinds: z.array(RunKind),
+  env: z.string(),
+});
+export type NotifyState = z.infer<typeof NotifyState>;
 
 export const GlobalEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("run_started"), run: RunSummary }),
@@ -309,6 +329,7 @@ export const Overview = z.object({
   schedules: z.number(),
   schedules_enabled: z.number(),
   next_schedule: Schedule.nullable(),
+  notify: NotifyState,
 });
 export type Overview = z.infer<typeof Overview>;
 

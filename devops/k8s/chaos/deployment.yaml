@@ -55,10 +55,21 @@ spec:
             - name: CHAOS_ENGINE_URL
               value: http://envoy:50051
             - name: CHAOS_LEDGER_URL
+              value: http://envoy:50051
             - name: CHAOS_RESULTS_DIR
               value: /data/results
             - name: CHAOS_SCHEDULES_FILE
               value: /data/schedules.json
+            - name: CHAOS_STACK_FILE
+              value: /data/stack.json
+            # Slack incoming webhook for run notifications; the chaos-notify
+            # Secret is optional (`mise run chaos:slack URL` creates it).
+            - name: CHAOS_SLACK_WEBHOOK
+              valueFrom:
+                secretKeyRef:
+                  name: chaos-notify
+                  key: CHAOS_SLACK_WEBHOOK
+                  optional: true
             # The image's scenarios/ is read-only; the UI edits a seeded copy.
             - name: CHAOS_SCENARIOS_DIR
               value: /data/scenarios
@@ -110,11 +121,11 @@ spec:
             - name: tmp
               mountPath: /tmp
       volumes:
-        # Run records. emptyDir: history lives as long as the pod. Swap for a
-        # PVC when an environment should keep it across restarts.
+        # Run records, the editable scenario copy, schedules and the added
+        # instances (pvc.yaml): they outlive the pod.
         - name: data
-          emptyDir:
-            sizeLimit: 1Gi
+          persistentVolumeClaim:
+            claimName: chaos-data
         - name: tmp
           emptyDir:
             sizeLimit: 256Mi

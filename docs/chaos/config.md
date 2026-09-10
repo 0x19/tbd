@@ -57,18 +57,25 @@ TBD_ENV=production chaos config    # production
 | `paths.scenarios` | `scenarios` | `--scenarios`, `CHAOS_SCENARIOS_DIR` | scenario files the API lists and edits |
 | `paths.scenarios_seed` | `""` | `--scenarios-seed`, `CHAOS_SCENARIOS_SEED` | copied into `paths.scenarios` on `serve` start when it is missing or empty; containers set it to the image's read-only `scenarios/` and point `paths.scenarios` at a volume |
 | `paths.results` | `.chaos/results` | `--results`, `CHAOS_RESULTS_DIR` | run records |
+| `paths.stack` | `.chaos/stack.json` | `--stack-file`, `CHAOS_STACK_FILE` | instances added to the serve stack at runtime (replicas, new engines and protocols, [api.md](api.md#stack)); re-added on start, engines first; one that no longer starts is dropped with a warning; containers put it on `/data` |
 | `paths.schedules` | `.chaos/schedules.json` | `--schedules`, `CHAOS_SCHEDULES_FILE` | the schedules file (`chaos serve` cron jobs, [api.md](api.md#schedules)); created on first write; containers put it on the `/data` volume next to the results |
 | `targets.protocol` | `http://127.0.0.1:8080` | `--protocol`, `CHAOS_PROTOCOL_URL` | default for `validate` and API validate |
 | `targets.engine` | `http://127.0.0.1:50051` | `--engine`, `CHAOS_ENGINE_URL` | same, engine gRPC |
 | `targets.ledger` | `http://127.0.0.1:50052` | `--ledger`, `CHAOS_LEDGER_URL` | same, ledger gRPC; through Envoy the internal listener `http://envoy:50051`, matched by service name |
 | `validate.timeout` | `5s` | `--timeout` | per-check timeout |
 | `validate.ca_cert` | `""` | `--ca-cert`, `CHAOS_CA_CERT` | extra PEM root for `https://` / `wss://` targets; empty means the public roots only |
+| `notify.slack.webhook` | `""` | `--slack-webhook`, `CHAOS_SLACK_WEBHOOK` | Slack incoming webhook; environment only, never a file; empty means off |
+| `notify.slack.channel` | `""` | | channel shown in the UI and sent with the message (app webhooks ignore it, they are bound to a channel; legacy ones honour it); `#chaos-local`, `#chaos-dev`, `#chaos-prod` per environment |
+| `notify.slack.on` | `["failed", "error"]` | | outcomes that post; production adds `cancelled` |
+| `notify.slack.kinds` | `["scenario", "load", "validate"]` | | kinds that post |
 | `links.domain` | `""` | `--public-domain`, `CHAOS_PUBLIC_DOMAIN` | public base domain; when set the links below are derived from the edge's hosts (`grafana.`, `logs.`, `profiles.`, `metrics.`) and `envoy_admin` is cleared |
 | `links.grafana` | `""` | | UI link when there is no domain; empty hides it |
 | `links.victorialogs` | `""` | | same |
 | `links.metrics` | `""` | | same |
 | `links.pyroscope` | `""` | | same |
 | `links.envoy_admin` | `""` | | same; never derived, the edge does not expose it |
+| `links.chaos` | `""` | | the public admin UI root (`https://chaosadmin.<domain>` when derived; `http://chaos.localhost:18080` in `local.toml`): run links in Slack messages |
+| `links.auth` | `""` | | the sign-in host (`https://auth.<domain>` when derived): "sign out everywhere" in the user menu |
 
 `serve.base_path` must start with `/` and not end with one; `serve.ui_path` is empty (the
 root) or the same shape; they must differ.
@@ -87,7 +94,9 @@ and friends. Targets stay at `127.0.0.1:8080` and
 `--protocol http://localhost:18080 --engine http://localhost:15051`, as `mise run
 local:traffic` does.
 
-In the cluster the chaos pod runs with `TBD_ENV` from the `tbd-env` ConfigMap (`local`
+In the cluster the chaos pod keeps `/data` (run records, the editable scenario copy,
+`schedules.json`, `stack.json`) on a PersistentVolumeClaim (`devops/k8s/chaos/pvc.yaml`),
+so restarts and image rolls keep them; the chaos pod runs with `TBD_ENV` from the `tbd-env` ConfigMap (`local`
 in the local overlay, `dev` in dev) and the target env vars set to Envoy
 (`CHAOS_PROTOCOL_URL=http://envoy:8080`), so `POST /validate` with no body checks the
 deployed stack through the load balancer.

@@ -200,6 +200,11 @@ chaos validate --protocol https://api.<domain> --engine https://api.<domain> --t
 A missing or rejected token shows as one failed `auth_token` check before any other
 check runs.
 
+**Chaos Admin.** The same headers reach the chaos pod on `chaosadmin.<domain>`;
+`GET /api/chaos/v1/me` returns them for the user menu (initials, name, email, role), or
+`user: null` on the open `chaos.localhost` host. The menu's "Sign out of Chaos Admin" is
+that host's `/oauth2/signout`; "Sign out everywhere" is `https://auth.<domain>/logout`.
+
 ## What is not done yet
 
 - **Authorization is coarse.** One role per person and one API scope; no per-object

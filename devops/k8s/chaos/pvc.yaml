@@ -1,0 +1,15 @@
+# Everything chaos serve keeps: run records, the scenario copy the UI edits,
+# schedules and instances added to the stack. One claim, mounted at /data, so a
+# pod restart (an image roll, a node move) keeps history and configuration. The
+# deployment's strategy is Recreate, so a ReadWriteOnce claim is enough.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: chaos-data
+  labels:
+    app.kubernetes.io/name: chaos
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 2Gi

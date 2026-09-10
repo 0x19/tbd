@@ -99,6 +99,18 @@ run = "cargo run -q -p tbd-chaos -- up topologies/dev.toml"
 description = "chaos API on :7700 with the dev topology in-process (TBD_ENV picks configs/chaos/<env>.toml); serves ui/chaos/out when built"
 run = "cargo run -q -p tbd-chaos -- serve --ui-dir ui/chaos/out $CHAOS_ARGS"
 
+[tasks."chaos:slack"]
+description = "Give the chaos pod a Slack incoming webhook for run notifications: mise run chaos:slack https://hooks.slack.com/services/..."
+usage = '''
+arg "<url>" help="the Slack incoming webhook URL (https://hooks.slack.com/services/...)"
+'''
+run = """
+set -euo pipefail
+kubectl -n tbd create secret generic chaos-notify --from-literal=CHAOS_SLACK_WEBHOOK="$usage_url" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+kubectl -n tbd rollout restart deployment/chaos >/dev/null
+echo "chaos-notify secret set; chaos restarted. Channel and outcomes: configs/chaos/<env>.toml [notify.slack]"
+"""
+
 [tasks."chaos:config"]
 description = "Print the effective chaos config for TBD_ENV (base.toml + <env>.toml)"
 run = "cargo run -q -p tbd-chaos -- config"

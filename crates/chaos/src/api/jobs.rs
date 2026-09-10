@@ -21,6 +21,7 @@ use tokio::sync::Mutex;
 
 use super::{
     error::ApiError,
+    notify::NotifyMode,
     runs::RunKind,
     state::{LoadRequest, ValidateRequest},
 };
@@ -170,6 +171,10 @@ pub struct ScheduleSpec {
     /// Off means kept but never fired.
     #[serde(default = "default_true")]
     pub enabled: bool,
+    /// Slack: `failures` follows `[notify.slack] on`, `always` posts every
+    /// outcome, `off` never posts.
+    #[serde(default)]
+    pub notify: NotifyMode,
 }
 
 fn default_true() -> bool {
@@ -189,6 +194,9 @@ pub struct Schedule {
     pub job: Job,
     /// Fires when on.
     pub enabled: bool,
+    /// Slack override.
+    #[serde(default)]
+    pub notify: NotifyMode,
     /// RFC 3339.
     pub created_at: String,
     /// RFC 3339.
@@ -265,6 +273,7 @@ impl Schedules {
             cron: spec.cron,
             job: spec.job,
             enabled: spec.enabled,
+            notify: spec.notify,
             created_at: to_string(now),
             updated_at: to_string(now),
             next_at: None,
@@ -292,6 +301,7 @@ impl Schedules {
         schedule.cron = spec.cron;
         schedule.job = spec.job;
         schedule.enabled = spec.enabled;
+        schedule.notify = spec.notify;
         schedule.updated_at = to_string(now);
         schedule.next_at = next_at(schedule, now);
         let out = schedule.clone();
@@ -439,6 +449,7 @@ mod tests {
                 cron: "0 3 * * *".into(),
                 job: Job::AllScenarios,
                 enabled: true,
+                notify: NotifyMode::default(),
             })
             .await
             .unwrap();
@@ -449,6 +460,7 @@ mod tests {
                 cron: "nope".into(),
                 job: Job::AllScenarios,
                 enabled: true,
+                notify: NotifyMode::default(),
             })
             .await;
         assert_eq!(bad.unwrap_err().status, 422);
@@ -466,6 +478,7 @@ mod tests {
                     cron: "0 3 * * *".into(),
                     job: Job::AllScenarios,
                     enabled: false,
+                    notify: NotifyMode::default(),
                 },
             )
             .await
@@ -487,6 +500,7 @@ mod tests {
                 cron: "* * * * * *".into(),
                 job: Job::AllScenarios,
                 enabled: true,
+                notify: NotifyMode::default(),
             })
             .await
             .unwrap();

@@ -76,6 +76,9 @@ services:
       CHAOS_LEDGER_URL: http://envoy:50051
       CHAOS_RESULTS_DIR: /data/results
       CHAOS_SCHEDULES_FILE: /data/schedules.json
+      CHAOS_STACK_FILE: /data/stack.json
+      # Slack incoming webhook for run notifications (docs/chaos/config.md); empty = off.
+      CHAOS_SLACK_WEBHOOK: ${CHAOS_SLACK_WEBHOOK:-}
       CHAOS_SCENARIOS_DIR: /data/scenarios
       CHAOS_SCENARIOS_SEED: /app/scenarios
       CHAOS_UI_DIR: /app/ui

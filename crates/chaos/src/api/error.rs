@@ -58,7 +58,11 @@ impl From<StackError> for ApiError {
     fn from(e: StackError) -> Self {
         let status = match &e {
             StackError::Unknown(_) => StatusCode::NOT_FOUND,
-            StackError::AlreadyRunning(_) => StatusCode::CONFLICT,
+            StackError::AlreadyRunning(_)
+            | StackError::Exists(_)
+            | StackError::DependencyDown { .. }
+            | StackError::InUse { .. }
+            | StackError::FromTopology(_) => StatusCode::CONFLICT,
             StackError::NoFaults(_) | StackError::Unresolvable(_) => {
                 StatusCode::UNPROCESSABLE_ENTITY
             }

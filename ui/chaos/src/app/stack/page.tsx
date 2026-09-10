@@ -1,10 +1,11 @@
 "use client";
 
-import { Activity, Pause, Play, ShieldCheck, Wand2 } from "lucide-react";
+import { Activity, Copy, Pause, Play, Plus, ShieldCheck, Trash2, Wand2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
 import { useChaos } from "@/app/providers";
+import { AddInstanceDialog } from "@/components/add-instance-dialog";
 import { BehaviorDialog } from "@/components/behavior-dialog";
 import { describeBehavior } from "@/components/instances-table";
 import { DetailList, PageTitle, SectionTitle } from "@/components/kit";
@@ -29,6 +30,7 @@ export default function StackPage() {
   const [selected, setSelected] = useState<string | null>(null);
   const [editing, setEditing] = useState<InstanceInfo | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
   const instances = stack.data ?? [];
   const up = instances.filter((i) => i.running).length;
   const faulty = instances.filter((i) => i.behavior && i.behavior.type !== "healthy");
@@ -48,6 +50,9 @@ export default function StackPage() {
     }
   };
 
+  const replicate = (i: InstanceInfo) => act(i.name, () => api.stackClone(i.name), "added a replica of");
+  const remove = (i: InstanceInfo) => act(i.name, () => api.stackRemove(i.name), "removed");
+
   const tone = (i: InstanceInfo) =>
     !i.running ? "off" : i.behavior && i.behavior.type !== "healthy" ? "warn" : "good";
   const word = (i: InstanceInfo) =>
@@ -57,11 +62,14 @@ export default function StackPage() {
     <>
       <PageTitle
         title="Stack"
-        description="The topology this serve runs in-process. Stop, start and inject faults, and watch the protocol react."
+        description="The topology this serve runs in-process. Stop, start, inject faults, add replicas or new instances, and watch the protocol react."
       >
         <Badge variant="outline">
           {up}/{instances.length} running
         </Badge>
+        <Button onClick={() => setAdding(true)} disabled={!stack.data}>
+          <Plus /> Add instance
+        </Button>
       </PageTitle>
       {stack.error ? <p className="text-destructive text-sm">{stack.error}</p> : null}
 
@@ -91,15 +99,36 @@ export default function StackPage() {
                 ? `${faulty.length} instance${faulty.length > 1 ? "s" : ""} with an injected fault`
                 : "every instance healthy"}
             </div>
-            <div className="flex flex-wrap gap-2 border-t pt-3 text-xs">
-              <span className="text-muted-foreground">Try</span>
-              {instances
-                .filter((i) => i.behavior !== null)
-                .map((i) => (
-                  <Button key={i.name} size="sm" variant="outline" onClick={() => setEditing(i)}>
-                    fault {i.name}
-                  </Button>
-                ))}
+            <div className="flex flex-wrap items-center gap-2 border-t pt-3 text-xs">
+              <span className="text-muted-foreground">Faults</span>
+              {instances.filter((i) => i.behavior !== null).length ? (
+                instances
+                  .filter((i) => i.behavior !== null)
+                  .map((i) => (
+                    <Button
+                      key={i.name}
+                      size="sm"
+                      variant="outline"
+                      className="h-7 gap-1.5 font-mono text-xs"
+                      title={`Change the behaviour of ${i.name}`}
+                      onClick={() => setEditing(i)}
+                    >
+                      <Wand2 className="size-3" />
+                      {i.name}
+                      <span
+                        className={
+                          i.behavior && i.behavior.type !== "healthy"
+                            ? "text-amber-600 dark:text-amber-400"
+                            : "text-muted-foreground"
+                        }
+                      >
+                        {describeBehavior(i.behavior)}
+                      </span>
+                    </Button>
+                  ))
+              ) : (
+                <span className="text-muted-foreground">no running engine to inject into</span>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -145,16 +174,27 @@ export default function StackPage() {
 
       <SectionTitle
         title="Instances"
-        description="Dependencies start first; a stopped instance keeps its port."
+        description="Dependencies start first; a stopped instance keeps its port. Replica adds the same service on a fresh port; load with no explicit targets spreads over every running protocol."
       />
       {!stack.data ? (
         <Skeleton className="h-40" />
       ) : (
         <div className="divide-y rounded-xl border">
           {instances.map((i) => (
-            <div key={i.name} className="flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 text-sm">
+            <div
+              key={i.name}
+              data-testid={`instance-${i.name}`}
+              className="flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 text-sm"
+            >
               <button type="button" className="min-w-40 text-left" onClick={() => setSelected(i.name)}>
-                <div className="font-mono font-medium hover:underline">{i.name}</div>
+                <div className="flex items-center gap-2 font-mono font-medium">
+                  <span className="hover:underline">{i.name}</span>
+                  {i.added ? (
+                    <Badge variant="outline" className="text-[10px]">
+                      added
+                    </Badge>
+                  ) : null}
+                </div>
                 <div className="text-muted-foreground text-xs">
                   {i.kind}
                   {i.depends_on.length ? ` · needs ${i.depends_on.join(", ")}` : ""}
@@ -199,6 +239,27 @@ export default function StackPage() {
                   >
                     <Wand2 /> Fault
                   </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busy === i.name}
+                    title="Add one more of this on a fresh port"
+                    onClick={() => replicate(i)}
+                  >
+                    <Copy /> Replica
+                  </Button>
+                  {i.added ? (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={busy === i.name}
+                      aria-label={`Remove ${i.name}`}
+                      title="Stop and forget this instance"
+                      onClick={() => remove(i)}
+                    >
+                      <Trash2 />
+                    </Button>
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -240,6 +301,20 @@ export default function StackPage() {
                   >
                     <Wand2 /> Fault
                   </Button>
+                  <Button variant="outline" onClick={() => replicate(current)}>
+                    <Copy /> Replica
+                  </Button>
+                  {current.added ? (
+                    <Button
+                      variant="ghost"
+                      onClick={() => {
+                        remove(current);
+                        setSelected(null);
+                      }}
+                    >
+                      <Trash2 /> Remove
+                    </Button>
+                  ) : null}
                 </div>
                 <DetailList
                   rows={[
@@ -292,6 +367,15 @@ export default function StackPage() {
           ) : null}
         </SheetContent>
       </Sheet>
+
+      {adding ? (
+        <AddInstanceDialog
+          open
+          onOpenChange={(o) => !o && setAdding(false)}
+          instances={instances}
+          onAdded={(next) => stack.setData(next)}
+        />
+      ) : null}
 
       {editing ? (
         <BehaviorDialog

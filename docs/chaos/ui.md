@@ -20,15 +20,15 @@ starts with `chaos.` to the server does the same. `curl` needs `-H 'Host: chaos.
 
 | Page | Kit pattern | What it is for |
 |---|---|---|
-| Overview | Ecommerce dashboard 1 + Developers overview | KPI strip (stack health, last validate, runs and failure rate over 24 h with deltas against the previous day), throughput of the last scenario run over the previous run of the same scenario, latency p50/p90/p99 per scenario as stacked bars, stack list, live activity, where-to-look links, recent runs. |
-| Stack | Payments webhooks | Two summary cards (integrity bar per instance, engine traffic), an instance list with health dots and Stop / Start / Fault, and a detail sheet per instance with key/value rows and the session's activity. |
+| Overview | Ecommerce dashboard 1 + Developers overview | KPI strip (stack health, last validate, runs and failure rate over 24 h with deltas against the previous day), throughput of the last scenario run over the previous run of the same scenario, latency p50/p90/p99 per scenario as stacked bars, stack list, live activity (the last ten minutes, six rows, consecutive queue changes collapsed, "Show more" for the rest of the session), where to look (the live serve stack by kind, what validate hits, paths, observability links), recent runs. |
+| Stack | Payments webhooks | Two summary cards (integrity bar per instance, engine traffic), an instance list with health dots and Stop / Start / Fault / Replica, an "added" chip and Remove on instances created at runtime, an "Add instance" dialog (engine with heartbeat, or protocol forwarding to a running engine), and a detail sheet per instance with the same actions, key/value rows and the session's activity. |
 | Scenarios | Ecommerce product list | Title with "Run all" (queues every ready scenario) and the primary action, status tabs, search toolbar, table with last run chip and numbers, row menu (edit, runs, schedule, delete). The queue panel appears while something waits. |
 | Scenario | Ecommerce order detail | Back arrow, big name with status chips, a stage strip that previews setup / warmup / load + timeline / assert / teardown with the timeline actions, a CodeMirror TOML editor (syntax colours, line numbers, undo, bracket matching) checked as you type, a "Reference" sheet with insertable blocks (stack, load, timeline actions, behaviours, assertions) and the full file reference, and a right rail with stack, load, assertions and last run. |
 | Runs | Developers events & logs | The queue panel (what waits for the slot, remove one or clear all), filter rail (kind, status, scenario with counts), search, refresh and Live, table with a totals row and a "scheduled" chip on runs a schedule started. Sidebar sub-items deep-link by kind. |
 | Run | Payments delivery simulator + order lifecycle | Lifecycle strip, stat row, the per-second chart, assertions, timeline with OK/ERROR chips, a latency heat grid per operation (darker is slower), error classes, per target and service. Live while running, replayed when opened late. |
 | Load | Payments delivery simulator | A policy rail (shape, operations, target; unit suffixes and info tooltips; expected requests and concurrency computed live), a load window stat row, previous load runs with a throughput sparkline, the request body. |
 | Validate | Developers events & logs | Targets form, stat row, filter rail by surface and result, PASS / FAIL chips with latency and detail, totals row, previous validate runs. |
-| Schedules | Ecommerce product list + settings dialog | Cron jobs: a switch per row, what runs, the preset or raw cron, next fire time, last run chip, fired and skipped counts, "Run now" and a row menu; a dialog to create or edit (name, what to run with a scenario picker or rate and duration, a preset or custom cron in UTC, enabled). `?new=scenario:<id>` opens it prefilled from a scenario's row menu. |
+| Schedules | Ecommerce product list + settings dialog | A Slack card (this environment's channel and outcome filter, or how to turn it on, with "Send a test message"), then the cron jobs: a switch per row, what runs, the preset or raw cron, next fire time, last run chip, the Slack mode, fired and skipped counts, "Run now" and a row menu; a dialog to create or edit (name, what to run with a scenario picker or rate and duration, a preset or custom cron in UTC, Slack: failures / every outcome / never, enabled). `?new=scenario:<id>` opens it prefilled from a scenario's row menu. |
 | Scenario reference | Docs page | [scenarios.md](scenarios.md) rendered in the app with a table of contents; bundled at build time by `scripts/gen-docs.mjs`, so the UI and the repo never disagree. |
 | Runbook | Original settings | Vertical section nav with observability links, titled entries with "look at" and "then" columns. |
 
@@ -120,8 +120,9 @@ Rules the code follows:
 v2.3.0, Premium ZIP), reduced the way the kit recommends: keep the product you are
 building, delete the rest. Kept from the kit, file for file: the shell
 (`components/layout/`: sidebar with team switcher and collapsible nav groups, header with
-⌘K, notifications and theme controls, the breadcrumb sub-header without the kit's second
-search box), the theme preset
+⌘K, notifications and theme controls, a user menu with initials, name, email, role and
+sign-out links when Envoy forwards an identity, the breadcrumb sub-header without the
+kit's second search box), the theme preset
 picker with its presets, the `components/ui/` primitives (shadcn on Radix), the global
 CSS, ESLint and Prettier. Deleted: the five demo sub-apps, auth and error pages, their
 mock data, and the packages only they used (editor, maps, PDF, drag and drop, forms,

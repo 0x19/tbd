@@ -13,8 +13,10 @@ use tokio::sync::{Mutex, broadcast, mpsc};
 use tokio_util::sync::CancellationToken;
 
 use super::{
+    added::{AddedInstance, AddedSpec, AddedStore},
     error::ApiError,
     jobs::{Job, Queue, QueuedRun, Schedule, Schedules},
+    notify::{Notifier, NotifyMode},
     runs::{ActiveRun, RunFeed, RunKind, RunRecord, RunStatus, RunStore, RunSummary},
 };
 use crate::{
@@ -22,7 +24,7 @@ use crate::{
     load::{self, LoadConfig, LoadSnapshot, Metrics, Target},
     scenario::{self, RunEvent, ScenarioFile, executor::EventOutcome},
     stack::{InstanceInfo, Stack},
-    topology::TopologyFile,
+    topology::{StackConfig, TopologyFile},
     validate,
 };
 
@@ -116,12 +118,18 @@ pub struct AppState {
     pub source: Source,
     /// The long-lived stack, when `[serve] start_stack` is on.
     pub stack: Mutex<Option<Stack>>,
+    /// The topology it started from.
+    pub topology: StackConfig,
+    /// Instances added at runtime, persisted.
+    pub added: AddedStore,
     /// Run records.
     pub runs: RunStore,
     /// Jobs waiting for the active slot.
     pub queue: Queue,
     /// Cron schedules.
     pub schedules: Schedules,
+    /// Slack.
+    pub notifier: Notifier,
     global: broadcast::Sender<GlobalEvent>,
     stop: CancellationToken,
 }
@@ -133,28 +141,57 @@ impl AppState {
         let schedules = Schedules::open(&config.paths.schedules)
             .map_err(|e| anyhow::anyhow!("open schedules: {e}"))?;
         seed_scenarios(&config.paths.scenarios, &config.paths.scenarios_seed)?;
+        let added = AddedStore::open(&config.paths.stack)
+            .map_err(|e| anyhow::anyhow!("open stack file: {e}"))?;
+        let mut topology = StackConfig::default();
         let stack = if config.serve.start_stack {
             let path = &config.paths.topology;
             let text = std::fs::read_to_string(path)
                 .map_err(|e| anyhow::anyhow!("read topology {}: {e}", path.display()))?;
-            let topology: TopologyFile = toml::from_str(&text)
+            let file: TopologyFile = toml::from_str(&text)
                 .map_err(|e| anyhow::anyhow!("parse topology {}: {e}", path.display()))?;
-            topology
-                .stack
+            file.stack
                 .check()
                 .map_err(|e| anyhow::anyhow!("{}: {e}", path.display()))?;
-            Some(topology.stack.start().await?)
+            let mut stack = file.stack.start().await?;
+            topology = file.stack;
+            // Re-add what was added last time, engines first. Whatever no
+            // longer starts (its engine is gone, a port clash) is dropped
+            // from the file with a warning rather than blocking serve.
+            for item in added.list().await {
+                let Some(launcher) = item.spec.launcher(&item.name) else {
+                    continue;
+                };
+                match stack.add_instance(&item.name, launcher).await {
+                    Ok(_) => tracing::info!(instance = item.name, "re-added"),
+                    Err(error) => {
+                        tracing::warn!(instance = item.name, %error, "could not re-add; dropped");
+                        if let Err(e) = added.remove(&item.name).await {
+                            tracing::error!(error = %e, "could not write stack file");
+                        }
+                    }
+                }
+            }
+            Some(stack)
         } else {
             None
         };
         let (global, _) = broadcast::channel(256);
+        let notifier = Notifier::new(
+            config.notify.slack.clone(),
+            &source.env,
+            &config.links.resolved().chaos,
+        );
         Ok(Arc::new(Self {
             config,
             source,
             stack: Mutex::new(stack),
+            topology,
+            added,
             runs,
             queue: Queue::default(),
             schedules,
+            notifier,
             global,
             stop: CancellationToken::new(),
         }))
@@ -209,6 +246,77 @@ impl AppState {
             instances: stack.describe(),
         });
         Ok(out)
+    }
+
+    /// Add a new instance to the running stack and remember it. `name` empty
+    /// means the next free `<kind>-<n>`.
+    pub async fn add_instance(
+        &self,
+        spec: AddedSpec,
+        name: Option<String>,
+        replica_of: Option<String>,
+    ) -> Result<Vec<InstanceInfo>, ApiError> {
+        let (name, info) = self
+            .with_stack(async |s| {
+                let name = match name {
+                    Some(n) => n,
+                    None => match &replica_of {
+                        Some(source) => s.next_name(source),
+                        None => (1..=10_000)
+                            .map(|n| format!("{}-{n}", spec.kind()))
+                            .find(|c| !s.has(c))
+                            .unwrap_or_else(|| format!("{}-1", spec.kind())),
+                    },
+                };
+                let launcher = spec
+                    .launcher(&name)
+                    .ok_or_else(|| ApiError::internal("no launcher built"))?;
+                s.add_instance(&name, launcher).await?;
+                Ok((name, s.describe()))
+            })
+            .await?;
+        self.added
+            .insert(AddedInstance {
+                name,
+                spec,
+                replica_of,
+                added_at: humantime::format_rfc3339_millis(std::time::SystemTime::now())
+                    .to_string(),
+            })
+            .await?;
+        Ok(info)
+    }
+
+    /// `count` replicas of an existing instance: the same spec on fresh ports.
+    pub async fn clone_instance(
+        &self,
+        name: &str,
+        count: usize,
+    ) -> Result<Vec<InstanceInfo>, ApiError> {
+        let spec = match self.added.get(name).await {
+            Some(a) => a.spec,
+            None => AddedSpec::of_topology(&self.topology, name)
+                .ok_or_else(|| ApiError::not_found(format!("no instance named {name:?}")))?,
+        };
+        let mut info = Vec::new();
+        for _ in 0..count.clamp(1, 16) {
+            info = self
+                .add_instance(spec.clone(), None, Some(name.to_owned()))
+                .await?;
+        }
+        Ok(info)
+    }
+
+    /// Stop, forget and unpersist an added instance.
+    pub async fn remove_instance(&self, name: &str) -> Result<Vec<InstanceInfo>, ApiError> {
+        let info = self
+            .with_stack(async |s| {
+                s.remove_instance(name).await?;
+                Ok(s.describe())
+            })
+            .await?;
+        self.added.remove(name).await?;
+        Ok(info)
     }
 
     async fn stack_targets(&self) -> Vec<Target> {
@@ -342,6 +450,26 @@ impl AppState {
         self.publish(GlobalEvent::RunFinished {
             run: record.summary(),
         });
+        self.notify(&record).await;
+    }
+
+    /// Post the finished record to Slack when the config, and the schedule
+    /// that started it, say so. Runs in the background.
+    async fn notify(&self, record: &RunRecord) {
+        let schedule = match &record.schedule_id {
+            Some(id) => self.schedules.get(id).await,
+            None => None,
+        };
+        let mode = schedule.as_ref().map_or(NotifyMode::Failures, |s| s.notify);
+        if !self.notifier.wants(record, mode) {
+            return;
+        }
+        let payload = self
+            .notifier
+            .message(record, schedule.as_ref().map(|s| s.name.as_str()));
+        let name = record.name.clone();
+        let notifier = self.notifier.clone();
+        tokio::spawn(async move { notifier.send_payload(payload, &name).await });
     }
 
     /// Start a scenario run in the background. 409 while another run is active.
@@ -499,6 +627,7 @@ impl AppState {
         self.publish(GlobalEvent::RunFinished {
             run: record.summary(),
         });
+        self.notify(&record).await;
         Ok(record)
     }
 
@@ -637,6 +766,7 @@ impl AppState {
         self.publish(GlobalEvent::RunFinished {
             run: record.summary(),
         });
+        self.notify(&record).await;
     }
 
     // -------------------------------------------------------- schedules --
