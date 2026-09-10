@@ -1,0 +1,47 @@
+# Local stack: engine (gRPC) + protocol (HTTP/WS/GraphQL gateway).
+#
+#   docker compose up --build
+#   docker compose down -v
+#
+# Images are distroless (no shell, no curl), so compose-level healthchecks cannot exec inside
+# the container. Readiness here is "process is up"; real probes live in devops/k8s. The
+# protocol service retries its engine connection on start, so start order is only a courtesy.
+name: tbd
+
+x-common-env: &common-env
+  RUST_LOG: ${RUST_LOG:-info}
+  LOG_FORMAT: ${LOG_FORMAT:-json}
+
+services:
+  engine:
+    image: ${IMAGE_REGISTRY:-ghcr.io/ORG}/tbd-engine:${IMAGE_TAG:-dev}
+    build:
+      context: .
+      dockerfile: devops/docker/Dockerfile
+      args:
+        BIN: engine
+        PORT: "50051"
+    environment:
+      <<: *common-env
+      ENGINE_LISTEN_ADDR: 0.0.0.0:50051
+    ports:
+      - "50051:50051"
+    restart: unless-stopped
+
+  protocol:
+    image: ${IMAGE_REGISTRY:-ghcr.io/ORG}/tbd-protocol:${IMAGE_TAG:-dev}
+    build:
+      context: .
+      dockerfile: devops/docker/Dockerfile
+      args:
+        BIN: protocol
+        PORT: "8080"
+    environment:
+      <<: *common-env
+      PROTOCOL_LISTEN_ADDR: 0.0.0.0:8080
+      PROTOCOL_ENGINE_URL: http://engine:50051
+    ports:
+      - "8080:8080"
+    depends_on:
+      - engine
+    restart: unless-stopped

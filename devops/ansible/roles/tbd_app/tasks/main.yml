@@ -1,0 +1,49 @@
+---
+- name: Create application directory
+  ansible.builtin.file:
+    path: "{{ app_dir }}"
+    state: directory
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
+    mode: "0750"
+
+- name: Log in to the container registry
+  community.docker.docker_login:
+    registry_url: "{{ registry }}"
+    username: "{{ vault_registry_username }}"
+    password: "{{ vault_registry_password }}"
+  no_log: true
+
+- name: Render compose file
+  ansible.builtin.template:
+    src: compose.yaml.j2
+    dest: "{{ app_dir }}/compose.yaml"
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
+    mode: "0640"
+  notify: Restart stack
+
+- name: Pull images at the requested tag
+  community.docker.docker_image_pull:
+    name: "{{ item }}"
+    tag: "{{ image_tag }}"
+  loop:
+    - "{{ engine_image }}"
+    - "{{ protocol_image }}"
+
+- name: Bring the stack up
+  community.docker.docker_compose_v2:
+    project_src: "{{ app_dir }}"
+    project_name: "{{ compose_project }}"
+    state: present
+    pull: never
+    remove_orphans: true
+
+- name: Wait for protocol /healthz
+  ansible.builtin.uri:
+    url: "{{ healthz_url }}"
+    status_code: 200
+  register: healthz
+  retries: 20
+  delay: 3
+  until: healthz.status == 200

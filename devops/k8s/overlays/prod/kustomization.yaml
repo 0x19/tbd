@@ -1,0 +1,40 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+images:
+  # Pin to an immutable tag (a release tag or image digest) before applying.
+  - name: ghcr.io/ORG/tbd-engine
+    newTag: v0.0.0-REPLACE
+  - name: ghcr.io/ORG/tbd-protocol
+    newTag: v0.0.0-REPLACE
+patches:
+  - target:
+      kind: Deployment
+      name: engine
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 2
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests: { cpu: 250m, memory: 128Mi }
+          limits: { cpu: "2", memory: 512Mi }
+  - target:
+      kind: Deployment
+      name: protocol
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 2
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests: { cpu: 250m, memory: 128Mi }
+          limits: { cpu: "2", memory: 512Mi }
+configMapGenerator:
+  - name: tbd-env
+    behavior: merge
+    literals:
+      - RUST_LOG=info

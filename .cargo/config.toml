@@ -1,0 +1,5 @@
+[build]
+rustdocflags = ["-D", "rustdoc::all", "-A", "rustdoc::private-doc-tests"]
+
+[alias]
+xtask = "run --package xtask --"

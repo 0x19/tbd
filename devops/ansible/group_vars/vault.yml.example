@@ -1,0 +1,7 @@
+---
+# Copy to group_vars/vault.yml and encrypt:
+#   cp group_vars/vault.yml.example group_vars/vault.yml
+#   ansible-vault encrypt group_vars/vault.yml
+# Then run playbooks with --ask-vault-pass or --vault-password-file.
+vault_registry_username: REPLACE_ME          # GitHub user with read:packages
+vault_registry_password: REPLACE_ME          # PAT or GITHUB_TOKEN with read:packages

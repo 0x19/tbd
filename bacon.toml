@@ -1,0 +1,30 @@
+# bacon: background cargo runner used by `mise run dev`.
+default_job = "check"
+
+[jobs.check]
+command = ["cargo", "check", "--workspace", "--all-targets", "--all-features", "--color", "always"]
+need_stdout = false
+
+[jobs.clippy]
+command = ["cargo", "clippy", "--workspace", "--all-targets", "--all-features", "--color", "always", "--", "-D", "warnings"]
+need_stdout = false
+
+[jobs.test]
+command = ["cargo", "nextest", "run", "--workspace", "--all-features", "--color", "always"]
+need_stdout = true
+
+[jobs.engine]
+command = ["cargo", "run", "-p", "tbd-engine", "--color", "always"]
+need_stdout = true
+background = false
+on_change_strategy = "kill_then_restart"
+
+[jobs.protocol]
+command = ["cargo", "run", "-p", "tbd-protocol", "--color", "always"]
+need_stdout = true
+background = false
+on_change_strategy = "kill_then_restart"
+
+[keybindings]
+e = "job:engine"
+p = "job:protocol"

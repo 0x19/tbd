@@ -1,0 +1,36 @@
+[package]
+name = "tbd-engine"
+description = "The streaming compute service. gRPC only; no HTTP surface. Talks to nothing else yet."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "engine"
+path = "src/main.rs"
+
+[dependencies]
+tbd-common.workspace = true
+tbd-proto.workspace = true
+
+anyhow.workspace = true
+clap.workspace = true
+futures.workspace = true
+prost-types.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-stream.workspace = true
+tonic.workspace = true
+tonic-health.workspace = true
+tonic-reflection.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
+
+[lints]
+workspace = true

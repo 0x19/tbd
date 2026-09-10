@@ -1,0 +1,24 @@
+# Rendered by ansible (role tbd_app). Do not edit on the host.
+name: {{ compose_project }}
+
+services:
+  engine:
+    image: {{ engine_image }}:{{ image_tag }}
+    environment:
+      RUST_LOG: {{ rust_log }}
+      LOG_FORMAT: {{ log_format }}
+      ENGINE_LISTEN_ADDR: 0.0.0.0:{{ engine_port }}
+    restart: unless-stopped
+
+  protocol:
+    image: {{ protocol_image }}:{{ image_tag }}
+    environment:
+      RUST_LOG: {{ rust_log }}
+      LOG_FORMAT: {{ log_format }}
+      PROTOCOL_LISTEN_ADDR: 0.0.0.0:{{ protocol_port }}
+      PROTOCOL_ENGINE_URL: http://engine:{{ engine_port }}
+    ports:
+      - "{{ protocol_port }}:{{ protocol_port }}"
+    depends_on:
+      - engine
+    restart: unless-stopped

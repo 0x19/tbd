@@ -1,0 +1,44 @@
+[package]
+name = "tbd-protocol"
+description = "The API gateway. Serves HTTP, WebSocket, GraphQL and gRPC on one port and talks to the engine over gRPC. Owns no business logic."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "protocol"
+path = "src/main.rs"
+
+[dependencies]
+tbd-common.workspace = true
+tbd-proto.workspace = true
+
+anyhow.workspace = true
+async-graphql.workspace = true
+async-graphql-axum.workspace = true
+axum.workspace = true
+clap.workspace = true
+futures.workspace = true
+http.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-stream.workspace = true
+tonic.workspace = true
+tonic-health.workspace = true
+tonic-reflection.workspace = true
+tower-http.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+tbd-engine.workspace = true
+reqwest.workspace = true
+tokio-tungstenite.workspace = true
+
+[lints]
+workspace = true

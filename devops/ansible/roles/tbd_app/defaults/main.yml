@@ -1,0 +1,5 @@
+---
+# Overridable per inventory/group/host or with -e.
+image_tag: main
+compose_project: tbd
+healthz_url: "http://127.0.0.1:{{ protocol_port }}/healthz"

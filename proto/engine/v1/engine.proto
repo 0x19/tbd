@@ -1,0 +1,67 @@
+syntax = "proto3";
+
+package tbd.engine.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// The Engine is the streaming compute service. Every call is scoped to a
+// subject: the entity the engine is reasoning about.
+service Engine {
+  // Score a single subject once. Unary.
+  rpc Evaluate(EvaluateRequest) returns (EvaluateResponse);
+  // Subscribe to engine events for a subject. Server streaming.
+  rpc Subscribe(SubscribeRequest) returns (stream Event);
+  // Long-lived bidirectional session. Client and server both stream frames.
+  rpc Session(stream SessionFrame) returns (stream SessionFrame);
+}
+
+message EvaluateRequest {
+  string subject_id = 1;
+  bytes payload = 2;
+}
+
+message EvaluateResponse {
+  string subject_id = 1;
+  double score = 2;
+  // True while the score comes from a placeholder, never from a model.
+  // Consumers must surface this flag; it is not optional metadata.
+  bool stub = 3;
+  string model_version = 4;
+}
+
+message SubscribeRequest {
+  string subject_id = 1;
+}
+
+message Event {
+  string id = 1;
+  string subject_id = 2;
+  google.protobuf.Timestamp at = 3;
+  oneof kind {
+    Heartbeat heartbeat = 10;
+    ScoreUpdated score_updated = 11;
+  }
+}
+
+message Heartbeat {
+  uint64 seq = 1;
+}
+
+message ScoreUpdated {
+  double score = 1;
+  bool stub = 2;
+}
+
+message SessionFrame {
+  string session_id = 1;
+  uint64 seq = 2;
+  oneof body {
+    bytes data = 10;
+    Heartbeat heartbeat = 11;
+    Close close = 12;
+  }
+}
+
+message Close {
+  string reason = 1;
+}

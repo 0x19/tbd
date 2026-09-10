@@ -1,0 +1,9 @@
+---
+# One-time host preparation. Run as root (or a sudoer) once per machine.
+#   ansible-playbook -i inventory/dev.yml playbooks/bootstrap.yml
+- name: Bootstrap tbd hosts
+  hosts: tbd
+  become: true
+  roles:
+    - common
+    - docker

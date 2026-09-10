@@ -1,0 +1,35 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+images:
+  - name: ghcr.io/ORG/tbd-engine
+    newTag: dev
+  - name: ghcr.io/ORG/tbd-protocol
+    newTag: dev
+patches:
+  - target:
+      kind: Deployment
+      name: engine
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+      - op: replace
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: Always
+  - target:
+      kind: Deployment
+      name: protocol
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+      - op: replace
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: Always
+configMapGenerator:
+  - name: tbd-env
+    behavior: merge
+    literals:
+      - RUST_LOG=debug

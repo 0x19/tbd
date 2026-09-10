@@ -1,0 +1,12 @@
+---
+# EXAMPLE inventory. Replace host names and addresses before use.
+all:
+  children:
+    tbd:
+      hosts:
+        dev-1:
+          ansible_host: 203.0.113.10   # EXAMPLE (TEST-NET-3), replace
+          ansible_user: root           # bootstrap runs as root; deploy switches to deploy_user
+      vars:
+        env_name: dev
+        image_tag: main

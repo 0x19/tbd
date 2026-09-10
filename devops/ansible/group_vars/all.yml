@@ -1,0 +1,18 @@
+---
+# Non-secret defaults for every host. Secrets live in group_vars/vault.yml (ansible-vault).
+registry: ghcr.io
+image_org: ORG                     # PLACEHOLDER: GitHub org/user that owns the images
+engine_image: "{{ registry }}/{{ image_org }}/tbd-engine"
+protocol_image: "{{ registry }}/{{ image_org }}/tbd-protocol"
+
+deploy_user: tbd
+app_dir: /opt/tbd
+
+engine_port: 50051
+protocol_port: 8080
+rust_log: info
+log_format: json
+
+# Ports opened by the firewall role in bootstrap. 22 is always kept.
+firewall_allow_tcp:
+  - "{{ protocol_port }}"

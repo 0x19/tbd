@@ -1,0 +1,17 @@
+---
+# Deploy (or upgrade) the stack. Pass an explicit image tag:
+#   ansible-playbook -i inventory/prod.yml playbooks/deploy.yml -e image_tag=v1.2.3 --ask-vault-pass
+- name: Deploy tbd stack
+  hosts: tbd
+  become: true
+  vars_files:
+    - ../group_vars/vault.yml
+  pre_tasks:
+    - name: Refuse to deploy a placeholder tag
+      ansible.builtin.assert:
+        that:
+          - image_tag is defined
+          - image_tag != "REPLACE_ME"
+        fail_msg: "Pass -e image_tag=<tag> (a release tag or commit sha)."
+  roles:
+    - tbd_app

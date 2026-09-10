@@ -1,0 +1,183 @@
+# Developer experience entrypoint. `mise run` lists tasks; `make <task>` delegates here.
+# Rust itself is managed by rustup via rust-toolchain.toml, not by mise, so plain
+# `cargo` works for people who do not use mise.
+
+[settings]
+experimental = true
+
+[env]
+_.file = [".env"]
+RUST_LOG = "info,tbd=debug"
+LOG_FORMAT = "text"
+IMAGE_REGISTRY = "ghcr.io/ORG"
+IMAGE_TAG = "dev"
+KUBE_OVERLAY = "dev"
+ANSIBLE_INVENTORY = "inventory/dev.yml"
+
+[tools]
+"cargo:cargo-nextest" = "latest"
+"cargo:cargo-deny" = "latest"
+"cargo:cargo-hack" = "latest"
+"cargo:cargo-shear" = "latest"
+"cargo:bacon" = "latest"
+buf = "latest"
+typos = "latest"
+kubectl = "latest"
+kustomize = "latest"
+grpcurl = "latest"
+websocat = "latest"
+# Ansible needs Python. Uncomment when deploying from this machine:
+# "pipx:ansible" = "latest"
+
+# ---------------------------------------------------------------- build ----
+
+[tasks.setup]
+description = "Install toolchain components and every tool above"
+run = ["rustup show active-toolchain", "mise install"]
+
+[tasks.check]
+description = "Type-check the whole workspace"
+run = "cargo check --workspace --all-targets --all-features"
+
+[tasks.build]
+description = "Debug build of both services"
+run = "cargo build --workspace"
+
+[tasks."build:release"]
+description = "Release build of both services"
+run = "cargo build --workspace --release"
+
+[tasks.clean]
+run = "cargo clean"
+
+# ------------------------------------------------------------- quality ----
+
+[tasks.fmt]
+description = "Format Rust and proto sources"
+run = ["cargo fmt --all", "buf format -w proto"]
+
+[tasks."fmt:check"]
+run = ["cargo fmt --all --check", "buf format -d --exit-code proto"]
+
+[tasks.lint]
+description = "Clippy with warnings as errors, plus proto lint"
+run = [
+  "cargo clippy --locked --workspace --all-targets --all-features -- -D warnings",
+  "buf lint proto",
+]
+
+[tasks.test]
+description = "Unit + integration tests (nextest) and doctests"
+run = [
+  "cargo nextest run --workspace --all-features",
+  "cargo test --workspace --doc",
+]
+
+[tasks.smoke]
+description = "Hit every surface of a running local stack (HTTP, SSE, GraphQL, WS, gRPC)"
+run = "scripts/smoke.sh"
+
+[tasks.doc]
+run = "cargo doc --workspace --all-features --no-deps"
+
+[tasks.deny]
+description = "Advisories, licences, bans, sources"
+run = "cargo deny check"
+
+[tasks.typos]
+run = "typos"
+
+[tasks.unused]
+description = "Unused dependencies (weekly, not per PR)"
+run = "cargo shear"
+
+[tasks.features]
+description = "Every feature combination compiles"
+run = "cargo hack check --each-feature --no-dev-deps --workspace"
+
+[tasks.msrv]
+run = "cargo hack check --rust-version --workspace --all-targets --ignore-private"
+
+[tasks.ci]
+description = "Everything CI runs, in order"
+depends = ["fmt:check", "lint", "test", "doc", "deny", "typos"]
+
+# ----------------------------------------------------------------- run ----
+
+[tasks."run:engine"]
+description = "Run the engine (gRPC on ENGINE_LISTEN_ADDR)"
+run = "cargo run -p tbd-engine"
+
+[tasks."run:protocol"]
+description = "Run the protocol gateway (HTTP/WS/GraphQL/gRPC on PROTOCOL_LISTEN_ADDR)"
+run = "cargo run -p tbd-protocol"
+
+[tasks.dev]
+description = "Both services in one terminal (parallel, output prefixed per service)"
+depends = ["run:engine", "run:protocol"]
+
+[tasks."watch:engine"]
+description = "Engine with auto-reload on file change (bacon)"
+run = "bacon engine"
+
+[tasks."watch:protocol"]
+description = "Protocol with auto-reload on file change (bacon)"
+run = "bacon protocol"
+
+# --------------------------------------------------------------- docker ----
+
+[tasks."docker:build"]
+description = "Build both images locally"
+run = [
+  "docker build -f devops/docker/Dockerfile --build-arg BIN=engine   --build-arg PORT=50051 -t $IMAGE_REGISTRY/tbd-engine:$IMAGE_TAG .",
+  "docker build -f devops/docker/Dockerfile --build-arg BIN=protocol --build-arg PORT=8080  -t $IMAGE_REGISTRY/tbd-protocol:$IMAGE_TAG .",
+]
+
+[tasks."docker:push"]
+depends = ["docker:build"]
+run = [
+  "docker push $IMAGE_REGISTRY/tbd-engine:$IMAGE_TAG",
+  "docker push $IMAGE_REGISTRY/tbd-protocol:$IMAGE_TAG",
+]
+
+[tasks.up]
+description = "Local stack via compose"
+run = "docker compose up --build -d"
+
+[tasks.down]
+run = "docker compose down -v"
+
+[tasks.logs]
+run = "docker compose logs -f"
+
+# ------------------------------------------------------------------ k8s ----
+
+[tasks."k8s:render"]
+description = "Render the kustomize overlay (KUBE_OVERLAY=dev|prod)"
+run = "kustomize build devops/k8s/overlays/$KUBE_OVERLAY"
+
+[tasks."k8s:diff"]
+run = "kustomize build devops/k8s/overlays/$KUBE_OVERLAY | kubectl diff -f -"
+
+[tasks."k8s:apply"]
+run = "kustomize build devops/k8s/overlays/$KUBE_OVERLAY | kubectl apply -f -"
+
+# -------------------------------------------------------------- ansible ----
+
+[tasks."ansible:deps"]
+dir = "devops/ansible"
+run = "ansible-galaxy collection install -r requirements.yml"
+
+[tasks."ansible:bootstrap"]
+description = "Prepare hosts (packages, docker, deploy user). ANSIBLE_INVENTORY=inventory/dev.yml|inventory/prod.yml"
+dir = "devops/ansible"
+run = "ansible-playbook -i $ANSIBLE_INVENTORY playbooks/bootstrap.yml"
+
+[tasks."ansible:deploy"]
+description = "Deploy IMAGE_TAG to the inventory hosts"
+dir = "devops/ansible"
+run = "ansible-playbook -i $ANSIBLE_INVENTORY playbooks/deploy.yml -e image_tag=$IMAGE_TAG -e image_org=$IMAGE_REGISTRY --ask-vault-pass"
+
+[tasks.ship]
+description = "Build, push, deploy: the whole path"
+depends = ["ci", "docker:push", "ansible:deploy"]

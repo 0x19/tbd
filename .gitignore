@@ -1,0 +1,63 @@
+# =============================================================================
+# Build artifacts
+# =============================================================================
+**/target/
+**/build/
+dist/
+
+# Rust
+**/*.rs.bk
+*.pdb
+
+# Node
+node_modules/
+
+# =============================================================================
+# Secrets — never commit
+# =============================================================================
+.env
+.env.*
+!.env.example
+*-service-account.json
+*.pem
+*.key
+
+# =============================================================================
+# Editors
+# =============================================================================
+.idea/
+.vscode/
+*.iml
+.DS_Store
+
+# =============================================================================
+# Model weights
+# =============================================================================
+# The leading slash is DELIBERATE. A bare `models` pattern matches any file or
+# directory named `models` at ANY depth. In the apex repo that single line
+# silently excluded two source directories — backend/src/engine/models/ and
+# mobile/lib/models/ — which were therefore never committed and are now lost.
+# Neither the backend nor the mobile app can be built from that repo.
+#
+# Anchor every ignore rule that names a common word. Verify with:
+#   git check-ignore -v <path>
+/models/
+
+# =============================================================================
+# Lockfiles ARE committed
+# =============================================================================
+# Do NOT add *.lock here. Cargo.lock and pubspec.lock belong in version control
+# for binaries and applications — apex ignored them and lost reproducibility.
+
+# =============================================================================
+# Claude Code
+# =============================================================================
+CLAUDE.local.md
+.claude/settings.local.json
+.claude/worktrees/
+
+# =============================================================================
+# Local tooling
+# =============================================================================
+.mise.local.toml
+junit.xml
