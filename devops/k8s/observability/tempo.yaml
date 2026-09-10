@@ -36,6 +36,8 @@ data:
     overrides:
       defaults:
         metrics_generator:
+          # TraceQL metrics (Traces Drilldown) are served natively in Tempo 3
+          # monolithic mode; `local-blocks` is not a processor there.
           processors: [service-graphs, span-metrics]
 ---
 apiVersion: apps/v1

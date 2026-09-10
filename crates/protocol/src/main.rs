@@ -10,7 +10,14 @@ async fn main() -> anyhow::Result<()> {
     if let Some(addr) = config.metrics_addr {
         tbd_common::metrics::install(addr, &telemetry.service_name)?;
     }
+    let mut profiler = tbd_common::profiling::maybe_start(
+        config.telemetry.pyroscope_server.as_deref(),
+        &telemetry.service_name,
+    );
     tbd_protocol::serve(config, tbd_common::shutdown::signal()).await?;
+    if let Some(p) = profiler.as_mut() {
+        p.stop();
+    }
     telemetry.shutdown();
     Ok(())
 }

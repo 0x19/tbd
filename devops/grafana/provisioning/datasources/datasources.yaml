@@ -45,6 +45,13 @@ datasources:
         filterBySpanID: false
         customQuery: true
         query: 'trace_id:="${__span.traceId}"'
+      tracesToProfiles:
+        datasourceUid: pyroscope
+        profileTypeId: process_cpu:cpu:nanoseconds:cpu:nanoseconds
+        customQuery: false
+        tags:
+          - key: service.name
+            value: service_name
       tracesToMetrics:
         datasourceUid: victoriametrics
         spanStartTimeShift: "-5m"
@@ -66,3 +73,9 @@ datasources:
         timeShiftEnabled: true
         spanStartTimeShift: "-5m"
         spanEndTimeShift: "5m"
+  - uid: pyroscope
+    name: Pyroscope
+    type: grafana-pyroscope-datasource
+    access: proxy
+    url: http://pyroscope.observability.svc:4040
+    editable: false

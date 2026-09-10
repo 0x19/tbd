@@ -13,7 +13,7 @@ project as-is.
 | **protocol** | One port, four surfaces: REST and SSE under `/v1`, WebSocket at `/ws`, GraphQL at `/graphql`, gRPC over h2c. Forwards to the engine, owns no logic. Port 8080. |
 | **envoy** | The load balancer in front of everything: edge on 8080 for REST, SSE, GraphQL, WebSocket and gRPC; engine load balancer on 50051. One config for compose, Ansible and Kubernetes. |
 | **chaos** | Runs both services in one process, validates every surface, generates load, injects faults on a timeline and asserts. Used for development and in CI. |
-| **observability** | Prometheus metrics, OpenTelemetry traces and JSON logs with trace ids from every service and Envoy, into VictoriaMetrics, Tempo and VictoriaLogs, with Grafana dashboards. |
+| **observability** | Prometheus metrics, OpenTelemetry traces, JSON logs with trace ids and continuous CPU profiles from every service and Envoy, into VictoriaMetrics, Tempo, VictoriaLogs and Pyroscope, with Grafana dashboards. |
 | **devops** | One Dockerfile, kustomize overlays including a local k3d cluster, Ansible playbooks, compose. |
 
 Every score the engine returns today is a **stub** and carries `stub: true` on every
@@ -98,6 +98,7 @@ mise run local:up          # k3d on this machine, k3s 1.34, storage on the RAID
 mise run local:build       # both images into the cluster
 mise run local:deploy      # Envoy + services + VictoriaMetrics + Tempo + VictoriaLogs + collector + Grafana
 mise run local:traffic     # some requests through Envoy
+mise run local:load        # sustained load: dashboards, traces and CPU profiles fill up
 open http://localhost:3000 # admin / admin, dashboards tagged "tbd"
 mise run k9s
 ```

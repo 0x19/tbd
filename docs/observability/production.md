@@ -12,6 +12,7 @@ format, and trace ↔ log ↔ metric correlation.
 | Traces | Tempo 3 | best Grafana integration, TraceQL, metrics-generator; monolithic mode needs no Kafka | Jaeger v2 if you want its own UI |
 | Metrics | VictoriaMetrics | Prometheus-compatible, one binary, remote-write target for Tempo, same vendor and operator family as the logs | Prometheus 3 as reference; Mimir if standardising on the Grafana stack |
 | Collector | OpenTelemetry Collector (upstream) | backend-neutral, `filelog` and `k8sattributes` presets, one config language | Grafana Alloy if the backends were Loki and Mimir |
+| Profiles | Pyroscope + Alloy eBPF | no code changes, links from spans, same vendor UI | in-process `pyroscope` crate for memory profiles |
 | UI | Grafana 13 | | |
 
 Rust side: `tracing` + `tracing-opentelemetry` 0.33 + `opentelemetry-otlp` 0.32 for
@@ -53,9 +54,10 @@ and object storage. Collector gateways scale horizontally behind a Service.
 
 ## Security
 
-- Grafana runs with `admin`/`admin` and anonymous viewers locally. Change both before
-  anything is reachable beyond a developer machine; wire Grafana to the identity provider
-  and drop anonymous access.
+- Grafana runs with `admin`/`admin` and anonymous **Editor** access locally so Explore
+  and the Drilldown apps work without signing in. Change both before anything is
+  reachable beyond a developer machine: wire Grafana to the identity provider, drop
+  anonymous access or set it to Viewer.
 - The observability namespace exposes nothing outside the cluster except through the
   `*-lb` Services in the local overlay. Production reaches Grafana through the ingress
   with auth, and nothing else.

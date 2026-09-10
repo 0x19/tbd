@@ -11,6 +11,7 @@ mise run local:up        # create the cluster if missing; ~40 s
 mise run local:build     # build both images and import them (no registry needed)
 mise run local:deploy    # apply observability, host services and the app; waits for readiness
 mise run local:traffic   # 30 rounds of `chaos validate` through Envoy (TRAFFIC_ROUNDS=n)
+mise run local:load      # sustained load through Envoy, 8 workers (LOAD_SECONDS=n); fills dashboards and profiles
 mise run local:restart   # after a code change: rebuild, import, roll the app pods
 mise run local:status    # every pod
 mise run local:urls      # the port map below
@@ -34,6 +35,7 @@ steps idempotently and is the template for provisioning a real box the same way.
 | `observability` | `tempo` | 1 | trace store, span metrics |
 | `observability` | `otel-agent` | one per node | tails pod logs |
 | `observability` | `otel-collector` | 1 | OTLP gateway for traces |
+| `observability` | `pyroscope` | 1 | profile store |
 | `observability` | `grafana` | 1 | UI |
 
 ## Ports
@@ -49,14 +51,23 @@ on this machine use.
 | 3000 | `observability/grafana-lb` | Grafana, admin/admin |
 | 9090 | `observability/victoria-metrics-lb` | VictoriaMetrics UI and API |
 | 14317 | `observability/otel-collector-lb` | OTLP/gRPC into the collector, for processes on the host |
+| 9428 | `observability/victoria-logs-lb` | VictoriaLogs UI at `/select/vmui` and its query API |
+| 4040 | `observability/pyroscope-lb` | Pyroscope UI and API |
 
 The mapping lives in two places that must agree: the `-p` flags in `mise.toml`
 `local:up` (and the Ansible playbook), and the `*-lb` Services in
 `devops/k8s/overlays/local/envoy-lb.yaml` and
-`devops/k8s/observability/local-services.yaml`. Adding a port means a cluster
-recreate, because k3d fixes the mappings at creation.
+`devops/k8s/observability/local-services.yaml`. Adding a port: `k3d cluster edit tbd --port-add "PORT:PORT@loadbalancer"` re-creates
+only the load balancer container, then add the `*-lb` Service.
 
 In-cluster names never change: `envoy:8080`, `envoy:50051`, `otel-collector.observability.svc:4317`.
+
+## Node mounts
+
+Besides storage, every node container gets the host's `/sys/kernel/tracing` and
+`/sys/kernel/debug`, so the eBPF profiler manifest can be applied for testing. It still
+cannot profile here (the node's PID namespace is a container's), so the local cluster
+relies on the services' in-process profiler. Both mounts are fixed at cluster creation.
 
 ## Storage
 

@@ -41,3 +41,33 @@ spec:
     - name: otlp-grpc
       port: 14317
       targetPort: otlp-grpc
+---
+# VictoriaLogs' own UI at /select/vmui, and its query API.
+apiVersion: v1
+kind: Service
+metadata:
+  name: victoria-logs-lb
+  namespace: observability
+spec:
+  type: LoadBalancer
+  selector:
+    app.kubernetes.io/name: victoria-logs
+  ports:
+    - name: http
+      port: 9428
+      targetPort: http
+---
+# Pyroscope's own UI and API.
+apiVersion: v1
+kind: Service
+metadata:
+  name: pyroscope-lb
+  namespace: observability
+spec:
+  type: LoadBalancer
+  selector:
+    app.kubernetes.io/name: pyroscope
+  ports:
+    - name: http
+      port: 4040
+      targetPort: http

@@ -1,0 +1,86 @@
+# Pyroscope: continuous profiles from every pod, pushed by the Alloy eBPF agent.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pyroscope
+data:
+  config.yaml: |
+    server:
+      http_listen_port: 4040
+    storage:
+      backend: filesystem
+      filesystem:
+        dir: /data
+    self_profiling:
+      disable_push: true
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: pyroscope
+  labels:
+    app.kubernetes.io/name: pyroscope
+spec:
+  serviceName: pyroscope
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pyroscope
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "4040"
+      labels:
+        app.kubernetes.io/name: pyroscope
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001
+      containers:
+        - name: pyroscope
+          image: grafana/pyroscope:2.3.1
+          args:
+            - -config.file=/etc/pyroscope/config.yaml
+            - -target=all
+          ports:
+            - name: http
+              containerPort: 4040
+          readinessProbe:
+            httpGet: { path: /ready, port: http }
+            periodSeconds: 5
+            initialDelaySeconds: 10
+          resources:
+            requests: { cpu: 200m, memory: 512Mi }
+            limits: { cpu: "4", memory: 4Gi }
+          volumeMounts:
+            - name: config
+              mountPath: /etc/pyroscope
+              readOnly: true
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: config
+          configMap:
+            name: pyroscope
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 50Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pyroscope
+spec:
+  selector:
+    app.kubernetes.io/name: pyroscope
+  ports:
+    - name: http
+      port: 4040
+      targetPort: http

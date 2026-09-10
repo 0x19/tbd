@@ -35,8 +35,9 @@
       command: >
         k3d cluster create {{ cluster }} --image {{ k3s_image }} --servers 1 --agents 2
         --volume {{ storage }}:/var/lib/rancher/k3s/storage@all
+        --volume /sys/kernel/tracing:/sys/kernel/tracing@all --volume /sys/kernel/debug:/sys/kernel/debug@all
         -p 3000:3000@loadbalancer -p 9090:9090@loadbalancer -p 18080:18080@loadbalancer
-        -p 15051:15051@loadbalancer -p 14317:14317@loadbalancer
+        -p 15051:15051@loadbalancer -p 14317:14317@loadbalancer -p 9428:9428@loadbalancer -p 4040:4040@loadbalancer
         --k3s-arg --disable=traefik@server:0 --wait
       when: (clusters.stdout | from_json | map(attribute='name') | list) is not contains(cluster)
 
@@ -90,6 +91,7 @@
         - statefulset/victoria-metrics
         - statefulset/victoria-logs
         - statefulset/tempo
+        - statefulset/pyroscope
         - deployment/otel-collector
         - deployment/grafana
       changed_when: false
@@ -106,5 +108,5 @@
       debug:
         msg:
           - "edge http://localhost:18080   engine LB http://localhost:15051"
-          - "grafana http://localhost:3000 (admin/admin)   victoria-metrics http://localhost:9090"
+          - "grafana http://localhost:3000 (admin/admin)   victoria-metrics http://localhost:9090   victoria-logs http://localhost:9428/select/vmui   pyroscope http://localhost:4040"
           - "chaos validate --protocol http://localhost:18080 --engine http://localhost:15051"

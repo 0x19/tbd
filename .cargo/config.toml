@@ -1,5 +1,7 @@
 [build]
 rustdocflags = ["-D", "rustdoc::all", "-A", "rustdoc::private-doc-tests"]
+# Frame pointers let the eBPF profiler unwind Rust stacks without DWARF; ~1% cost.
+rustflags = ["-C", "force-frame-pointers=yes"]
 
 [alias]
 xtask = "run --package xtask --"

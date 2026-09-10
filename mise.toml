@@ -197,10 +197,10 @@ run = "kustomize build devops/k8s/overlays/$KUBE_OVERLAY | kubectl apply -f -"
 # ---------------------------------------------------------- local cluster ----
 # A k3d cluster on this machine with Envoy, both services and the observability
 # stack. Host ports: 18080 edge, 15051 engine LB, 3000 Grafana, 9090 VictoriaMetrics,
-# 14317 OTLP into the collector. PVCs live under K3D_STORAGE.
+# 14317 OTLP into the collector, 9428 VictoriaLogs UI, 4040 Pyroscope. PVCs live under K3D_STORAGE.
 
 [tasks."local:up"]
-description = "Create the k3d cluster if missing (k3s 1.34, 1 server + 2 agents, storage on the RAID)"
+description = "Create the k3d cluster if missing (k3s 1.34, 1 server + 2 agents, storage on the RAID, tracefs mounted for the eBPF profiler)"
 run = """
 if k3d cluster list -o json | grep -q '"name":"'"$K3D_CLUSTER"'"'; then
   echo "cluster $K3D_CLUSTER exists"
@@ -208,8 +208,9 @@ else
   mkdir -p "$K3D_STORAGE"
   k3d cluster create "$K3D_CLUSTER" --image rancher/k3s:v1.34.9-k3s1 --servers 1 --agents 2 \
     --volume "$K3D_STORAGE:/var/lib/rancher/k3s/storage@all" \
+    --volume /sys/kernel/tracing:/sys/kernel/tracing@all --volume /sys/kernel/debug:/sys/kernel/debug@all \
     -p "3000:3000@loadbalancer" -p "9090:9090@loadbalancer" -p "18080:18080@loadbalancer" \
-    -p "15051:15051@loadbalancer" -p "14317:14317@loadbalancer" \
+    -p "15051:15051@loadbalancer" -p "14317:14317@loadbalancer" -p "9428:9428@loadbalancer" -p "4040:4040@loadbalancer" \
     --k3s-arg "--disable=traefik@server:0" --wait
 fi
 kubectl config use-context "k3d-$K3D_CLUSTER"
@@ -230,15 +231,16 @@ kubectl apply -k devops/k8s/observability
 kubectl apply -f devops/k8s/observability/local-services.yaml
 kubectl apply -k devops/k8s/overlays/local
 kubectl -n observability rollout status statefulset/victoria-metrics statefulset/victoria-logs statefulset/tempo --timeout=180s
-kubectl -n observability rollout status deployment/otel-collector deployment/grafana --timeout=300s
+kubectl -n observability rollout status statefulset/pyroscope deployment/otel-collector deployment/grafana --timeout=300s
 kubectl -n tbd rollout status deployment/engine deployment/protocol deployment/envoy --timeout=180s
 mise run local:urls
 """
 
 [tasks."local:restart"]
-description = "Rebuild images and restart the app pods on the new build"
+description = "Rebuild images, re-apply the app overlay (config changes included) and restart the app pods"
 run = """
 mise run local:build
+kubectl apply -k devops/k8s/overlays/local
 kubectl -n tbd rollout restart deployment/engine deployment/protocol
 kubectl -n tbd rollout status deployment/engine deployment/protocol --timeout=180s
 """
@@ -250,6 +252,8 @@ echo "engine LB (gRPC)             http://localhost:15051"
 echo "grafana (admin/admin)        http://localhost:3000"
 echo "victoria-metrics             http://localhost:9090"
 echo "otlp into the collector      http://localhost:14317"
+echo "victoria-logs UI             http://localhost:9428/select/vmui"
+echo "pyroscope UI                 http://localhost:4040"
 echo "validate:  chaos validate --protocol http://localhost:18080 --engine http://localhost:15051"
 """
 
@@ -259,10 +263,23 @@ run = "kubectl get pods -A -o wide"
 [tasks."local:traffic"]
 description = "Send N rounds of validate traffic through Envoy so the dashboards have data (N=${TRAFFIC_ROUNDS:-30})"
 run = """
-for i in $(seq 1 ${TRAFFIC_ROUNDS:-30}); do
+rounds=${TRAFFIC_ROUNDS:-30}
+for i in $(seq 1 "$rounds"); do
   cargo run -q -p tbd-chaos -- validate --protocol http://localhost:18080 --engine http://localhost:15051 > /dev/null || true
+  printf '\r  round %s/%s' "$i" "$rounds"
 done
-echo "done: $TRAFFIC_ROUNDS rounds"
+echo; echo "done: $rounds rounds, $((rounds * 11)) checks through Envoy"
+"""
+
+[tasks."local:load"]
+description = "Sustained load through Envoy for LOAD_SECONDS (default 60): tight REST and gRPC loops, 8 workers. Fills dashboards and profiles."
+run = """
+secs=${LOAD_SECONDS:-60}; end=$(( $(date +%s) + secs ))
+rest() { while [ $(date +%s) -lt $end ]; do curl -s -o /dev/null -X POST http://localhost:18080/v1/evaluate -H 'content-type: application/json' -d '{"subject_id":"load","payload":"x"}'; done; }
+grpc() { while [ $(date +%s) -lt $end ]; do grpcurl -plaintext -d '{"subject_id":"load","payload":"eA=="}' localhost:15051 tbd.engine.v1.EngineService/Evaluate > /dev/null 2>&1; done; }
+gql()  { while [ $(date +%s) -lt $end ]; do curl -s -o /dev/null -X POST http://localhost:18080/graphql -H 'content-type: application/json' -d '{"query":"{ evaluate(subjectId:\\"load\\"){ stub } }"}'; done; }
+for i in 1 2 3; do rest & done; for i in 1 2 3; do grpc & done; for i in 1 2; do gql & done
+echo "loading for ${secs}s (8 workers) ..."; wait; echo "done"
 """
 
 [tasks."local:down"]

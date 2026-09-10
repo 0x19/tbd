@@ -7,6 +7,7 @@ resources:
   - victoria-logs.yaml
   - tempo.yaml
   - otel-collector.yaml
+  - pyroscope.yaml
   - grafana.yaml
   - ../../grafana
 labels:

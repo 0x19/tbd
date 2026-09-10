@@ -19,7 +19,7 @@ paths:
   service at another service's DNS name.
 - Pins are deliberate: k3s `v1.34.9-k3s1`, Envoy `v1.39.1`, the observability images.
   Bump one at a time with the reason in the commit.
-- Host port map for the local cluster lives in `mise.toml` `local:up`,
+- Host port map for the local cluster (3000, 4040, 9090, 9428, 14317, 15051, 18080) lives in `mise.toml` `local:up`,
   `devops/ansible/playbooks/local.yml`, `devops/k8s/overlays/local/envoy-lb.yaml` and
   `devops/k8s/observability/local-services.yaml`; change all or none.
 - Update `docs/local-cluster.md`, `docs/observability/*.md` or `devops/*/README.md` in the

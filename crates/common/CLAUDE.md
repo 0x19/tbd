@@ -19,6 +19,12 @@ If a change needs one of those, it belongs in the service, not here.
   A tracer provider is always installed so spans get trace ids and `traceparent`
   propagates even with no exporter; the OTLP exporter is added only when the endpoint is
   set. `propagation::{inject, adopt_parent}` are the two helpers services use.
+- `profiling.rs`: in-process CPU profiling to Pyroscope, on only when
+  `PYROSCOPE_SERVER_ADDRESS` is set; `maybe_start` never fails the service. `pprof-rs` needs a writable
+  `/tmp` (read-only containers get an `emptyDir` there) or it reports "create profiler
+  error". `pyroscope`
+  is pinned to 0.5 because `pyroscope_pprofrs` targets that line; 2.x is a different API
+  and pulling both in gives mismatched backend types.
 - `metrics.rs`: `install(addr, service)` sets up the Prometheus listener once per
   process with a global `service` label and process metrics; `names` holds every metric
   name; `RequestTimer` and `StreamGuard` are the recording helpers. With no exporter

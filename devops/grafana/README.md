@@ -45,7 +45,8 @@ for f in devops/grafana/dashboards/*.json; do python3 -c "import json,sys; json.
 |---|---|---|---|
 | `victoriametrics` | prometheus | `http://victoria-metrics.observability.svc:8428` | default; PromQL |
 | `victorialogs` | victoriametrics-logs-datasource | `http://victoria-logs.observability.svc:9428` | LogsQL; the `trace_id` field links to Tempo |
-| `tempo` | tempo | `http://tempo.observability.svc:3200` | TraceQL; "Trace to logs" runs `trace_id:="<id>"` in VictoriaLogs |
+| `tempo` | tempo | `http://tempo.observability.svc:3200` | TraceQL; "Trace to logs" runs `trace_id:="<id>"` in VictoriaLogs; "Trace to profiles" opens Pyroscope by `service_name` |
+| `pyroscope` | grafana-pyroscope-datasource | `http://pyroscope.observability.svc:4040` | CPU profiles from the eBPF agent; Profiles Drilldown |
 
 Correlation works in both directions: click `trace_id` on a log line to open the trace;
 click a span to see the logs written inside it.

@@ -1,0 +1,163 @@
+# Grafana Alloy as the eBPF profiler: one privileged pod per node samples CPU
+# stacks of every container in the tbd and observability namespaces, no code
+# changes, and pushes them to Pyroscope. service_name is the container name, so
+# it matches service.name on traces and logs.
+#
+# Real nodes only. See kustomization.yaml in this directory for why it cannot
+# work on k3d or kind.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: alloy-profiles
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: alloy-profiles
+rules:
+  - apiGroups: [""]
+    resources: [pods, nodes, namespaces]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: alloy-profiles
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: alloy-profiles
+subjects:
+  - kind: ServiceAccount
+    name: alloy-profiles
+    namespace: observability
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alloy-profiles
+data:
+  config.alloy: |
+    discovery.kubernetes "local_pods" {
+      role = "pod"
+      selectors {
+        role  = "pod"
+        field = "spec.nodeName=" + sys.env("NODE_NAME")
+      }
+    }
+
+    discovery.relabel "profiled" {
+      targets = discovery.kubernetes.local_pods.targets
+      rule {
+        action        = "drop"
+        regex         = "Succeeded|Failed"
+        source_labels = ["__meta_kubernetes_pod_phase"]
+      }
+      rule {
+        action        = "keep"
+        regex         = "tbd|observability"
+        source_labels = ["__meta_kubernetes_namespace"]
+      }
+      // Same value as service.name on traces and logs, so Grafana links a span to its profile.
+      rule {
+        action        = "replace"
+        source_labels = ["__meta_kubernetes_pod_container_name"]
+        target_label  = "service_name"
+      }
+      rule {
+        action        = "replace"
+        source_labels = ["__meta_kubernetes_namespace"]
+        target_label  = "namespace"
+      }
+      rule {
+        action        = "replace"
+        source_labels = ["__meta_kubernetes_pod_name"]
+        target_label  = "pod"
+      }
+      rule {
+        action        = "replace"
+        source_labels = ["__meta_kubernetes_pod_container_name"]
+        target_label  = "container"
+      }
+      rule {
+        action        = "replace"
+        source_labels = ["__meta_kubernetes_pod_node_name"]
+        target_label  = "node"
+      }
+    }
+
+    pyroscope.ebpf "profiled" {
+      forward_to       = [pyroscope.write.pyroscope.receiver]
+      targets          = discovery.relabel.profiled.output
+      collect_interval = "15s"
+      sample_rate      = 97
+      demangle         = "full"
+    }
+
+    pyroscope.write "pyroscope" {
+      endpoint {
+        url = "http://pyroscope:4040"
+      }
+    }
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: alloy-profiles
+  labels:
+    app.kubernetes.io/name: alloy-profiles
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: alloy-profiles
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "12345"
+      labels:
+        app.kubernetes.io/name: alloy-profiles
+    spec:
+      serviceAccountName: alloy-profiles
+      hostPID: true
+      containers:
+        - name: alloy
+          image: grafana/alloy:v1.19.2
+          args:
+            - run
+            - /etc/alloy/config.alloy
+            - --storage.path=/tmp/alloy
+            - --server.http.listen-addr=0.0.0.0:12345
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          ports:
+            - name: http
+              containerPort: 12345
+          securityContext:
+            privileged: true
+            runAsUser: 0
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { cpu: "1", memory: 1Gi }
+          volumeMounts:
+            - name: config
+              mountPath: /etc/alloy
+              readOnly: true
+            - name: tracing
+              mountPath: /sys/kernel/tracing
+              readOnly: true
+            - name: symb-cache
+              mountPath: /tmp/symb-cache
+      volumes:
+        - name: config
+          configMap:
+            name: alloy-profiles
+        - name: tracing
+          hostPath:
+            path: /sys/kernel/tracing
+        - name: symb-cache
+          emptyDir:
+            sizeLimit: 2Gi

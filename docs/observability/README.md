@@ -8,7 +8,8 @@ change.
 |---|---|---|---|---|
 | Metrics | every service on `/metrics` (Prometheus text), Envoy on its admin port | VictoriaMetrics scrapes pods annotated `prometheus.io/scrape` | VictoriaMetrics, 30 d | Grafana dashboards, PromQL |
 | Traces | every service (OTLP/gRPC), Envoy as the root span | OpenTelemetry Collector gateway → Tempo | Tempo, local blocks | Grafana Explore, TraceQL, service graph |
-| Logs | every service as JSON on stdout with `trace_id`, Envoy access logs as JSON | OpenTelemetry Collector agent tails pod logs, parses the JSON, adds k8s metadata | VictoriaLogs, 30 d | Grafana Explore, LogsQL |
+| Logs | every service as JSON on stdout with `trace_id`, Envoy access logs as JSON | OpenTelemetry Collector agent tails pod logs, parses the JSON, adds k8s metadata | VictoriaLogs, 30 d | Grafana Explore, VictoriaLogs UI, LogsQL |
+| Profiles | every service in-process (`pprof-rs`); every container via eBPF on real nodes | pushed to Pyroscope | Pyroscope, filesystem | Profiles Drilldown, Pyroscope UI, flame graphs linked from spans |
 | Span metrics, service graph | Tempo's metrics-generator from traces | remote-write | VictoriaMetrics | Traces dashboard, node graph |
 
 Why these: VictoriaLogs indexes every field, so `trace_id:="…"` is a direct lookup and
@@ -23,6 +24,7 @@ The reasoning behind the choices is in [production.md](production.md#why-this-st
 | [tracing.md](tracing.md) | spans, propagation, sampling, TraceQL |
 | [logs.md](logs.md) | log shape, the collector pipeline, LogsQL |
 | [dashboards.md](dashboards.md) | the five dashboards, editing and reloading them |
+| [profiling.md](profiling.md) | continuous CPU profiles, flame graphs, trace-to-profile |
 | [production.md](production.md) | why this stack, sizing, durability, sampling, retention |
 | [../local-cluster.md](../local-cluster.md) | the k3d cluster this all runs on locally |
 
@@ -33,6 +35,7 @@ mise run local:up        # k3d cluster, once
 mise run local:build     # images into the cluster
 mise run local:deploy    # observability + envoy + services, waits for readiness
 mise run local:traffic   # 30 rounds of validate through Envoy so there is data
+mise run local:load      # 60 s of sustained load; needed for meaningful profiles
 mise run k9s             # the cluster in a TUI
 ```
 

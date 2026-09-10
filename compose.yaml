@@ -14,6 +14,7 @@ x-common-env: &common-env
   # Set to an OTLP/gRPC collector to export traces, e.g. http://alloy:4317.
   OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
   OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-1.0}
+  PYROSCOPE_SERVER_ADDRESS: ${PYROSCOPE_SERVER_ADDRESS:-}
 
 services:
   engine:

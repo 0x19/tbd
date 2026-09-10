@@ -1,7 +1,8 @@
-# Build context for devops/docker/Dockerfile. Only Cargo manifests, crates/ and proto/ are needed.
+# Build context for devops/docker/Dockerfile. Only Cargo manifests, .cargo/, crates/ and proto/ are needed.
 *
 !Cargo.toml
 !Cargo.lock
+!.cargo/
 !crates/
 !proto/
 # never ship build output or secrets even if the allowlist above matches a subpath

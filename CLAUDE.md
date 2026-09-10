@@ -28,6 +28,8 @@ earlier idea material for a product direction, not a spec; do not "fix" it.
 
 - Clippy pedantic is on and warnings are errors. `unwrap`/`expect` denied outside tests;
   `println`/`dbg` denied; `unsafe` forbidden.
+- Release builds keep symbols and frame pointers on purpose (profiling); do not add
+  `strip` back.
 - Stub values are labelled stubs on every surface (`stub: true`, `stub-` model versions).
   Never let a placeholder look like a measurement.
 - Protocol handlers translate and forward only. Business logic goes in the engine.

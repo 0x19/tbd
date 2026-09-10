@@ -71,6 +71,14 @@ pub struct TelemetryArgs {
         global = true
     )]
     pub sample_ratio: f64,
+
+    /// Pyroscope server for in-process CPU profiles, e.g. `http://pyroscope:4040`. Unset disables.
+    #[arg(
+        long = "pyroscope-server",
+        env = "PYROSCOPE_SERVER_ADDRESS",
+        global = true
+    )]
+    pub pyroscope_server: Option<String>,
 }
 
 impl Default for TelemetryArgs {
@@ -81,6 +89,7 @@ impl Default for TelemetryArgs {
             otlp_endpoint: None,
             service_name: None,
             sample_ratio: 1.0,
+            pyroscope_server: None,
         }
     }
 }

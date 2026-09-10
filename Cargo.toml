@@ -66,6 +66,8 @@ opentelemetry-semantic-conventions = "0.32"
 metrics            = "0.24"
 metrics-exporter-prometheus = { version = "0.18", default-features = false, features = ["http-listener"] }
 metrics-process    = "2"
+pyroscope          = "0.5"   # the pprof-rs backend targets this line; 2.x is a different API
+pyroscope_pprofrs  = "0.2"
 
 # misc
 uuid = { version = "1", features = ["v4", "v7"] }
@@ -108,4 +110,8 @@ broken_intra_doc_links = "deny"
 [profile.release]
 lto = "thin"
 codegen-units = 1
-strip = "symbols"
+# Symbols and line tables stay in: the eBPF profiler needs function names and
+# frame pointers (see .cargo/config.toml) to draw flame graphs of the release
+# binaries. Costs some tens of MB per image, nothing at runtime.
+strip = "none"
+debug = "line-tables-only"

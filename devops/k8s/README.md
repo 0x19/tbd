@@ -8,7 +8,8 @@ overlays/
   local/         the k3d cluster on this machine: 2 replicas each, host-facing envoy-lb
   dev/           1 replica, debug logging, images pulled
   prod/          replicas and pinned tags per release
-observability/   VictoriaMetrics, VictoriaLogs, Tempo, OTel Collector agent + gateway, Grafana
+observability/   VictoriaMetrics, VictoriaLogs, Tempo, Pyroscope, OTel Collector agent + gateway, Grafana
+  ebpf/          Alloy eBPF profiler DaemonSet; real nodes only, applied separately
                  (dashboards and datasources come from ../../grafana via kustomize)
 ```
 

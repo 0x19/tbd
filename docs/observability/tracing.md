@@ -47,6 +47,24 @@ a sampled trace stays sampled across hops. Keep `1.0` until Tempo's write rate i
 problem; then lower the root ratio and add tail sampling in the collector gateway so
 error traces are always kept. Envoy's tracer follows the incoming `traceparent` flag.
 
+## Viewing traces
+
+Tempo has no UI; Grafana is the front end, three ways in:
+
+- **Traces Drilldown** (Grafana menu → Drilldown → Traces, or
+  `/a/grafana-exploretraces-app/explore`): query-free. Starts from services and their
+  rate, error and duration, lets you click a spike, compares slow against fast spans by
+  attribute, and opens the waterfall. Backed by TraceQL metrics, which Tempo 3 serves
+  natively in monolithic mode. Best first stop.
+- **Explore** (`/explore`, datasource Tempo): the Search tab has dropdowns for service,
+  span name, status and duration; the TraceQL tab takes a query; the Trace ID tab takes
+  an id. Results open the waterfall.
+- **The Traces dashboard**: a search panel over the last 30 minutes and the service
+  graph.
+
+Locally the anonymous role is Editor so all three work without signing in; in
+production it is Viewer, which hides Explore and the Drilldown apps, so sign in.
+
 ## Querying
 
 Grafana Explore, datasource Tempo. TraceQL:

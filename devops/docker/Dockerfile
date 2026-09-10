@@ -20,6 +20,7 @@ WORKDIR /app
 # ---------------------------------------------------------------------------
 FROM chef AS planner
 COPY Cargo.toml Cargo.lock ./
+COPY .cargo ./.cargo
 COPY crates ./crates
 COPY proto ./proto
 RUN cargo chef prepare --recipe-path recipe.json
@@ -36,6 +37,7 @@ ARG BIN=engine
 COPY --from=cacher /app/target ./target
 COPY --from=cacher /usr/local/cargo /usr/local/cargo
 COPY Cargo.toml Cargo.lock ./
+COPY .cargo ./.cargo
 COPY crates ./crates
 COPY proto ./proto
 RUN cargo build --locked --release -p tbd-${BIN} \

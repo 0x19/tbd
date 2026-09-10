@@ -53,7 +53,13 @@ without a stream selector.
 
 ## Querying
 
-Grafana Explore, datasource VictoriaLogs, or the VictoriaLogs UI through a port-forward.
+Two UIs. Grafana Explore with the VictoriaLogs datasource has the field browser, the
+volume histogram and the `trace_id` link to Tempo. VictoriaLogs' own UI at
+http://localhost:9428/select/vmui (port 9428 on the local cluster) is the stronger
+explorer: field statistics, hit histograms, completion, every LogsQL pipe. Grafana's
+"Logs Drilldown" app is Loki-only and shows a "no Loki datasource" notice here; ignore
+it.
+
 LogsQL:
 
 ```

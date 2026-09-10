@@ -10,6 +10,7 @@ services:
       ENGINE_LISTEN_ADDR: 0.0.0.0:{{ engine_port }}
       ENGINE_METRICS_ADDR: 0.0.0.0:9464
       OTEL_EXPORTER_OTLP_ENDPOINT: "{{ otlp_endpoint | default('') }}"
+      PYROSCOPE_SERVER_ADDRESS: "{{ pyroscope_server | default('') }}"
     restart: unless-stopped
 
   protocol:
@@ -20,6 +21,7 @@ services:
       PROTOCOL_LISTEN_ADDR: 0.0.0.0:{{ protocol_port }}
       PROTOCOL_METRICS_ADDR: 0.0.0.0:9465
       OTEL_EXPORTER_OTLP_ENDPOINT: "{{ otlp_endpoint | default('') }}"
+      PYROSCOPE_SERVER_ADDRESS: "{{ pyroscope_server | default('') }}"
       PROTOCOL_ENGINE_URL: http://engine:{{ engine_port }}
     ports:
       - "{{ protocol_port }}:{{ protocol_port }}"

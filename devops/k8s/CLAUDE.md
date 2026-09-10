@@ -16,8 +16,20 @@ Read `README.md` here first. Non-obvious facts:
   rewritten by kustomize. Do not hardcode a hashed name anywhere.
 - Tempo 3 monolithic config: no `ingest`, no `block_builder`, no
   `metrics_generator.traces_storage`. A wrong key crash-loops the pod; the log names it.
+  `local-blocks` is not a processor in 3.x either (Tempo logs it as unknown); TraceQL
+  metrics for Traces Drilldown work without it.
+- Grafana's anonymous role is Editor in `observability/grafana.yaml` for local use only.
 - The OTel agent config is the only place that knows our JSON log shape
   (`span.trace_id` lifted to `trace_id`). Changing log fields in `tbd-common` may need
   a change there.
 - Validate before applying: `kustomize build <dir> > /dev/null`, `mise run envoy:validate`,
   and YAML parse; there is no CI job that applies these to a cluster yet.
+- `observability/ebpf/` (Alloy eBPF profiler) is a separate kustomization for real
+  nodes. It cannot work on k3d or kind (node PID namespace is a container's), so never
+  add it to the main observability kustomization. Locally, services profile themselves
+  (`PYROSCOPE_SERVER_ADDRESS` in `base/configmap.yaml`).
+- Profiles are only readable if release binaries keep symbols and frame pointers
+  (`Cargo.toml` `[profile.release]`, `.cargo/config.toml` rustflags, and the Dockerfile
+  copies `.cargo/`). A stripped build shows `[unknown]` frames.
+- Service pods mount an `emptyDir` at `/tmp`: the in-process profiler creates temp
+  files and the root filesystem is read-only. Removing it silently disables profiling.
