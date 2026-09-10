@@ -1,22 +1,18 @@
 "use client";
 
-import { Search } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { useChaos } from "@/app/providers";
-import { useSearch } from "@/components/search-provider";
-import { Button } from "@/components/ui/button";
 import { crumbs } from "@/data/sidebar-data";
 import { site } from "@/data/site";
 
 import { StatusBadge } from "../status-badge";
 
-/** The kit's sub-header: root breadcrumb, section, tail, and the command search. */
+/** The kit's sub-header: root breadcrumb, section and tail; the active run on the right. */
 export function SubHeader() {
   const pathname = usePathname();
   const trail = crumbs(pathname);
-  const { setOpen } = useSearch();
   const { overview } = useChaos();
   const active = overview?.active_run;
 
@@ -35,23 +31,6 @@ export function SubHeader() {
               </span>
             </span>
           ))}
-        </div>
-
-        <div className="relative xl:mx-auto xl:w-full xl:max-w-md">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => setOpen(true)}
-            aria-label="Open command palette"
-            aria-keyshortcuts="Meta+K Control+K"
-            className="bg-muted/70 text-muted-foreground hover:bg-muted/90 hover:text-foreground h-10 w-full justify-start rounded-full border-none px-3 font-normal shadow-none"
-          >
-            <Search className="size-4 shrink-0" aria-hidden="true" />
-            <span className="min-w-0 flex-1 truncate text-left">Search pages or run commands</span>
-            <kbd className="bg-background pointer-events-none hidden h-6 shrink-0 items-center gap-1 rounded-full border px-2 font-mono text-[10px] font-medium opacity-100 select-none sm:inline-flex">
-              <span className="text-xs">⌘</span>K
-            </kbd>
-          </Button>
         </div>
 
         {active ? (

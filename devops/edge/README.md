@@ -20,6 +20,7 @@ internet ──443──▶ router (port forward) ──▶ this host: caddy ─
 | `profiles.<base>` | Pyroscope 4040 | HTTP basic | |
 | `metrics.<base>` | VictoriaMetrics 9090 | HTTP basic | `/` redirects to `/vmui/` |
 | `chaosadmin.<base>` | Envoy 18080, `chaosadmin.*` virtual host | HTTP basic | the chaos admin UI at the root, API at `/api/chaos/v1/` |
+| `auth.<base>` | Envoy 18080, `auth.*` virtual host | none (it is the sign-in) | Ory Hydra, Ory Kratos and the login/registration/consent pages |
 
 ## Setup
 

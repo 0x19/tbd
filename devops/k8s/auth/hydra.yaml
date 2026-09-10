@@ -1,0 +1,131 @@
+# Ory Hydra. The init container renders config/hydra.yml with the public URL and
+# runs the SQL migrations; both are idempotent.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hydra
+  labels:
+    app.kubernetes.io/name: hydra
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: hydra
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: hydra
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "4445"
+        prometheus.io/path: /admin/metrics/prometheus
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10000
+        runAsGroup: 10000
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: render-config
+          image: busybox:1.37
+          command: ["sh", "-c"]
+          args:
+            - sed "s|__AUTH_PUBLIC_URL__|$AUTH_PUBLIC_URL|g; s|__BASE_DOMAIN__|$BASE_DOMAIN|g" /template/hydra.yml > /config/hydra.yml
+          envFrom:
+            - configMapRef:
+                name: auth-env
+          volumeMounts:
+            - name: template
+              mountPath: /template
+            - name: config
+              mountPath: /config
+        - name: migrate
+          image: oryd/hydra:v26.2.0
+          args: ["migrate", "sql", "-e", "--yes", "-c", "/etc/config/hydra/hydra.yml"]
+          env:
+            - name: DSN
+              valueFrom:
+                secretKeyRef:
+                  name: auth-secrets
+                  key: hydra-dsn
+          volumeMounts:
+            - name: config
+              mountPath: /etc/config/hydra
+      containers:
+        - name: hydra
+          image: oryd/hydra:v26.2.0
+          args: ["serve", "all", "-c", "/etc/config/hydra/hydra.yml"]
+          env:
+            - name: DSN
+              valueFrom:
+                secretKeyRef:
+                  name: auth-secrets
+                  key: hydra-dsn
+            - name: SECRETS_SYSTEM
+              valueFrom:
+                secretKeyRef:
+                  name: auth-secrets
+                  key: hydra-system
+          ports:
+            - name: public
+              containerPort: 4444
+            - name: admin
+              containerPort: 4445
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: admin
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health/alive
+              port: admin
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: "2"
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: config
+              mountPath: /etc/config/hydra
+              readOnly: true
+      volumes:
+        - name: template
+          configMap:
+            name: hydra-config
+        - name: config
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hydra-public
+spec:
+  selector:
+    app.kubernetes.io/name: hydra
+  ports:
+    - name: http
+      port: 4444
+      targetPort: public
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hydra-admin
+spec:
+  selector:
+    app.kubernetes.io/name: hydra
+  ports:
+    - name: http
+      port: 4445
+      targetPort: admin

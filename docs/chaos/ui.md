@@ -118,7 +118,8 @@ Rules the code follows:
 v2.3.0, Premium ZIP), reduced the way the kit recommends: keep the product you are
 building, delete the rest. Kept from the kit, file for file: the shell
 (`components/layout/`: sidebar with team switcher and collapsible nav groups, header with
-⌘K, notifications and theme controls, the breadcrumb sub-header), the theme preset
+⌘K, notifications and theme controls, the breadcrumb sub-header without the kit's second
+search box), the theme preset
 picker with its presets, the `components/ui/` primitives (shadcn on Radix), the global
 CSS, ESLint and Prettier. Deleted: the five demo sub-apps, auth and error pages, their
 mock data, and the packages only they used (editor, maps, PDF, drag and drop, forms,
