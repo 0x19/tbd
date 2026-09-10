@@ -16,7 +16,7 @@ name. If you add a check, add it in both places; this page lists the mapping.
 | `doc` | `doc` | any rustdoc warning, broken intra-doc links included |
 | `chaos:run` | `scenarios` | any scenario under `scenarios/` failing an assertion or timeline action |
 | `ui:check` | `ui` | `ui/chaos`: prettier drift, an eslint finding (React Compiler rules included), a type error; CI also runs `pnpm build` |
-| not in the gate | `docker` | any of the three images failing to build; on `main` also failing to push. The chaos image build runs `pnpm build` first so it carries the UI |
+| not in the gate | `docker` | any image failing to build; on `main` also failing to push. The chaos image build runs `pnpm build` first so it carries the UI |
 
 Locally the steps run in that order, cheapest first, so a typo or format slip fails in
 under two seconds without a compile. They run sequentially on purpose: parallel cargo
@@ -57,10 +57,13 @@ commands above still work if those tools are on `PATH`.
 
 ## Images
 
-The `docker` job builds `ghcr.io/<ORG>/tbd-engine`, `ghcr.io/<ORG>/tbd-protocol` and
-`ghcr.io/<ORG>/tbd-chaos` from `devops/docker/Dockerfile` on every push and pull
-request, and pushes them only on `main`, tagged with the short commit SHA and `main`. `release.yml` runs on `v*` tags and
-pushes the semver tag plus `latest`.
+The `docker` job builds every image from `devops/docker/Dockerfile` on every push and
+pull request, and pushes them only on `main`, tagged with the short commit SHA and
+`main`. `release.yml` runs on `v*` tags and pushes the semver tag plus `latest`.
+
+- `ghcr.io/<ORG>/tbd-engine`
+- `ghcr.io/<ORG>/tbd-protocol`
+- `ghcr.io/<ORG>/tbd-chaos`
 
 `ORG` defaults to the repository owner. Override it with a repository variable named
 `ORG`. Pushing needs no secret beyond the automatic `GITHUB_TOKEN` with `packages: write`.

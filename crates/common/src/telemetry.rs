@@ -235,6 +235,19 @@ pub fn current_trace_id() -> Option<String> {
 pub mod propagation {
     pub use opentelemetry::propagation::{Extractor, Injector};
 
+    /// An [`Extractor`] over HTTP headers, for adopting a caller's
+    /// `traceparent` on any server built on `http` types.
+    pub struct Headers<'a>(pub &'a http::HeaderMap);
+
+    impl Extractor for Headers<'_> {
+        fn get(&self, key: &str) -> Option<&str> {
+            self.0.get(key).and_then(|v| v.to_str().ok())
+        }
+        fn keys(&self) -> Vec<&str> {
+            self.0.keys().map(http::HeaderName::as_str).collect()
+        }
+    }
+
     /// Inject the current span's context into `carrier`.
     pub fn inject(carrier: &mut dyn Injector) {
         use tracing_opentelemetry::OpenTelemetrySpanExt as _;
@@ -257,4 +270,33 @@ pub mod propagation {
         let sc = context.span().span_context().clone();
         sc.is_valid().then(|| sc.trace_id().to_string())
     }
+}
+
+/// One `grpc.request` span for `route` (the RPC path without its leading
+/// slash), parented to the caller's trace when `traceparent` is present, with
+/// `trace_id` recorded so JSON logs inside it can be joined to the trace.
+/// `enduser.id` is declared empty so a service that learns the caller later
+/// can record it.
+#[must_use]
+pub fn grpc_span(headers: &http::HeaderMap, route: &str) -> tracing::Span {
+    let span = tracing::info_span!(
+        "grpc.request",
+        rpc.system = "grpc",
+        rpc.method = %route,
+        trace_id = tracing::field::Empty,
+        enduser.id = tracing::field::Empty,
+    );
+    if let Some(id) = propagation::adopt_parent(&span, &propagation::Headers(headers)) {
+        span.record("trace_id", id);
+    }
+    span
+}
+
+/// [`grpc_span`] in the shape `tonic::transport::Server::trace_fn` takes.
+#[must_use]
+pub fn grpc_request_span(request: &http::Request<()>) -> tracing::Span {
+    grpc_span(
+        request.headers(),
+        request.uri().path().trim_start_matches('/'),
+    )
 }

@@ -11,10 +11,8 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
-/// Environment variable naming the environment, shared by every binary.
-pub const ENV_VAR: &str = "TBD_ENV";
-/// Default environment.
-pub const DEFAULT_ENV: &str = "local";
+pub use tbd_common::config::{DEFAULT_ENV, ENV_VAR};
+
 /// Default directory.
 pub const DEFAULT_DIR: &str = "configs/chaos";
 

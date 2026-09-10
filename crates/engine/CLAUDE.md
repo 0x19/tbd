@@ -7,12 +7,14 @@ The streaming compute service. gRPC only. Talks to nothing else yet.
   chaos tool use the last two on port 0.
 - `service.rs`: the `EngineService` trait impl on `Engine`. Every RPC starts with
   `admit()`: count the request, apply the fault handle, map a `Fault` to a gRPC status.
-- `stats.rs`: two per-instance counters, `requests_total` and `requests_failed`, read
-  by the chaos tool through `Runtime.stats`. Not production metrics.
+- `Runtime`, `Stats` and friends are re-exported from `tbd_common::runtime`; the two
+  per-instance counters are read by the chaos tool through `Runtime.stats`. Not
+  production metrics.
 - `config.rs`: clap `Config`; every field has an env var (`ENGINE_*`).
 
-- Observability: `request_span` in `lib.rs` makes one `grpc.request` span per call,
-  adopts a caller's `traceparent` from metadata and records `trace_id`; `admit()` in
+- Observability: `tbd_common::telemetry::grpc_request_span` (the `trace_fn`) makes one
+  `grpc.request` span per call, adopts a caller's `traceparent` from metadata and
+  records `trace_id`; `admit()` in
   `service.rs` starts the `RequestTimer` and counts injected faults; streams hold a
   `StreamGuard`. Metrics listen on `ENGINE_METRICS_ADDR` (default `:9464`), set to
   `None` by embedders.

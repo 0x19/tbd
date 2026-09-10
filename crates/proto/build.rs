@@ -17,8 +17,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let fds = protox::compile(files, [proto_root.as_path()])?;
 
     // `compile_fds` does not write descriptor sets itself; reflection needs them.
-    // One set per package so each service advertises only what it serves.
-    for (name, file) in [("engine", files[0]), ("protocol", files[1])] {
+    // One set per package so each service advertises only what it serves. The
+    // package name is the second path segment: `tbd/<name>/v1/<name>.proto`.
+    for file in files {
+        let name = file
+            .split('/')
+            .nth(1)
+            .ok_or_else(|| format!("{file}: expected tbd/<name>/v1/<name>.proto"))?;
         let set = protox::compile([file], [proto_root.as_path()])?;
         fs::write(
             out_dir.join(format!("{name}_descriptor.bin")),

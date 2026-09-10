@@ -13,17 +13,6 @@ use axum::{
 };
 use tbd_common::{metrics::RequestTimer, telemetry::propagation};
 
-struct Headers<'a>(&'a http::HeaderMap);
-
-impl propagation::Extractor for Headers<'_> {
-    fn get(&self, key: &str) -> Option<&str> {
-        self.0.get(key).and_then(|v| v.to_str().ok())
-    }
-    fn keys(&self) -> Vec<&str> {
-        self.0.keys().map(http::HeaderName::as_str).collect()
-    }
-}
-
 pub(crate) fn is_grpc(headers: &http::HeaderMap) -> bool {
     headers
         .get(http::header::CONTENT_TYPE)
@@ -51,24 +40,17 @@ pub fn make_span(request: &http::Request<axum::body::Body>) -> tracing::Span {
         || request.uri().path().to_owned(),
         |m| m.as_str().to_owned(),
     );
-    let span = if grpc {
-        tracing::info_span!(
-            "grpc.request",
-            rpc.system = "grpc",
-            rpc.method = %route.trim_start_matches('/'),
-            trace_id = tracing::field::Empty,
-            enduser.id = tracing::field::Empty,
-        )
-    } else {
-        tracing::info_span!(
-            "http.request",
-            http.request.method = %request.method(),
-            http.route = %route,
-            trace_id = tracing::field::Empty,
-            enduser.id = tracing::field::Empty,
-        )
-    };
-    if let Some(id) = propagation::adopt_parent(&span, &Headers(request.headers())) {
+    if grpc {
+        return tbd_common::telemetry::grpc_span(request.headers(), route.trim_start_matches('/'));
+    }
+    let span = tracing::info_span!(
+        "http.request",
+        http.request.method = %request.method(),
+        http.route = %route,
+        trace_id = tracing::field::Empty,
+        enduser.id = tracing::field::Empty,
+    );
+    if let Some(id) = propagation::adopt_parent(&span, &propagation::Headers(request.headers())) {
         span.record("trace_id", id);
     }
     span

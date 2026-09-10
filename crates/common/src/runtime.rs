@@ -1,7 +1,9 @@
-//! Per-instance request counters, readable by whoever holds the handle.
+//! What an embedder keeps to observe and perturb a running service: a fault
+//! handle and per-instance request counters.
 //!
-//! Not production metrics. They exist so an in-process orchestrator can
-//! assert which engine served what.
+//! The counters are not production metrics. They exist so an in-process
+//! orchestrator (the chaos tool, integration tests) can assert which instance
+//! served what.
 
 use std::sync::{
     Arc,
@@ -9,6 +11,17 @@ use std::sync::{
 };
 
 use serde::Serialize;
+
+use crate::fault::FaultHandle;
+
+/// Handles an embedder keeps to observe and perturb a running service.
+#[derive(Debug, Clone, Default)]
+pub struct Runtime {
+    /// Fault injection. Healthy unless something sets it.
+    pub fault: FaultHandle,
+    /// Request counters.
+    pub stats: StatsHandle,
+}
 
 /// Live counters. Share via [`StatsHandle`].
 #[derive(Debug, Default)]
@@ -40,11 +53,13 @@ impl Stats {
         }
     }
 
-    pub(crate) fn request(&self) {
+    /// Count one request or stream received.
+    pub fn request(&self) {
         self.requests_total.fetch_add(1, Ordering::Relaxed);
     }
 
-    pub(crate) fn failure(&self) {
+    /// Count one request that ended in an error.
+    pub fn failure(&self) {
         self.requests_failed.fetch_add(1, Ordering::Relaxed);
     }
 }

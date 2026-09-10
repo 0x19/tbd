@@ -18,7 +18,14 @@ If a change needs one of those, it belongs in the service, not here.
   sample ratio; all `global = true` clap flags) and `init(args, default_service_name)`.
   A tracer provider is always installed so spans get trace ids and `traceparent`
   propagates even with no exporter; the OTLP exporter is added only when the endpoint is
-  set. `propagation::{inject, adopt_parent}` are the two helpers services use.
+  set. `propagation::{inject, adopt_parent, Headers}` are the helpers services use;
+  `grpc_span(headers, route)` and `grpc_request_span` (tonic's `trace_fn` shape) are
+  the one `grpc.request` span every gRPC server installs, so no service carries its own
+  copy. `http` is a dependency for header types only; that is not transport.
+- `runtime.rs`: `Runtime { fault, stats }`, what an embedder (chaos, tests) keeps to
+  perturb and observe a service, with the `Stats` counters. Services re-export it.
+- `config.rs`: the layered TOML loader (`load`, `merge`) plus `ENV_VAR` (`TBD_ENV`) and
+  `DEFAULT_ENV` (`local`), shared by every binary that reads `configs/<name>/`.
 - `profiling.rs`: in-process CPU profiling to Pyroscope, on only when
   `PYROSCOPE_SERVER_ADDRESS` is set; `maybe_start` never fails the service. `pprof-rs` needs a writable
   `/tmp` (read-only containers get an `emptyDir` there) or it reports "create profiler

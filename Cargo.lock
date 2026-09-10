@@ -3215,6 +3215,7 @@ name = "tbd-common"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "http",
  "humantime-serde",
  "metrics",
  "metrics-exporter-prometheus",
@@ -3242,7 +3243,6 @@ dependencies = [
  "anyhow",
  "clap",
  "futures",
- "http",
  "metrics",
  "prost-types",
  "serde",

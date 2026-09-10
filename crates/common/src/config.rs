@@ -17,6 +17,10 @@ use serde::de::DeserializeOwned;
 
 /// The reserved name of the shared layer.
 pub const BASE: &str = "base";
+/// Environment variable naming the environment, shared by every binary.
+pub const ENV_VAR: &str = "TBD_ENV";
+/// The environment a binary assumes when [`ENV_VAR`] is unset.
+pub const DEFAULT_ENV: &str = "local";
 
 /// What went wrong while loading.
 #[derive(Debug, thiserror::Error)]

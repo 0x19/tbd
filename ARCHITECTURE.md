@@ -36,7 +36,7 @@ hop; the same observability stack runs locally and in production.
 
 | Crate | Role | May depend on |
 |---|---|---|
-| `tbd-common` | telemetry (logs, OTLP traces, trace propagation), Prometheus metrics with the shared metric names, shutdown, shared CLI flags, fault injection | tokio, tracing, clap, opentelemetry, metrics |
+| `tbd-common` | telemetry (logs, OTLP traces, trace propagation, the shared gRPC span), Prometheus metrics with the shared metric names, shutdown, shared CLI flags, fault injection, the embedder `Runtime`, layered config | tokio, tracing, clap, opentelemetry, metrics, http (types) |
 | `tbd-proto` | code generated from `/proto` at build time via `protox` + `tonic-prost-build` | tonic, prost |
 | `tbd-engine` | `tbd.engine.v1.EngineService` implementation, health, reflection | common, proto |
 | `tbd-protocol` | axum router: REST, SSE, WebSocket bridge, GraphQL, protocol gRPC; traced and measured engine client | common, proto |
@@ -75,8 +75,8 @@ Envoy routes, from `devops/envoy/envoy.yaml`:
    and forwarded untouched by REST, GraphQL and SSE. Tests assert it.
 2. **The protocol has no business logic.** If a handler does more than translate and
    forward, it belongs in the engine.
-3. **`tbd-common` has no service transport.** No tonic, no axum. The OTLP exporter and
-   the metrics listener are the only network code in it.
+3. **`tbd-common` has no service transport.** No tonic, no axum; `http` for header types
+   only. The OTLP exporter and the metrics listener are the only network code in it.
 4. **`tbd-proto` is generated only.** Wrap generated types where the behaviour lives.
 5. **One port per service, plus one for metrics.** The protocol multiplexes HTTP/1.1 and
    h2c on 8080; the engine serves gRPC on 50051; each exposes Prometheus metrics on its

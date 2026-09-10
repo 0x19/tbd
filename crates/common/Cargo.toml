@@ -10,6 +10,7 @@ publish.workspace = true
 
 [dependencies]
 clap.workspace = true
+http.workspace = true
 humantime-serde.workspace = true
 metrics.workspace = true
 metrics-exporter-prometheus.workspace = true
