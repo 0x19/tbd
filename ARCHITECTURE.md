@@ -15,10 +15,18 @@ never before.
  clients ──REST/SSE/GraphQL/WS/gRPC──▶  envoy :8080  ──▶  protocol  ──▶  envoy :50051  ──▶  engine
                                         (edge)          (translate)     (engine LB)      (compute)
                                         gRPC by service name goes straight to the engine
+                                          │ verifies every token (JWKS)
+                      ┌───────────────────┴──────────────────────────────────────────────┐
+                      │  identity: hydra (OAuth2/OIDC) ◀── kratos (people, passkeys)     │
+                      │            auth.<domain>: sign-in pages, /oauth2/*, JWKS         │
+                      └──────────────────────────────────────────────────────────────────┘
 ```
 
 Three processes plus Envoy. Envoy is the only thing anything talks to: clients hit its
-edge, protocol instances reach engines through its engine load balancer. The protocol
+edge, protocol instances reach engines through its engine load balancer. Envoy is also
+the only thing that authenticates: bearer JWTs from Hydra on the API, a browser login
+(OAuth2 filter) on the UI hosts, nothing behind it checks a token
+([docs/auth/README.md](docs/auth/README.md)). The protocol
 owns every client-facing surface and no business logic. The engine owns compute and
 speaks only gRPC. Services share generated types (`tbd-proto`) and plumbing
 (`tbd-common`), nothing else. Every request is traced end to end and measured at every
@@ -51,12 +59,15 @@ Envoy routes, from `devops/envoy/envoy.yaml`:
 
 | Match on the edge (8080) | Upstream | Timeout |
 |---|---|---|
+| `/healthz`, `/readyz` (no token needed; everything else below needs a bearer JWT) | protocol | 5 s |
 | gRPC `/tbd.engine.v1.EngineService/*` | engine | none, retries on connect failure and `UNAVAILABLE` |
 | any other gRPC (`tbd.protocol.v1`, health, reflection) | protocol | none |
 | `/ws` | protocol, WebSocket upgrade | none |
 | `/v1/subjects/*` (SSE) | protocol | none |
 | everything else | protocol | 15 s, retries only when the request was never sent |
 | engine LB (50051), all gRPC | engine | none |
+| host `auth.*` | hydra / kratos / login pages, open | 15 s |
+| hosts `grafana.*`, `logs.*`, `profiles.*`, `metrics.*`, `chaosadmin.*` | the UI, after the browser login | none |
 
 ## Invariants
 
@@ -78,6 +89,11 @@ Envoy routes, from `devops/envoy/envoy.yaml`:
    with the shared metric names. A caller-supplied `traceparent` is honoured.
 8. **Health is the orchestrator's job.** Images are distroless with no shell; probes are
    gRPC health on the engine, `/healthz` and `/readyz` on the protocol, `/ready` on Envoy.
+9. **Envoy is the only authenticator.** Tokens are verified once, in Envoy, against
+   Hydra's keys; identity reaches a service only as the `x-jwt-payload` header Envoy
+   sets after stripping whatever the client sent. Services read it (`Subject`) and never
+   verify, decode or forward tokens themselves. A new host or route is gated by naming a
+   JWT requirement in `envoy.yaml`, not by code in a service.
 
 ## Cross-cutting
 

@@ -13,7 +13,7 @@ project as-is.
 | **protocol** | One port, four surfaces: REST and SSE under `/v1`, WebSocket at `/ws`, GraphQL at `/graphql`, gRPC over h2c. Forwards to the engine, owns no logic. Port 8080. |
 | **envoy** | The load balancer in front of everything: edge on 8080 for REST, SSE, GraphQL, WebSocket and gRPC; engine load balancer on 50051. One config for compose, Ansible and Kubernetes. |
 | **chaos** | Runs both services in one process, validates every surface, generates load, injects faults on a timeline and asserts. Used for development and in CI. |
-| **auth** | Ory Hydra + Kratos: OAuth2/OIDC, passkeys, one sign-in host; Envoy verifies every token, services trust only Envoy. |
+| **auth** | Ory Hydra + Kratos: OAuth2/OIDC, password, passkeys, Google; one sign-in host. Envoy is the only thing that checks a token; services read the identity Envoy forwards and verify nothing themselves. |
 | **observability** | Prometheus metrics, OpenTelemetry traces, JSON logs with trace ids and continuous CPU profiles from every service and Envoy, into VictoriaMetrics, Tempo, VictoriaLogs and Pyroscope, with Grafana dashboards. |
 | **devops** | One Dockerfile, kustomize overlays including a local k3d cluster, Ansible playbooks, compose. |
 
@@ -103,12 +103,37 @@ The UI (`ui/chaos`, Next.js static export served by the chaos binary) is describ
 [docs/chaos/ui.md](docs/chaos/ui.md); `mise run chaos:serve` plus `mise run ui:dev`
 is the development loop.
 
+## Sign-in and access
+
+Every call into a deployed environment is authenticated by Envoy against the identity
+stack in `devops/k8s/auth` (Ory Hydra for OAuth2/OIDC, Ory Kratos for identities):
+
+- **People** sign up and in at `https://auth.<domain>/` with a password, a passkey or
+  Google, and get a 30-day session. Browser hosts (`grafana.`, `logs.`, `profiles.`,
+  `metrics.`, `chaosadmin.`) send them there when they are not signed in and let them
+  through afterwards; Grafana creates their user on the spot.
+- **Programs** present a bearer JWT on `api.<domain>`; only `/healthz` and `/readyz`
+  are open. The `tbd-chaos` client uses the client-credentials grant, the future app is
+  the public PKCE client `tbd-app`.
+- **Services** never see a raw token. The protocol reads the verified subject Envoy
+  forwards (`GET /v1/me` echoes it) and does no verification of its own.
+
+```sh
+mise run auth:token                      # a JWT for the chaos client, from the deployed Hydra
+mise run auth:e2e                        # browser check: sign-up, PKCE flow, the gated UI hosts
+mise run auth:oidc google <id> <secret>  # switch a social provider on
+CHAOS_AUTH_TOKEN_URL=https://auth.<domain>/oauth2/token CHAOS_AUTH_CLIENT_SECRET=... \
+  chaos validate --protocol https://api.<domain> --engine https://api.<domain>
+```
+
+The design, every gate and what is still open: [docs/auth/README.md](docs/auth/README.md).
+
 ## Local cluster with Grafana
 
 ```sh
 mise run local:up          # k3d on this machine, k3s 1.34, storage on the RAID
 mise run local:build       # both images into the cluster
-mise run local:deploy      # Envoy + services + VictoriaMetrics + Tempo + VictoriaLogs + collector + Grafana
+mise run local:deploy      # Envoy + services + observability stack + identity stack (Hydra, Kratos)
 mise run local:traffic     # some requests through Envoy
 mise run local:load        # sustained load: dashboards, traces and CPU profiles fill up
 open http://localhost:3000 # admin / admin, dashboards tagged "tbd"

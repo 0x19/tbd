@@ -166,6 +166,38 @@ chaos validate --protocol https://api.<domain> --engine https://api.<domain> --t
 A missing or rejected token shows as one failed `auth_token` check before any other
 check runs.
 
+## What is not done yet
+
+- **Authorization.** Any valid token with audience `tbd-api` reaches every API route,
+  and every signed-in person gets every UI host and Grafana's Editor role. Scopes exist
+  (`tbd.api`) but nothing checks them per route yet; roles and org membership are not
+  modelled. Next: a `scp`/role requirement per route in Envoy (RBAC filter on the
+  verified claims) and Grafana role mapping from a claim.
+- **E-mail.** Recovery and verification are configured but off: no SMTP relay. Until
+  then a lost password is an admin task (`kratos` admin API).
+- **Apple sign-in** is not wired (needs key-based credentials); Apple requires it once
+  the iOS app offers Google.
+- **Google's app is in Testing** in Google Auth Platform: only listed test users can use
+  the button until it is published.
+- **Ory's reference UI** renders the pages. Replace it with our own pages (Ory Elements)
+  when the product's look is decided; the flows stay the same.
+- **Logout across hosts.** `/oauth2/signout` on a UI host clears that host's cookies;
+  the Kratos session and other hosts' cookies live on. A global logout goes through
+  Hydra's `/oauth2/sessions/logout` and Kratos' logout flow.
+- **Secrets management.** Secrets are random values in Kubernetes Secrets created by
+  mise tasks. A real environment wants them in an external secret store and rotated;
+  the tasks are where that hooks in.
+- **The engine load balancer (port 50051)** has no gate: it is LAN-only on the local
+  cluster and internal in a real one. Do not publish it.
+- **Rate limiting and bot protection** are not in Envoy yet; Cloudflare covers the public
+  edge for now.
+- **Cloudflare's gRPC toggle** is off on the zone, so gRPC through the public host fails
+  until it is switched on (Network → gRPC).
+- **Ansible single-host deploys** carry the `CHAOS_AUTH_*` variables but not the identity
+  stack itself; add the compose services from `compose.yaml` when that path is used.
+- `.env.example` still lacks the `CHAOS_AUTH_TOKEN_URL`, `CHAOS_AUTH_CLIENT_ID`,
+  `CHAOS_AUTH_CLIENT_SECRET` and `CHAOS_TOKEN` lines (edit blocked by tooling policy).
+
 ## Operating it
 
 ```sh

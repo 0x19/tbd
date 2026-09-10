@@ -21,6 +21,12 @@ earlier idea material for a product direction, not a spec; do not "fix" it.
   to a flag, output field, TOML key, API route, behaviour or check updates the matching
   page in the same commit (`api.md` for routes and SSE frames, `config.md` for
   `configs/chaos/`). CI is described in `docs/ci.md`.
+- Identity stack (Ory Hydra + Kratos, `devops/k8s/auth`): `mise run auth:secrets` once,
+  `auth:deploy` (part of `local:deploy`), `auth:envoy-secrets`, `auth:token` for a
+  machine JWT, `auth:e2e` for the browser check, `auth:oidc <provider> <id> <secret>` for
+  social sign-in. Envoy gates every host (`devops/envoy/envoy.yaml`); against a deployed
+  stack `chaos validate` and load need `CHAOS_AUTH_*` or `--token`. Docs:
+  `docs/auth/README.md`.
 - Binaries read layered config from `configs/<binary>/base.toml` + `<TBD_ENV>.toml`
   (`tbd_common::config`); every key lives in `base.toml`, env files carry differences,
   flags and env vars override. `chaos config` prints the effective result.
@@ -47,6 +53,12 @@ earlier idea material for a product direction, not a spec; do not "fix" it.
   `docs/observability/metrics.md`; every request path gets a span with `trace_id`
   recorded and a `RequestTimer`; streams get a `StreamGuard`.
 - Services never address each other directly: the engine URL is Envoy's engine LB.
+- Services never verify tokens. Envoy does, and forwards the verified claims in
+  `x-jwt-payload`; handlers take `Subject` (`crates/protocol/src/subject.rs`). A new
+  route or host is gated in `envoy.yaml` by naming a JWT requirement; health paths stay
+  open. Secrets live only in Kubernetes Secrets created by mise tasks, never in files.
+- `envoy.yaml` has exactly one placeholder, `__AUTH_PUBLIC_URL__`; anything else that
+  differs per environment goes through DNS names or ConfigMaps, not more placeholders.
 
 ## Git
 

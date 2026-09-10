@@ -82,6 +82,9 @@ timeline did and when, and each assertion with its bound and the observed value.
 
 ## What it does not do yet
 
+- Check scopes or roles: against a deployed stack every run needs a bearer token
+  (`[auth]` in `configs/chaos/`, `CHAOS_AUTH_*`, or `--token`; see
+  [../auth/README.md](../auth/README.md)) and that is all it knows about identity.
 - Run a scenario against a stack it did not start. `validate` works against any URL and
   an ad-hoc load run through the API takes explicit targets, but `run` always starts its
   own stack because the timeline needs fault handles on the instances.

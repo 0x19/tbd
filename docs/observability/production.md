@@ -54,10 +54,11 @@ and object storage. Collector gateways scale horizontally behind a Service.
 
 ## Security
 
-- Grafana runs with `admin`/`admin` and anonymous **Editor** access locally so Explore
-  and the Drilldown apps work without signing in. Change both before anything is
-  reachable beyond a developer machine: wire Grafana to the identity provider, drop
-  anonymous access or set it to Viewer.
+- Grafana has no anonymous access. Publicly it sits behind Envoy's browser login and
+  trusts the identity headers Envoy sets (auth proxy, every signed-in person is an
+  Editor for now); the `admin`/`admin` form remains on the LAN port for break-glass and
+  must get a real password before that port is reachable by anyone else
+  ([../auth/README.md](../auth/README.md)).
 - The observability namespace exposes nothing outside the cluster except through the
   `*-lb` Services in the local overlay. Production reaches Grafana through the ingress
   with auth, and nothing else.

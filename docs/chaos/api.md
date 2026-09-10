@@ -121,7 +121,11 @@ An ad-hoc load run takes the `[load]` table of a scenario as JSON (`rate`, `dura
 [scenarios.md](scenarios.md#load)). `targets` defaults to every running protocol in the
 serve stack; give explicit targets to load a stack serve did not start, such as the
 cluster through Envoy: `[{"name":"envoy","http_url":"http://localhost:18080"}]`.
-Validate defaults to `[targets]` in the config.
+Validate defaults to `[targets]` in the config. Both validate and explicit-target load
+runs send the bearer token from `[auth]` (client credentials, fetched per run); in the
+cluster the chaos pod has the `tbd-chaos` client's secret from the `chaos-auth` Secret.
+The API itself is reachable only through Envoy's gate: `chaosadmin.<domain>` after the
+browser login, or with a bearer token on the request.
 
 Scenario runs start their own stack on free ports, exactly like `chaos run`; the serve
 stack is untouched.
