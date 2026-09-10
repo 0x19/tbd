@@ -8,6 +8,7 @@ Global flags, valid before or after the subcommand:
 | `--log-filter <directive>` | `RUST_LOG` | see below | `tracing` filter |
 | `--env <name>` | `TBD_ENV` | `local` | which `configs/chaos/<env>.toml` to merge over `base.toml` |
 | `--config-dir <dir>` | `CHAOS_CONFIG_DIR` | `configs/chaos` | where those files are |
+| `--public-domain <domain>` | `CHAOS_PUBLIC_DOMAIN` | `[links] domain` | base domain of the public edge; UI links become `https://grafana.<domain>` and friends |
 
 Every command loads the configuration first ([config.md](config.md)); flags below
 override the fields they name.

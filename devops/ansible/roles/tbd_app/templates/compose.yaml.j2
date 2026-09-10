@@ -45,6 +45,7 @@ services:
       CHAOS_SCENARIOS_DIR: /data/scenarios
       CHAOS_SCENARIOS_SEED: /app/scenarios
       CHAOS_UI_DIR: /app/ui
+      CHAOS_PUBLIC_DOMAIN: "{{ base_domain | default('') }}"
       OTEL_EXPORTER_OTLP_ENDPOINT: "{{ otlp_endpoint | default('') }}"
     volumes:
       - chaos-results:/data

@@ -29,6 +29,7 @@ export function AppSidebar() {
   const external = [
     { title: "Grafana", href: links?.grafana },
     { title: "Logs", href: links?.victorialogs },
+    { title: "Metrics", href: links?.metrics },
     { title: "Profiles", href: links?.pyroscope },
     { title: "Envoy admin", href: links?.envoy_admin },
   ].filter((l) => l.href);

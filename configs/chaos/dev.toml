@@ -6,6 +6,5 @@ protocol = "http://envoy:8080"
 engine = "http://envoy:50051"
 
 [links]
-grafana = "https://grafana.dev.example.invalid"
-victorialogs = "https://logs.dev.example.invalid/select/vmui"
-pyroscope = "https://profiles.dev.example.invalid"
+# Replace with the dev base domain; hosts follow devops/edge/Caddyfile.
+domain = "dev.example.invalid"

@@ -11,6 +11,9 @@ Read `README.md` here first. Non-obvious facts:
   match the `-p` flags in `mise.toml` `local:up` and `ansible/playbooks/local.yml`.
 - `local-services.yaml` under `observability/` is applied with `-f`, not part of the
   kustomization, so other environments never get `LoadBalancer` Services.
+- `overlays/local/edge.env` is generated (gitignored) by `mise run local:deploy` from
+  `devops/edge/.env`; it carries only `CHAOS_PUBLIC_DOMAIN` into the `tbd-edge`
+  ConfigMap the chaos pod reads. Do not commit a real domain into the overlay.
 - `chaos/` is a separate kustomization included by `overlays/local` and `overlays/dev`
   only; `prod` must not include it. The chaos pod runs its own engine and protocol
   in-process on pod-local ports for scenarios and reaches the deployed stack through

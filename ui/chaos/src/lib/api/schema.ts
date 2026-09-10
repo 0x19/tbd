@@ -188,8 +188,10 @@ export const GlobalEvent = z.discriminatedUnion("type", [
 export type GlobalEvent = z.infer<typeof GlobalEvent>;
 
 export const Links = z.object({
+  domain: z.string(),
   grafana: z.string(),
   victorialogs: z.string(),
+  metrics: z.string(),
   pyroscope: z.string(),
   envoy_admin: z.string(),
 });

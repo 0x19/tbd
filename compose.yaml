@@ -73,6 +73,8 @@ services:
       CHAOS_SCENARIOS_DIR: /data/scenarios
       CHAOS_SCENARIOS_SEED: /app/scenarios
       CHAOS_UI_DIR: /app/ui
+      # Base domain of the public edge (devops/edge); empty keeps localhost links.
+      CHAOS_PUBLIC_DOMAIN: ${BASE_DOMAIN:-}
     volumes:
       - chaos-results:/data
     tmpfs:

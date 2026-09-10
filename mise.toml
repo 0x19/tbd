@@ -275,8 +275,20 @@ docker build -f devops/docker/Dockerfile --build-arg BIN=chaos    --build-arg PO
 k3d image import -m direct -c "$K3D_CLUSTER" $IMAGE_REGISTRY/tbd-engine:dev $IMAGE_REGISTRY/tbd-protocol:dev $IMAGE_REGISTRY/tbd-chaos:dev
 """
 
+# The chaos UI links to grafana.<domain>, logs.<domain>, ... of the public edge.
+# Copy only BASE_DOMAIN out of devops/edge/.env into the local overlay; empty when
+# no edge is configured, and the environment file's localhost links apply.
+[tasks."local:edge-env"]
+hide = true
+run = """
+domain="${BASE_DOMAIN:-$(grep -s '^BASE_DOMAIN=' devops/edge/.env | cut -d= -f2- | tr -d '"')}"
+echo "CHAOS_PUBLIC_DOMAIN=$domain" > devops/k8s/overlays/local/edge.env
+echo "chaos UI links: ${domain:-localhost (no devops/edge/.env and BASE_DOMAIN unset)}"
+"""
+
 [tasks."local:deploy"]
 description = "Apply observability + app to the local cluster and wait for rollouts"
+depends = ["local:edge-env"]
 run = """
 kubectl apply -k devops/k8s/observability
 kubectl apply -f devops/k8s/observability/local-services.yaml
@@ -289,6 +301,7 @@ mise run local:urls
 
 [tasks."local:restart"]
 description = "Rebuild images, re-apply the app overlay (config changes included) and restart the app pods"
+depends = ["local:edge-env"]
 run = """
 mise run local:build
 kubectl apply -k devops/k8s/overlays/local
