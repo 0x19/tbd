@@ -82,7 +82,12 @@ export function HeaderNotifications() {
                     <Link href={`/runs/view/?id=${a.event.run.id}`}>
                       <div className="min-w-0 flex-1 space-y-1">
                         <div className="flex items-start justify-between gap-2">
-                          <p className={cn("truncate text-sm leading-tight", !seen.has(a.at) && "font-semibold")}>
+                          <p
+                            className={cn(
+                              "truncate text-sm leading-tight",
+                              !seen.has(a.at) && "font-semibold",
+                            )}
+                          >
                             {a.event.run.name}
                           </p>
                           <span className="text-muted-foreground shrink-0 text-[10px] whitespace-nowrap">

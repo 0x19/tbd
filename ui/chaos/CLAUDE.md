@@ -14,7 +14,7 @@ first; `docs/chaos/api.md` is the contract the pages consume.
   Compiler rules relaxed like the kit) and Prettier (tailwind plugin). Regenerate `ui/`
   files from the kit or `pnpm dlx shadcn@latest add`, do not hand-edit.
 - What is ours: pages under `src/app/`, `src/components/{kit,charts,status-badge,
-  runs-table,behavior-dialog,instances-table,field}.tsx`, `src/lib/{api,format,runs}`,
+runs-table,behavior-dialog,instances-table,field}.tsx`, `src/lib/{api,format,runs}`,
   `src/data/{site,sidebar-data}`, `src/app/providers.tsx` (chaos overview context +
   the kit's search state), `command-menu.tsx`, `header-notifications.tsx` (finished
   runs from the live feed).
@@ -34,7 +34,7 @@ first; `docs/chaos/api.md` is the contract the pages consume.
   segment cannot be exported.
 - `pnpm dev` is on 3001 because Grafana owns 3000 locally.
 - Checks: `mise run ui:check` (prettier, eslint, tsc) is part of `mise run ci`; `mise run
-  ui:build` must pass before the chaos image is built (`local:build` does both).
+ui:build` must pass before the chaos image is built (`local:build` does both).
 - `e2e/smoke.mjs` (`mise run ui:e2e`) is the browser check against a running cluster;
   extend it when a page gains a flow. The theme control is a menu: click, then "Dark".
 - `chaos serve` serves `out/` at the root of its host (`crates/chaos/src/api/ui.rs`).
