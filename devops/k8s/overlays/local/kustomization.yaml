@@ -45,5 +45,6 @@ configMapGenerator:
   # Written by `mise run local:deploy` / `local:restart` from devops/edge/.env
   # (BASE_DOMAIN only). Empty when there is no public edge.
   - name: tbd-edge
+    namespace: tbd
     envs:
       - edge.env
