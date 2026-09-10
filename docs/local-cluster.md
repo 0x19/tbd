@@ -31,7 +31,6 @@ steps idempotently and is the template for provisioning a real box the same way.
 | `tbd` | `protocol` | 2 | REST, SSE, GraphQL, WebSocket, gRPC |
 | `tbd` | `engine` | 2 | gRPC compute |
 | `tbd` | `chaos` | 1 | `chaos serve`: API and admin UI, behind Envoy at `/api/chaos/v1` and the `chaos.localhost` host |
-| `auth` | `postgres`, `hydra`, `kratos`, `auth-ui` | 1 each | sign-in and tokens ([auth/README.md](auth/README.md)); `auth.localhost:18080` |
 | `observability` | `victoria-metrics` | 1 | metrics store and scraper |
 | `observability` | `victoria-logs` | 1 | log store |
 | `observability` | `tempo` | 1 | trace store, span metrics |

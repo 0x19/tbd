@@ -21,9 +21,6 @@ Evaluated top to bottom; first match wins.
 
 | Match | To | Timeout | Retries |
 |---|---|---|---|
-| host `auth.*`: `/oauth2/`, `/userinfo`, `/.well-known/{jwks.json,openid-configuration,oauth-authorization-server}` | `hydra` (Ory Hydra public API) | 15 s | none |
-| host `auth.*`: `/self-service/`, `/sessions/`, `/schemas/`, `/.well-known/ory/` | `kratos` (Ory Kratos public API) | 15 s | none |
-| host `auth.*`, anything else | `auth-ui` (login, registration, consent pages) | 15 s | none |
 | host `chaos.api.*`, any path | `chaos`, rewritten to `/api/chaos/...` | none | none |
 | host `chaos.*` or `chaosadmin.*`, any path | `chaos` unchanged: the UI at the root, `/api/chaos/` the API | 15 s (none for `/api/chaos/`) | none |
 | prefix `/api/chaos/` (chaos API, SSE) | `chaos` | none | none |

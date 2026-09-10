@@ -71,4 +71,3 @@ devops/k8s/overlays/local/edge.env
 # ui/chaos build output (mise run ui:build); the chaos image copies it when present
 ui/chaos/.next/
 ui/chaos/out/
-devops/k8s/auth/auth.env

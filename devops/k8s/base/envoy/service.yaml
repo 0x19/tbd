@@ -26,29 +26,3 @@ metadata:
 spec:
   type: ExternalName
   externalName: otel-collector.observability.svc.cluster.local
----
-# The identity stack lives in the `auth` namespace (devops/k8s/auth); these
-# give Envoy the same short names in every environment.
-apiVersion: v1
-kind: Service
-metadata:
-  name: hydra
-spec:
-  type: ExternalName
-  externalName: hydra-public.auth.svc.cluster.local
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: kratos
-spec:
-  type: ExternalName
-  externalName: kratos-public.auth.svc.cluster.local
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: auth-ui
-spec:
-  type: ExternalName
-  externalName: auth-ui.auth.svc.cluster.local

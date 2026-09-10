@@ -13,7 +13,6 @@ project as-is.
 | **protocol** | One port, four surfaces: REST and SSE under `/v1`, WebSocket at `/ws`, GraphQL at `/graphql`, gRPC over h2c. Forwards to the engine, owns no logic. Port 8080. |
 | **envoy** | The load balancer in front of everything: edge on 8080 for REST, SSE, GraphQL, WebSocket and gRPC; engine load balancer on 50051. One config for compose, Ansible and Kubernetes. |
 | **chaos** | Runs both services in one process, validates every surface, generates load, injects faults on a timeline and asserts. Used for development and in CI. |
-| **auth** | Ory Hydra + Kratos: OAuth2/OIDC, passkeys, one sign-in host; Envoy verifies every token, services trust only Envoy. |
 | **observability** | Prometheus metrics, OpenTelemetry traces, JSON logs with trace ids and continuous CPU profiles from every service and Envoy, into VictoriaMetrics, Tempo, VictoriaLogs and Pyroscope, with Grafana dashboards. |
 | **devops** | One Dockerfile, kustomize overlays including a local k3d cluster, Ansible playbooks, compose. |
 

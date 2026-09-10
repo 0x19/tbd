@@ -284,54 +284,6 @@ run = """
 domain="${BASE_DOMAIN:-$(grep -s '^BASE_DOMAIN=' devops/edge/.env | cut -d= -f2- | tr -d '"')}"
 echo "CHAOS_PUBLIC_DOMAIN=$domain" > devops/k8s/overlays/local/edge.env
 echo "chaos UI links: ${domain:-localhost (no devops/edge/.env and BASE_DOMAIN unset)}"
-# The identity stack's public URL: the edge when there is one, else the local host name.
-if [ -n "$domain" ]; then
-  printf 'AUTH_PUBLIC_URL=https://auth.%s\nBASE_DOMAIN=%s\nAUTH_INSECURE_COOKIES=false\n' "$domain" "$domain" > devops/k8s/auth/auth.env
-else
-  printf 'AUTH_PUBLIC_URL=http://auth.localhost:18080\nBASE_DOMAIN=localhost\nAUTH_INSECURE_COOKIES=true\n' > devops/k8s/auth/auth.env
-fi
-echo "auth: $(head -1 devops/k8s/auth/auth.env | cut -d= -f2)"
-"""
-
-[tasks."auth:secrets"]
-description = "Create the auth-secrets Secret in the cluster once (random values; never on disk)"
-run = """
-kubectl apply -f devops/k8s/auth/namespace.yaml >/dev/null
-if kubectl -n auth get secret auth-secrets >/dev/null 2>&1; then echo "auth-secrets exists; leaving it"; exit 0; fi
-pg=$(openssl rand -hex 16)
-kubectl -n auth create secret generic auth-secrets \
-  --from-literal=postgres-password="$pg" \
-  --from-literal=hydra-dsn="postgres://auth:$pg@postgres.auth.svc:5432/hydra?sslmode=disable&max_conns=20&max_idle_conns=4" \
-  --from-literal=kratos-dsn="postgres://auth:$pg@postgres.auth.svc:5432/kratos?sslmode=disable&max_conns=20&max_idle_conns=4" \
-  --from-literal=hydra-system="$(openssl rand -hex 32)" \
-  --from-literal=kratos-cookie="$(openssl rand -hex 32)" \
-  --from-literal=kratos-cipher="$(openssl rand -hex 16)" \
-  --from-literal=ui-cookie="$(openssl rand -hex 32)" \
-  --from-literal=ui-csrf="$(openssl rand -hex 32)" \
-  --from-literal=client-ui-secret="$(openssl rand -hex 24)" \
-  --from-literal=client-chaos-secret="$(openssl rand -hex 24)"
-echo "auth-secrets created"
-"""
-
-[tasks."auth:deploy"]
-description = "Apply the identity stack (Postgres, Hydra, Kratos, login UI, seeded clients) and wait for it"
-depends = ["local:edge-env", "auth:secrets"]
-run = """
-kubectl -n auth delete job seed-clients --ignore-not-found >/dev/null
-kubectl apply -k devops/k8s/auth
-kubectl -n auth rollout status statefulset/postgres --timeout=180s
-kubectl -n auth rollout status deployment/hydra deployment/kratos deployment/auth-ui --timeout=300s
-kubectl -n auth wait --for=condition=complete job/seed-clients --timeout=180s
-kubectl -n auth logs job/seed-clients | tail -3
-"""
-
-[tasks."auth:token"]
-description = "Print a client-credentials access token for the chaos client (AUTH_URL defaults to auth.env)"
-run = """
-url="${AUTH_URL:-$(grep -s '^AUTH_PUBLIC_URL=' devops/k8s/auth/auth.env | cut -d= -f2-)}"
-secret=$(kubectl -n auth get secret auth-secrets -o jsonpath='{.data.client-chaos-secret}' | base64 -d)
-curl -fsS -u "tbd-chaos:$secret" -d grant_type=client_credentials -d scope=tbd.api -d audience=tbd-api "$url/oauth2/token"
-echo
 """
 
 [tasks."local:deploy"]
@@ -340,7 +292,6 @@ depends = ["local:edge-env"]
 run = """
 kubectl apply -k devops/k8s/observability
 kubectl apply -f devops/k8s/observability/local-services.yaml
-mise run auth:deploy
 kubectl apply -k devops/k8s/overlays/local
 kubectl -n observability rollout status statefulset/victoria-metrics statefulset/victoria-logs statefulset/tempo --timeout=180s
 kubectl -n observability rollout status statefulset/pyroscope deployment/otel-collector deployment/grafana --timeout=300s
@@ -364,7 +315,6 @@ echo "edge (REST/WS/GraphQL/gRPC)  http://localhost:18080"
 echo "engine LB (gRPC)             http://localhost:15051"
 echo "chaos API                    http://localhost:18080/api/chaos/v1/overview"
 echo "chaos UI                     http://chaos.localhost:18080/   (browsers resolve *.localhost themselves)"
-echo "sign-in (Hydra/Kratos)       $(grep -s '^AUTH_PUBLIC_URL=' devops/k8s/auth/auth.env | cut -d= -f2-)/login   discovery: /.well-known/openid-configuration"
 echo "grafana (admin/admin)        http://localhost:3000"
 echo "victoria-metrics             http://localhost:9090"
 echo "otlp into the collector      http://localhost:14317"

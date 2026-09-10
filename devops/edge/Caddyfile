@@ -9,7 +9,6 @@
 #   profiles.<base>  Pyroscope :4040                                           basic auth
 #   metrics.<base>   VictoriaMetrics UI :9090                                  basic auth
 #   chaosadmin.<base>  chaos admin UI (root) + API (/api/chaos/v1), via Envoy :18080    basic auth
-#   auth.<base>      sign-in: Ory Hydra + Kratos + login pages, via Envoy :18080      public
 #
 # Env: BASE_DOMAIN, ACME_EMAIL, OBS_USER, OBS_PASSWORD_HASH (caddy hash-password).
 {
@@ -90,18 +89,5 @@ chaosadmin.{$BASE_DOMAIN} {
 	reverse_proxy cluster:18080 {
 		flush_interval -1
 		header_up X-Forwarded-Proto https
-	}
-}
-
-# Where people sign in. Public by nature; Envoy routes it to Hydra, Kratos and
-# the login pages. Cookies and redirects need the real Host and https scheme.
-auth.{$BASE_DOMAIN} {
-	encode zstd gzip
-	reverse_proxy cluster:18080 {
-		header_up X-Forwarded-Proto https
-	}
-	log {
-		output stdout
-		format json
 	}
 }

@@ -50,9 +50,6 @@ this file is the non-obvious part.
 
 CI builds both images on every push and pushes on `main`; `release.yml` pushes on `v*`
 tags. See `docs/ci.md`.
-- `k8s/auth/` is the identity stack (Ory Hydra + Kratos). Envoy is the only thing that
-  verifies tokens; services never do. Its public host is `auth.<domain>`; the URL is the
-  token issuer, so it is deploy-time config (`auth.env`), not a runtime default.
 - `edge/` is the only thing that faces the internet from a home/office deployment. Caddy
   terminates TLS and forwards to Envoy's edge on the host port (18080 for the local
   cluster). gRPC is matched on `Content-Type: application/grpc*` and gets the h2c
