@@ -11,6 +11,7 @@
 | You want to change what chaos does per environment (`configs/chaos/`) | [chaos/config.md](chaos/config.md) |
 | You want to know how chaos works inside | [chaos/architecture.md](chaos/architecture.md) |
 | You are adding a service, operation, action, assertion or check | [chaos/extending.md](chaos/extending.md) |
+| You are adding a service | [tbd/README.md](tbd/README.md), the scaffolding CLI |
 | A check failed in CI, or you are changing CI | [ci.md](ci.md) |
 | You want metrics, traces, logs, dashboards, or to run the local cluster | [observability.md](observability/README.md) |
 | You want to know how sign-in, tokens and API access work | [auth/README.md](auth/README.md) |

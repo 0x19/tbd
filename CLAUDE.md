@@ -28,6 +28,11 @@ earlier idea material for a product direction, not a spec; do not "fix" it.
   sign-in pages are `ui/auth` (Next.js on Ory Elements, `ui:auth:check` in `ci`). Envoy gates every host (`devops/envoy/envoy.yaml`); against a deployed
   stack `chaos validate` and load need `CHAOS_AUTH_*` or `--token`. Docs:
   `docs/auth/README.md`.
+- New services come from the CLI: `mise run tbd -- new service <name>` scaffolds a gRPC
+  service (crate, proto, configs, k8s, chaos adapter) and registers it in every shared
+  file; `tbd service check <name>` verifies that; `mise run tbd:selfcheck` is the CI
+  proof. `docs/tbd/README.md` is its contract; the anchors it relies on are tested
+  against the real tree, so reformatting a shared file is a CLI change too.
 - Binaries read layered config from `configs/<binary>/base.toml` + `<TBD_ENV>.toml`
   (`tbd_common::config`); every key lives in `base.toml`, env files carry differences,
   flags and env vars override. `chaos config` prints the effective result.

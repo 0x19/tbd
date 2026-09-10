@@ -1,0 +1,12 @@
+  - target:
+      kind: Deployment
+      name: @@name@@
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 2
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests: { cpu: 250m, memory: 128Mi }
+          limits: { cpu: "2", memory: 512Mi }

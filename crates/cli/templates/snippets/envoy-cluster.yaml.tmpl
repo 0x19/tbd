@@ -1,0 +1,31 @@
+    - name: @@name@@
+      type: STRICT_DNS
+      dns_lookup_family: V4_ONLY
+      dns_refresh_rate: 5s
+      lb_policy: LEAST_REQUEST
+      connect_timeout: 1s
+      typed_extension_protocol_options:
+        envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+          "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+          explicit_http_config:
+            http2_protocol_options: {}
+      load_assignment:
+        cluster_name: @@name@@
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address: { address: @@name@@, port_value: @@port@@ }
+      health_checks:
+        - timeout: 1s
+          interval: 5s
+          unhealthy_threshold: 2
+          healthy_threshold: 1
+          grpc_health_check:
+            service_name: @@grpc_service@@
+      outlier_detection:
+        consecutive_gateway_failure: 5
+        interval: 5s
+        base_ejection_time: 30s
+        max_ejection_percent: 50
+

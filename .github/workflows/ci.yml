@@ -43,6 +43,26 @@ jobs:
       - run: cargo nextest run --locked --workspace --all-features
       - run: cargo test --locked --workspace --doc
 
+  scaffold:
+    name: tbd selfcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          components: rustfmt, clippy
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - uses: bufbuild/buf-action@v1
+        with:
+          setup_only: true
+      - uses: jdx/mise-action@v4
+        with:
+          install: false
+          cache: false
+      - run: mise run tbd:selfcheck
+
   deny:
     name: cargo-deny (${{ matrix.checks }})
     runs-on: ubuntu-latest

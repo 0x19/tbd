@@ -5,3 +5,4 @@ rustflags = ["-C", "force-frame-pointers=yes"]
 
 [alias]
 xtask = "run --package xtask --"
+tbd = "run -q --package tbd-cli --"

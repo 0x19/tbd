@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: @@name@@
+  labels:
+    app.kubernetes.io/name: @@name@@
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: @@name@@
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9464"
+        prometheus.io/path: /metrics
+      labels:
+        app.kubernetes.io/name: @@name@@
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: @@name@@
+          # Overlays pin the tag.
+          image: @@image@@:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: grpc
+              containerPort: @@port@@
+            - name: metrics
+              containerPort: 9464
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: tbd-env
+          livenessProbe:
+            grpc:
+              port: @@port@@
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          readinessProbe:
+            grpc:
+              port: @@port@@
+            initialDelaySeconds: 1
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              cpu: "1"
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            # The in-process profiler (pprof-rs) needs a writable temp dir for
+            # its sample buffers; the root filesystem stays read-only.
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi

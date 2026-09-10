@@ -18,6 +18,7 @@ tbd-proto    = { path = "crates/proto" }
 tbd-engine   = { path = "crates/engine" }
 tbd-protocol = { path = "crates/protocol" }
 tbd-chaos    = { path = "crates/chaos" }
+tbd-cli      = { path = "crates/cli" }
 
 # async runtime
 tokio        = { version = "1.53", features = ["rt-multi-thread", "macros", "signal", "net", "sync", "time"] }
@@ -43,6 +44,7 @@ http               = "1"
 async-graphql      = { version = "7.2", features = ["playground"] }
 async-graphql-axum = "7.2"
 async-trait        = "0.1"
+tempfile           = "3"
 
 # serialization
 serde      = { version = "1", features = ["derive"] }

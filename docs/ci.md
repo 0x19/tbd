@@ -55,6 +55,12 @@ commands above still work if those tools are on `PATH`.
 | `ui` prettier | `cd ui/chaos && pnpm format` |
 | `ui` eslint `set-state-in-effect` | derive the value or move the `setState` into the callback that learns the news; see `src/lib/api/hooks.ts` |
 
+`mise run tbd:selfcheck` sits between `test` and `doc`: it scaffolds a throwaway
+service (`zeta`) into a copy of the tree with the `tbd` CLI, runs the CLI again to prove
+the second run is a no-op, checks every registration, and compiles, lints, formats,
+tests and buf-lints the result. A template or an anchor in `crates/cli` that drifts
+from the tree fails here. See [tbd/README.md](tbd/README.md).
+
 ## Images
 
 The `docker` job builds every image from `devops/docker/Dockerfile` on every push and

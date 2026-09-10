@@ -1,0 +1,9 @@
+
+pub mod @@name@@ {
+    pub mod v1 {
+        tonic::include_proto!("@@proto_package@@");
+        /// Encoded `FileDescriptorSet` for this package, for gRPC reflection.
+        pub const DESCRIPTOR_SET: &[u8] =
+            include_bytes!(concat!(env!("OUT_DIR"), "/@@name@@_descriptor.bin"));
+    }
+}

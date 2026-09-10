@@ -1,0 +1,6 @@
+                        # @@name@@, matched by service name; the engine stays the catch-all.
+                        - match: { prefix: "/@@grpc_service@@/", grpc: {} }
+                          route:
+                            cluster: @@name@@
+                            timeout: 0s
+                            retry_policy: *grpc_retry

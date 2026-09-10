@@ -12,6 +12,7 @@ project as-is.
 | **engine** | gRPC streaming compute service: unary `Evaluate`, server-streaming `Subscribe`, bidirectional `Session`. Health and reflection built in. Port 50051. |
 | **protocol** | One port, four surfaces: REST and SSE under `/v1`, WebSocket at `/ws`, GraphQL at `/graphql`, gRPC over h2c. Forwards to the engine, owns no logic. Port 8080. |
 | **envoy** | The load balancer in front of everything: edge on 8080 for REST, SSE, GraphQL, WebSocket and gRPC; engine load balancer on 50051. One config for compose, Ansible and Kubernetes. |
+| **tbd** | The scaffolding CLI: `tbd new service <name>` renders a complete gRPC service and registers it in every shared file, idempotently; `tbd service check` proves it. |
 | **chaos** | Runs both services in one process, validates every surface, generates load, injects faults on a timeline and asserts. Used for development and in CI. |
 | **auth** | Ory Hydra + Kratos: OAuth2/OIDC, password, passkeys, Google; one sign-in host. Envoy is the only thing that checks a token; services read the identity Envoy forwards and verify nothing themselves. |
 | **observability** | Prometheus metrics, OpenTelemetry traces, JSON logs with trace ids and continuous CPU profiles from every service and Envoy, into VictoriaMetrics, Tempo, VictoriaLogs and Pyroscope, with Grafana dashboards. |
@@ -174,6 +175,7 @@ crates/
   engine/     the engine service (lib + bin + tests/it)
   protocol/   the protocol service (lib + bin + tests/it)
   chaos/      the chaos tool (lib + bin + tests/it)
+  cli/        the tbd scaffolding CLI (bin `tbd`, templates/)
 proto/        .proto sources, buf STANDARD naming
 scenarios/    chaos scenarios: load + timeline + assertions
 topologies/   stacks for `chaos up` and `chaos serve`

@@ -175,11 +175,37 @@ run = [
   "mise run deny",
   "mise run lint",
   "mise run test",
+  "mise run tbd:selfcheck",
   "mise run doc",
   "mise run chaos:run",
   "mise run ui:check",
   "mise run ui:auth:check",
 ]
+
+# ------------------------------------------------------------- scaffold ----
+
+[tasks.tbd]
+description = "The tbd CLI: mise run tbd -- new service <name> | service check <name> | service list (docs/tbd/README.md)"
+run = "cargo run -q -p tbd-cli --"
+
+[tasks."tbd:selfcheck"]
+description = "Scaffold a throwaway service into a copy of the tree and prove it compiles, lints, tests and is fully registered"
+run = """
+set -eu
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+git ls-files -co --exclude-standard -z | tar --null -T - -cf - | tar -C "$tmp" -xf -
+cargo run -q -p tbd-cli -- --repo "$tmp" new service zeta --port 50099 --metrics-port 9499 --bacon-key z
+cargo run -q -p tbd-cli -- --repo "$tmp" new service zeta | grep -q "already scaffolded"
+cargo run -q -p tbd-cli -- --repo "$tmp" service check zeta
+export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$PWD/target}"
+cd "$tmp"
+cargo check -q -p tbd-zeta --all-targets
+cargo clippy -q -p tbd-zeta --all-targets -- -D warnings
+cargo fmt --check -p tbd-zeta
+cargo nextest run -p tbd-zeta
+buf lint proto
+"""
 
 # ----------------------------------------------------------------- run ----
 

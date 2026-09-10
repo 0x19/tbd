@@ -1,0 +1,10 @@
+  - target:
+      kind: Deployment
+      name: @@name@@
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+      - op: replace
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: @@pull_policy@@

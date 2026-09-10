@@ -1,0 +1,17 @@
+  @@name@@:
+    image: ${IMAGE_REGISTRY:-ghcr.io/0x19}/@@package@@:${IMAGE_TAG:-dev}
+    build:
+      context: .
+      dockerfile: devops/docker/Dockerfile
+      args:
+        BIN: @@name@@
+        PORT: "@@port@@"
+    environment:
+      <<: *common-env
+      TBD_ENV: ${TBD_ENV:-local}
+      @@NAME@@_LISTEN_ADDR: 0.0.0.0:@@port@@
+      @@NAME@@_METRICS_ADDR: 0.0.0.0:9464
+    ports:
+      - "@@metrics_port@@:9464"
+    restart: unless-stopped
+
