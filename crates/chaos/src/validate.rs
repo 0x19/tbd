@@ -6,7 +6,7 @@
 use std::time::{Duration, Instant};
 
 use futures::{SinkExt, StreamExt};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tbd_proto::{
     engine::v1::{EvaluateRequest, SubscribeRequest, engine_service_client::EngineServiceClient},
@@ -30,12 +30,12 @@ pub struct Targets {
 }
 
 /// Outcome of one check.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CheckResult {
     /// Check name.
     pub name: String,
     /// Surface it exercises.
-    pub surface: &'static str,
+    pub surface: String,
     /// Passed.
     pub passed: bool,
     /// Wall time.
@@ -45,7 +45,7 @@ pub struct CheckResult {
 }
 
 /// Whole-run report.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Report {
     /// Every check.
     pub checks: Vec<CheckResult>,
@@ -127,7 +127,7 @@ pub async fn run(targets: Targets) -> Report {
                 idx,
                 CheckResult {
                     name: name.to_owned(),
-                    surface,
+                    surface: surface.to_owned(),
                     passed,
                     latency_ms,
                     detail,

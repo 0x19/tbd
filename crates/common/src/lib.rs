@@ -1,5 +1,6 @@
 //! Plumbing shared by every service binary. Deliberately transport-free.
 
+pub mod config;
 pub mod fault;
 pub mod metrics;
 pub mod profiling;

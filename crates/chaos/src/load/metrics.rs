@@ -13,7 +13,7 @@ use std::{
 };
 
 use hdrhistogram::Histogram;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// Live metrics. Safe to share across tasks.
 pub struct Metrics {
@@ -28,7 +28,7 @@ pub struct Metrics {
 }
 
 /// Success and failure counts for one key.
-#[derive(Debug, Clone, Copy, Default, Serialize)]
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
 pub struct TargetCounts {
     /// Requests sent.
     pub total: u64,
@@ -37,7 +37,7 @@ pub struct TargetCounts {
 }
 
 /// Per-operation counts and latency.
-#[derive(Debug, Clone, Copy, Default, Serialize)]
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
 pub struct OpSnapshot {
     /// Requests sent.
     pub total: u64,
@@ -53,7 +53,7 @@ struct OpStats {
 }
 
 /// Latency percentiles in milliseconds.
-#[derive(Debug, Clone, Copy, Default, Serialize)]
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
 pub struct Latency {
     /// Median.
     pub p50_ms: f64,
@@ -68,7 +68,7 @@ pub struct Latency {
 }
 
 /// A point-in-time copy of [`Metrics`].
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct LoadSnapshot {
     /// Seconds since the last reset.
     pub elapsed_s: f64,

@@ -81,6 +81,8 @@ chaos validate [--protocol URL] [--engine URL] [--json]   # every surface, per-c
 chaos up [topology.toml]                                    # stack in one process until Ctrl-C
 chaos run scenarios/*.toml | --dir scenarios [--json]       # load + faults + assertions
 chaos check scenarios/*.toml                                # validate files only
+chaos serve                                                 # HTTP API for the admin UI (ui/chaos)
+chaos config                                                # effective configs/chaos/<env>.toml
 ```
 
 A scenario is one TOML file: which engines and protocols to run, how much load of which
@@ -89,7 +91,16 @@ real services through a handle they consult on every request, so there are no mo
 
 Start with [docs/chaos/README.md](docs/chaos/README.md). Writing scenarios:
 [docs/chaos/scenarios.md](docs/chaos/scenarios.md). Adding services or operations:
-[docs/chaos/extending.md](docs/chaos/extending.md).
+[docs/chaos/extending.md](docs/chaos/extending.md). The HTTP API behind the admin UI:
+[docs/chaos/api.md](docs/chaos/api.md). Per-environment configuration
+(`configs/chaos/base.toml` + `local|dev|production.toml`):
+[docs/chaos/config.md](docs/chaos/config.md).
+
+In the local cluster `chaos serve` runs as a pod behind Envoy:
+`http://localhost:18080/api/chaos/overview`, UI at `http://localhost:18080/chaos/`.
+The UI (`ui/chaos`, Next.js static export served by the chaos binary) is described in
+[docs/chaos/ui.md](docs/chaos/ui.md); `mise run chaos:serve` plus `mise run ui:dev`
+is the development loop.
 
 ## Local cluster with Grafana
 
@@ -136,7 +147,9 @@ crates/
   chaos/      the chaos tool (lib + bin + tests/it)
 proto/        .proto sources, buf STANDARD naming
 scenarios/    chaos scenarios: load + timeline + assertions
-topologies/   stacks for `chaos up`
+topologies/   stacks for `chaos up` and `chaos serve`
+configs/      layered TOML config per binary: chaos/{base,local,dev,production}.toml
+ui/           web UIs: chaos/ is the chaos admin UI (Next.js, served by chaos serve)
 devops/       docker/, envoy/, k8s/ (base, overlays, observability), grafana/, ansible/
 docs/         ci.md, observability.md, chaos/, design/ (earlier idea material, not a spec)
 compose.yaml  Envoy + services from the same images

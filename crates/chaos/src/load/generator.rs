@@ -3,22 +3,46 @@
 
 use std::{sync::Arc, time::Duration};
 
-use tokio::{sync::Semaphore, task::JoinSet, time::Instant};
+use tokio::{
+    sync::{Semaphore, mpsc},
+    task::JoinSet,
+    time::Instant,
+};
+use tokio_util::sync::CancellationToken;
 
 use super::{
-    LoadConfig, Metrics,
+    LoadConfig, LoadSnapshot, Metrics,
     ops::{Clients, Operation, Target},
 };
+
+/// How often [`Hooks::progress`] receives a snapshot.
+pub const PROGRESS_INTERVAL: Duration = Duration::from_secs(1);
+
+/// Optional observation and control of a load run.
+#[derive(Debug, Clone, Default)]
+pub struct Hooks {
+    /// Receives a snapshot every [`PROGRESS_INTERVAL`] while load runs, and
+    /// one final snapshot when each phase ends.
+    pub progress: Option<mpsc::UnboundedSender<LoadSnapshot>>,
+    /// Cancel: the pacer stops scheduling, in-flight requests drain.
+    pub cancel: CancellationToken,
+}
 
 /// Run the configured load against `targets`. Returns the final snapshot.
 ///
 /// A warmup phase, if configured, runs first with the same shape and its
 /// metrics are discarded.
-pub async fn run(
+pub async fn run(config: &LoadConfig, targets: &[Target], metrics: Arc<Metrics>) -> LoadSnapshot {
+    run_with(config, targets, metrics, &Hooks::default()).await
+}
+
+/// [`run`] with progress reporting and cancellation.
+pub async fn run_with(
     config: &LoadConfig,
     targets: &[Target],
     metrics: Arc<Metrics>,
-) -> super::LoadSnapshot {
+    hooks: &Hooks,
+) -> LoadSnapshot {
     let clients = Arc::new(Clients::new(config.timeout));
     let ops: Vec<(Arc<dyn Operation>, u32)> = config
         .operations
@@ -31,14 +55,44 @@ pub async fn run(
         && !warmup.is_zero()
     {
         tracing::info!(?warmup, "warmup");
-        phase(config, targets, &ops, &clients, &metrics, warmup).await;
+        phase(config, targets, &ops, &clients, &metrics, warmup, hooks).await;
         metrics.reset();
     }
     tracing::info!(duration = ?config.duration, rate = config.rate, pattern = ?config.pattern, "load");
-    phase(config, targets, &ops, &clients, &metrics, config.duration).await;
+    phase(
+        config,
+        targets,
+        &ops,
+        &clients,
+        &metrics,
+        config.duration,
+        hooks,
+    )
+    .await;
     metrics.snapshot()
 }
 
+/// Sends a snapshot every [`PROGRESS_INTERVAL`] until aborted.
+fn progress_ticker(
+    metrics: &Arc<Metrics>,
+    progress: Option<&mpsc::UnboundedSender<LoadSnapshot>>,
+) -> Option<tokio::task::AbortHandle> {
+    let tx = progress?.clone();
+    let metrics = Arc::clone(metrics);
+    let task = tokio::spawn(async move {
+        let mut tick =
+            tokio::time::interval_at(Instant::now() + PROGRESS_INTERVAL, PROGRESS_INTERVAL);
+        loop {
+            tick.tick().await;
+            if tx.send(metrics.snapshot()).is_err() {
+                break;
+            }
+        }
+    });
+    Some(task.abort_handle())
+}
+
+#[allow(clippy::too_many_arguments)]
 async fn phase(
     config: &LoadConfig,
     targets: &[Target],
@@ -46,10 +100,12 @@ async fn phase(
     clients: &Arc<Clients>,
     metrics: &Arc<Metrics>,
     duration: Duration,
+    hooks: &Hooks,
 ) {
     if targets.is_empty() || ops.is_empty() {
         return;
     }
+    let ticker = progress_ticker(metrics, hooks.progress.as_ref());
     let total_weight: u32 = ops.iter().map(|(_, w)| w).sum();
     let permits = Arc::new(Semaphore::new(config.max_in_flight));
     let mut tasks = JoinSet::new();
@@ -58,7 +114,7 @@ async fn phase(
     let mut next = start;
     let mut rr = 0_usize;
 
-    while Instant::now() < deadline {
+    while Instant::now() < deadline && !hooks.cancel.is_cancelled() {
         let rate = config
             .pattern
             .rate_at(config.rate, start.elapsed(), duration);
@@ -68,7 +124,10 @@ async fn phase(
             continue;
         }
         next += Duration::from_secs_f64(1.0 / rate);
-        tokio::time::sleep_until(next).await;
+        tokio::select! {
+            () = tokio::time::sleep_until(next) => {}
+            () = hooks.cancel.cancelled() => break,
+        }
         if Instant::now() >= deadline {
             break;
         }
@@ -103,6 +162,12 @@ async fn phase(
     if drain.await.is_err() {
         tracing::warn!("aborting requests still in flight after the drain window");
         tasks.abort_all();
+    }
+    if let Some(ticker) = ticker {
+        ticker.abort();
+    }
+    if let Some(tx) = &hooks.progress {
+        let _ = tx.send(metrics.snapshot());
     }
 }
 

@@ -7,11 +7,17 @@
 #                     so engine replicas are a pure scale-out.
 #   :9901  admin      /ready, /stats/prometheus, /clusters, /config_dump.
 #
-# Clusters resolve by DNS name: `engine`, `protocol`, `otel-collector`. In compose
-# those are service names; in Kubernetes they are headless Services (engine,
-# protocol) and an ExternalName Service (otel-collector), so this one file is
-# used unchanged everywhere. STRICT_DNS re-resolves every 5 s, so scale-out
-# and pod churn are picked up without a restart.
+# Clusters resolve by DNS name: `engine`, `protocol`, `chaos`, `otel-collector`.
+# In compose those are service names; in Kubernetes they are headless Services
+# (engine, protocol, chaos) and an ExternalName Service (otel-collector), so this
+# one file is used unchanged everywhere. STRICT_DNS re-resolves every 5 s, so
+# scale-out and pod churn are picked up without a restart.
+#
+# chaos (the chaos API and admin UI) is reachable two ways: by prefix on any
+# host (`/api/chaos/...`, `/chaos/...`) and by its own host names
+# (`chaos.<domain>` for the UI, `chaos.api.<domain>` for the API, rewritten to
+# the same prefixes). Where chaos is not deployed the cluster has no endpoints
+# and Envoy answers 503, which is the intended "not here".
 #
 # Observability: JSON access logs to stdout with the trace id, Prometheus stats on
 # the admin port, OpenTelemetry tracing to the collector with W3C traceparent
@@ -91,9 +97,49 @@ static_resources:
                 route_config:
                   name: edge
                   virtual_hosts:
+                    # chaos API on its own host: chaos.api.<domain>/... -> /api/chaos/...
+                    - name: chaos-api
+                      domains: ["chaos.api.*"]
+                      routes:
+                        - match: { prefix: "/" }
+                          route:
+                            cluster: chaos
+                            prefix_rewrite: "/api/chaos/"
+                            timeout: 0s
+                    # chaos UI on its own host: chaos.<domain>/... -> /chaos/...;
+                    # the UI calls the API by absolute path, which the same host serves.
+                    - name: chaos-ui
+                      domains: ["chaos.*"]
+                      routes:
+                        - match: { prefix: "/api/chaos/" }
+                          route:
+                            cluster: chaos
+                            timeout: 0s
+                        - match: { prefix: "/" }
+                          route:
+                            cluster: chaos
+                            prefix_rewrite: "/chaos/"
+                            timeout: 0s
                     - name: all
                       domains: ["*"]
                       routes:
+                        # chaos API and UI by prefix. Streams (SSE) get no timeout.
+                        - match: { prefix: "/api/chaos/" }
+                          route:
+                            cluster: chaos
+                            timeout: 0s
+                        - match: { path: "/api/chaos" }
+                          route:
+                            cluster: chaos
+                            timeout: 0s
+                        - match: { prefix: "/chaos/" }
+                          route:
+                            cluster: chaos
+                            timeout: 15s
+                        - match: { path: "/chaos" }
+                          route:
+                            cluster: chaos
+                            timeout: 15s
                         # gRPC: engine service straight to the engines.
                         - match: { prefix: "/tbd.engine.v1.EngineService/", grpc: {} }
                           route:
@@ -239,6 +285,27 @@ static_resources:
         interval: 5s
         base_ejection_time: 30s
         max_ejection_percent: 50
+
+    - name: chaos
+      type: STRICT_DNS
+      dns_lookup_family: V4_ONLY
+      dns_refresh_rate: 5s
+      lb_policy: ROUND_ROBIN
+      connect_timeout: 1s
+      load_assignment:
+        cluster_name: chaos
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address: { address: chaos, port_value: 7700 }
+      health_checks:
+        - timeout: 1s
+          interval: 5s
+          unhealthy_threshold: 2
+          healthy_threshold: 1
+          http_health_check:
+            path: /api/chaos/healthz
 
     - name: otel-collector
       type: STRICT_DNS

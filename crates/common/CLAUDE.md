@@ -29,6 +29,10 @@ If a change needs one of those, it belongs in the service, not here.
   process with a global `service` label and process metrics; `names` holds every metric
   name; `RequestTimer` and `StreamGuard` are the recording helpers. With no exporter
   installed the `metrics` macros are no-ops, which is what chaos relies on.
+- `config.rs` is the layered TOML loader (`base.toml` + `<env>.toml`, deep merge of
+  tables, everything else replaced). It knows nothing about any binary's schema; each
+  binary owns its `configs/<name>/` directory and struct. Unknown keys must fail, so
+  callers derive `deny_unknown_fields`.
 
 Gotchas:
 - Adding a `Behavior` variant is a contract change for scenario files. Update

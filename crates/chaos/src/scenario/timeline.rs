@@ -2,13 +2,13 @@
 
 use std::time::Duration;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tbd_common::fault::Behavior;
 
 use crate::stack::Stack;
 
 /// One `[[timeline]]` entry. `at` is measured from when load starts.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub enum TimelineEvent {
     /// Change an engine's fault behaviour.
@@ -85,16 +85,9 @@ impl TimelineEvent {
         match self {
             Self::SetBehavior {
                 service, behavior, ..
-            } => {
-                let instance = stack
-                    .get(service)
-                    .ok_or_else(|| format!("{service} is not running"))?;
-                let fault = instance
-                    .fault()
-                    .ok_or_else(|| format!("{service} has no fault injection"))?;
-                fault.set(behavior.clone());
-                Ok(())
-            }
+            } => stack
+                .set_behavior(service, behavior.clone())
+                .map_err(|e| e.to_string()),
             Self::Stop { service, .. } => stack
                 .stop_instance(service)
                 .await

@@ -1,0 +1,46 @@
+# chaos configuration, shared layer. `configs/chaos/<env>.toml` is merged over
+# this file; tables merge key by key, any other value replaces. Every key is
+# listed here so an environment file only needs what it changes. Flags and
+# their environment variables (see docs/chaos/commands.md) override both.
+
+[serve]
+# Where `chaos serve` listens. In-cluster this is overridden to 0.0.0.0 by
+# CHAOS_LISTEN_ADDR.
+listen = "127.0.0.1:7700"
+# Prefix for every API route. Envoy forwards /api/chaos/ here.
+base_path = "/api/chaos"
+# Built UI to serve at `ui_path`. Empty: no UI, API only.
+ui_dir = ""
+ui_path = "/chaos"
+# Start the [paths].topology stack when `serve` starts.
+start_stack = true
+
+[paths]
+# Stack `chaos up` and `chaos serve` run in-process.
+topology = "topologies/dev.toml"
+# Scenario files the API lists, edits and runs.
+scenarios = "scenarios"
+# Copied into `scenarios` when `serve` starts and that directory is missing or
+# empty. Used in containers: the image's scenarios/ is read-only, the copy on
+# /data is what the UI edits. Empty: no seeding.
+scenarios_seed = ""
+# Where run records (scenario, load, validate) are written as JSON.
+results = ".chaos/results"
+
+[targets]
+# Defaults for `chaos validate` and for API load runs against an external stack.
+protocol = "http://127.0.0.1:8080"
+engine = "http://127.0.0.1:50051"
+
+[validate]
+timeout = "5s"
+# Extra PEM root for https:// and wss:// targets (a staging edge, Caddy's
+# internal CA). Empty: the public roots compiled into the binary.
+ca_cert = ""
+
+[links]
+# Shown by the UI and the overview endpoint. Empty: link hidden.
+grafana = ""
+victorialogs = ""
+pyroscope = ""
+envoy_admin = ""

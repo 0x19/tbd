@@ -32,7 +32,7 @@ hop; the same observability stack runs locally and in production.
 | `tbd-proto` | code generated from `/proto` at build time via `protox` + `tonic-prost-build` | tonic, prost |
 | `tbd-engine` | `tbd.engine.v1.EngineService` implementation, health, reflection | common, proto |
 | `tbd-protocol` | axum router: REST, SSE, WebSocket bridge, GraphQL, protocol gRPC; traced and measured engine client | common, proto |
-| `tbd-chaos` | `chaos` binary: runs the services in-process, validates, loads, injects faults | everything above |
+| `tbd-chaos` | `chaos` binary: runs the services in-process, validates, loads, injects faults; `chaos serve` exposes all of it as an HTTP API and serves the admin UI from `ui/chaos` | everything above |
 
 Each service crate is `lib.rs` + thin `main.rs`. `serve_on(listener, config, shutdown)`
 is the seam: `main` binds the configured address, tests bind port 0, and the engine's

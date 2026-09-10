@@ -2,11 +2,12 @@
 
 use std::{collections::BTreeMap, path::Path, sync::Arc, time::Instant};
 
-use serde::Serialize;
-use tokio::sync::Mutex;
+use serde::{Deserialize, Serialize};
+use tokio::sync::{Mutex, mpsc};
+use tokio_util::sync::CancellationToken;
 
 use crate::{
-    load::{self, Metrics, Target},
+    load::{self, LoadSnapshot, Metrics, Target},
     service::RequestCounts,
 };
 
@@ -16,7 +17,7 @@ use super::{
 };
 
 /// Outcome of one scenario.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScenarioResult {
     /// From `[scenario] name`.
     pub name: String,
@@ -29,7 +30,7 @@ pub struct ScenarioResult {
     /// Wall time.
     pub duration_s: f64,
     /// Load metrics, when load ran.
-    pub load: Option<load::LoadSnapshot>,
+    pub load: Option<LoadSnapshot>,
     /// Engine counters at the end.
     pub services: BTreeMap<String, RequestCounts>,
     /// Timeline events as applied, with outcome.
@@ -41,7 +42,7 @@ pub struct ScenarioResult {
 }
 
 /// One applied timeline event.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EventOutcome {
     /// Seconds after load start when it fired.
     pub at_s: f64,
@@ -51,11 +52,55 @@ pub struct EventOutcome {
     pub error: Option<String>,
 }
 
+/// Something that happened while a scenario ran, in order.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum RunEvent {
+    /// Entered a phase: `setup`, `load`, `assert`, `teardown`.
+    Phase {
+        /// Phase name.
+        name: String,
+    },
+    /// A load snapshot, once per [`load::PROGRESS_INTERVAL`].
+    Load {
+        /// Snapshot.
+        snapshot: LoadSnapshot,
+    },
+    /// A timeline action fired.
+    Timeline {
+        /// What happened.
+        event: EventOutcome,
+    },
+}
+
+/// Optional observation and control of a scenario run.
+#[derive(Debug, Clone, Default)]
+pub struct Hooks {
+    /// Receives every [`RunEvent`].
+    pub events: Option<mpsc::UnboundedSender<RunEvent>>,
+    /// Cancel: load stops, pending timeline events are skipped, the stack is
+    /// torn down and the result carries `error = "cancelled"`.
+    pub cancel: CancellationToken,
+}
+
+impl Hooks {
+    fn emit(&self, event: RunEvent) {
+        if let Some(tx) = &self.events {
+            let _ = tx.send(event);
+        }
+    }
+}
+
 /// Run a scenario from a file.
 pub async fn run_file(path: &Path) -> ScenarioResult {
+    run_file_with(path, &Hooks::default()).await
+}
+
+/// [`run_file`] with hooks.
+pub async fn run_file_with(path: &Path, hooks: &Hooks) -> ScenarioResult {
     match ScenarioFile::from_path(path) {
         Ok(file) => {
-            let mut result = run_scenario(&file).await;
+            let mut result = run_scenario_with(&file, hooks).await;
             result.file = Some(path.display().to_string());
             result
         }
@@ -76,6 +121,12 @@ pub async fn run_file(path: &Path) -> ScenarioResult {
 
 /// Run a parsed scenario.
 pub async fn run_scenario(file: &ScenarioFile) -> ScenarioResult {
+    run_scenario_with(file, &Hooks::default()).await
+}
+
+/// [`run_scenario`] with hooks.
+#[allow(clippy::too_many_lines)]
+pub async fn run_scenario_with(file: &ScenarioFile, hooks: &Hooks) -> ScenarioResult {
     let started = Instant::now();
     let mut result = ScenarioResult {
         name: file.scenario.name.clone(),
@@ -94,6 +145,9 @@ pub async fn run_scenario(file: &ScenarioFile) -> ScenarioResult {
         return result;
     }
     tracing::info!(scenario = %file.scenario.name, "setup");
+    hooks.emit(RunEvent::Phase {
+        name: "setup".into(),
+    });
 
     let stack = match file.stack.start().await {
         Ok(s) => Arc::new(Mutex::new(s)),
@@ -119,11 +173,18 @@ pub async fn run_scenario(file: &ScenarioFile) -> ScenarioResult {
     let mut events = file.timeline.clone();
     events.sort_by_key(super::timeline::TimelineEvent::at);
     let timeline_stack = Arc::clone(&stack);
+    let timeline_hooks = hooks.clone();
     let load_start = Instant::now();
+    hooks.emit(RunEvent::Phase {
+        name: "load".into(),
+    });
     let timeline = tokio::spawn(async move {
         let mut outcomes = Vec::new();
         for event in events {
-            tokio::time::sleep_until((load_start + event.at()).into()).await;
+            tokio::select! {
+                () = tokio::time::sleep_until((load_start + event.at()).into()) => {}
+                () = timeline_hooks.cancel.cancelled() => break,
+            }
             tracing::info!(at = ?event.at(), action = %event.describe(), "timeline");
             let outcome = {
                 let mut s = timeline_stack.lock().await;
@@ -132,18 +193,35 @@ pub async fn run_scenario(file: &ScenarioFile) -> ScenarioResult {
             if let Err(error) = &outcome {
                 tracing::error!(%error, action = %event.describe(), "timeline action failed");
             }
-            outcomes.push(EventOutcome {
+            let applied = EventOutcome {
                 at_s: load_start.elapsed().as_secs_f64(),
                 action: event.describe(),
                 error: outcome.err(),
+            };
+            timeline_hooks.emit(RunEvent::Timeline {
+                event: applied.clone(),
             });
+            outcomes.push(applied);
         }
         outcomes
     });
 
     if let Some(load_config) = &file.load {
         let metrics = Arc::new(Metrics::new());
-        result.load = Some(load::run(load_config, &targets, metrics).await);
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let forward_hooks = hooks.clone();
+        let forward = tokio::spawn(async move {
+            while let Some(snapshot) = rx.recv().await {
+                forward_hooks.emit(RunEvent::Load { snapshot });
+            }
+        });
+        let load_hooks = load::Hooks {
+            progress: Some(tx),
+            cancel: hooks.cancel.clone(),
+        };
+        result.load = Some(load::run_with(load_config, &targets, metrics, &load_hooks).await);
+        drop(load_hooks);
+        let _ = forward.await;
     } else if let Some(last) = file
         .timeline
         .iter()
@@ -151,7 +229,10 @@ pub async fn run_scenario(file: &ScenarioFile) -> ScenarioResult {
         .max()
     {
         // No load: just let the timeline play out.
-        tokio::time::sleep_until((load_start + last).into()).await;
+        tokio::select! {
+            () = tokio::time::sleep_until((load_start + last).into()) => {}
+            () = hooks.cancel.cancelled() => {}
+        }
     }
 
     if let Ok(outcomes) = timeline.await {
@@ -168,12 +249,21 @@ pub async fn run_scenario(file: &ScenarioFile) -> ScenarioResult {
     let stack = stack.into_inner();
     result.services = stack.request_counts();
 
+    hooks.emit(RunEvent::Phase {
+        name: "assert".into(),
+    });
     result.assertions = file.assertions.evaluate(&Snapshot {
         load: result.load.as_ref(),
         engines: &result.services,
     });
+    if hooks.cancel.is_cancelled() && result.error.is_none() {
+        result.error = Some("cancelled".into());
+    }
 
     tracing::info!(scenario = %file.scenario.name, "teardown");
+    hooks.emit(RunEvent::Phase {
+        name: "teardown".into(),
+    });
     stack.shutdown().await;
 
     let events_ok = result.events.iter().all(|e| e.error.is_none());

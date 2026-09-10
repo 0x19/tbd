@@ -1,6 +1,6 @@
 [package]
 name = "tbd-common"
-description = "Cross-service plumbing: telemetry (logs, OTLP traces, Prometheus metrics), shutdown, shared CLI args, fault injection. No service transport: the OTLP exporter and the metrics listener are the only network code here."
+description = "Cross-service plumbing: telemetry (logs, OTLP traces, Prometheus metrics), shutdown, shared CLI args, fault injection, layered TOML config. No service transport: the OTLP exporter and the metrics listener are the only network code here."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -24,12 +24,11 @@ rand.workspace = true
 serde.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
+toml.workspace = true
 tracing.workspace = true
 tracing-opentelemetry.workspace = true
 tracing-subscriber.workspace = true
 
-[dev-dependencies]
-toml.workspace = true
 
 [lints]
 workspace = true

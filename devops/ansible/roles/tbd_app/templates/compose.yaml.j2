@@ -28,3 +28,32 @@ services:
     depends_on:
       - engine
     restart: unless-stopped
+{% if chaos_enabled | default(false) %}
+
+  # chaos API + admin UI. Off by default; dev hosts set chaos_enabled: true.
+  chaos:
+    image: {{ chaos_image | default(engine_image | regex_replace('engine$', 'chaos')) }}:{{ image_tag }}
+    command: ["serve"]
+    environment:
+      RUST_LOG: {{ rust_log }}
+      LOG_FORMAT: {{ log_format }}
+      TBD_ENV: {{ tbd_env | default('dev') }}
+      CHAOS_LISTEN_ADDR: 0.0.0.0:7700
+      CHAOS_PROTOCOL_URL: http://protocol:{{ protocol_port }}
+      CHAOS_ENGINE_URL: http://engine:{{ engine_port }}
+      CHAOS_RESULTS_DIR: /data/results
+      CHAOS_SCENARIOS_DIR: /data/scenarios
+      CHAOS_SCENARIOS_SEED: /app/scenarios
+      CHAOS_UI_DIR: /app/ui
+      OTEL_EXPORTER_OTLP_ENDPOINT: "{{ otlp_endpoint | default('') }}"
+    volumes:
+      - chaos-results:/data
+    tmpfs:
+      - /tmp
+    ports:
+      - "{{ chaos_port | default(7700) }}:7700"
+    restart: unless-stopped
+
+volumes:
+  chaos-results:
+{% endif %}

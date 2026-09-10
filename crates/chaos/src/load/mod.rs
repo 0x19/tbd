@@ -7,14 +7,14 @@ pub mod ops;
 
 use std::time::Duration;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-pub use generator::run;
+pub use generator::{Hooks, PROGRESS_INTERVAL, run, run_with};
 pub use metrics::{LoadSnapshot, Metrics};
 pub use ops::{OpKind, Target};
 
 /// `[load]` in a scenario.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct LoadConfig {
     /// Requests per second, spread across all targets. With a `ramp` pattern
@@ -61,7 +61,7 @@ fn default_operations() -> Vec<OperationWeight> {
 }
 
 /// One entry in the operation mix.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct OperationWeight {
     /// Which operation.
@@ -76,7 +76,7 @@ fn one() -> u32 {
 }
 
 /// Rate over time.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Pattern {
     /// `rate` for the whole duration.

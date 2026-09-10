@@ -4,7 +4,7 @@
 |---|---|---|
 | `docker/` | one multi-stage Dockerfile for every workspace binary | `docker build -f devops/docker/Dockerfile --build-arg BIN=engine -t ghcr.io/0x19/tbd-engine .` |
 | `envoy/` | the load balancer config, one file for every environment | `mise run envoy:validate`; see `envoy/README.md` |
-| `k8s/` | kustomize base (engine, protocol, envoy) plus `local`, `dev` and `prod` overlays, and the `observability/` stack | `kubectl apply -k devops/k8s/overlays/<env>` |
+| `k8s/` | kustomize base (engine, protocol, envoy) plus `local`, `dev` and `prod` overlays, `chaos/` (API + admin UI, local and dev only) and the `observability/` stack | `kubectl apply -k devops/k8s/overlays/<env>` |
 | `grafana/` | datasources and dashboards, provisioned into the cluster as ConfigMaps | `mise run grafana:reload` |
 | `edge/` | public TLS entry point for a cluster behind a home/office router: Caddy with Let's Encrypt in front of Envoy | `mise run edge:up`; see `edge/README.md` |
 | `ansible/` | host bootstrap, compose-based deploy, and `local.yml` for the local cluster | see `ansible/README.md` |

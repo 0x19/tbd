@@ -1,15 +1,19 @@
 # Local k3d cluster: images imported from the docker daemon, Envoy exposed on
 # host ports 18080/15051 through envoy-lb.yaml and k3d's load balancer,
-# two protocol replicas and two engines so Envoy has something to balance.
+# two protocol replicas and two engines so Envoy has something to balance,
+# plus chaos serve (API + UI) reachable through Envoy at /api/chaos and /chaos.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - ../../base
+  - ../../chaos
   - envoy-lb.yaml
 images:
   - name: ghcr.io/0x19/tbd-engine
     newTag: dev
   - name: ghcr.io/0x19/tbd-protocol
+    newTag: dev
+  - name: ghcr.io/0x19/tbd-chaos
     newTag: dev
 patches:
   - target:
@@ -37,3 +41,4 @@ configMapGenerator:
     behavior: merge
     literals:
       - RUST_LOG=info,tbd=debug
+      - TBD_ENV=local

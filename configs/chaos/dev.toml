@@ -1,0 +1,11 @@
+# Dev cluster. Targets are Envoy inside the cluster; links are what a browser
+# on the team network can open. Replace the hosts when the dev domain exists.
+
+[targets]
+protocol = "http://envoy:8080"
+engine = "http://envoy:50051"
+
+[links]
+grafana = "https://grafana.dev.example.invalid"
+victorialogs = "https://logs.dev.example.invalid/select/vmui"
+pyroscope = "https://profiles.dev.example.invalid"

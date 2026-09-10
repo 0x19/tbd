@@ -3,7 +3,7 @@
 
 use std::{collections::BTreeMap, net::SocketAddr, sync::Arc, time::Duration};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tbd_common::fault::Behavior;
 
 use crate::{
@@ -12,7 +12,7 @@ use crate::{
 };
 
 /// `[stack]` in a scenario or topology file.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct StackConfig {
     /// `[stack.engines.<name>]`
@@ -24,7 +24,7 @@ pub struct StackConfig {
 }
 
 /// One engine instance.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct EngineSpec {
     /// Bind address. Omit for any free loopback port.
@@ -43,7 +43,7 @@ fn default_heartbeat() -> Duration {
 }
 
 /// One protocol instance.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ProtocolSpec {
     /// Bind address. Omit for any free loopback port.
