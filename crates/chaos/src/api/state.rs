@@ -100,6 +100,9 @@ pub struct ValidateRequest {
     /// Engine gRPC URL.
     #[serde(default)]
     pub engine: Option<String>,
+    /// Ledger gRPC URL.
+    #[serde(default)]
+    pub ledger: Option<String>,
     /// Per-check timeout.
     #[serde(default, with = "humantime_serde")]
     pub timeout: Option<Duration>,
@@ -461,13 +464,20 @@ impl AppState {
             engine: req
                 .engine
                 .unwrap_or_else(|| self.config.targets.engine.clone()),
+            ledger: req
+                .ledger
+                .unwrap_or_else(|| self.config.targets.ledger.clone()),
             timeout: req.timeout.unwrap_or(self.config.validate.timeout),
             trust: self
                 .config
                 .trust()
                 .map_err(|e| ApiError::internal(e.to_string()))?,
         };
-        for (what, u) in [("protocol", &targets.protocol), ("engine", &targets.engine)] {
+        for (what, u) in [
+            ("protocol", &targets.protocol),
+            ("engine", &targets.engine),
+            ("ledger", &targets.ledger),
+        ] {
             url::Url::parse(u).map_err(|e| ApiError::invalid(format!("{what}: {e}")))?;
         }
         let mut record = RunRecord::start(RunKind::Validate, "validate");
@@ -711,6 +721,7 @@ fn targets_json(t: &validate::Targets) -> serde_json::Value {
     serde_json::json!({
         "protocol": t.protocol,
         "engine": t.engine,
+        "ledger": t.ledger,
         "timeout": humantime::format_duration(t.timeout).to_string(),
     })
 }

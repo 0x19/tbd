@@ -124,6 +124,8 @@ pub struct Targets {
     pub protocol: String,
     /// Engine gRPC URL.
     pub engine: String,
+    /// Ledger gRPC URL. Through Envoy, the internal listener (`http://envoy:50051`).
+    pub ledger: String,
 }
 
 /// `[validate]`
@@ -243,6 +245,7 @@ impl ChaosConfig {
         for (what, u) in [
             ("targets.protocol", &self.targets.protocol),
             ("targets.engine", &self.targets.engine),
+            ("targets.ledger", &self.targets.ledger),
         ] {
             url::Url::parse(u).map_err(|e| anyhow::anyhow!("{what}: {e}"))?;
         }

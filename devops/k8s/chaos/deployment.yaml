@@ -54,6 +54,7 @@ spec:
               value: http://envoy:8080
             - name: CHAOS_ENGINE_URL
               value: http://envoy:50051
+            - name: CHAOS_LEDGER_URL
             - name: CHAOS_RESULTS_DIR
               value: /data/results
             - name: CHAOS_SCHEDULES_FILE

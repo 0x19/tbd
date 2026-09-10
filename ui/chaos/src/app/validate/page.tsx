@@ -21,6 +21,7 @@ export default function ValidatePage() {
   const history = useFetch(() => api.runs(100), 5000, [lastEvent]);
   const [protocol, setProtocol] = useState("");
   const [engine, setEngine] = useState("");
+  const [ledger, setLedger] = useState("");
   const [timeout, setTimeoutValue] = useState("");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<RunRecord | null>(null);
@@ -33,6 +34,7 @@ export default function ValidatePage() {
       const record = await api.validate({
         protocol: protocol || undefined,
         engine: engine || undefined,
+        ledger: ledger || undefined,
         timeout: timeout || undefined,
       });
       setResult(record);
@@ -64,14 +66,14 @@ export default function ValidatePage() {
     <>
       <PageTitle
         title="Validate"
-        description="Eleven checks, one per surface, run concurrently with a timeout each. Green means the stack answers on every protocol the way the contract says."
+        description="Twelve checks, one per surface, run concurrently with a timeout each. Green means the stack answers on every protocol the way the contract says."
       >
         <Button onClick={run} disabled={busy}>
           <Play /> {busy ? "Running…" : "Run validate"}
         </Button>
       </PageTitle>
 
-      <div className="grid gap-3 rounded-xl border p-4 md:grid-cols-3">
+      <div className="grid gap-3 rounded-xl border p-4 md:grid-cols-4">
         <label className="grid gap-1.5 text-sm">
           <span className="font-medium">Protocol base URL</span>
           <InputGroup>
@@ -89,6 +91,16 @@ export default function ValidatePage() {
               value={engine}
               onChange={(e) => setEngine(e.target.value)}
               placeholder={overview?.config.targets.engine}
+            />
+          </InputGroup>
+        </label>
+        <label className="grid gap-1.5 text-sm">
+          <span className="font-medium">Ledger gRPC URL</span>
+          <InputGroup>
+            <InputGroupInput
+              value={ledger}
+              onChange={(e) => setLedger(e.target.value)}
+              placeholder={overview?.config.targets.ledger}
             />
           </InputGroup>
         </label>

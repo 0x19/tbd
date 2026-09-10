@@ -38,6 +38,9 @@ struct TargetArgs {
     /// Engine gRPC URL.
     #[arg(long, env = "CHAOS_ENGINE_URL")]
     engine: Option<String>,
+    /// Ledger gRPC URL.
+    #[arg(long, env = "CHAOS_LEDGER_URL")]
+    ledger: Option<String>,
 }
 
 /// Bearer token for a deployed stack (Envoy requires one on the API).
@@ -246,6 +249,7 @@ async fn main() -> anyhow::Result<()> {
             let report = tbd_chaos::validate::run(tbd_chaos::validate::Targets {
                 protocol: config.targets.protocol,
                 engine: config.targets.engine,
+                ledger: config.targets.ledger,
                 timeout: timeout.unwrap_or(config.validate.timeout),
                 trust,
             })
@@ -284,6 +288,9 @@ impl TargetArgs {
         }
         if let Some(e) = self.engine {
             config.targets.engine = e;
+        }
+        if let Some(l) = self.ledger {
+            config.targets.ledger = l;
         }
     }
 }
@@ -332,7 +339,7 @@ async fn up(file: PathBuf) -> anyhow::Result<()> {
     println!("\nstack up:");
     for (name, instance) in stack.instances() {
         let surface = match instance.kind {
-            "engine" => "grpc",
+            "engine" | "ledger" => "grpc",
             "protocol" => "http/ws/graphql/grpc",
             _ => "",
         };
@@ -343,12 +350,17 @@ async fn up(file: PathBuf) -> anyhow::Result<()> {
     }
     if let Some(p) = stack.of_kind("protocol").first() {
         println!(
-            "\n  chaos validate --protocol {} --engine {}",
+            "\n  chaos validate --protocol {} --engine {} --ledger {}",
             p.http_url(),
             stack
                 .of_kind("engine")
                 .first()
                 .map(|e| e.http_url())
+                .unwrap_or_default(),
+            stack
+                .of_kind("ledger")
+                .first()
+                .map(|l| l.http_url())
                 .unwrap_or_default()
         );
     }

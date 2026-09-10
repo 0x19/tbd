@@ -74,6 +74,9 @@ are the `[[timeline]]` actions, by hand.
 | `POST /stack/{name}/stop` | | `[InstanceInfo]` |
 | `POST /stack/{name}/start` | | `[InstanceInfo]`; same port as before |
 | `PUT /stack/{name}/behavior` | a behaviour, e.g. `{"type":"error","kind":"unavailable","rate":0.5,"message":"x"}` | `[InstanceInfo]` |
+| `POST /stack/{name}/clone` | `{"count": 1}`, optional, at most 16 | `201` + `[InstanceInfo]`: `count` replicas of `name`, the same service on fresh ports, named `<base>-<n>` for the next free `n` (`protocol-1` gives `protocol-2`); a protocol replica forwards to the same engine |
+| `POST /stack` | `{"kind": "engine"\|"protocol", "name"?, "engine"? (protocols), "heartbeat"?, "behavior"? (engines)}` | `201` + `[InstanceInfo]`: a new instance, started now on a free port; `name` defaults to the next free `<kind>-<n>`; `409` when the name exists or the engine is not running |
+| `DELETE /stack/{name}` | | `[InstanceInfo]`: stop and forget an instance added at runtime; `409` for a topology instance (stop it instead) or one another instance forwards to |
 
 Behaviours are the same objects as in `[[timeline]]`, in JSON: `healthy`, `slow`,
 `hang`, `error`, `delayed_failure` ([scenarios.md](scenarios.md#behaviours)). Only
@@ -81,7 +84,15 @@ engines have fault injection; a protocol answers `422`.
 
 `InstanceInfo`: `name`, `kind` (`engine`/`protocol`), `addr`, `running`,
 `depends_on`, `behavior` (`null` when stopped or without fault injection),
-`requests` (`{"total","failed"}`, engine-side counters, reset on restart).
+`requests` (`{"total","failed"}`, engine-side counters, reset on restart), `added`
+(created at runtime by `clone` or `POST /stack`; only these can be deleted).
+
+Replicas and added instances are recorded in `[paths] stack` (one JSON file, the same
+keys as the topology tables plus `replica_of`) and re-added when serve starts, engines
+first; the topology file itself is never changed. One that no longer starts, because
+its engine was removed or its port is taken, is dropped from the file with a warning. Load runs with no explicit targets spread over every
+running protocol, so a protocol replica takes traffic at once; an engine replica takes
+traffic once a protocol forwards to it (`POST /stack` with `"engine": "engine-2"`).
 
 ## Scenarios
 
@@ -120,7 +131,7 @@ One run at a time. A second `POST /runs` while one is active answers `409`.
 | `GET /runs/{id}/events` | | SSE: history so far, then live, ending at `finished` |
 | `POST /runs/{id}/cancel` | | `202`; `409` if not active |
 | `DELETE /runs/{id}` | | `204`; `409` if active |
-| `POST /validate` | `{"protocol", "engine", "timeout"}`, every field optional | `200` + `RunRecord` (kind `validate`), synchronous |
+| `POST /validate` | `{"protocol", "engine", "ledger", "timeout"}`, every field optional | `200` + `RunRecord` (kind `validate`), synchronous |
 
 An ad-hoc load run takes the `[load]` table of a scenario as JSON (`rate`, `duration`,
 `warmup`, `timeout`, `max_in_flight`, `pattern`, `operations`; see

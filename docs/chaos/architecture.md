@@ -11,7 +11,7 @@ crates/chaos/src
 │   ├── runs.rs        RunRecord/RunStore (JSON files), ActiveRun (live feed)
 │   ├── routes.rs      handlers and SSE
 │   └── error.rs       ApiError → status + {"error"}
-├── service/           the Service extension point
+├── service/           the Service extension point (engine, protocol, ledger adapters)
 │   ├── mod.rs         Service, InstanceHandle, Instance, Peers
 │   ├── engine.rs      engine adapter: serve_with + Runtime (fault, counters)
 │   └── protocol.rs    protocol adapter: serve_on, /readyz

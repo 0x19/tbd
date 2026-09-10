@@ -73,6 +73,7 @@ services:
       CHAOS_LISTEN_ADDR: 0.0.0.0:7700
       CHAOS_PROTOCOL_URL: http://envoy:8080
       CHAOS_ENGINE_URL: http://envoy:50051
+      CHAOS_LEDGER_URL: http://envoy:50051
       CHAOS_RESULTS_DIR: /data/results
       CHAOS_SCHEDULES_FILE: /data/schedules.json
       CHAOS_SCENARIOS_DIR: /data/scenarios
@@ -88,6 +89,23 @@ services:
       - chaos-results:/data
     tmpfs:
       - /tmp
+    restart: unless-stopped
+
+  ledger:
+    image: ${IMAGE_REGISTRY:-ghcr.io/0x19}/tbd-ledger:${IMAGE_TAG:-dev}
+    build:
+      context: .
+      dockerfile: devops/docker/Dockerfile
+      args:
+        BIN: ledger
+        PORT: "50052"
+    environment:
+      <<: *common-env
+      TBD_ENV: ${TBD_ENV:-local}
+      LEDGER_LISTEN_ADDR: 0.0.0.0:50052
+      LEDGER_METRICS_ADDR: 0.0.0.0:9464
+    ports:
+      - "9466:9464"
     restart: unless-stopped
 
   envoy:
@@ -119,6 +137,7 @@ services:
       - engine
       - protocol
       - chaos
+      - ledger
       - hydra
       - kratos
       - auth-ui

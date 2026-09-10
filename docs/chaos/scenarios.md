@@ -5,7 +5,7 @@ a typo fails at `chaos check` instead of silently doing nothing.
 
 ```
 [scenario]      name, description, skip
-[stack]         which engines and protocols to run
+[stack]         which engines, protocols and ledgers to run
 [load]          how much traffic, of what kind, for how long
 [[timeline]]    what happens while load runs, and when
 [assertions]    what must be true afterwards
@@ -38,6 +38,9 @@ type = "healthy"                # optional initial behaviour, see Behaviours
 [stack.protocols.protocol-1]
 listen = "127.0.0.1:8080"       # optional
 engine = "engine-1"             # required; the engine this protocol forwards to
+
+[stack.ledgers.ledger-1]
+listen = "127.0.0.1:50052"      # optional; `behavior` as for engines; no dependencies
 ```
 
 Engines start first, then the protocols that reference them. Each instance keeps its port

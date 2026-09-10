@@ -4,6 +4,7 @@
 [targets]
 protocol = "http://envoy:8080"
 engine = "http://envoy:50051"
+ledger = "http://envoy:50051"
 
 [links]
 # Replace with the dev base domain; hosts follow devops/edge/Caddyfile.

@@ -403,6 +403,13 @@ async fn ui_at_the_root_serves_pages_next_to_the_api() {
 #[tokio::test]
 async fn validate_runs_against_config_targets_and_is_recorded() {
     let s = boot().await;
+    // The serve stack has no ledger; run one beside it for the ledger check.
+    let ledger_stack: tbd_chaos::topology::StackConfig =
+        toml::from_str("[stack.ledgers.ledger-1]\n")
+            .map(|t: tbd_chaos::topology::TopologyFile| t.stack)
+            .unwrap();
+    let ledger_stack = ledger_stack.start().await.unwrap();
+    let ledger_url = ledger_stack.get("ledger-1").unwrap().http_url();
     // The test stack is on ephemeral ports; point validate at it explicitly.
     let stack = s.state.stack_info().await.unwrap();
     let url = |kind: &str| {
@@ -414,7 +421,7 @@ async fn validate_runs_against_config_targets_and_is_recorded() {
     let (status, record) = s
         .post(
             "/validate",
-            json!({"protocol": url("protocol"), "engine": url("engine")}),
+            json!({"protocol": url("protocol"), "engine": url("engine"), "ledger": ledger_url}),
         )
         .await;
     assert_eq!(status, 200, "{record}");

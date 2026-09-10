@@ -25,6 +25,13 @@ need_stdout = true
 background = false
 on_change_strategy = "kill_then_restart"
 
+[jobs.ledger]
+command = ["cargo", "run", "-p", "tbd-ledger", "--color", "always"]
+need_stdout = true
+background = false
+on_change_strategy = "kill_then_restart"
+
 [keybindings]
 e = "job:engine"
 p = "job:protocol"
+l = "job:ledger"

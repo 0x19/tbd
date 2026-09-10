@@ -30,6 +30,7 @@ steps idempotently and is the template for provisioning a real box the same way.
 | `tbd` | `envoy` | 2 | edge and engine load balancer |
 | `tbd` | `protocol` | 2 | REST, SSE, GraphQL, WebSocket, gRPC |
 | `tbd` | `engine` | 2 | gRPC compute |
+| `tbd` | `ledger` | 1 | gRPC `ledger` service, scaffolded by `tbd new service`; a stub until its RPCs land |
 | `tbd` | `chaos` | 1 | `chaos serve`: API and admin UI, behind Envoy at `/api/chaos/v1` and the `chaos.localhost` host |
 | `auth` | `postgres`, `hydra`, `kratos`, `auth-ui` | 1 each | sign-in and tokens ([auth/README.md](auth/README.md)); `auth.localhost:18080` |
 | `observability` | `victoria-metrics` | 1 | metrics store and scraper |

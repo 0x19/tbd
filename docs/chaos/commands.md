@@ -26,7 +26,7 @@ failed, `2` bad arguments.
 Hit every surface of a running stack. Checks run concurrently, each with its own timeout.
 
 ```
-chaos validate [--protocol URL] [--engine URL] [--timeout DURATION] [--ca-cert PEM]
+chaos validate [--protocol URL] [--engine URL] [--ledger URL] [--timeout DURATION] [--ca-cert PEM]
                [--token JWT | --auth-token-url URL --auth-client-id ID --auth-client-secret SECRET] [--json]
 ```
 
@@ -34,6 +34,7 @@ chaos validate [--protocol URL] [--engine URL] [--timeout DURATION] [--ca-cert P
 |---|---|---|
 | `--protocol` | `CHAOS_PROTOCOL_URL` | `[targets] protocol`, `http://127.0.0.1:8080` in `base.toml` |
 | `--engine` | `CHAOS_ENGINE_URL` | `[targets] engine`, `http://127.0.0.1:50051` |
+| `--ledger` | `CHAOS_LEDGER_URL` | `[targets] ledger`, `http://127.0.0.1:50052`; through Envoy `http://envoy:50051` |
 | `--timeout` | | `[validate] timeout`, `5s` |
 | `--ca-cert` | `CHAOS_CA_CERT` | `[validate] ca_cert`, none: `https://`/`wss://` targets verify against the public roots |
 | `--token` | `CHAOS_TOKEN` | `[auth] token`: a fixed bearer token |
@@ -68,6 +69,7 @@ Checks, in output order:
 | `grpc_engine_subscribe` | gRPC | `EngineService/Subscribe` delivers two events |
 | `grpc_protocol_health` | gRPC | health on the protocol port answers |
 | `grpc_protocol_ping` | gRPC | `ProtocolService/Ping` echoes the message |
+| `grpc_ledger_ping` | gRPC | `LedgerService/Ping` echoes the message and reports `stub`; the ledger has no named health check through Envoy's shared listener |
 
 The two streaming checks wait for two events, so they take about one heartbeat interval.
 
@@ -206,6 +208,7 @@ chaos serve [--listen ADDR] [--base-path PATH] [--ui-dir DIR] [--topology FILE]
 | `--schedules` | `CHAOS_SCHEDULES_FILE` | `[paths] schedules`, `.chaos/schedules.json` |
 | `--no-stack` | | off; sets `[serve] start_stack = false` |
 | `--protocol`, `--engine` | `CHAOS_PROTOCOL_URL`, `CHAOS_ENGINE_URL` | `[targets]`, the defaults for API validate |
+| `--protocol`, `--engine`, `--ledger` | `CHAOS_PROTOCOL_URL`, `CHAOS_ENGINE_URL`, `CHAOS_LEDGER_URL` | `[targets]`, the defaults for API validate |
 
 On start it prints the API URL, the UI URL when configured, and each stack instance,
 loads the schedules file and starts firing the enabled ones. It

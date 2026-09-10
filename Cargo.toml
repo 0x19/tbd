@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
 members = ["crates/*"]
-default-members = ["crates/engine", "crates/protocol", "crates/chaos"]
+default-members = ["crates/engine", "crates/protocol", "crates/chaos", "crates/ledger"]
 
 [workspace.package]
 version = "0.1.0"
@@ -19,6 +19,7 @@ tbd-engine   = { path = "crates/engine" }
 tbd-protocol = { path = "crates/protocol" }
 tbd-chaos    = { path = "crates/chaos" }
 tbd-cli      = { path = "crates/cli" }
+tbd-ledger   = { path = "crates/ledger" }
 
 # async runtime
 tokio        = { version = "1.53", features = ["rt-multi-thread", "macros", "signal", "net", "sync", "time"] }

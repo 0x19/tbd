@@ -5,6 +5,7 @@
 [targets]
 protocol = "https://api.example.invalid"
 engine = "https://engine.api.example.invalid"
+ledger = "https://engine.api.example.invalid"
 
 [serve]
 start_stack = false

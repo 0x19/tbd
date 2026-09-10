@@ -1,5 +1,6 @@
-//! This project's topology: the TOML tables that describe which engines and
-//! protocols to run. A different project replaces this file and keeps the rest.
+//! This project's topology: the TOML tables that describe which engines,
+//! protocols and ledgers to run. A different project replaces this file and
+//! keeps the rest.
 
 use std::{collections::BTreeMap, net::SocketAddr, sync::Arc, time::Duration};
 
@@ -7,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use tbd_common::fault::Behavior;
 
 use crate::{
-    service::{engine::Engine, protocol::Protocol},
+    service::{engine::Engine, ledger::Ledger, protocol::Protocol},
     stack::{Launcher, Stack, ephemeral},
 };
 
@@ -21,6 +22,21 @@ pub struct StackConfig {
     /// `[stack.protocols.<name>]`
     #[serde(default)]
     pub protocols: BTreeMap<String, ProtocolSpec>,
+    /// `[stack.ledgers.<name>]`
+    #[serde(default)]
+    pub ledgers: BTreeMap<String, LedgerSpec>,
+}
+
+/// One ledger instance.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct LedgerSpec {
+    /// Bind address. Omit for any free loopback port.
+    #[serde(default)]
+    pub listen: Option<SocketAddr>,
+    /// Initial fault behaviour.
+    #[serde(default)]
+    pub behavior: Behavior,
 }
 
 /// One engine instance.
@@ -80,6 +96,17 @@ impl StackConfig {
                 },
             );
         }
+        for (name, spec) in &self.ledgers {
+            out.insert(
+                name.clone(),
+                Launcher {
+                    service: Arc::new(Ledger {
+                        behavior: spec.behavior.clone(),
+                    }),
+                    listen: spec.listen.unwrap_or_else(ephemeral),
+                },
+            );
+        }
         out
     }
 
@@ -101,7 +128,12 @@ impl StackConfig {
                 return Err(format!("{name:?} is both an engine and a protocol"));
             }
         }
-        if self.protocols.is_empty() && self.engines.is_empty() {
+        for name in self.ledgers.keys() {
+            if self.engines.contains_key(name) || self.protocols.contains_key(name) {
+                return Err(format!("{name:?} is a ledger and another kind"));
+            }
+        }
+        if self.protocols.is_empty() && self.engines.is_empty() && self.ledgers.is_empty() {
             return Err("stack has no instances".to_owned());
         }
         Ok(())

@@ -48,8 +48,18 @@ export const InstanceInfo = z.object({
   depends_on: z.array(z.string()),
   behavior: Behavior.nullable(),
   requests: RequestCounts.nullable(),
+  added: z.boolean(),
 });
 export type InstanceInfo = z.infer<typeof InstanceInfo>;
+
+/** Body of `POST /stack`: a new engine or protocol. */
+export type AddInstance = {
+  kind: "engine" | "protocol";
+  name?: string;
+  engine?: string;
+  heartbeat?: string;
+  behavior?: Behavior;
+};
 
 export const Latency = z.object({
   p50_ms: z.number(),
@@ -189,7 +199,14 @@ export type Job =
   | { scenario: string }
   | "all_scenarios"
   | { load: LoadRequest }
-  | { validate: { protocol?: string | null; engine?: string | null; timeout?: string | null } };
+  | {
+      validate: {
+        protocol?: string | null;
+        engine?: string | null;
+        ledger?: string | null;
+        timeout?: string | null;
+      };
+    };
 
 export const Job: z.ZodType<Job> = z.union([
   z.literal("all_scenarios"),
@@ -253,6 +270,8 @@ export const Links = z.object({
   metrics: z.string(),
   pyroscope: z.string(),
   envoy_admin: z.string(),
+  chaos: z.string(),
+  auth: z.string(),
 });
 
 export const ChaosConfig = z.object({
@@ -269,7 +288,7 @@ export const ChaosConfig = z.object({
     results: z.string(),
     schedules: z.string(),
   }),
-  targets: z.object({ protocol: z.string(), engine: z.string() }),
+  targets: z.object({ protocol: z.string(), engine: z.string(), ledger: z.string() }),
   validate: z.object({ timeout: z.string() }),
   links: Links,
 });

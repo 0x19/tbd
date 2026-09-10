@@ -22,3 +22,12 @@ pub mod protocol {
             include_bytes!(concat!(env!("OUT_DIR"), "/protocol_descriptor.bin"));
     }
 }
+
+pub mod ledger {
+    pub mod v1 {
+        tonic::include_proto!("tbd.ledger.v1");
+        /// Encoded `FileDescriptorSet` for this package, for gRPC reflection.
+        pub const DESCRIPTOR_SET: &[u8] =
+            include_bytes!(concat!(env!("OUT_DIR"), "/ledger_descriptor.bin"));
+    }
+}

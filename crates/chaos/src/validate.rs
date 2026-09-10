@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tbd_proto::{
     engine::v1::{EvaluateRequest, SubscribeRequest, engine_service_client::EngineServiceClient},
+    ledger::v1::{PingRequest as LedgerPingRequest, ledger_service_client::LedgerServiceClient},
     protocol::v1::{PingRequest, protocol_service_client::ProtocolServiceClient},
 };
 use tokio_tungstenite::tungstenite::Message;
@@ -22,6 +23,9 @@ pub struct Targets {
     pub protocol: String,
     /// Engine gRPC URL, e.g. `http://127.0.0.1:50051`.
     pub engine: String,
+    /// Ledger gRPC URL, e.g. `http://127.0.0.1:50052`. Through Envoy it is the
+    /// same internal listener as the engine, matched by service name.
+    pub ledger: String,
     /// Per-check timeout.
     pub timeout: Duration,
     /// Roots for `https://` / `wss://` targets.
@@ -104,6 +108,9 @@ fn all() -> Vec<(&'static str, &'static str, Check)> {
         }),
         ("grpc_protocol_ping", "grpc", |t| {
             Box::pin(grpc_protocol_ping(t))
+        }),
+        ("grpc_ledger_ping", "grpc", |t| {
+            Box::pin(grpc_ledger_ping(t))
         }),
     ]
 }
@@ -371,6 +378,25 @@ async fn grpc_protocol_ping(t: Targets) -> Result<String, String> {
         .into_inner();
     if r.message == "validate" {
         Ok(format!("version={}", r.protocol_version))
+    } else {
+        Err(format!("wrong echo {r:?}"))
+    }
+}
+
+/// `LedgerService/Ping` echoes and is labelled a stub. Not a named health
+/// check: through Envoy's internal listener a health request lands on the
+/// engine, and a check whose result depends on the path is worse than none.
+async fn grpc_ledger_ping(t: Targets) -> Result<String, String> {
+    let mut c = LedgerServiceClient::new(channel(&t, &t.ledger)?);
+    let r = c
+        .ping(LedgerPingRequest {
+            message: "validate".into(),
+        })
+        .await
+        .map_err(|e| e.to_string())?
+        .into_inner();
+    if r.message == "validate" {
+        Ok(format!("version={} stub={}", r.version, r.stub))
     } else {
         Err(format!("wrong echo {r:?}"))
     }

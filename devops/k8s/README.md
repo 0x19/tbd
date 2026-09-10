@@ -3,7 +3,7 @@
 kustomize only, no Helm. Three trees:
 
 ```
-base/            engine, protocol, envoy (deployments, headless services, configmap, envoy config)
+base/            engine, protocol, ledger, envoy (deployments, headless services, configmap, envoy config)
 overlays/
   local/         the k3d cluster on this machine: 2 replicas each, host-facing envoy-lb
   dev/           1 replica, debug logging, images pulled
@@ -41,8 +41,8 @@ kubectl apply -k devops/k8s/overlays/local                       # or dev | prod
 
 | Overlay | Replicas | Images | Notes |
 |---|---|---|---|
-| `local` | engine 2, protocol 2, envoy 2 | `:dev`, `IfNotPresent`, imported by k3d | adds `envoy-lb.yaml` with host ports 18080 and 15051; `RUST_LOG=info,tbd=debug` |
-| `dev` | engine 1, protocol 1, envoy 2 | `:dev`, `Always` | `RUST_LOG=debug` |
+| `local` | engine 2, protocol 2, envoy 2, ledger 1 | `:dev`, `IfNotPresent`, imported by k3d | adds `envoy-lb.yaml` with host ports 18080 and 15051; `RUST_LOG=info,tbd=debug` |
+| `dev` | engine 1, protocol 1, envoy 2, ledger 1 | `:dev`, `Always` | `RUST_LOG=debug` |
 | `prod` | see file | pinned `newTag` per release | resources raised |
 
 An overlay changes replicas, image tags, pull policy and env; it does not redefine

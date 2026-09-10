@@ -70,6 +70,7 @@ pull request, and pushes them only on `main`, tagged with the short commit SHA a
 - `ghcr.io/<ORG>/tbd-engine`
 - `ghcr.io/<ORG>/tbd-protocol`
 - `ghcr.io/<ORG>/tbd-chaos`
+- `ghcr.io/<ORG>/tbd-ledger`
 
 `ORG` defaults to the repository owner. Override it with a repository variable named
 `ORG`. Pushing needs no secret beyond the automatic `GITHUB_TOKEN` with `packages: write`.

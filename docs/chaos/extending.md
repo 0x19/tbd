@@ -5,8 +5,9 @@ in each.
 
 ## Add a service kind
 
-Reference: `crates/chaos/src/service/protocol.rs` (about 60 lines), and
-`service/engine.rs` for fault and counter wiring.
+Reference: `crates/chaos/src/service/ledger.rs`, the smallest (no peers), which
+`tbd new service` renders for every new service; `service/protocol.rs` for a service
+with a dependency, and `service/engine.rs` for fault and counter wiring.
 
 1. Implement `service::Service`: `kind()`, `depends_on()` if it needs other instances,
    and `start(name, listen, peers)` which binds, spawns the service's library entry point

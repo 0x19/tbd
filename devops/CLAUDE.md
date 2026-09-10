@@ -62,6 +62,9 @@ tags. See `docs/ci.md`.
   `AUTH_PUBLIC_URL` and that Secret, or Envoy will not start.
 - Env vars added for auth: `CHAOS_TOKEN`, `CHAOS_AUTH_TOKEN_URL`, `CHAOS_AUTH_CLIENT_ID`,
   `CHAOS_AUTH_CLIENT_SECRET` (chaos deployment, compose, ansible template).
+- Scaffolded services (`tbd new service`) register their `<NAME>_LISTEN_ADDR` and
+  `<NAME>_METRICS_ADDR` everywhere themselves; `CHAOS_LEDGER_URL` points chaos at the
+  ledger (through Envoy's internal listener in the cluster).
 - `edge/` is the only thing that faces the internet from a home/office deployment. Caddy
   terminates TLS and forwards to Envoy's edge on the host port (18080 for the local
   cluster). gRPC is matched on `Content-Type: application/grpc*` and gets the h2c

@@ -4,6 +4,7 @@
 //! and hand back an [`Instance`] the stack can observe, perturb and stop.
 
 pub mod engine;
+pub mod ledger;
 pub mod protocol;
 
 use std::{collections::BTreeMap, net::SocketAddr, time::Duration};

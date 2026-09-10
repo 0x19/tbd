@@ -15,6 +15,14 @@ There is no control plane; the file is the whole truth and Envoy validates it at
 Both HTTP listeners have `stream_idle_timeout: 0s` and `request_timeout: 0s`: long-lived
 streams are the normal case here, so timeouts are per route, not per connection.
 
+## The internal listener (50051)
+
+The engine is the catch-all; other internal gRPC services are matched by service name
+before it (`/tbd.ledger.v1.LedgerService/` to `ledger`). Callers use one address,
+`http://envoy:50051`, for every internal service. Health and reflection on this
+listener answer for the engine; a service's own health is checked by Envoy's active
+check on its cluster and by the pod's probes.
+
 ## Routing on the edge
 
 Evaluated top to bottom; first match wins. Every route on the catch-all host needs a

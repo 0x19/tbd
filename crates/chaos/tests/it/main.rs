@@ -29,6 +29,8 @@ heartbeat = "50ms"
 
 [stack.protocols.protocol-1]
 engine = "engine-1"
+
+[stack.ledgers.ledger-1]
 "#;
 
 #[tokio::test]
@@ -37,15 +39,17 @@ async fn stack_starts_in_dependency_order_and_validate_passes() {
     let engine = stack.get("engine-1").unwrap();
     let protocol = stack.get("protocol-1").unwrap();
 
+    let ledger = stack.get("ledger-1").unwrap();
     let report = validate::run(validate::Targets {
         protocol: protocol.http_url(),
         engine: engine.http_url(),
+        ledger: ledger.http_url(),
         timeout: Duration::from_secs(5),
         trust: tbd_chaos::tls::Trust::default(),
     })
     .await;
     assert!(report.ok(), "validate failed:\n{}", report.render());
-    assert_eq!(report.checks.len(), 11);
+    assert_eq!(report.checks.len(), 12);
 
     // The engine counted the validate traffic.
     let counts = engine.requests().unwrap();
@@ -206,4 +210,33 @@ service = "ghost"
         )
         .is_err()
     );
+}
+
+/// A fault set on a ledger instance surfaces through the ledger check and
+/// nowhere else.
+#[tokio::test]
+async fn ledger_fault_surfaces_in_its_own_check() {
+    let stack = topology(TWO_TIER).start().await.unwrap();
+    let ledger = stack.get("ledger-1").unwrap();
+    ledger.fault().unwrap().set(Behavior::Error {
+        kind: ErrorKind::Unavailable,
+        rate: 1.0,
+        message: "injected".into(),
+    });
+    let report = validate::run(validate::Targets {
+        protocol: stack.get("protocol-1").unwrap().http_url(),
+        engine: stack.get("engine-1").unwrap().http_url(),
+        ledger: ledger.http_url(),
+        timeout: Duration::from_secs(5),
+        trust: tbd_chaos::tls::Trust::default(),
+    })
+    .await;
+    let failed: Vec<&str> = report
+        .checks
+        .iter()
+        .filter(|c| !c.passed)
+        .map(|c| c.name.as_str())
+        .collect();
+    assert_eq!(failed, ["grpc_ledger_ping"]);
+    stack.shutdown().await;
 }

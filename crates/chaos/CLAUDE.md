@@ -17,6 +17,10 @@ is a change there too.
 Where things are:
 - `main.rs` is the only file allowed to print to stdout (`print_stdout` lint allowed
   there). It also sets the default log filter that silences the in-process services.
+- Service kinds: `engine`, `protocol`, `ledger` (`service/{engine,protocol,ledger}.rs`;
+  the ledger adapter is what `tbd new service` renders). `[stack.ledgers.X]` takes
+  `listen` and `behavior`; validate's `grpc_ledger_ping` is the twelfth check and needs
+  `targets.ledger` (`--ledger`, `CHAOS_LEDGER_URL`).
 - `stack/mod.rs` never knows what a service is; keep it that way.
 - `scenario/executor.rs` is the one executor. There is no second path for Rust-defined
   scenarios; add hooks there rather than a parallel executor.

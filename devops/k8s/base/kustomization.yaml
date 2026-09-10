@@ -6,6 +6,7 @@ resources:
   - configmap.yaml
   - engine
   - protocol
+  - ledger
   - envoy
 labels:
   - pairs:

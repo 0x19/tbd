@@ -35,6 +35,8 @@ schedules = ".chaos/schedules.json"
 # Defaults for `chaos validate` and for API load runs against an external stack.
 protocol = "http://127.0.0.1:8080"
 engine = "http://127.0.0.1:50051"
+# The ledger's own port in-process; through Envoy it is the engine listener.
+ledger = "http://127.0.0.1:50052"
 
 [validate]
 timeout = "5s"

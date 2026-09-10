@@ -17,6 +17,7 @@ tbd-common.workspace = true
 tbd-engine.workspace = true
 tbd-proto.workspace = true
 tbd-protocol.workspace = true
+tbd-ledger.workspace = true
 
 anyhow.workspace = true
 async-trait.workspace = true

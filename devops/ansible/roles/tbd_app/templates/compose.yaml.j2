@@ -28,6 +28,17 @@ services:
     depends_on:
       - engine
     restart: unless-stopped
+  ledger:
+    image: {{ ledger_image }}:{{ image_tag }}
+    environment:
+      RUST_LOG: {{ rust_log }}
+      LOG_FORMAT: {{ log_format }}
+      TBD_ENV: production
+      LEDGER_LISTEN_ADDR: 0.0.0.0:{{ ledger_port }}
+      LEDGER_METRICS_ADDR: 0.0.0.0:9464
+      OTEL_EXPORTER_OTLP_ENDPOINT: "{{ otlp_endpoint | default('') }}"
+      PYROSCOPE_SERVER_ADDRESS: "{{ pyroscope_server | default('') }}"
+    restart: unless-stopped
 {% if chaos_enabled | default(false) %}
 
   # chaos API + admin UI. Off by default; dev hosts set chaos_enabled: true.
@@ -41,6 +52,7 @@ services:
       CHAOS_LISTEN_ADDR: 0.0.0.0:7700
       CHAOS_PROTOCOL_URL: http://protocol:{{ protocol_port }}
       CHAOS_ENGINE_URL: http://engine:{{ engine_port }}
+      CHAOS_LEDGER_URL: http://ledger:{{ ledger_port }}
       CHAOS_RESULTS_DIR: /data/results
       CHAOS_SCHEDULES_FILE: /data/schedules.json
       CHAOS_SCENARIOS_DIR: /data/scenarios

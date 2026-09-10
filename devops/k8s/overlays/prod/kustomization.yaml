@@ -8,6 +8,8 @@ images:
     newTag: v0.0.0-REPLACE
   - name: ghcr.io/0x19/tbd-protocol
     newTag: v0.0.0-REPLACE
+  - name: ghcr.io/0x19/tbd-ledger
+    newTag: v0.0.0-REPLACE
 patches:
   - target:
       kind: Deployment
@@ -24,6 +26,18 @@ patches:
   - target:
       kind: Deployment
       name: protocol
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 2
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests: { cpu: 250m, memory: 128Mi }
+          limits: { cpu: "2", memory: 512Mi }
+  - target:
+      kind: Deployment
+      name: ledger
     patch: |-
       - op: replace
         path: /spec/replicas

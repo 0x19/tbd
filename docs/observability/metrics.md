@@ -24,7 +24,8 @@ backend is visible instead of clipped.
 | `process_cpu_seconds_total`, `process_resident_memory_bytes`, `process_virtual_memory_bytes`, `process_open_fds`, `process_max_fds`, `process_threads`, `process_start_time_seconds` | mixed | | every 5 s by `metrics-process` |
 
 `route` values: axum's matched pattern for HTTP (`/v1/evaluate`, `/v1/subjects/{subject_id}/events`),
-the RPC path for gRPC (`EngineService/Evaluate` on the engine,
+the RPC path for gRPC (`EngineService/Evaluate` on the engine, `LedgerService/Ping` on
+the ledger,
 `tbd.protocol.v1.ProtocolService/Ping` on the protocol). An HTTP request that matches
 no route is `unmatched` (answered 404), never its raw path, so internet scanners cannot
 grow the label set.

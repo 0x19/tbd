@@ -217,9 +217,13 @@ run = "cargo run -p tbd-engine"
 description = "Run the protocol service (HTTP/WS/GraphQL/gRPC on PROTOCOL_LISTEN_ADDR)"
 run = "cargo run -p tbd-protocol"
 
+[tasks."run:ledger"]
+description = "Run the ledger service (gRPC on LEDGER_LISTEN_ADDR)"
+run = "cargo run -p tbd-ledger"
+
 [tasks.dev]
 description = "Both services in one terminal (parallel, output prefixed per service)"
-depends = ["run:engine", "run:protocol"]
+depends = ["run:engine", "run:protocol", "run:ledger"]
 
 [tasks."watch:engine"]
 description = "Engine with auto-reload on file change (bacon)"
@@ -228,6 +232,10 @@ run = "bacon engine"
 [tasks."watch:protocol"]
 description = "Protocol with auto-reload on file change (bacon)"
 run = "bacon protocol"
+
+[tasks."watch:ledger"]
+description = "Ledger with auto-reload on file change (bacon)"
+run = "bacon ledger"
 
 # --------------------------------------------------------------- docker ----
 
@@ -238,6 +246,7 @@ run = [
   "docker build -f devops/docker/Dockerfile --build-arg BIN=engine   --build-arg PORT=50051 -t $IMAGE_REGISTRY/tbd-engine:$IMAGE_TAG .",
   "docker build -f devops/docker/Dockerfile --build-arg BIN=protocol --build-arg PORT=8080  -t $IMAGE_REGISTRY/tbd-protocol:$IMAGE_TAG .",
   "docker build -f devops/docker/Dockerfile --build-arg BIN=chaos    --build-arg PORT=7700  -t $IMAGE_REGISTRY/tbd-chaos:$IMAGE_TAG .",
+  "docker build -f devops/docker/Dockerfile --build-arg BIN=ledger --build-arg PORT=50052 -t $IMAGE_REGISTRY/tbd-ledger:$IMAGE_TAG .",
 ]
 
 [tasks."docker:push"]
@@ -246,6 +255,7 @@ run = [
   "docker push $IMAGE_REGISTRY/tbd-engine:$IMAGE_TAG",
   "docker push $IMAGE_REGISTRY/tbd-protocol:$IMAGE_TAG",
   "docker push $IMAGE_REGISTRY/tbd-chaos:$IMAGE_TAG",
+  "docker push $IMAGE_REGISTRY/tbd-ledger:$IMAGE_TAG",
 ]
 
 [tasks.up]
@@ -299,8 +309,9 @@ mise run ui:build
 docker build -f devops/docker/Dockerfile --build-arg BIN=engine   --build-arg PORT=50051 -t $IMAGE_REGISTRY/tbd-engine:dev .
 docker build -f devops/docker/Dockerfile --build-arg BIN=protocol --build-arg PORT=8080  -t $IMAGE_REGISTRY/tbd-protocol:dev .
 docker build -f devops/docker/Dockerfile --build-arg BIN=chaos    --build-arg PORT=7700  -t $IMAGE_REGISTRY/tbd-chaos:dev .
+docker build -f devops/docker/Dockerfile --build-arg BIN=ledger --build-arg PORT=50052 -t $IMAGE_REGISTRY/tbd-ledger:dev .
 docker build -f devops/docker/Dockerfile.auth-ui $(mise run -q auth:ui-build-args) -t $IMAGE_REGISTRY/tbd-auth-ui:dev .
-k3d image import -m direct -c "$K3D_CLUSTER" $IMAGE_REGISTRY/tbd-engine:dev $IMAGE_REGISTRY/tbd-protocol:dev $IMAGE_REGISTRY/tbd-chaos:dev $IMAGE_REGISTRY/tbd-auth-ui:dev
+k3d image import -m direct -c "$K3D_CLUSTER" $IMAGE_REGISTRY/tbd-engine:dev $IMAGE_REGISTRY/tbd-protocol:dev $IMAGE_REGISTRY/tbd-chaos:dev $IMAGE_REGISTRY/tbd-ledger:dev $IMAGE_REGISTRY/tbd-auth-ui:dev
 """
 
 # The chaos UI links to grafana.<domain>, logs.<domain>, ... of the public edge.
@@ -502,7 +513,7 @@ mise run auth:envoy-secrets
 kubectl apply -k devops/k8s/overlays/local
 kubectl -n observability rollout status statefulset/victoria-metrics statefulset/victoria-logs statefulset/tempo --timeout=180s
 kubectl -n observability rollout status statefulset/pyroscope deployment/otel-collector deployment/grafana --timeout=300s
-kubectl -n tbd rollout status deployment/engine deployment/protocol deployment/envoy deployment/chaos --timeout=180s
+kubectl -n tbd rollout status deployment/engine deployment/protocol deployment/envoy deployment/chaos deployment/ledger --timeout=180s
 mise run local:urls
 """
 
@@ -512,8 +523,8 @@ depends = ["local:edge-env"]
 run = """
 mise run local:build
 kubectl apply -k devops/k8s/overlays/local
-kubectl -n tbd rollout restart deployment/engine deployment/protocol deployment/chaos
-kubectl -n tbd rollout status deployment/engine deployment/protocol deployment/chaos --timeout=180s
+kubectl -n tbd rollout restart deployment/engine deployment/protocol deployment/chaos deployment/ledger
+kubectl -n tbd rollout status deployment/engine deployment/protocol deployment/chaos deployment/ledger --timeout=180s
 """
 
 [tasks."local:urls"]
@@ -542,7 +553,7 @@ for i in $(seq 1 "$rounds"); do
   cargo run -q -p tbd-chaos -- validate --protocol http://localhost:18080 --engine http://localhost:15051 > /dev/null || true
   printf '\r  round %s/%s' "$i" "$rounds"
 done
-echo; echo "done: $rounds rounds, $((rounds * 11)) checks through Envoy"
+echo; echo "done: $rounds rounds, $((rounds * 12)) checks through Envoy"
 """
 
 [tasks."local:load"]

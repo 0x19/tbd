@@ -96,6 +96,8 @@ jobs:
             port: "8080"
           - bin: chaos
             port: "7700"
+          - bin: ledger
+            port: "50052"
     steps:
       - uses: actions/checkout@v6
       # The chaos image carries the admin UI when ui/chaos/out exists.

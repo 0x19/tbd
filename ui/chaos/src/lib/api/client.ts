@@ -3,12 +3,14 @@
 import type { z } from "zod";
 
 import {
+  type AddInstance,
   type Behavior,
   CheckReply,
   GlobalEvent,
   InstanceInfo,
   type Job,
   type LoadRequest,
+  Me,
   Overview,
   QueuedRun,
   RunFeed,
@@ -87,6 +89,14 @@ export const api = {
     call(InstanceInfo.array(), `/stack/${encodeURIComponent(name)}/stop`, {
       method: "POST",
     }),
+  stackClone: (name: string, count = 1) =>
+    call(InstanceInfo.array(), `/stack/${encodeURIComponent(name)}/clone`, {
+      method: "POST",
+      json: { count },
+    }),
+  stackAdd: (body: AddInstance) => call(InstanceInfo.array(), "/stack", { method: "POST", json: body }),
+  stackRemove: (name: string) =>
+    call(InstanceInfo.array(), `/stack/${encodeURIComponent(name)}`, { method: "DELETE" }),
   stackBehavior: (name: string, behavior: Behavior) =>
     call(InstanceInfo.array(), `/stack/${encodeURIComponent(name)}/behavior`, {
       method: "PUT",
@@ -111,7 +121,7 @@ export const api = {
   runLoad: (req: LoadRequest) => call(RunSummary, "/runs", { method: "POST", json: req }),
   runCancel: (id: string) => call(none, `/runs/${id}/cancel`, { method: "POST" }),
   runDelete: (id: string) => call(none, `/runs/${id}`, { method: "DELETE" }),
-  validate: (body?: { protocol?: string; engine?: string; timeout?: string }) =>
+  validate: (body?: { protocol?: string; engine?: string; ledger?: string; timeout?: string }) =>
     call(RunRecord, "/validate", { method: "POST", json: body ?? {} }),
   queue: () => call(QueuedRun.array(), "/queue"),
   enqueue: (jobs: Job[]) => call(QueuedRun.array(), "/queue", { method: "POST", json: { jobs } }),

@@ -31,7 +31,7 @@ checks.
 mise run setup                     # once: installs the tools
 
 mise run chaos:up                  # terminal 1: engine on :50051, protocol on :8080
-mise run validate                  # terminal 2: 11 checks, one line each
+mise run validate                  # terminal 2: 12 checks, one line each
 chaos validate --json              # same, for machines
 
 mise run chaos:run                 # all scenarios, fresh stack per scenario, exit 1 on failure

@@ -7,3 +7,6 @@ listen = "127.0.0.1:50051"
 [stack.protocols.protocol-1]
 listen = "127.0.0.1:8080"
 engine = "engine-1"
+
+[stack.ledgers.ledger-1]
+listen = "127.0.0.1:50052"
