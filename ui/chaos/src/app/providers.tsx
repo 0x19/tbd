@@ -1,7 +1,9 @@
 "use client";
 
-import { ThemeProvider } from "next-themes";
-import { createContext, useContext, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
+
+import SearchProvider from "@/components/search-provider";
+import { ThemeProvider } from "@/components/theme-provider";
 import { api } from "@/lib/api/client";
 import { useFetch, useGlobalFeed } from "@/lib/api/hooks";
 import type { GlobalEvent, Overview } from "@/lib/api/schema";
@@ -16,8 +18,6 @@ type ChaosContext = {
   lastEvent: GlobalEvent | null;
   /** The last events of this session, newest first. */
   activity: ActivityItem[];
-  commandOpen: boolean;
-  setCommandOpen: (open: boolean) => void;
 };
 
 const Ctx = createContext<ChaosContext>({
@@ -27,28 +27,44 @@ const Ctx = createContext<ChaosContext>({
   reload: () => {},
   lastEvent: null,
   activity: [],
-  commandOpen: false,
-  setCommandOpen: () => {},
 });
 
 export function useChaos() {
   return useContext(Ctx);
 }
 
-/** Theme plus the overview every page and the shell share. */
-export function Providers({ children }: { children: React.ReactNode }) {
+interface Props {
+  children: React.ReactNode;
+}
+
+/** Theme, ⌘K search state (the kit's SearchProvider) and the chaos overview context. */
+export function Providers({ children }: Props) {
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        setOpen((open) => !open);
+      }
+    };
+    document.addEventListener("keydown", down);
+    return () => document.removeEventListener("keydown", down);
+  }, []);
+
   return (
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-      <ChaosProvider>{children}</ChaosProvider>
+      <ChaosProvider>
+        <SearchProvider value={{ open, setOpen }}>{children}</SearchProvider>
+      </ChaosProvider>
     </ThemeProvider>
   );
 }
 
-function ChaosProvider({ children }: { children: React.ReactNode }) {
+function ChaosProvider({ children }: Props) {
   const overview = useFetch(() => api.overview(), 10_000);
   const [lastEvent, setLastEvent] = useState<GlobalEvent | null>(null);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
-  const [commandOpen, setCommandOpen] = useState(false);
   const { connected } = useGlobalFeed((e) => {
     setLastEvent(e);
     setActivity((a) => [{ at: Date.now(), event: e }, ...a].slice(0, 30));
@@ -62,10 +78,8 @@ function ChaosProvider({ children }: { children: React.ReactNode }) {
       reload: overview.reload,
       lastEvent,
       activity,
-      commandOpen,
-      setCommandOpen,
     }),
-    [overview.data, overview.error, overview.reload, connected, lastEvent, activity, commandOpen],
+    [overview.data, overview.error, overview.reload, connected, lastEvent, activity],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

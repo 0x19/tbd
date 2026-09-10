@@ -1,18 +1,19 @@
 "use client";
 
-import { useState } from "react";
 import { Activity, Pause, Play, ShieldCheck, Wand2 } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
+
+import { useChaos } from "@/app/providers";
+import { BehaviorDialog } from "@/components/behavior-dialog";
+import { describeBehavior } from "@/components/instances-table";
+import { DetailList, PageTitle, SectionTitle } from "@/components/kit";
+import { Dot } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
-import { BehaviorDialog } from "@/components/behavior-dialog";
-import { describeBehavior } from "@/components/instances-table";
-import { DetailList, PageTitle, SectionTitle } from "@/components/kit";
-import { Dot } from "@/components/status-badge";
-import { useChaos } from "@/components/shell/providers";
 import { api } from "@/lib/api/client";
 import { describe, useStack } from "@/lib/api/hooks";
 import type { Behavior, InstanceInfo } from "@/lib/api/schema";
@@ -62,7 +63,7 @@ export default function StackPage() {
           {up}/{instances.length} running
         </Badge>
       </PageTitle>
-      {stack.error ? <p className="text-sm text-destructive">{stack.error}</p> : null}
+      {stack.error ? <p className="text-destructive text-sm">{stack.error}</p> : null}
 
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
@@ -72,7 +73,7 @@ export default function StackPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="grid gap-3">
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <div className="text-muted-foreground flex items-center justify-between text-xs">
               <span>Running {up}</span>
               <span>Target {instances.length}</span>
             </div>
@@ -95,7 +96,7 @@ export default function StackPage() {
               {instances
                 .filter((i) => i.behavior !== null)
                 .map((i) => (
-                  <Button key={i.name} size="xs" variant="outline" onClick={() => setEditing(i)}>
+                  <Button key={i.name} size="sm" variant="outline" onClick={() => setEditing(i)}>
                     fault {i.name}
                   </Button>
                 ))}
@@ -154,19 +155,19 @@ export default function StackPage() {
             <div key={i.name} className="flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 text-sm">
               <button type="button" className="min-w-40 text-left" onClick={() => setSelected(i.name)}>
                 <div className="font-mono font-medium hover:underline">{i.name}</div>
-                <div className="text-xs text-muted-foreground">
+                <div className="text-muted-foreground text-xs">
                   {i.kind}
                   {i.depends_on.length ? ` · needs ${i.depends_on.join(", ")}` : ""}
                 </div>
               </button>
-              <div className="font-mono text-xs text-muted-foreground">{i.addr}</div>
+              <div className="text-muted-foreground font-mono text-xs">{i.addr}</div>
               <div className="ml-auto flex items-center gap-4">
                 <Dot tone={tone(i)} label={word(i)} />
                 {i.behavior && i.behavior.type !== "healthy" ? (
                   <Badge variant="outline">{describeBehavior(i.behavior)}</Badge>
                 ) : null}
                 {i.requests ? (
-                  <span className="w-24 text-right text-xs tabular-nums text-muted-foreground">
+                  <span className="text-muted-foreground w-24 text-right text-xs tabular-nums">
                     {num(i.requests.total)} req
                   </span>
                 ) : null}
@@ -242,19 +243,31 @@ export default function StackPage() {
                 </div>
                 <DetailList
                   rows={[
-                    { k: "Status", v: <Dot tone={tone(current)} label={word(current)} /> },
+                    {
+                      k: "Status",
+                      v: <Dot tone={tone(current)} label={word(current)} />,
+                    },
                     {
                       k: "Behaviour",
                       v: current.behavior ? describeBehavior(current.behavior) : "no fault injection",
                     },
-                    { k: "Depends on", v: current.depends_on.join(", ") || "–" },
-                    { k: "Served", v: current.requests ? num(current.requests.total) : "–" },
-                    { k: "Failed", v: current.requests ? num(current.requests.failed) : "–" },
+                    {
+                      k: "Depends on",
+                      v: current.depends_on.join(", ") || "–",
+                    },
+                    {
+                      k: "Served",
+                      v: current.requests ? num(current.requests.total) : "–",
+                    },
+                    {
+                      k: "Failed",
+                      v: current.requests ? num(current.requests.failed) : "–",
+                    },
                   ]}
                 />
                 <div>
                   <div className="mb-2 text-sm font-semibold">Activity</div>
-                  <ul className="grid gap-2 text-xs text-muted-foreground">
+                  <ul className="text-muted-foreground grid gap-2 text-xs">
                     {activity
                       .filter((a) => a.event.type === "stack_changed")
                       .slice(0, 6)

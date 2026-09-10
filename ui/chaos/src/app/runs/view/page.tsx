@@ -1,18 +1,19 @@
 "use client";
 
+import { ArrowLeft, Square } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
-import { ArrowLeft, Square } from "lucide-react";
 import { toast } from "sonner";
+
+import { ChartHeadline, Legend, RunChart } from "@/components/charts";
+import { DetailList, HeatGrid, LevelChip, PageTitle, StageBar, StatRow } from "@/components/kit";
+import { BoolBadge, StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ChartHeadline, Legend, RunChart } from "@/components/charts";
-import { DetailList, HeatGrid, LevelChip, PageTitle, StageBar, StatRow } from "@/components/kit";
-import { BoolBadge, StatusBadge } from "@/components/status-badge";
 import { api } from "@/lib/api/client";
 import { describe, useRunFeed } from "@/lib/api/hooks";
 import type { CheckResult, LoadSnapshot, RunRecord } from "@/lib/api/schema";
@@ -66,14 +67,16 @@ function RunView() {
     }
   };
 
-  if (!id) return <p className="text-sm text-muted-foreground">No run id.</p>;
+  if (!id) return <p className="text-muted-foreground text-sm">No run id.</p>;
 
   return (
     <>
       <PageTitle
         back={
-          <Button variant="outline" size="icon" render={<Link href="/runs/" />} aria-label="Back">
-            <ArrowLeft />
+          <Button variant="outline" size="icon" aria-label="Back" asChild>
+            <Link href="/runs/">
+              <ArrowLeft />
+            </Link>
           </Button>
         }
         title={
@@ -115,9 +118,9 @@ function RunView() {
           </Button>
         ) : null}
       </PageTitle>
-      {live.error ? <p className="text-sm text-destructive">{live.error}</p> : null}
+      {live.error ? <p className="text-destructive text-sm">{live.error}</p> : null}
       {record?.error ? (
-        <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+        <div className="border-destructive/30 bg-destructive/5 text-destructive rounded-lg border px-3 py-2 text-sm">
           {record.error}
         </div>
       ) : null}
@@ -127,7 +130,7 @@ function RunView() {
       ) : (
         <>
           {record?.kind !== "load" ? (
-            <div className="rounded-xl border bg-muted/30 p-4">
+            <div className="bg-muted/30 rounded-xl border p-4">
               <div className="mb-3 flex justify-between text-sm">
                 <span>
                   Lifecycle
@@ -155,7 +158,10 @@ function RunView() {
                 value: pct(latest?.error_rate),
                 tone: latest ? (latest.error_rate > 0 ? "bad" : "good") : undefined,
               },
-              { label: "Throughput", value: latest ? `${Math.round(latest.throughput_rps)} rps` : "–" },
+              {
+                label: "Throughput",
+                value: latest ? `${Math.round(latest.throughput_rps)} rps` : "–",
+              },
               {
                 label: "p50 / p99",
                 value: latest ? `${ms(latest.latency.p50_ms)} / ${ms(latest.latency.p99_ms)}` : "–",
@@ -169,10 +175,22 @@ function RunView() {
               <CardDescription>
                 <Legend
                   items={[
-                    { label: "req/s", color: "var(--foreground)" },
-                    { label: "p50 ms", color: "var(--chart-2)" },
-                    { label: "p99 ms", color: "var(--chart-4)" },
-                    { label: "error %", color: "var(--destructive)" },
+                    {
+                      label: "req/s",
+                      color: "var(--foreground)",
+                    },
+                    {
+                      label: "p50 ms",
+                      color: "var(--chart-2)",
+                    },
+                    {
+                      label: "p99 ms",
+                      color: "var(--chart-4)",
+                    },
+                    {
+                      label: "error %",
+                      color: "var(--destructive)",
+                    },
                   ]}
                 />
               </CardDescription>
@@ -222,7 +240,7 @@ function RunView() {
                       </TableBody>
                     </Table>
                   ) : (
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-muted-foreground text-sm">
                       {running ? "Evaluated when load ends." : "No assertions in this scenario."}
                     </p>
                   )}
@@ -239,7 +257,7 @@ function RunView() {
                   <ol className="divide-y">
                     {live.events.map((e, i) => (
                       <li key={i} className="flex items-start gap-3 py-2.5 text-sm">
-                        <span className="w-16 font-mono text-xs tabular-nums text-muted-foreground">
+                        <span className="text-muted-foreground w-16 font-mono text-xs tabular-nums">
                           {e.at_s.toFixed(2)} s
                         </span>
                         <span className="flex-1 font-mono text-xs">{e.action}</span>
@@ -248,7 +266,7 @@ function RunView() {
                     ))}
                   </ol>
                 ) : (
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-muted-foreground text-sm">
                     {record?.kind === "load" ? "Ad-hoc load has no timeline." : "No timeline events yet."}
                   </p>
                 )}
@@ -324,7 +342,7 @@ function Breakdown({
         </CardContent>
       </Card>
       <div className="grid content-start gap-4">
-        <Card size="sm">
+        <Card>
           <CardHeader>
             <CardTitle>Errors by class</CardTitle>
           </CardHeader>
@@ -337,11 +355,11 @@ function Breakdown({
                 }))}
               />
             ) : (
-              <p className="text-sm text-muted-foreground">No failures.</p>
+              <p className="text-muted-foreground text-sm">No failures.</p>
             )}
           </CardContent>
         </Card>
-        <Card size="sm">
+        <Card>
           <CardHeader>
             <CardTitle>Per target and service</CardTitle>
             <CardDescription>Client side per protocol; engine side from its counters.</CardDescription>
@@ -381,13 +399,23 @@ function ValidateView({ record }: { record: RunRecord }) {
       <StatRow
         items={[
           { label: "Passed", value: r.passed, tone: "good" },
-          { label: "Failed", value: r.failed, tone: r.failed ? "bad" : undefined },
+          {
+            label: "Failed",
+            value: r.failed,
+            tone: r.failed ? "bad" : undefined,
+          },
           { label: "Took", value: seconds(record.duration_s) },
           {
             label: "Targets",
             value: (
               <span className="text-sm font-normal">
-                {String((record.request as { protocol?: string } | null)?.protocol ?? "")}
+                {String(
+                  (
+                    record.request as {
+                      protocol?: string;
+                    } | null
+                  )?.protocol ?? "",
+                )}
               </span>
             ),
           },

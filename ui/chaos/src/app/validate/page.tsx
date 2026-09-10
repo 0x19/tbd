@@ -1,14 +1,15 @@
 "use client";
 
-import { useState } from "react";
 import { Play, Search } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
+
+import { useChaos } from "@/app/providers";
 import { ChecksTable } from "@/app/runs/view/page";
 import { FilterRail, PageTitle, StatRow } from "@/components/kit";
 import { RunsTable } from "@/components/runs-table";
-import { useChaos } from "@/components/shell/providers";
+import { Button } from "@/components/ui/button";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { api } from "@/lib/api/client";
 import { describe, useFetch } from "@/lib/api/hooks";
 import type { RunRecord } from "@/lib/api/schema";
@@ -101,7 +102,7 @@ export default function ValidatePage() {
             />
           </InputGroup>
         </label>
-        <p className="text-xs text-muted-foreground md:col-span-3">
+        <p className="text-muted-foreground text-xs md:col-span-3">
           Empty fields use the config for <b>{overview?.env}</b>, as seen from chaos serve. Targets may be
           http:// (h2c) or https://; a private root goes in <code>[validate] ca_cert</code>.
         </p>
@@ -111,13 +112,20 @@ export default function ValidatePage() {
         <>
           <StatRow
             items={[
-              { label: "Passed", value: result.validate.passed, tone: "good" },
+              {
+                label: "Passed",
+                value: result.validate.passed,
+                tone: "good",
+              },
               {
                 label: "Failed",
                 value: result.validate.failed,
                 tone: result.validate.failed ? "bad" : undefined,
               },
-              { label: "Took", value: seconds(result.duration_s) },
+              {
+                label: "Took",
+                value: seconds(result.duration_s),
+              },
               {
                 label: "Ran",
                 value: <span className="text-base font-normal">{when(result.started_at)}</span>,
@@ -131,8 +139,16 @@ export default function ValidatePage() {
                 {
                   title: "Result",
                   options: [
-                    { value: "pass", label: "Pass", count: checks.filter((c) => c.passed).length },
-                    { value: "fail", label: "Fail", count: checks.filter((c) => !c.passed).length },
+                    {
+                      value: "pass",
+                      label: "Pass",
+                      count: checks.filter((c) => c.passed).length,
+                    },
+                    {
+                      value: "fail",
+                      label: "Fail",
+                      count: checks.filter((c) => !c.passed).length,
+                    },
                   ],
                 },
               ]}
@@ -156,7 +172,7 @@ export default function ValidatePage() {
           </div>
         </>
       ) : (
-        <div className="rounded-xl border border-dashed p-10 text-center text-sm text-muted-foreground">
+        <div className="text-muted-foreground rounded-xl border border-dashed p-10 text-center text-sm">
           Run validate to see each check with its latency and what it observed.
         </div>
       )}

@@ -1,10 +1,14 @@
 "use client";
 
+import { MoreHorizontal, Play, Plus, Search } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { MoreHorizontal, Play, Plus, Search } from "lucide-react";
 import { toast } from "sonner";
+
+import { useChaos } from "@/app/providers";
+import { PageTitle } from "@/components/kit";
+import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,9 +22,6 @@ import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/in
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { PageTitle } from "@/components/kit";
-import { StatusBadge } from "@/components/status-badge";
-import { useChaos } from "@/components/shell/providers";
 import { api } from "@/lib/api/client";
 import { describe, useFetch } from "@/lib/api/hooks";
 import type { RunSummary, ScenarioEntry } from "@/lib/api/schema";
@@ -84,13 +85,15 @@ export default function ScenariosPage() {
         title="Scenarios"
         description="Browse, edit and run the scenario files: a stack, load, a fault timeline and assertions."
       >
-        <Button render={<Link href="/scenarios/view/?id=new" />}>
-          <Plus /> New scenario
+        <Button asChild>
+          <Link href="/scenarios/view/?id=new">
+            <Plus /> New scenario
+          </Link>
         </Button>
       </PageTitle>
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)}>
-        <TabsList variant="line">
+        <TabsList>
           <TabsTrigger value="all">All scenarios ({count(() => true)})</TabsTrigger>
           <TabsTrigger value="ok">Ready ({count((s) => s.ok && !s.skip)})</TabsTrigger>
           <TabsTrigger value="skipped">Skipped ({count((s) => s.skip)})</TabsTrigger>
@@ -105,7 +108,7 @@ export default function ScenariosPage() {
           </InputGroupAddon>
           <InputGroupInput placeholder="Search scenarios" value={q} onChange={(e) => setQ(e.target.value)} />
         </InputGroup>
-        <span className="ml-auto text-xs text-muted-foreground">{shown.length} shown</span>
+        <span className="text-muted-foreground ml-auto text-xs">{shown.length} shown</span>
       </div>
 
       {!list.data ? (
@@ -136,9 +139,9 @@ export default function ScenariosPage() {
                       >
                         {s.name ?? s.id}
                       </Link>
-                      <div className="font-mono text-[11px] text-muted-foreground">{s.file}</div>
+                      <div className="text-muted-foreground font-mono text-[11px]">{s.file}</div>
                     </TableCell>
-                    <TableCell className="max-w-md truncate text-muted-foreground">{s.description}</TableCell>
+                    <TableCell className="text-muted-foreground max-w-md truncate">{s.description}</TableCell>
                     <TableCell>
                       {s.skip ? (
                         <Badge variant="outline">skip</Badge>
@@ -147,7 +150,7 @@ export default function ScenariosPage() {
                           checks
                         </Badge>
                       ) : (
-                        <span className="text-xs text-destructive" title={s.error ?? ""}>
+                        <span className="text-destructive text-xs" title={s.error ?? ""}>
                           {s.error}
                         </span>
                       )}
@@ -156,10 +159,10 @@ export default function ScenariosPage() {
                       {last ? (
                         <Link href={`/runs/view/?id=${last.id}`} className="flex items-center gap-2">
                           <StatusBadge status={last.status} />
-                          <span className="text-xs text-muted-foreground">{ago(last.started_at)}</span>
+                          <span className="text-muted-foreground text-xs">{ago(last.started_at)}</span>
                         </Link>
                       ) : (
-                        <span className="text-xs text-muted-foreground">never</span>
+                        <span className="text-muted-foreground text-xs">never</span>
                       )}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">{last?.requests_total ?? "–"}</TableCell>
@@ -179,21 +182,17 @@ export default function ScenariosPage() {
                           <Play /> Run
                         </Button>
                         <DropdownMenu>
-                          <DropdownMenuTrigger
-                            render={<Button size="icon-sm" variant="ghost" aria-label="More" />}
-                          >
-                            <MoreHorizontal />
+                          <DropdownMenuTrigger asChild>
+                            <Button size="icon-sm" variant="ghost" aria-label="More">
+                              <MoreHorizontal />
+                            </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                              render={<Link href={`/scenarios/view/?id=${encodeURIComponent(s.id)}`} />}
-                            >
-                              Edit
+                            <DropdownMenuItem asChild>
+                              <Link href={`/scenarios/view/?id=${encodeURIComponent(s.id)}`}>Edit</Link>
                             </DropdownMenuItem>
-                            <DropdownMenuItem
-                              render={<Link href={`/runs/?scenario=${encodeURIComponent(s.id)}`} />}
-                            >
-                              Runs
+                            <DropdownMenuItem asChild>
+                              <Link href={`/runs/?scenario=${encodeURIComponent(s.id)}`}>Runs</Link>
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem variant="destructive" onClick={() => remove(s)}>
@@ -208,7 +207,7 @@ export default function ScenariosPage() {
               })}
               {!shown.length ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={7} className="text-muted-foreground py-8 text-center">
                     No scenarios here.
                   </TableCell>
                 </TableRow>

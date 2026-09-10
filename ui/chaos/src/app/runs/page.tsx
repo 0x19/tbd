@@ -1,16 +1,17 @@
 "use client";
 
+import { Radio, RefreshCw, Search, Trash2 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
-import { Radio, RefreshCw, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+
+import { useChaos } from "@/app/providers";
+import { FilterRail, PageTitle } from "@/components/kit";
+import { RunsTable } from "@/components/runs-table";
 import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TableCell, TableRow } from "@/components/ui/table";
-import { FilterRail, PageTitle } from "@/components/kit";
-import { RunsTable } from "@/components/runs-table";
-import { useChaos } from "@/components/shell/providers";
 import { api } from "@/lib/api/client";
 import { describe, useFetch } from "@/lib/api/hooks";
 import type { RunSummary } from "@/lib/api/schema";
@@ -33,7 +34,10 @@ function RunsFromUrl() {
   return (
     <Runs
       key={params.toString()}
-      initial={{ ...(kind ? { Kind: [kind] } : {}), ...(scenario ? { Scenario: [scenario] } : {}) }}
+      initial={{
+        ...(kind ? { Kind: [kind] } : {}),
+        ...(scenario ? { Scenario: [scenario] } : {}),
+      }}
     />
   );
 }
@@ -52,7 +56,11 @@ function Runs({ initial }: { initial: Record<string, string[]> }) {
       const k = f(r);
       if (k) m.set(k, (m.get(k) ?? 0) + 1);
     }
-    return [...m.entries()].map(([value, count]) => ({ value, label: value, count }));
+    return [...m.entries()].map(([value, count]) => ({
+      value,
+      label: value,
+      count,
+    }));
   };
 
   const shown = all.filter((r) => {
@@ -88,7 +96,10 @@ function Runs({ initial }: { initial: Record<string, string[]> }) {
           groups={[
             { title: "Kind", options: countBy((r) => r.kind) },
             { title: "Status", options: countBy((r) => r.status) },
-            { title: "Scenario", options: countBy((r) => r.scenario_id) },
+            {
+              title: "Scenario",
+              options: countBy((r) => r.scenario_id),
+            },
           ]}
           selected={selected}
           onChange={(g, v) => setSelected({ ...selected, [g]: v })}

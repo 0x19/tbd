@@ -1,8 +1,9 @@
 // Browser smoke of the built UI: every page renders real data, no console
 // errors, a scenario run streams to the end, a fault applies, load cancels.
 // Run with `mise run ui:e2e` against the local cluster (UI_BASE overrides).
-import { chromium } from "playwright";
 import { mkdirSync } from "node:fs";
+
+import { chromium } from "playwright";
 
 const BASE = process.env.UI_BASE ?? "http://chaos.localhost:18080";
 const SHOTS = process.env.SHOTS ?? "e2e/shots";
@@ -70,7 +71,10 @@ await step("stack: stop and start the engine", async () => {
     .first()
     .click();
   await page.getByText("Stopped").first().waitFor({ timeout: 10000 });
-  await page.screenshot({ path: `${SHOTS}/stack-stopped.png`, fullPage: true });
+  await page.screenshot({
+    path: `${SHOTS}/stack-stopped.png`,
+    fullPage: true,
+  });
   await page
     .getByRole("button", { name: /^start$/i })
     .first()
@@ -140,7 +144,7 @@ await step("runbook renders with links", async () => {
 
 await step("command palette opens with ctrl+k and lists scenarios", async () => {
   await page.keyboard.press("Control+k");
-  await page.getByPlaceholder("Search pages or run commands…").waitFor({ timeout: 5000 });
+  await page.getByPlaceholder("Type a command or search...").waitFor({ timeout: 5000 });
   await page.getByText("Run a scenario").waitFor();
   await page.screenshot({ path: `${SHOTS}/command.png` });
   await page.keyboard.press("Escape");
@@ -148,8 +152,12 @@ await step("command palette opens with ctrl+k and lists scenarios", async () => 
 
 await step("dark mode toggles", async () => {
   await page.getByRole("button", { name: "Toggle theme" }).click();
+  await page.getByRole("menuitem", { name: /^dark/i }).click();
   await page.waitForFunction(() => document.documentElement.classList.contains("dark"));
-  await page.screenshot({ path: `${SHOTS}/runbook-dark.png`, fullPage: true });
+  await page.screenshot({
+    path: `${SHOTS}/runbook-dark.png`,
+    fullPage: true,
+  });
 });
 
 await browser.close();

@@ -1,23 +1,24 @@
 "use client";
 
+import { Info, Play } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Info, Play } from "lucide-react";
+import { useEffect } from "react";
 import { toast } from "sonner";
+
+import { useChaos } from "@/app/providers";
+import { PageTitle, Sparkline, StatRow } from "@/components/kit";
+import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from "@/components/ui/input-group";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { PageTitle, Sparkline, StatRow } from "@/components/kit";
-import { StatusBadge } from "@/components/status-badge";
-import { useChaos } from "@/components/shell/providers";
 import { api } from "@/lib/api/client";
 import { describe, useFetch } from "@/lib/api/hooks";
-import { OpKind, type LoadRequest, type RunRecord } from "@/lib/api/schema";
+import { type LoadRequest, OpKind, type RunRecord } from "@/lib/api/schema";
 import { ago, ms, num, pct } from "@/lib/format";
-import { useEffect } from "react";
 
 const OPS = OpKind.options;
 
@@ -69,8 +70,17 @@ export default function LoadPage() {
       warmup: warmup || undefined,
       timeout: timeout || undefined,
       max_in_flight: Number(maxInFlight) || undefined,
-      pattern: ramp ? { type: "ramp", start_rate: Number(startRate), end_rate: Number(endRate) } : undefined,
-      operations: OPS.map((op) => ({ op, weight: Number(weights[op] ?? 0) })).filter((o) => o.weight > 0),
+      pattern: ramp
+        ? {
+            type: "ramp",
+            start_rate: Number(startRate),
+            end_rate: Number(endRate),
+          }
+        : undefined,
+      operations: OPS.map((op) => ({
+        op,
+        weight: Number(weights[op] ?? 0),
+      })).filter((o) => o.weight > 0),
     },
   });
 
@@ -123,7 +133,7 @@ export default function LoadPage() {
                 help="Constant holds the rate; ramp interpolates from start to end over the duration."
               >
                 <select
-                  className="h-8 w-full rounded-lg border bg-background px-2 text-sm"
+                  className="bg-background h-8 w-full rounded-lg border px-2 text-sm"
                   value={ramp ? "ramp" : "constant"}
                   onChange={(e) => setRamp(e.target.value === "ramp")}
                 >
@@ -214,7 +224,7 @@ export default function LoadPage() {
                 </Field>
               </div>
               <div className="border-t pt-3 text-sm">
-                <div className="text-xs text-muted-foreground">Expected</div>
+                <div className="text-muted-foreground text-xs">Expected</div>
                 <div className="tabular-nums">
                   ≈ {num(expected)} requests ·{" "}
                   {capped ? (
@@ -235,7 +245,12 @@ export default function LoadPage() {
                   <InputGroup>
                     <InputGroupInput
                       value={weights[op] ?? "0"}
-                      onChange={(e) => setWeights({ ...weights, [op]: e.target.value })}
+                      onChange={(e) =>
+                        setWeights({
+                          ...weights,
+                          [op]: e.target.value,
+                        })
+                      }
                       inputMode="numeric"
                     />
                     <InputGroupAddon align="inline-end">
@@ -259,7 +274,7 @@ export default function LoadPage() {
                 help="The serve stack's protocols, or any protocol base URL such as Envoy."
               >
                 <select
-                  className="h-8 w-full rounded-lg border bg-background px-2 text-sm"
+                  className="bg-background h-8 w-full rounded-lg border px-2 text-sm"
                   value={targetMode}
                   onChange={(e) => setTargetMode(e.target.value as "stack" | "url")}
                 >
@@ -296,8 +311,14 @@ export default function LoadPage() {
               items={[
                 { label: "Warmup", value: warmup || "none" },
                 { label: "Measured", value: duration || "–" },
-                { label: "Requests", value: `≈ ${num(expected)}` },
-                { label: "Mix", value: `${OPS.filter((op) => Number(weights[op]) > 0).length} ops` },
+                {
+                  label: "Requests",
+                  value: `≈ ${num(expected)}`,
+                },
+                {
+                  label: "Mix",
+                  value: `${OPS.filter((op) => Number(weights[op]) > 0).length} ops`,
+                },
               ]}
             />
           </section>
@@ -341,7 +362,7 @@ export default function LoadPage() {
                   ))}
                   {!loadRuns.length ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                      <TableCell colSpan={7} className="text-muted-foreground py-8 text-center">
                         No load runs yet.
                       </TableCell>
                     </TableRow>
@@ -351,12 +372,12 @@ export default function LoadPage() {
             </div>
           </section>
 
-          <Card size="sm">
+          <Card>
             <CardHeader>
               <CardTitle>Request body</CardTitle>
             </CardHeader>
             <CardContent>
-              <pre className="overflow-x-auto rounded-lg bg-muted p-3 text-xs">
+              <pre className="bg-muted overflow-x-auto rounded-lg p-3 text-xs">
                 {JSON.stringify(request(), null, 1)}
               </pre>
             </CardContent>
@@ -382,8 +403,10 @@ function Field({ label, help, children }: { label: string; help?: string; childr
 function Hint({ text }: { text: string }) {
   return (
     <Tooltip>
-      <TooltipTrigger render={<span className="inline-flex" />}>
-        <Info className="size-3.5 text-muted-foreground" />
+      <TooltipTrigger asChild>
+        <span className="inline-flex">
+          <Info className="text-muted-foreground size-3.5" />
+        </span>
       </TooltipTrigger>
       <TooltipContent>{text}</TooltipContent>
     </Tooltip>
@@ -400,7 +423,7 @@ function RunSpark({ id }: { id: string }) {
       .catch(() => setRecord(null));
   }, [id]);
   const s = record?.samples ?? [];
-  if (!s.length) return <span className="text-xs text-muted-foreground">–</span>;
+  if (!s.length) return <span className="text-muted-foreground text-xs">–</span>;
   const values = s.map((x, i) => {
     const p = i > 0 ? s[i - 1] : null;
     const dt = p ? x.elapsed_s - p.elapsed_s : x.elapsed_s;

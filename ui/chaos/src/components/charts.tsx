@@ -3,21 +3,22 @@
 // Monochrome charts in the kit's style: a big number with an uppercase
 // caption above, greys for series, a legend on the right.
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
-import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
+
+import { type ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import type { LoadSnapshot } from "@/lib/api/schema";
 
 export function ChartHeadline({ value, caption }: { value: React.ReactNode; caption: string }) {
   return (
     <div className="mb-2">
       <div className="text-3xl font-semibold tracking-tight tabular-nums">{value}</div>
-      <div className="text-[11px] font-medium tracking-widest text-muted-foreground uppercase">{caption}</div>
+      <div className="text-muted-foreground text-[11px] font-medium tracking-widest uppercase">{caption}</div>
     </div>
   );
 }
 
 export function Legend({ items }: { items: { label: string; color: string }[] }) {
   return (
-    <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+    <div className="text-muted-foreground flex flex-wrap items-center gap-4 text-xs">
       {items.map((i) => (
         <span key={i.label} className="flex items-center gap-1.5">
           <span className="size-2 rounded-full" style={{ background: i.color }} />
@@ -74,7 +75,7 @@ export function CompareChart({
   }));
   if (!n)
     return (
-      <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
+      <div className="text-muted-foreground flex h-40 items-center justify-center text-sm">
         No load samples yet.
       </div>
     );
@@ -121,7 +122,7 @@ export function RunChart({ samples, height = 260 }: { samples: LoadSnapshot[]; h
   const data = perSecond(samples);
   if (!data.length)
     return (
-      <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
+      <div className="text-muted-foreground flex h-40 items-center justify-center text-sm">
         No samples yet.
       </div>
     );
@@ -187,7 +188,7 @@ export function LatencyBars({
 }) {
   if (!rows.length)
     return (
-      <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
+      <div className="text-muted-foreground flex h-40 items-center justify-center text-sm">
         No finished scenario runs yet.
       </div>
     );
@@ -219,8 +220,12 @@ export function LatencyBars({
         <ChartTooltip
           content={
             <ChartTooltipContent
-              formatter={(value, name, item) => {
-                const p = item.payload as { p50: number; _p90: number; _p99: number };
+              formatter={(_value, name, item) => {
+                const p = item.payload as {
+                  p50: number;
+                  _p90: number;
+                  _p99: number;
+                };
                 const v = name === "p50" ? p.p50 : name === "p90" ? p._p90 : p._p99;
                 return (
                   <span className="flex w-full justify-between gap-4">

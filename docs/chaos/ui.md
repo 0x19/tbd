@@ -52,7 +52,7 @@ elsewhere); in a build they call `/api/chaos/v1` on their own origin, which is w
 export works under `chaos serve`, Envoy's `chaos.*` host and the public edge.
 
 ```sh
-mise run ui:check         # prettier, eslint (React Compiler rules), tsc
+mise run ui:check         # prettier, eslint, tsc
 mise run ui:build         # static export into ui/chaos/out
 mise run chaos:serve      # picks ui/chaos/out up and serves it at /
 ```
@@ -92,9 +92,10 @@ ui/chaos/src
     └── format.ts              ms, pct, ago, ...
 ```
 
-Stack: Next.js 16 App Router with `output: "export"`, React 19, Tailwind CSS 4, shadcn/ui
-(Base UI primitives, `render` prop instead of `asChild`), Recharts, Zod, Lucide,
-next-themes, sonner, cmdk. Fonts are Inter and JetBrains Mono, as in the kit. No server components do work: every page is `"use client"` and
+Stack: the Admin Kit's own: Next.js 16 App Router with `output: "export"`, React 19,
+Tailwind CSS 4, shadcn/ui on Radix (`asChild` composition), Recharts, Zod, Lucide and
+Tabler icons, next-themes, sonner, cmdk, the kit's ESLint (simple-import-sort) and
+Prettier (tailwind plugin). Fonts are Inter and Geist Mono, as in the kit. No server components do work: every page is `"use client"` and
 fetches from the API, which is what makes the static export possible.
 
 Rules the code follows:
@@ -108,18 +109,23 @@ Rules the code follows:
 - Live data comes over Server-Sent Events (`useRunFeed`, `useGlobalFeed`); lists poll.
   No websocket, no client-side store.
 - Nothing is mocked. The pages render from the real API or show the error.
-- The React Compiler lint rules are on (`react-hooks/set-state-in-effect`, refs during
-  render). Derive state instead of syncing it in effects; `useRunFeed` shows the pattern.
+- ESLint is the kit's: imports sorted, unused variables an error, the React Compiler
+  effect rules relaxed as the kit relaxes them.
 
 ## Layout
 
-The pages reproduce the shadcnblocks Admin Kit (https://www.shadcnblocks.com/admin-dashboard)
-pattern by pattern, taken from its live demo and its 139 page screenshots: Inter, the
-two-tier header, the grouped collapsible sidebar with workspace and identity blocks, one
-KPI card split by dividers with a "previous" line and a coloured delta, monochrome charts
-with a big number and an uppercase caption, list pages with a filter rail and a toolbar,
-detail pages with a big id, chips and a lifecycle strip, and the simulator layout with a
-form rail and a heat grid. The building blocks live in `components/kit.tsx` and
-`components/charts.tsx`. The kit itself is a paid ZIP (Premium) and is not vendored;
-once available, its components replace `components/ui/` and `kit.tsx` without touching
-the data layer.
+`ui/chaos` *is* the shadcnblocks Admin Kit (https://www.shadcnblocks.com/admin-dashboard,
+v2.3.0, Premium ZIP), reduced the way the kit recommends: keep the product you are
+building, delete the rest. Kept from the kit, file for file: the shell
+(`components/layout/`: sidebar with team switcher and collapsible nav groups, header with
+⌘K, notifications and theme controls, the breadcrumb sub-header), the theme preset
+picker with its presets, the `components/ui/` primitives (shadcn on Radix), the global
+CSS, ESLint and Prettier. Deleted: the five demo sub-apps, auth and error pages, their
+mock data, and the packages only they used (editor, maps, PDF, drag and drop, forms,
+faker). Ours on top: the pages, the data layer, `components/kit.tsx` (page title, KPI
+strip, stat row, stage bar, filter rail, heat grid, detail list, level chips, all
+modelled on the kit's payments, developers and ecommerce pages) and `charts.tsx`.
+
+The kit is licensed per buyer and is not in git. To pull a kit update, diff the new
+ZIP's `src/components/{ui,layout}`, `src/lib/theme-*` and `globals.css` against ours and
+port what changed; everything else here is independent of the kit's demo apps.

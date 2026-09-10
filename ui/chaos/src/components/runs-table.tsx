@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+
 import { StatusBadge } from "@/components/status-badge";
-import { ago, ms, num, pct, seconds } from "@/lib/format";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { RunSummary } from "@/lib/api/schema";
+import { ago, ms, num, pct, seconds } from "@/lib/format";
 
 /** The kit's list table: id in mono, name, chips, numbers right-aligned. */
 export function RunsTable({
@@ -18,7 +19,7 @@ export function RunsTable({
 }) {
   if (!runs.length) {
     return (
-      <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+      <div className="text-muted-foreground rounded-lg border border-dashed p-8 text-center text-sm">
         No runs match. Start one from Scenarios, Load or Validate.
       </div>
     );
@@ -48,7 +49,7 @@ export function RunsTable({
                 <Link href={`/runs/view/?id=${r.id}`} className="font-medium hover:underline">
                   {r.name}
                 </Link>
-                <div className="font-mono text-[11px] text-muted-foreground">{r.id.slice(0, 13)}</div>
+                <div className="text-muted-foreground font-mono text-[11px]">{r.id.slice(0, 13)}</div>
               </TableCell>
               <TableCell className="text-muted-foreground capitalize">{r.kind}</TableCell>
               <TableCell>

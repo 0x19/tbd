@@ -1,14 +1,21 @@
 "use client";
 
+import { Activity, ExternalLink, FlaskConical, ListChecks, type LucideIcon, MonitorCog } from "lucide-react";
 import { useState } from "react";
-import { Activity, ExternalLink, FlaskConical, ListChecks, MonitorCog, type LucideIcon } from "lucide-react";
-import { Button } from "@/components/ui/button";
+
+import { useChaos } from "@/app/providers";
 import { PageTitle } from "@/components/kit";
-import { useChaos } from "@/components/shell/providers";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 type Entry = { symptom: string; means: string; look: string; then: string };
-type Section = { id: string; title: string; icon: LucideIcon; blurb: string; entries: Entry[] };
+type Section = {
+  id: string;
+  title: string;
+  icon: LucideIcon;
+  blurb: string;
+  entries: Entry[];
+};
 
 const SECTIONS: Section[] = [
   {
@@ -160,7 +167,7 @@ export default function RunbookPage() {
               type="button"
               onClick={() => setActive(s.id)}
               className={cn(
-                "flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-muted",
+                "hover:bg-muted flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm",
                 s.id === active && "bg-muted font-medium",
               )}
             >
@@ -170,24 +177,26 @@ export default function RunbookPage() {
           ))}
           {links && (links.grafana || links.victorialogs || links.pyroscope) ? (
             <div className="mt-4 grid gap-1 border-t pt-4">
-              <div className="px-3 text-xs font-medium text-muted-foreground uppercase">Open</div>
+              <div className="text-muted-foreground px-3 text-xs font-medium uppercase">Open</div>
               {[
-                { t: "Dashboards", h: links.grafana ? `${links.grafana}/dashboards` : "" },
-                { t: "Traces", h: links.grafana ? `${links.grafana}/explore` : "" },
+                {
+                  t: "Dashboards",
+                  h: links.grafana ? `${links.grafana}/dashboards` : "",
+                },
+                {
+                  t: "Traces",
+                  h: links.grafana ? `${links.grafana}/explore` : "",
+                },
                 { t: "Logs", h: links.victorialogs },
                 { t: "Metrics", h: links.metrics },
                 { t: "Profiles", h: links.pyroscope },
               ]
                 .filter((l) => l.h)
                 .map((l) => (
-                  <Button
-                    key={l.t}
-                    variant="ghost"
-                    size="sm"
-                    className="justify-start"
-                    render={<a href={l.h} target="_blank" rel="noreferrer" />}
-                  >
-                    <ExternalLink /> {l.t}
+                  <Button key={l.t} variant="ghost" size="sm" className="justify-start" asChild>
+                    <a href={l.h} target="_blank" rel="noreferrer">
+                      <ExternalLink /> {l.t}
+                    </a>
                   </Button>
                 ))}
             </div>
@@ -195,13 +204,13 @@ export default function RunbookPage() {
         </nav>
         <div>
           <h2 className="text-lg font-semibold">{section.title}</h2>
-          <p className="text-sm text-muted-foreground">{section.blurb}</p>
+          <p className="text-muted-foreground text-sm">{section.blurb}</p>
           <div className="mt-4 divide-y border-t">
             {section.entries.map((e) => (
               <div key={e.symptom} className="grid gap-4 py-5 md:grid-cols-[1fr_2fr]">
                 <div>
                   <div className="font-medium">{e.symptom}</div>
-                  <div className="mt-1 text-sm text-muted-foreground">{e.means}</div>
+                  <div className="text-muted-foreground mt-1 text-sm">{e.means}</div>
                 </div>
                 <dl className="grid gap-2 text-sm md:grid-cols-[5rem_1fr]">
                   <dt className="text-muted-foreground">Look at</dt>

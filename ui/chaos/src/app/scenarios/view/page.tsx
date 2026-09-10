@@ -1,18 +1,19 @@
 "use client";
 
+import { ArrowLeft, Play, Save, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
-import { ArrowLeft, Play, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+
+import { DetailList, PageTitle, StageBar } from "@/components/kit";
+import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { DetailList, PageTitle, StageBar } from "@/components/kit";
-import { StatusBadge } from "@/components/status-badge";
 import { api } from "@/lib/api/client";
 import { describe } from "@/lib/api/hooks";
 import type { CheckReply, ScenarioDetail } from "@/lib/api/schema";
@@ -62,7 +63,10 @@ min_requests = 200
 
 type Parsed = {
   scenario?: { name?: string; description?: string; skip?: boolean };
-  stack?: { engines?: Record<string, unknown>; protocols?: Record<string, { engine?: string }> };
+  stack?: {
+    engines?: Record<string, unknown>;
+    protocols?: Record<string, { engine?: string }>;
+  };
   load?: {
     rate?: number;
     duration?: string;
@@ -70,7 +74,12 @@ type Parsed = {
     operations?: { op: string; weight: number }[];
     pattern?: { type: string };
   };
-  timeline?: { at: string; action: string; service?: string; message?: string }[];
+  timeline?: {
+    at: string;
+    action: string;
+    service?: string;
+    message?: string;
+  }[];
   assertions?: Record<string, unknown>;
 };
 
@@ -177,8 +186,10 @@ function ScenarioView() {
     <>
       <PageTitle
         back={
-          <Button variant="outline" size="icon" render={<Link href="/scenarios/" />} aria-label="Back">
-            <ArrowLeft />
+          <Button variant="outline" size="icon" aria-label="Back" asChild>
+            <Link href="/scenarios/">
+              <ArrowLeft />
+            </Link>
           </Button>
         }
         title={
@@ -223,15 +234,16 @@ function ScenarioView() {
           <Play /> {dirty ? "Save and run" : "Run"}
         </Button>
       </PageTitle>
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      {error ? <p className="text-destructive text-sm">{error}</p> : null}
 
       <div className="grid gap-6 xl:grid-cols-[1fr_20rem]">
         <div className="grid content-start gap-6">
-          <div className="rounded-xl border bg-muted/30 p-4">
+          <div className="bg-muted/30 rounded-xl border p-4">
             <div className="mb-3 flex flex-wrap justify-between gap-2 text-sm">
               <span>
-                Stack <b>{engines.length}</b> engine{engines.length === 1 ? "" : "s"},{" "}
-                <b>{protocols.length}</b> protocol{protocols.length === 1 ? "" : "s"}
+                Stack <b>{engines.length}</b> engine
+                {engines.length === 1 ? "" : "s"}, <b>{protocols.length}</b> protocol
+                {protocols.length === 1 ? "" : "s"}
               </span>
               <span className="text-muted-foreground">
                 {load
@@ -244,7 +256,7 @@ function ScenarioView() {
               current={-1}
             />
             {timeline.length ? (
-              <ol className="mt-4 grid gap-1 text-xs text-muted-foreground">
+              <ol className="text-muted-foreground mt-4 grid gap-1 text-xs">
                 {timeline.map((t, i) => (
                   <li key={i} className="flex gap-3">
                     <span className="w-14 font-mono tabular-nums">{t.at}</span>
@@ -261,7 +273,7 @@ function ScenarioView() {
 
           {isNew ? (
             <div className="grid gap-1.5">
-              <span className="text-xs text-muted-foreground">Id, becomes scenarios/&lt;id&gt;.toml</span>
+              <span className="text-muted-foreground text-xs">Id, becomes scenarios/&lt;id&gt;.toml</span>
               <Input
                 value={id}
                 onChange={(e) => setId(e.target.value)}
@@ -271,7 +283,7 @@ function ScenarioView() {
             </div>
           ) : null}
           {check && !check.ok ? (
-            <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+            <div className="border-destructive/30 bg-destructive/5 text-destructive rounded-lg border px-3 py-2 text-sm">
               {check.error}
             </div>
           ) : null}
@@ -285,37 +297,39 @@ function ScenarioView() {
 
         <div className="grid content-start gap-4">
           {detail?.last_run ? (
-            <Card size="sm">
+            <Card>
               <CardHeader>
                 <CardTitle>Last run</CardTitle>
                 <CardDescription>{ago(detail.last_run.started_at)}</CardDescription>
               </CardHeader>
               <CardContent className="flex items-center justify-between">
                 <StatusBadge status={detail.last_run.status} />
-                <Button
-                  variant="outline"
-                  size="xs"
-                  render={<Link href={`/runs/view/?id=${detail.last_run.id}`} />}
-                >
-                  Open
+                <Button variant="outline" size="sm" asChild>
+                  <Link href={`/runs/view/?id=${detail.last_run.id}`}>Open</Link>
                 </Button>
               </CardContent>
             </Card>
           ) : null}
-          <Card size="sm">
+          <Card>
             <CardHeader>
               <CardTitle>Stack</CardTitle>
             </CardHeader>
             <CardContent>
               <DetailList
                 rows={[
-                  ...engines.map((e) => ({ k: e, v: "engine" })),
-                  ...protocols.map(([p, spec]) => ({ k: p, v: `protocol → ${spec.engine ?? "?"}` })),
+                  ...engines.map((e) => ({
+                    k: e,
+                    v: "engine",
+                  })),
+                  ...protocols.map(([p, spec]) => ({
+                    k: p,
+                    v: `protocol → ${spec.engine ?? "?"}`,
+                  })),
                 ]}
               />
             </CardContent>
           </Card>
-          <Card size="sm">
+          <Card>
             <CardHeader>
               <CardTitle>Load</CardTitle>
             </CardHeader>
@@ -323,18 +337,30 @@ function ScenarioView() {
               {load ? (
                 <DetailList
                   rows={[
-                    { k: "Rate", v: `${load.rate ?? 50} req/s` },
-                    { k: "Duration", v: load.duration ?? "–" },
-                    { k: "Pattern", v: load.pattern?.type ?? "constant" },
-                    ...(load.operations ?? []).map((o) => ({ k: o.op, v: `weight ${o.weight}` })),
+                    {
+                      k: "Rate",
+                      v: `${load.rate ?? 50} req/s`,
+                    },
+                    {
+                      k: "Duration",
+                      v: load.duration ?? "–",
+                    },
+                    {
+                      k: "Pattern",
+                      v: load.pattern?.type ?? "constant",
+                    },
+                    ...(load.operations ?? []).map((o) => ({
+                      k: o.op,
+                      v: `weight ${o.weight}`,
+                    })),
                   ]}
                 />
               ) : (
-                <p className="text-sm text-muted-foreground">No [load] table.</p>
+                <p className="text-muted-foreground text-sm">No [load] table.</p>
               )}
             </CardContent>
           </Card>
-          <Card size="sm">
+          <Card>
             <CardHeader>
               <CardTitle>Assertions</CardTitle>
             </CardHeader>
@@ -342,16 +368,22 @@ function ScenarioView() {
               {assertions.length || serviceAssertions.length ? (
                 <DetailList
                   rows={[
-                    ...assertions.map(([k, v]) => ({ k, v: String(v) })),
+                    ...assertions.map(([k, v]) => ({
+                      k,
+                      v: String(v),
+                    })),
                     ...serviceAssertions.flatMap(([svc, m]) =>
                       Object.entries(m)
                         .filter(([, v]) => v !== null && v !== undefined)
-                        .map(([k, v]) => ({ k: `${svc}.${k}`, v: String(v) })),
+                        .map(([k, v]) => ({
+                          k: `${svc}.${k}`,
+                          v: String(v),
+                        })),
                     ),
                   ]}
                 />
               ) : (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-muted-foreground text-sm">
                   No assertions; the run passes if nothing breaks.
                 </p>
               )}

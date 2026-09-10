@@ -6,6 +6,7 @@
 // stat row with dividers, a stage progress bar, a filter rail, a heat grid,
 // a sparkline, and a key/value detail list.
 import { ArrowDownRight, ArrowUpRight, ChevronDown, type LucideIcon } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -28,7 +29,7 @@ export function PageTitle({
         {back}
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">{title}</h1>
-          {description ? <p className="mt-1 text-sm text-muted-foreground">{description}</p> : null}
+          {description ? <p className="text-muted-foreground mt-1 text-sm">{description}</p> : null}
         </div>
       </div>
       {children ? <div className="flex flex-wrap items-center gap-2">{children}</div> : null}
@@ -49,7 +50,7 @@ export function SectionTitle({
     <div className="flex items-end justify-between gap-4">
       <div>
         <h2 className="text-base font-semibold">{title}</h2>
-        {description ? <p className="text-sm text-muted-foreground">{description}</p> : null}
+        {description ? <p className="text-muted-foreground text-sm">{description}</p> : null}
       </div>
       {children}
     </div>
@@ -68,7 +69,7 @@ export type Kpi = {
 /** One card, N columns with vertical dividers. */
 export function KpiStrip({ items }: { items: Kpi[] }) {
   return (
-    <div className="rounded-xl border bg-card text-card-foreground shadow-xs">
+    <div className="bg-card text-card-foreground rounded-xl border shadow-xs">
       <div className="grid grid-cols-1 divide-y sm:grid-cols-2 sm:divide-x sm:divide-y-0 xl:grid-cols-4">
         {items.map((k) => {
           const good = k.delta
@@ -78,11 +79,11 @@ export function KpiStrip({ items }: { items: Kpi[] }) {
             : true;
           return (
             <div key={k.label} className="flex flex-col gap-2 px-6 py-5">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <div className="text-muted-foreground flex items-center gap-2 text-sm">
                 <k.icon className="size-4" />
                 <span className="text-foreground">{k.label}</span>
               </div>
-              <div className="text-xs text-muted-foreground">{k.previous ?? " "}</div>
+              <div className="text-muted-foreground text-xs">{k.previous ?? " "}</div>
               <div className="text-3xl font-semibold tracking-tight tabular-nums">{k.value}</div>
               {k.delta ? (
                 <div
@@ -103,7 +104,7 @@ export function KpiStrip({ items }: { items: Kpi[] }) {
                   <span className="text-muted-foreground">{k.delta.label}</span>
                 </div>
               ) : k.hint ? (
-                <div className="text-xs text-muted-foreground">{k.hint}</div>
+                <div className="text-muted-foreground text-xs">{k.hint}</div>
               ) : null}
             </div>
           );
@@ -117,13 +118,18 @@ export function KpiStrip({ items }: { items: Kpi[] }) {
 export function StatRow({
   items,
 }: {
-  items: { label: string; value: React.ReactNode; sub?: string; tone?: "good" | "bad" }[];
+  items: {
+    label: string;
+    value: React.ReactNode;
+    sub?: string;
+    tone?: "good" | "bad";
+  }[];
 }) {
   return (
     <div className="grid grid-cols-2 divide-x md:grid-cols-4">
       {items.map((s) => (
         <div key={s.label} className="px-4 py-2 first:pl-0">
-          <div className="text-xs text-muted-foreground">{s.label}</div>
+          <div className="text-muted-foreground text-xs">{s.label}</div>
           <div
             className={cn(
               "mt-1 text-2xl font-semibold tracking-tight tabular-nums",
@@ -133,7 +139,7 @@ export function StatRow({
           >
             {s.value}
           </div>
-          {s.sub ? <div className="text-xs text-muted-foreground">{s.sub}</div> : null}
+          {s.sub ? <div className="text-muted-foreground text-xs">{s.sub}</div> : null}
         </div>
       ))}
     </div>
@@ -143,7 +149,12 @@ export function StatRow({
 /** Stage progress, like the order lifecycle strip: dot, name, filled bar. */
 export function StageBar({ stages, current }: { stages: string[]; current: number }) {
   return (
-    <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${stages.length}, minmax(0, 1fr))` }}>
+    <div
+      className="grid gap-3"
+      style={{
+        gridTemplateColumns: `repeat(${stages.length}, minmax(0, 1fr))`,
+      }}
+    >
       {stages.map((s, i) => {
         const state = i < current ? "done" : i === current ? "active" : "todo";
         return (
@@ -164,10 +175,10 @@ export function StageBar({ stages, current }: { stages: string[]; current: numbe
                 {s}
               </span>
             </div>
-            <div className="h-1 overflow-hidden rounded-full bg-muted">
+            <div className="bg-muted h-1 overflow-hidden rounded-full">
               <div
                 className={cn(
-                  "h-full bg-foreground transition-all",
+                  "bg-foreground h-full transition-all",
                   state === "done" ? "w-full" : state === "active" ? "w-1/2 animate-pulse" : "w-0",
                 )}
               />
@@ -200,14 +211,14 @@ export function FilterRail({
     <div className="grid content-start gap-4 border-r pr-4">
       <div className="flex items-center justify-between">
         <span className="text-sm font-semibold">Filters</span>
-        <Button variant="outline" size="xs" onClick={onReset}>
+        <Button variant="outline" size="sm" onClick={onReset}>
           Reset
         </Button>
       </div>
       {groups.map((g) => (
         <Collapsible key={g.title} defaultOpen className="group/filter">
           <CollapsibleTrigger className="flex w-full items-center gap-2 text-sm font-medium">
-            <ChevronDown className="size-4 transition-transform group-data-[panel-closed]/filter:-rotate-90" />
+            <ChevronDown className="size-4 transition-transform group-data-[state=closed]/filter:-rotate-90" />
             {g.title}
           </CollapsibleTrigger>
           <CollapsibleContent>
@@ -217,7 +228,7 @@ export function FilterRail({
                 return (
                   <label
                     key={o.value}
-                    className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
+                    className="hover:bg-muted flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm"
                   >
                     <Checkbox
                       checked={on}
@@ -228,7 +239,7 @@ export function FilterRail({
                     />
                     <span className="flex-1">{o.label}</span>
                     {o.count !== undefined ? (
-                      <span className="rounded-md bg-muted px-1.5 text-xs tabular-nums text-muted-foreground">
+                      <span className="bg-muted text-muted-foreground rounded-md px-1.5 text-xs tabular-nums">
                         {o.count}
                       </span>
                     ) : null}
@@ -264,7 +275,7 @@ export function HeatGrid({
           <tr>
             <th />
             {cols.map((c) => (
-              <th key={c} className="pb-2 text-center font-normal text-muted-foreground">
+              <th key={c} className="text-muted-foreground pb-2 text-center font-normal">
                 {c}
               </th>
             ))}
@@ -273,7 +284,7 @@ export function HeatGrid({
         <tbody>
           {rows.map((r) => (
             <tr key={r}>
-              <td className="pr-3 text-right font-mono text-muted-foreground">{r}</td>
+              <td className="text-muted-foreground pr-3 text-right font-mono">{r}</td>
               {cols.map((c) => {
                 const v = cell(r, c);
                 const t = v === null ? 0 : v / max;
@@ -282,7 +293,7 @@ export function HeatGrid({
                   <td key={c} className="p-0">
                     <div
                       className={cn(
-                        "flex h-11 items-center justify-center border border-background text-xs tabular-nums",
+                        "border-background flex h-11 items-center justify-center border text-xs tabular-nums",
                         dark ? "text-background" : "text-foreground",
                       )}
                       style={{
@@ -315,7 +326,7 @@ export function Sparkline({ values, className }: { values: number[]; className?:
       {shown.map((v, i) => (
         <span
           key={i}
-          className="w-1 rounded-sm bg-foreground/80"
+          className="bg-foreground/80 w-1 rounded-sm"
           style={{ height: `${Math.max(8, (v / max) * 100)}%` }}
         />
       ))}
@@ -350,7 +361,7 @@ export function LevelChip({ level }: { level: "pass" | "fail" | "info" | "warn" 
   return (
     <span
       className={cn(
-        "inline-flex rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+        "inline-flex rounded-md px-1.5 py-0.5 text-[10px] font-semibold tracking-wide uppercase",
         cls,
       )}
     >

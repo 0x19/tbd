@@ -1,18 +1,19 @@
 // One fetch layer for the chaos API (docs/chaos/api.md). Every response is
 // parsed through its Zod schema so pages never touch untyped JSON.
 import type { z } from "zod";
+
 import {
+  type Behavior,
   CheckReply,
   GlobalEvent,
   InstanceInfo,
+  type LoadRequest,
   Overview,
   RunFeed,
   RunRecord,
   RunSummary,
   ScenarioDetail,
   ScenarioEntry,
-  type Behavior,
-  type LoadRequest,
 } from "./schema";
 
 /**

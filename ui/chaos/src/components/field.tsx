@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 export function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <Label className="grid gap-1.5 font-normal">
-      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className="text-muted-foreground text-xs">{label}</span>
       {children}
     </Label>
   );
