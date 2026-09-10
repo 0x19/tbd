@@ -16,3 +16,7 @@
 **/.env.*
 **/*.pem
 **/*.key
+# The sign-in UI (Dockerfile.auth-ui builds it from source; never its outputs).
+!ui/auth/
+ui/auth/node_modules/
+ui/auth/.next/

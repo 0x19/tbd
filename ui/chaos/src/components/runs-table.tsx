@@ -3,6 +3,7 @@
 import Link from "next/link";
 
 import { StatusBadge } from "@/components/status-badge";
+import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { RunSummary } from "@/lib/api/schema";
 import { ago, ms, num, pct, seconds } from "@/lib/format";
@@ -51,7 +52,18 @@ export function RunsTable({
                 </Link>
                 <div className="text-muted-foreground font-mono text-[11px]">{r.id.slice(0, 13)}</div>
               </TableCell>
-              <TableCell className="text-muted-foreground capitalize">{r.kind}</TableCell>
+              <TableCell className="text-muted-foreground capitalize">
+                {r.kind}
+                {r.schedule_id ? (
+                  <Badge
+                    variant="outline"
+                    className="ml-2 text-[10px] normal-case"
+                    title="queued by a schedule"
+                  >
+                    scheduled
+                  </Badge>
+                ) : null}
+              </TableCell>
               <TableCell>
                 <StatusBadge status={r.status} />
               </TableCell>

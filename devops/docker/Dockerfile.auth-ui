@@ -1,0 +1,25 @@
+# The sign-in UI (ui/auth): Next.js standalone server on distroless Node.
+#   docker build -f devops/docker/Dockerfile.auth-ui -t ghcr.io/0x19/tbd-auth-ui .
+# Build-time flags (NEXT_PUBLIC_*) decide which optional flows the pages offer;
+# the runtime URLs (Kratos, Hydra admin) are environment variables.
+FROM node:24-alpine AS build
+ARG RECOVERY_ENABLED=false
+ARG VERIFICATION_ENABLED=false
+ENV NEXT_PUBLIC_RECOVERY_ENABLED=$RECOVERY_ENABLED \
+    NEXT_PUBLIC_VERIFICATION_ENABLED=$VERIFICATION_ENABLED \
+    NEXT_TELEMETRY_DISABLED=1
+RUN corepack enable && corepack prepare pnpm@12 --activate
+WORKDIR /src
+COPY ui/auth/package.json ui/auth/pnpm-lock.yaml ui/auth/pnpm-workspace.yaml ./
+RUN pnpm install --frozen-lockfile
+COPY ui/auth/ ./
+RUN pnpm build
+
+FROM gcr.io/distroless/nodejs24-debian12:nonroot
+ENV NODE_ENV=production PORT=3000 HOSTNAME=0.0.0.0
+WORKDIR /app
+COPY --from=build --chown=nonroot:nonroot /src/.next/standalone ./
+COPY --from=build --chown=nonroot:nonroot /src/.next/static ./.next/static
+COPY --from=build --chown=nonroot:nonroot /src/public ./public
+EXPOSE 3000
+CMD ["server.js"]

@@ -1,6 +1,7 @@
-# Ory's reference self-service UI: login, registration, settings, and the Hydra
-# consent screen. Serves the root of auth.<domain>; Envoy sends the Hydra and
-# Kratos API paths past it. To be replaced by our own pages (Ory Elements) later.
+# The sign-in UI (ui/auth, Next.js on Ory Elements): login, registration,
+# settings, recovery, verification, the Hydra consent step and global logout.
+# Serves the root of auth.<domain>; Envoy sends the Hydra and Kratos API paths
+# past it. Image: devops/docker/Dockerfile.auth-ui.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -20,49 +21,40 @@ spec:
       automountServiceAccountToken: false
       containers:
         - name: ui
-          image: oryd/kratos-selfservice-ui-node:v26.2.0
+          # Overlays pin the tag.
+          image: ghcr.io/0x19/tbd-auth-ui:dev
+          imagePullPolicy: IfNotPresent
           env:
-            - name: PORT
-              value: "3000"
             - name: KRATOS_PUBLIC_URL
               value: http://kratos-public.auth.svc:4433
             - name: KRATOS_ADMIN_URL
               value: http://kratos-admin.auth.svc:4434
-            - name: KRATOS_BROWSER_URL
+            - name: HYDRA_ADMIN_URL
+              value: http://hydra-admin.auth.svc:4445
+            - name: AUTH_PUBLIC_URL
               valueFrom:
                 configMapKeyRef:
                   name: auth-env
                   key: AUTH_PUBLIC_URL
-            - name: HYDRA_ADMIN_URL
-              value: http://hydra-admin.auth.svc:4445
-            - name: COOKIE_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: auth-secrets
-                  key: ui-cookie
-            - name: CSRF_COOKIE_NAME
-              value: tbd_auth_csrf
-            - name: CSRF_COOKIE_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: auth-secrets
-                  key: ui-csrf
-            # First-party clients (skip_consent) are accepted without a consent screen.
+            # First-party clients: consent is granted without a screen.
             - name: TRUSTED_CLIENT_IDS
               value: tbd-ui,tbd-app
-            - name: DANGEROUSLY_DISABLE_SECURE_CSRF_COOKIES
-              valueFrom:
-                configMapKeyRef:
-                  name: auth-env
-                  key: AUTH_INSECURE_COOKIES
           ports:
             - name: http
               containerPort: 3000
           readinessProbe:
             httpGet:
-              path: /health/alive
+              path: /api/health
               port: http
             periodSeconds: 5
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
           resources:
             requests:
               cpu: 50m
@@ -70,6 +62,9 @@ spec:
             limits:
               cpu: "1"
               memory: 512Mi
+      volumes:
+        - name: tmp
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

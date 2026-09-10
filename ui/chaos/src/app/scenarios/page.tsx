@@ -1,6 +1,6 @@
 "use client";
 
-import { MoreHorizontal, Play, Plus, Search } from "lucide-react";
+import { ListVideo, MoreHorizontal, Play, Plus, Search } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -8,6 +8,7 @@ import { toast } from "sonner";
 
 import { useChaos } from "@/app/providers";
 import { PageTitle } from "@/components/kit";
+import { QueuePanel } from "@/components/queue-panel";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -67,6 +68,20 @@ export default function ScenariosPage() {
     }
   };
 
+  const ready = (list.data ?? []).filter((s) => s.ok && !s.skip);
+  const runAll = async () => {
+    setBusy("all");
+    try {
+      const items = await api.enqueue(["all_scenarios"]);
+      toast.success(`queued ${items.length} scenario${items.length === 1 ? "" : "s"}`);
+      router.push("/runs/");
+    } catch (e) {
+      toast.error(describe(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const remove = async (s: ScenarioEntry) => {
     if (!confirm(`Delete ${s.file}?`)) return;
     try {
@@ -85,12 +100,17 @@ export default function ScenariosPage() {
         title="Scenarios"
         description="Browse, edit and run the scenario files: a stack, load, a fault timeline and assertions."
       >
+        <Button variant="outline" onClick={runAll} disabled={busy === "all" || !ready.length}>
+          <ListVideo /> Run all ({ready.length})
+        </Button>
         <Button asChild>
           <Link href="/scenarios/view/?id=new">
             <Plus /> New scenario
           </Link>
         </Button>
       </PageTitle>
+
+      <QueuePanel />
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)}>
         <TabsList>
@@ -193,6 +213,11 @@ export default function ScenariosPage() {
                             </DropdownMenuItem>
                             <DropdownMenuItem asChild>
                               <Link href={`/runs/?scenario=${encodeURIComponent(s.id)}`}>Runs</Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem asChild>
+                              <Link href={`/schedules/?new=scenario:${encodeURIComponent(s.id)}`}>
+                                Schedule…
+                              </Link>
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem variant="destructive" onClick={() => remove(s)}>

@@ -24,6 +24,7 @@ configMapGenerator:
       - config/kratos.yml
       - config/identity.schema.json
       - config/oidc.sh
+      - config/flows.sh
       - config/oidc.google.jsonnet
       - config/oidc.github.jsonnet
   - name: seed-clients

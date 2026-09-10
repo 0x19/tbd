@@ -1,6 +1,15 @@
 "use client";
 
-import { Activity, AlertTriangle, BarChart3, ListChecks, RefreshCw, Server } from "lucide-react";
+import {
+  Activity,
+  AlertTriangle,
+  BarChart3,
+  CalendarClock,
+  ListChecks,
+  ListOrdered,
+  RefreshCw,
+  Server,
+} from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
@@ -130,14 +139,14 @@ export default function OverviewPage() {
 
       <div className="grid gap-4 xl:grid-cols-5">
         <Card className="xl:col-span-3">
-          <CardHeader className="relative">
+          <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0">
             <CardTitle className="flex items-center gap-2">
               <span className="flex size-8 items-center justify-center rounded-lg border">
                 <BarChart3 className="size-4" />
               </span>
               Throughput
             </CardTitle>
-            <div className="absolute top-6 right-6">
+            <div>
               <Legend
                 items={[
                   {
@@ -157,7 +166,7 @@ export default function OverviewPage() {
           </CardContent>
         </Card>
         <Card className="xl:col-span-2">
-          <CardHeader className="relative">
+          <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <span className="flex size-8 items-center justify-center rounded-lg border">
                 <BarChart3 className="size-4" />
@@ -192,14 +201,14 @@ export default function OverviewPage() {
 
       <div className="grid gap-4 xl:grid-cols-3">
         <Card>
-          <CardHeader>
-            <CardTitle>Stack</CardTitle>
-            <CardDescription>{overview.config.paths.topology} in this process.</CardDescription>
-            <div className="absolute top-6 right-6">
-              <Button variant="outline" size="sm" asChild>
-                <Link href="/stack/">Manage</Link>
-              </Button>
+          <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
+            <div className="space-y-1.5">
+              <CardTitle>Stack</CardTitle>
+              <CardDescription>{overview.config.paths.topology} in this process.</CardDescription>
             </div>
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/stack/">Manage</Link>
+            </Button>
           </CardHeader>
           <CardContent>
             {overview.stack ? (
@@ -228,7 +237,7 @@ export default function OverviewPage() {
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="relative">
+          <CardHeader>
             <CardTitle>Recent activity</CardTitle>
             <CardDescription>Live feed of this session.</CardDescription>
           </CardHeader>
@@ -245,6 +254,29 @@ export default function OverviewPage() {
                           <div className="text-muted-foreground text-xs">
                             {a.event.instances.filter((i) => i.running).length}/{a.event.instances.length}{" "}
                             running
+                          </div>
+                        </div>
+                      </>
+                    ) : a.event.type === "queue_changed" ? (
+                      <>
+                        <ListOrdered className="text-muted-foreground mt-0.5 size-4" />
+                        <div className="flex-1">
+                          <Link href="/runs/" className="hover:underline">
+                            Queue changed
+                          </Link>
+                          <div className="text-muted-foreground text-xs">{a.event.queue.length} waiting</div>
+                        </div>
+                      </>
+                    ) : a.event.type === "schedules_changed" ? (
+                      <>
+                        <CalendarClock className="text-muted-foreground mt-0.5 size-4" />
+                        <div className="flex-1">
+                          <Link href="/schedules/" className="hover:underline">
+                            Schedules changed
+                          </Link>
+                          <div className="text-muted-foreground text-xs">
+                            {a.event.schedules.filter((x) => x.enabled).length}/{a.event.schedules.length}{" "}
+                            enabled
                           </div>
                         </div>
                       </>
@@ -310,14 +342,14 @@ export default function OverviewPage() {
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Recent runs</CardTitle>
-          <CardDescription>Newest first.</CardDescription>
-          <div className="absolute top-6 right-6">
-            <Button variant="outline" size="sm" asChild>
-              <Link href="/runs/">All runs</Link>
-            </Button>
+        <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
+          <div className="space-y-1.5">
+            <CardTitle>Recent runs</CardTitle>
+            <CardDescription>Newest first.</CardDescription>
           </div>
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/runs/">All runs</Link>
+          </Button>
         </CardHeader>
         <CardContent>
           <RunsTable runs={all.slice(0, 8)} />

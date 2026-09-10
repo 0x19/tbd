@@ -47,6 +47,8 @@ tower-http = { workspace = true, features = ["fs", "cors"] }
 tracing.workspace = true
 url.workspace = true
 uuid.workspace = true
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+croner = { version = "4", features = ["chrono"] }
 
 [dev-dependencies]
 serde.workspace = true

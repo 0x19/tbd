@@ -37,10 +37,14 @@ or `500`. Every body is JSON; `PUT`/`POST` bodies reject unknown fields.
                "running": true, "depends_on": [], "behavior": {"type": "healthy"},
                "requests": {"total": 12, "failed": 0} } ],
   "active_run": null,
+  "queue": [ "…QueuedRun, front first" ],
   "recent_runs": [ "…RunSummary, newest first, at most 10" ],
   "last_validate": "…RunSummary or null",
   "scenarios": 4,
-  "runs": 17
+  "runs": 17,
+  "schedules": 2,
+  "schedules_enabled": 1,
+  "next_schedule": "…Schedule with the earliest next_at, or null"
 }
 ```
 
@@ -56,6 +60,8 @@ UI links to, derived from `[links] domain` behind the public edge. `stack` is
 | `run_started` | `{"type", "run": RunSummary}` | a scenario, load or validate run begins |
 | `run_finished` | `{"type", "run": RunSummary}` | it ends |
 | `stack_changed` | `{"type", "instances": [InstanceInfo]}` | after every stack call below |
+| `queue_changed` | `{"type", "queue": [QueuedRun]}` | something was queued, started or removed |
+| `schedules_changed` | `{"type", "schedules": [Schedule]}` | a schedule was created, changed, deleted, fired or skipped |
 
 ## Stack
 
@@ -130,6 +136,59 @@ browser login, or with a bearer token on the request.
 Scenario runs start their own stack on free ports, exactly like `chaos run`; the serve
 stack is untouched.
 
+## Queue
+
+The queue is what waits for the single run slot: "run all scenarios", a list pushed by
+a script, and whatever a schedule fires. Items start in order, each when the previous
+run ends; a `POST /runs` made by hand takes the slot when it is free and the queue
+waits behind it. The queue is in memory: it does not survive a restart.
+
+| Method and path | Body | Returns |
+|---|---|---|
+| `GET /queue` | | `[QueuedRun]`, front first |
+| `POST /queue` | `{"jobs": [Job]}` | `202` + `[QueuedRun]`, one per job after expansion; the first starts at once when the slot is free |
+| `DELETE /queue/{id}` | | `204`; `404` if it is not waiting (it may have started) |
+| `DELETE /queue` | | `204`, drops everything waiting; the active run keeps going |
+
+A `Job` is one of:
+
+| JSON | Runs |
+|---|---|
+| `{"scenario": "<id>"}` | that scenario; `404` before anything is queued when it does not exist |
+| `"all_scenarios"` | every scenario that checks and is not skipped, in id order, expanded into one item each; `422` when there is none |
+| `{"load": {…}}` | an ad-hoc load run, the same body as `POST /runs`; checked before queuing |
+| `{"validate": {…}}` | a validate run, the same body as `POST /validate`; validate does not take the slot, so it runs alongside whatever is active |
+
+`QueuedRun`: `id`, `job`, `kind`, `name`, `scenario_id`, `schedule_id` (set when a
+schedule queued it), `queued_at`. A queued job that cannot start when its turn comes
+(its scenario was deleted meanwhile) is recorded as an `error` run so the failure is
+visible, and the next item is tried.
+
+## Schedules
+
+A schedule queues its job on a cron expression, UTC. Five fields (`*/15 * * * *`), six
+with leading seconds, or a nickname (`@hourly`, `@daily`). Serve checks once a second.
+A schedule that falls due while its previous job is still queued or running is skipped
+and counted, never stacked: a cron faster than the run it starts does not pile up.
+Schedules are kept in `[paths] schedules` (one JSON file) and survive a restart;
+`next_at` is recomputed from the start time, so fires missed while serve was down are
+dropped, not replayed.
+
+| Method and path | Body | Returns |
+|---|---|---|
+| `GET /schedules` | | `[Schedule]`, by id |
+| `POST /schedules` | `ScheduleSpec` | `201` + `Schedule`; `422` for a cron that does not parse, an empty name, or a load job that does not check |
+| `GET /schedules/{id}` | | `Schedule` |
+| `PUT /schedules/{id}` | `ScheduleSpec` | `Schedule`; name, cron, job and enabled are replaced, counters stay |
+| `DELETE /schedules/{id}` | | `204` |
+| `POST /schedules/{id}/run` | | `202` + `[QueuedRun]`: queue its job now, whatever the cron says, enabled or not |
+
+`ScheduleSpec`: `{"name", "cron", "job": Job, "enabled": true}` (`enabled` defaults to
+`true`). `Schedule` adds `id`, `created_at`, `updated_at`, `next_at` (`null` when
+disabled), `last_fired_at`, `last_skipped_at`, `fired`, `skipped`. Runs started by a
+schedule carry its id in `schedule_id`, so `GET /runs` filtered on it is the
+schedule's history.
+
 ### `GET /runs/{id}/events`
 
 | `type` | `data` | |
@@ -151,6 +210,7 @@ finished run answers with its `finished` frame only.
   "kind": "scenario",
   "name": "error_injection",
   "scenario_id": "error_injection",
+  "schedule_id": null,
   "status": "passed",
   "started_at": "2026-09-10T14:15:43.869Z",
   "finished_at": "2026-09-10T14:15:47.532Z",
@@ -170,6 +230,7 @@ finished run answers with its `finished` frame only.
 | `id` | UUID v7, so ids sort by time |
 | `kind` | `scenario`, `load`, `validate` |
 | `status` | `running`, `passed`, `failed`, `error` (setup or a timeline action failed), `cancelled`, `completed` (load runs: nothing to pass or fail) |
+| `schedule_id` | the schedule that queued it, or `null` for runs started by hand or by `POST /queue` |
 | `scenario` | the [`chaos run --json`](commands.md#chaos-run) object, for scenario runs |
 | `load` | the final `LoadSnapshot`, for load runs |
 | `validate` | the [`chaos validate --json`](commands.md#chaos-validate) report |
@@ -177,7 +238,7 @@ finished run answers with its `finished` frame only.
 | `events` | timeline actions as applied |
 | `request` | what started it: the load request, or validate's targets |
 
-`RunSummary` is the list view: `id`, `kind`, `name`, `scenario_id`, `status`,
+`RunSummary` is the list view: `id`, `kind`, `name`, `scenario_id`, `schedule_id`, `status`,
 `started_at`, `finished_at`, `duration_s`, `requests_total`, `error_rate`,
 `throughput_rps`, `p50_ms`, `p90_ms`, `p99_ms`, `passed` (`[passed, total]` assertions or
 checks), `error`.

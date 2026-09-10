@@ -31,7 +31,7 @@ spec:
           image: busybox:1.37
           command: ["sh", "-c"]
           args:
-            - sed "s|__AUTH_PUBLIC_URL__|$AUTH_PUBLIC_URL|g; s|__BASE_DOMAIN__|$BASE_DOMAIN|g" /template/kratos.yml > /config/kratos.yml && cp /template/identity.schema.json /template/oidc.*.jsonnet /config/ && sh /template/oidc.sh
+            - sed "s|__AUTH_PUBLIC_URL__|$AUTH_PUBLIC_URL|g; s|__BASE_DOMAIN__|$BASE_DOMAIN|g" /template/kratos.yml > /config/kratos.yml && cp /template/identity.schema.json /template/oidc.*.jsonnet /config/ && sh /template/oidc.sh && sed "s|__BASE_DOMAIN__|$BASE_DOMAIN|g" /template/flows.sh > /config/flows.sh && sh /config/flows.sh
           envFrom:
             - configMapRef:
                 name: auth-env
@@ -45,6 +45,11 @@ spec:
               valueFrom: { secretKeyRef: { name: auth-secrets, key: oidc-github-id, optional: true } }
             - name: GITHUB_CLIENT_SECRET
               valueFrom: { secretKeyRef: { name: auth-secrets, key: oidc-github-secret, optional: true } }
+            # E-mail: present only after `mise run auth:smtp <smtp-uri> [from-address]`.
+            - name: COURIER_SMTP_CONNECTION_URI
+              valueFrom: { secretKeyRef: { name: auth-secrets, key: smtp-uri, optional: true } }
+            - name: COURIER_SMTP_FROM_ADDRESS
+              valueFrom: { secretKeyRef: { name: auth-secrets, key: smtp-from, optional: true } }
           volumeMounts:
             - name: template
               mountPath: /template
@@ -52,7 +57,7 @@ spec:
               mountPath: /config
         - name: migrate
           image: oryd/kratos:v26.2.0
-          args: ["migrate", "sql", "-e", "--yes", "-c", "/etc/config/kratos/kratos.yml", "-c", "/etc/config/kratos/oidc.yml"]
+          args: ["migrate", "sql", "-e", "--yes", "-c", "/etc/config/kratos/kratos.yml", "-c", "/etc/config/kratos/oidc.yml", "-c", "/etc/config/kratos/flows.yml"]
           env:
             - name: DSN
               valueFrom:
@@ -65,7 +70,7 @@ spec:
       containers:
         - name: kratos
           image: oryd/kratos:v26.2.0
-          args: ["serve", "all", "-c", "/etc/config/kratos/kratos.yml", "-c", "/etc/config/kratos/oidc.yml"]
+          args: ["serve", "all", "-c", "/etc/config/kratos/kratos.yml", "-c", "/etc/config/kratos/oidc.yml", "-c", "/etc/config/kratos/flows.yml"]
           env:
             - name: DSN
               valueFrom:

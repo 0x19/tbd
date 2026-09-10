@@ -48,5 +48,5 @@ its own README and its own numbering.
 | Plane | Directory | Covers |
 |-------|-----------|--------|
 | **Identity** | [`id/`](id/) | Portable verified identity: accounts, personas, uniqueness, vendor orchestration, data sharing |
-| **Engine** | _not yet_ | User representation and system behaviour policy |
+| **Humans** (the Engine plane) | [`humans/`](humans/) | What is known about one human: the facts ledger, sources, storage, consent, the JSON surface. Proposed, not built. |
 | **API** | _not yet_ | The single public contract |

@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 import { useChaos } from "@/app/providers";
 import { FilterRail, PageTitle } from "@/components/kit";
+import { QueuePanel } from "@/components/queue-panel";
 import { RunsTable } from "@/components/runs-table";
 import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
@@ -106,6 +107,7 @@ function Runs({ initial }: { initial: Record<string, string[]> }) {
           onReset={() => setSelected({})}
         />
         <div className="grid content-start gap-3">
+          <QueuePanel />
           <div className="flex flex-wrap items-center gap-2">
             <InputGroup className="max-w-sm">
               <InputGroupAddon>

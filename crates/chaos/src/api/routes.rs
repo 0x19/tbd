@@ -20,6 +20,7 @@ use tokio_stream::wrappers::BroadcastStream;
 
 use super::{
     error::ApiError,
+    jobs::{Job, QueuedRun, Schedule, ScheduleSpec},
     runs::{RunFeed, RunKind, RunRecord, RunSummary},
     state::{AppState, LoadRequest, ScenarioEntry, ValidateRequest},
 };
@@ -49,6 +50,16 @@ pub fn router() -> Router<Shared> {
         .route("/runs/{id}/events", get(run_events))
         .route("/runs/{id}/cancel", post(run_cancel))
         .route("/validate", post(validate))
+        .route("/queue", get(queue).post(queue_push).delete(queue_clear))
+        .route("/queue/{id}", axum::routing::delete(queue_remove))
+        .route("/schedules", get(schedules).post(schedule_create))
+        .route(
+            "/schedules/{id}",
+            get(schedule_get)
+                .put(schedule_update)
+                .delete(schedule_delete),
+        )
+        .route("/schedules/{id}/run", post(schedule_run))
 }
 
 async fn healthz() -> Json<serde_json::Value> {
@@ -64,13 +75,18 @@ struct Overview {
     config: crate::config::ChaosConfig,
     stack: Option<Vec<InstanceInfo>>,
     active_run: Option<RunSummary>,
+    queue: Vec<QueuedRun>,
     recent_runs: Vec<RunSummary>,
     last_validate: Option<RunSummary>,
     scenarios: usize,
     runs: usize,
+    schedules: usize,
+    schedules_enabled: usize,
+    next_schedule: Option<Schedule>,
 }
 
 async fn overview(State(state): State<Shared>) -> Json<Overview> {
+    let schedules = state.schedules.list().await;
     let active = match state.runs.current().await {
         Some(a) => state.runs.get(&a.id).await.map(|r| r.summary()),
         None => None,
@@ -87,6 +103,7 @@ async fn overview(State(state): State<Shared>) -> Json<Overview> {
         config: state.config.clone(),
         stack: state.stack_info().await.ok(),
         active_run: active,
+        queue: state.queue.list().await,
         recent_runs: state.runs.list(10).await,
         last_validate: state
             .runs
@@ -95,6 +112,13 @@ async fn overview(State(state): State<Shared>) -> Json<Overview> {
             .map(|r| r.summary()),
         scenarios: state.list_scenarios().len(),
         runs: state.runs.count().await,
+        schedules: schedules.len(),
+        schedules_enabled: schedules.iter().filter(|s| s.enabled).count(),
+        next_schedule: schedules
+            .iter()
+            .filter(|s| s.next_at.is_some())
+            .min_by(|a, b| a.next_at.cmp(&b.next_at))
+            .cloned(),
     })
 }
 
@@ -260,8 +284,8 @@ async fn run_start(
     Json(body): Json<RunRequest>,
 ) -> Result<(StatusCode, Json<RunSummary>)> {
     let summary = match body {
-        RunRequest::Scenario { scenario } => state.spawn_scenario(&scenario).await?,
-        RunRequest::Load(req) => state.spawn_load(req).await?,
+        RunRequest::Scenario { scenario } => state.spawn_scenario(&scenario, None).await?,
+        RunRequest::Load(req) => state.spawn_load(req, None).await?,
     };
     Ok((StatusCode::ACCEPTED, Json(summary)))
 }
@@ -348,7 +372,98 @@ async fn validate(
     body: Option<Json<ValidateRequest>>,
 ) -> Result<Json<RunRecord>> {
     let req = body.map(|Json(b)| b).unwrap_or_default();
-    Ok(Json(state.run_validate(req).await?))
+    Ok(Json(state.run_validate(req, None).await?))
+}
+
+// ---------------------------------------------------------------- queue --
+
+async fn queue(State(state): State<Shared>) -> Json<Vec<QueuedRun>> {
+    Json(state.queue.list().await)
+}
+
+/// Body of `POST /queue`.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct QueueRequest {
+    jobs: Vec<Job>,
+}
+
+async fn queue_push(
+    State(state): State<Shared>,
+    Json(body): Json<QueueRequest>,
+) -> Result<(StatusCode, Json<Vec<QueuedRun>>)> {
+    let items = state.enqueue(body.jobs, None).await?;
+    Ok((StatusCode::ACCEPTED, Json(items)))
+}
+
+async fn queue_clear(State(state): State<Shared>) -> StatusCode {
+    state.clear_queue().await;
+    StatusCode::NO_CONTENT
+}
+
+async fn queue_remove(State(state): State<Shared>, Path(id): Path<String>) -> Result<StatusCode> {
+    state.dequeue(&id).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// ------------------------------------------------------------ schedules --
+
+async fn schedules(State(state): State<Shared>) -> Json<Vec<Schedule>> {
+    Json(state.schedules.list().await)
+}
+
+async fn schedule_create(
+    State(state): State<Shared>,
+    Json(spec): Json<ScheduleSpec>,
+) -> Result<(StatusCode, Json<Schedule>)> {
+    let schedule = state.schedules.create(spec).await?;
+    state.publish_schedules().await;
+    Ok((StatusCode::CREATED, Json(schedule)))
+}
+
+async fn schedule_get(
+    State(state): State<Shared>,
+    Path(id): Path<String>,
+) -> Result<Json<Schedule>> {
+    state
+        .schedules
+        .get(&id)
+        .await
+        .map(Json)
+        .ok_or_else(|| ApiError::not_found(format!("no schedule {id}")))
+}
+
+async fn schedule_update(
+    State(state): State<Shared>,
+    Path(id): Path<String>,
+    Json(spec): Json<ScheduleSpec>,
+) -> Result<Json<Schedule>> {
+    let schedule = state.schedules.update(&id, spec).await?;
+    state.publish_schedules().await;
+    Ok(Json(schedule))
+}
+
+async fn schedule_delete(
+    State(state): State<Shared>,
+    Path(id): Path<String>,
+) -> Result<StatusCode> {
+    state.schedules.delete(&id).await?;
+    state.publish_schedules().await;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// `POST /schedules/{id}/run`: queue the schedule's job now, whatever its cron says.
+async fn schedule_run(
+    State(state): State<Shared>,
+    Path(id): Path<String>,
+) -> Result<(StatusCode, Json<Vec<QueuedRun>>)> {
+    let schedule = state
+        .schedules
+        .get(&id)
+        .await
+        .ok_or_else(|| ApiError::not_found(format!("no schedule {id}")))?;
+    let items = state.enqueue(vec![schedule.job], Some(&id)).await?;
+    Ok((StatusCode::ACCEPTED, Json(items)))
 }
 
 // ------------------------------------------------------------------ sse --

@@ -74,6 +74,7 @@ services:
       CHAOS_PROTOCOL_URL: http://envoy:8080
       CHAOS_ENGINE_URL: http://envoy:50051
       CHAOS_RESULTS_DIR: /data/results
+      CHAOS_SCHEDULES_FILE: /data/schedules.json
       CHAOS_SCENARIOS_DIR: /data/scenarios
       CHAOS_SCENARIOS_SEED: /app/scenarios
       CHAOS_UI_DIR: /app/ui
@@ -169,9 +170,10 @@ services:
         sed "s|__AUTH_PUBLIC_URL__|$$AUTH_PUBLIC_URL|g; s|__BASE_DOMAIN__|$$BASE_DOMAIN|g; s|hydra-admin.auth.svc|hydra|g; s|kratos-admin.auth.svc|kratos|g" /template/kratos.yml > /tmp/kratos.yml
         cp /template/identity.schema.json /template/oidc.*.jsonnet /tmp/
         sed "s|/config/oidc.yml|/tmp/oidc.yml|" /template/oidc.sh | sh
+        sed "s|/config/flows.yml|/tmp/flows.yml|; s|__BASE_DOMAIN__|$$BASE_DOMAIN|g" /template/flows.sh | sh
         sed -i "s|/etc/config/kratos/|/tmp/|g" /tmp/kratos.yml /tmp/oidc.yml
-        kratos migrate sql -e --yes -c /tmp/kratos.yml -c /tmp/oidc.yml
-        exec kratos serve all -c /tmp/kratos.yml -c /tmp/oidc.yml --dev
+        kratos migrate sql -e --yes -c /tmp/kratos.yml -c /tmp/oidc.yml -c /tmp/flows.yml
+        exec kratos serve all -c /tmp/kratos.yml -c /tmp/oidc.yml -c /tmp/flows.yml --dev
     environment:
       AUTH_PUBLIC_URL: ${AUTH_PUBLIC_URL:-http://auth.localhost:8080}
       BASE_DOMAIN: ${BASE_DOMAIN:-localhost}
@@ -182,6 +184,8 @@ services:
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      COURIER_SMTP_CONNECTION_URI: ${SMTP_URI:-}
+      COURIER_SMTP_FROM_ADDRESS: ${SMTP_FROM:-}
     volumes:
       - ./devops/k8s/auth/config:/template:ro
     depends_on:
@@ -190,18 +194,16 @@ services:
     restart: unless-stopped
 
   auth-ui:
-    image: oryd/kratos-selfservice-ui-node:v26.2.0
+    image: ${IMAGE_REGISTRY:-ghcr.io/0x19}/tbd-auth-ui:${IMAGE_TAG:-dev}
+    build:
+      context: .
+      dockerfile: devops/docker/Dockerfile.auth-ui
     environment:
-      PORT: "3000"
       KRATOS_PUBLIC_URL: http://kratos:4433
       KRATOS_ADMIN_URL: http://kratos:4434
-      KRATOS_BROWSER_URL: ${AUTH_PUBLIC_URL:-http://auth.localhost:8080}
       HYDRA_ADMIN_URL: http://hydra:4445
-      COOKIE_SECRET: ${UI_COOKIE_SECRET:-local-ui-cookie-secret-change-me}
-      CSRF_COOKIE_NAME: tbd_auth_csrf
-      CSRF_COOKIE_SECRET: ${UI_CSRF_SECRET:-local-ui-csrf-secret-change-me}
+      AUTH_PUBLIC_URL: ${AUTH_PUBLIC_URL:-http://auth.localhost:8080}
       TRUSTED_CLIENT_IDS: tbd-ui,tbd-app
-      DANGEROUSLY_DISABLE_SECURE_CSRF_COOKIES: "true"
     depends_on:
       - kratos
       - hydra

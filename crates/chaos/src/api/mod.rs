@@ -10,6 +10,7 @@
 //! at `[serve] ui_path`.
 
 mod error;
+mod jobs;
 mod routes;
 mod runs;
 mod state;
@@ -22,14 +23,31 @@ use tokio::net::TcpListener;
 use tower_http::cors::CorsLayer;
 
 pub use error::ApiError;
+pub use jobs::{Job, QueuedRun, Schedule, ScheduleSpec};
 pub use runs::{RunFeed, RunKind, RunRecord, RunStatus, RunStore, RunSummary};
 pub use state::AppState;
 
 use crate::config::{ChaosConfig, Source};
 
-/// Build the state: load run records and, when configured, start the stack.
+/// Build the state: load run records and schedules, start the stack when
+/// configured, and start the scheduler that fires due schedules once a second
+/// until shutdown.
 pub async fn state(config: ChaosConfig, source: Source) -> anyhow::Result<Arc<AppState>> {
-    AppState::new(config, source).await
+    let state = AppState::new(config, source).await?;
+    tokio::spawn(scheduler(Arc::clone(&state)));
+    Ok(state)
+}
+
+async fn scheduler(state: Arc<AppState>) {
+    let stop = state.stopped();
+    let mut tick = tokio::time::interval(std::time::Duration::from_secs(1));
+    tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    loop {
+        tokio::select! {
+            () = stop.cancelled() => return,
+            _ = tick.tick() => state.tick_schedules(chrono::Utc::now()).await,
+        }
+    }
 }
 
 /// The full router: API under `base_path`, UI under `ui_path` when set.

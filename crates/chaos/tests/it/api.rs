@@ -88,6 +88,7 @@ min_requests = 50
     config.paths.topology = dir.join("topology.toml");
     config.paths.scenarios = dir.join("scenarios");
     config.paths.results = dir.join("results");
+    config.paths.schedules = dir.join("schedules.json");
     if with_ui {
         config.serve.ui_dir = dir.join("ui").to_string_lossy().into_owned();
         config.serve.ui_path = String::new();
@@ -142,6 +143,23 @@ impl Server {
 
     async fn post(&self, path: &str, body: Value) -> (u16, Value) {
         self.send(reqwest::Method::POST, path, Some(body)).await
+    }
+
+    /// Poll `GET /runs` until `pred` holds for the list, within 20 s.
+    async fn wait_runs(&self, what: &str, pred: impl Fn(&[Value]) -> bool) -> Vec<Value> {
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
+        loop {
+            let (_, runs) = self.get("/runs?limit=100").await;
+            let runs = runs.as_array().cloned().unwrap_or_default();
+            if pred(&runs) {
+                return runs;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "timed out waiting for {what}"
+            );
+            tokio::time::sleep(Duration::from_millis(200)).await;
+        }
     }
 
     /// Event names of a run's SSE stream until `finished`.
@@ -404,4 +422,128 @@ async fn validate_runs_against_config_targets_and_is_recorded() {
     assert_eq!(record["validate"]["failed"], 0);
     let (_, overview) = s.get("/overview").await;
     assert_eq!(overview["last_validate"]["status"], "passed");
+}
+
+#[tokio::test]
+async fn queue_expands_all_scenarios_and_runs_them_one_after_another() {
+    let s = boot().await;
+    // An unknown scenario is rejected before anything is queued.
+    let (status, _) = s
+        .post("/queue", json!({"jobs": [{"scenario": "nope"}]}))
+        .await;
+    assert_eq!(status, 404);
+    let (status, _) = s.post("/queue", json!({"jobs": []})).await;
+    assert_eq!(status, 422);
+
+    let (status, items) = s
+        .post(
+            "/queue",
+            json!({"jobs": ["all_scenarios", {"scenario": "quick"}]}),
+        )
+        .await;
+    assert_eq!(status, 202, "{items}");
+    assert_eq!(items.as_array().unwrap().len(), 2, "{items}");
+    assert_eq!(items[0]["scenario_id"], "quick");
+
+    // The first started at once and holds the slot; the second waits.
+    let (_, overview) = s.get("/overview").await;
+    assert_eq!(overview["active_run"]["scenario_id"], "quick", "{overview}");
+    assert_eq!(overview["queue"].as_array().unwrap().len(), 1);
+    let (status, _) = s.post("/runs", json!({"scenario": "quick"})).await;
+    assert_eq!(status, 409);
+
+    let runs = s
+        .wait_runs("two finished runs", |runs| {
+            runs.iter().filter(|r| r["status"] == "passed").count() == 2
+        })
+        .await;
+    assert!(runs.iter().all(|r| r["schedule_id"].is_null()));
+    let (_, queue) = s.get("/queue").await;
+    assert!(queue.as_array().unwrap().is_empty());
+
+    // Queued items can be removed one by one or all at once.
+    let (_, items) = s
+        .post(
+            "/queue",
+            json!({"jobs": [{"scenario": "quick"}, {"scenario": "quick"}, {"scenario": "quick"}]}),
+        )
+        .await;
+    let waiting = items[1]["id"].as_str().unwrap();
+    let (status, _) = s
+        .send(reqwest::Method::DELETE, &format!("/queue/{waiting}"), None)
+        .await;
+    assert_eq!(status, 204);
+    let (status, _) = s
+        .send(reqwest::Method::DELETE, &format!("/queue/{waiting}"), None)
+        .await;
+    assert_eq!(status, 404);
+    let (status, _) = s.send(reqwest::Method::DELETE, "/queue", None).await;
+    assert_eq!(status, 204);
+    let (_, queue) = s.get("/queue").await;
+    assert!(queue.as_array().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn schedules_persist_fire_on_their_own_and_run_on_demand() {
+    let s = boot().await;
+    let (status, body) = s
+        .post(
+            "/schedules",
+            json!({"name": "bad", "cron": "every day", "job": "all_scenarios"}),
+        )
+        .await;
+    assert_eq!(status, 422, "{body}");
+
+    let (status, sched) = s
+        .post(
+            "/schedules",
+            json!({"name": "each second", "cron": "* * * * * *", "job": {"scenario": "quick"}}),
+        )
+        .await;
+    assert_eq!(status, 201, "{sched}");
+    let id = sched["id"].as_str().unwrap().to_owned();
+    assert!(sched["next_at"].is_string(), "{sched}");
+    assert!(
+        std::fs::read_to_string(s.state.config.paths.schedules.clone())
+            .unwrap()
+            .contains("each second")
+    );
+
+    // The scheduler fires it within a couple of seconds; the run carries the id.
+    s.wait_runs("a scheduled run", |runs| {
+        runs.iter().any(|r| r["schedule_id"] == id.as_str())
+    })
+    .await;
+    let (_, got) = s.get(&format!("/schedules/{id}")).await;
+    assert!(got["fired"].as_u64().unwrap() >= 1, "{got}");
+    assert!(got["last_fired_at"].is_string());
+
+    // Off: kept, no next fire time.
+    let (status, off) = s
+        .send(
+            reqwest::Method::PUT,
+            &format!("/schedules/{id}"),
+            Some(json!({"name": "each second", "cron": "* * * * * *", "job": {"scenario": "quick"}, "enabled": false})),
+        )
+        .await;
+    assert_eq!(status, 200, "{off}");
+    assert!(off["next_at"].is_null());
+    assert!(!off["enabled"].as_bool().unwrap());
+
+    // Run now still works while disabled.
+    let (status, items) = s.post(&format!("/schedules/{id}/run"), json!({})).await;
+    assert_eq!(status, 202, "{items}");
+    assert_eq!(items[0]["schedule_id"], id.as_str());
+    let (_, overview) = s.get("/overview").await;
+    assert_eq!(overview["schedules"], 1);
+    assert_eq!(overview["schedules_enabled"], 0);
+
+    let (status, _) = s
+        .send(reqwest::Method::DELETE, &format!("/schedules/{id}"), None)
+        .await;
+    assert_eq!(status, 204);
+    let (status, _) = s.get(&format!("/schedules/{id}")).await;
+    assert_eq!(status, 404);
+    let (_, list) = s.get("/schedules").await;
+    assert!(list.as_array().unwrap().is_empty());
 }

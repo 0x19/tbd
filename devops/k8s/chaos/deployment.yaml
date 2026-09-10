@@ -56,6 +56,8 @@ spec:
               value: http://envoy:50051
             - name: CHAOS_RESULTS_DIR
               value: /data/results
+            - name: CHAOS_SCHEDULES_FILE
+              value: /data/schedules.json
             # The image's scenarios/ is read-only; the UI edits a seeded copy.
             - name: CHAOS_SCENARIOS_DIR
               value: /data/scenarios

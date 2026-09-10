@@ -184,6 +184,7 @@ static_resources:
                               value_prefix: "Bearer "
                           forward: true
                           forward_payload_header: x-jwt-payload
+                          payload_in_metadata: jwt
                           claim_to_headers:
                             - { header_name: x-user-sub, claim_name: sub }
                           remote_jwks: &hydra_jwks
@@ -198,19 +199,25 @@ static_resources:
                         ui-cookie:
                           audiences: [tbd-ui]
                           from_cookies: [tbd_id]
+                          payload_in_metadata: jwt
                           claim_to_headers:
                             - { header_name: x-user-sub, claim_name: sub }
                             - { header_name: x-user-email, claim_name: email }
                             - { header_name: x-user-name, claim_name: name }
+                            - { header_name: x-user-role, claim_name: role }
+                            - { header_name: x-user-grafana-role, claim_name: grafana_role }
                           remote_jwks: *hydra_jwks
                         ui-bearer:
                           audiences: [tbd-ui, tbd-api]
                           from_headers:
                             - name: authorization
                               value_prefix: "Bearer "
+                          payload_in_metadata: jwt
                           claim_to_headers:
                             - { header_name: x-user-sub, claim_name: sub }
                             - { header_name: x-user-email, claim_name: email }
+                            - { header_name: x-user-role, claim_name: role }
+                            - { header_name: x-user-grafana-role, claim_name: grafana_role }
                           remote_jwks: *hydra_jwks
                       requirement_map:
                         api:
@@ -220,6 +227,17 @@ static_resources:
                             requirements:
                               - provider_name: ui-cookie
                               - provider_name: ui-bearer
+                  # Authorization on the verified claims. Disabled by default; routes
+                  # that need a scope or a role carry their own policy below.
+                  - name: envoy.filters.http.rbac
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.rbac.v3.RBAC
+                  # Rate limits, per route: token buckets keyed by the caller
+                  # (subject for the API, client address for sign-in endpoints).
+                  - name: envoy.filters.http.local_ratelimit
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.local_ratelimit.v3.LocalRateLimit
+                      stat_prefix: edge_ratelimit
                   - name: envoy.filters.http.router
                     typed_config:
                       "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
@@ -237,6 +255,29 @@ static_resources:
                           "@type": type.googleapis.com/envoy.config.route.v3.FilterConfig
                           disabled: true
                       routes:
+                        # Credential endpoints: 20 attempts per 10 s per client address
+                        # (each address gets its own bucket; the fill is the burst).
+                        - match: { prefix: "/self-service/login" }
+                          typed_per_filter_config: &signin_ratelimit
+                            envoy.filters.http.local_ratelimit:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.local_ratelimit.v3.LocalRateLimit
+                              stat_prefix: signin_ratelimit
+                              token_bucket: { max_tokens: 20, tokens_per_fill: 20, fill_interval: 10s }
+                              filter_enabled: { default_value: { numerator: 100 }, runtime_key: signin_ratelimit_enabled }
+                              filter_enforced: { default_value: { numerator: 100 }, runtime_key: signin_ratelimit_enforced }
+                              status: { code: TooManyRequests }
+                              rate_limited_as_resource_exhausted: true
+                              local_rate_limit_per_downstream_connection: false
+                          route: { cluster: kratos, timeout: 15s }
+                        - match: { prefix: "/self-service/registration" }
+                          typed_per_filter_config: *signin_ratelimit
+                          route: { cluster: kratos, timeout: 15s }
+                        - match: { prefix: "/self-service/recovery" }
+                          typed_per_filter_config: *signin_ratelimit
+                          route: { cluster: kratos, timeout: 15s }
+                        - match: { prefix: "/oauth2/token" }
+                          typed_per_filter_config: *signin_ratelimit
+                          route: { cluster: hydra, timeout: 15s }
                         - match: { prefix: "/oauth2/" }
                           route: { cluster: hydra, timeout: 15s }
                         - match: { prefix: "/userinfo" }
@@ -296,6 +337,25 @@ static_resources:
                         envoy.filters.http.jwt_authn:
                           "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.PerRouteConfig
                           requirement_name: ui
+                        # The chaos tool stops instances and starts load: admins only
+                        # (role from the ID token, or a machine token with scope tbd.api).
+                        envoy.filters.http.rbac:
+                          "@type": type.googleapis.com/envoy.extensions.filters.http.rbac.v3.RBACPerRoute
+                          rbac:
+                            rules:
+                              action: ALLOW
+                              policies:
+                                admins:
+                                  permissions: [{ any: true }]
+                                  principals:
+                                    - metadata:
+                                        filter: envoy.filters.http.jwt_authn
+                                        path: [{ key: jwt }, { key: role }]
+                                        value: { string_match: { exact: admin } }
+                                    - metadata:
+                                        filter: envoy.filters.http.jwt_authn
+                                        path: [{ key: jwt }, { key: scp }]
+                                        value: { list_match: { one_of: { string_match: { exact: tbd.api } } } }
                       routes:
                         - match: { prefix: "/api/chaos/" }
                           route:
@@ -309,13 +369,35 @@ static_resources:
                     # trusts the identity headers (auth proxy) and creates the user.
                     - name: grafana
                       domains: ["grafana.*"]
-                      typed_per_filter_config: *ui_gated
+                      typed_per_filter_config: &observability_gated
+                        envoy.filters.http.jwt_authn:
+                          "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.PerRouteConfig
+                          requirement_name: ui
+                        # Any role may look at observability; the role reaches Grafana as
+                        # X-WEBAUTH-ROLE (Admin, Editor or Viewer).
+                        envoy.filters.http.rbac:
+                          "@type": type.googleapis.com/envoy.extensions.filters.http.rbac.v3.RBACPerRoute
+                          rbac:
+                            rules:
+                              action: ALLOW
+                              policies:
+                                anyone-with-a-role:
+                                  permissions: [{ any: true }]
+                                  principals:
+                                    - metadata:
+                                        filter: envoy.filters.http.jwt_authn
+                                        path: [{ key: jwt }, { key: role }]
+                                        value: { string_match: { safe_regex: { regex: "^(admin|editor|viewer)$" } } }
+                                    - metadata:
+                                        filter: envoy.filters.http.jwt_authn
+                                        path: [{ key: jwt }, { key: scp }]
+                                        value: { list_match: { one_of: { string_match: { exact: tbd.api } } } }
                       request_headers_to_add:
                         - header: { key: X-WEBAUTH-USER, value: "%REQ(x-user-email)%" }
                           append_action: OVERWRITE_IF_EXISTS_OR_ADD
                         - header: { key: X-WEBAUTH-NAME, value: "%REQ(x-user-name)%" }
                           append_action: OVERWRITE_IF_EXISTS_OR_ADD
-                        - header: { key: X-WEBAUTH-ROLE, value: "Editor" }
+                        - header: { key: X-WEBAUTH-ROLE, value: "%REQ(x-user-grafana-role)%" }
                           append_action: OVERWRITE_IF_EXISTS_OR_ADD
                       routes:
                         - match: { prefix: "/" }
@@ -326,7 +408,7 @@ static_resources:
                               - upgrade_type: websocket
                     - name: logs
                       domains: ["logs.*"]
-                      typed_per_filter_config: *ui_gated
+                      typed_per_filter_config: *observability_gated
                       routes:
                         - match: { path: "/" }
                           redirect: { path_redirect: /select/vmui/ }
@@ -336,7 +418,7 @@ static_resources:
                             timeout: 0s
                     - name: profiles
                       domains: ["profiles.*"]
-                      typed_per_filter_config: *ui_gated
+                      typed_per_filter_config: *observability_gated
                       routes:
                         - match: { prefix: "/" }
                           route:
@@ -344,7 +426,7 @@ static_resources:
                             timeout: 0s
                     - name: metrics
                       domains: ["metrics.*"]
-                      typed_per_filter_config: *ui_gated
+                      typed_per_filter_config: *observability_gated
                       routes:
                         - match: { path: "/" }
                           redirect: { path_redirect: /vmui/ }
@@ -357,12 +439,55 @@ static_resources:
                     # probes, Envoy's own health checks and uptime monitors call.
                     - name: all
                       domains: ["*"]
-                      typed_per_filter_config: *api_gated
+                      typed_per_filter_config:
+                        envoy.filters.http.oauth2:
+                          "@type": type.googleapis.com/envoy.config.route.v3.FilterConfig
+                          disabled: true
+                        envoy.filters.http.jwt_authn:
+                          "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.PerRouteConfig
+                          requirement_name: api
+                        # Scope tbd.api is what makes a token an API token.
+                        envoy.filters.http.rbac:
+                          "@type": type.googleapis.com/envoy.extensions.filters.http.rbac.v3.RBACPerRoute
+                          rbac:
+                            rules:
+                              action: ALLOW
+                              policies:
+                                api-scope:
+                                  permissions: [{ any: true }]
+                                  principals:
+                                    - metadata:
+                                        filter: envoy.filters.http.jwt_authn
+                                        path: [{ key: jwt }, { key: scp }]
+                                        value: { list_match: { one_of: { string_match: { exact: tbd.api } } } }
+                        # 1000 requests per second per subject, bursts of 2000; load
+                        # tests run as one subject and stay under it.
+                        envoy.filters.http.local_ratelimit:
+                          "@type": type.googleapis.com/envoy.extensions.filters.http.local_ratelimit.v3.LocalRateLimit
+                          stat_prefix: api_ratelimit
+                          token_bucket: { max_tokens: 2000, tokens_per_fill: 1000, fill_interval: 1s }
+                          filter_enabled: { default_value: { numerator: 100 }, runtime_key: api_ratelimit_enabled }
+                          filter_enforced: { default_value: { numerator: 100 }, runtime_key: api_ratelimit_enforced }
+                          status: { code: TooManyRequests }
+                          rate_limited_as_resource_exhausted: true
+                          local_rate_limit_per_downstream_connection: false
+                          descriptors:
+                            - entries: [{ key: subject }]
+                              token_bucket: { max_tokens: 2000, tokens_per_fill: 1000, fill_interval: 1s }
+                      rate_limits:
+                        - actions:
+                            - request_headers: { header_name: x-user-sub, descriptor_key: subject }
                       routes:
                         - match: { path: "/healthz" }
                           typed_per_filter_config: &open
                             envoy.filters.http.jwt_authn:
                               "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.PerRouteConfig
+                              disabled: true
+                            envoy.filters.http.rbac:
+                              "@type": type.googleapis.com/envoy.config.route.v3.FilterConfig
+                              disabled: true
+                            envoy.filters.http.local_ratelimit:
+                              "@type": type.googleapis.com/envoy.config.route.v3.FilterConfig
                               disabled: true
                           route:
                             cluster: protocol

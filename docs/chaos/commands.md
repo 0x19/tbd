@@ -190,7 +190,8 @@ in-process, until Ctrl-C. The API is documented in [api.md](api.md).
 
 ```
 chaos serve [--listen ADDR] [--base-path PATH] [--ui-dir DIR] [--topology FILE]
-            [--scenarios DIR] [--results DIR] [--no-stack] [--protocol URL] [--engine URL]
+            [--scenarios DIR] [--results DIR] [--schedules FILE] [--no-stack]
+            [--protocol URL] [--engine URL]
 ```
 
 | Flag | Env | Default |
@@ -202,10 +203,12 @@ chaos serve [--listen ADDR] [--base-path PATH] [--ui-dir DIR] [--topology FILE]
 | `--scenarios` | `CHAOS_SCENARIOS_DIR` | `[paths] scenarios` |
 | `--scenarios-seed` | `CHAOS_SCENARIOS_SEED` | `[paths] scenarios_seed`, none; seeds `--scenarios` when empty |
 | `--results` | `CHAOS_RESULTS_DIR` | `[paths] results`, `.chaos/results` |
+| `--schedules` | `CHAOS_SCHEDULES_FILE` | `[paths] schedules`, `.chaos/schedules.json` |
 | `--no-stack` | | off; sets `[serve] start_stack = false` |
 | `--protocol`, `--engine` | `CHAOS_PROTOCOL_URL`, `CHAOS_ENGINE_URL` | `[targets]`, the defaults for API validate |
 
-On start it prints the API URL, the UI URL when configured, and each stack instance. It
+On start it prints the API URL, the UI URL when configured, and each stack instance,
+loads the schedules file and starts firing the enabled ones. It
 exits 1 when the stack cannot start (typically the fixed ports of `topologies/dev.toml`
 are taken) or the results directory cannot be created. `mise run chaos:serve` runs it
 with `--ui-dir ui/chaos/out`.

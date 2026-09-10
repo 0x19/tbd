@@ -178,6 +178,7 @@ run = [
   "mise run doc",
   "mise run chaos:run",
   "mise run ui:check",
+  "mise run ui:auth:check",
 ]
 
 # ----------------------------------------------------------------- run ----
@@ -272,7 +273,8 @@ mise run ui:build
 docker build -f devops/docker/Dockerfile --build-arg BIN=engine   --build-arg PORT=50051 -t $IMAGE_REGISTRY/tbd-engine:dev .
 docker build -f devops/docker/Dockerfile --build-arg BIN=protocol --build-arg PORT=8080  -t $IMAGE_REGISTRY/tbd-protocol:dev .
 docker build -f devops/docker/Dockerfile --build-arg BIN=chaos    --build-arg PORT=7700  -t $IMAGE_REGISTRY/tbd-chaos:dev .
-k3d image import -m direct -c "$K3D_CLUSTER" $IMAGE_REGISTRY/tbd-engine:dev $IMAGE_REGISTRY/tbd-protocol:dev $IMAGE_REGISTRY/tbd-chaos:dev
+docker build -f devops/docker/Dockerfile.auth-ui $(mise run -q auth:ui-build-args) -t $IMAGE_REGISTRY/tbd-auth-ui:dev .
+k3d image import -m direct -c "$K3D_CLUSTER" $IMAGE_REGISTRY/tbd-engine:dev $IMAGE_REGISTRY/tbd-protocol:dev $IMAGE_REGISTRY/tbd-chaos:dev $IMAGE_REGISTRY/tbd-auth-ui:dev
 """
 
 # The chaos UI links to grafana.<domain>, logs.<domain>, ... of the public edge.
@@ -293,6 +295,40 @@ else
 fi
 echo "auth: $(head -1 devops/k8s/auth/auth.env | cut -d= -f2)"
 """
+
+[tasks."auth:ui-build-args"]
+hide = true
+run = """
+# Recovery and verification pages exist only when an SMTP relay is configured (auth:smtp).
+if kubectl -n auth get secret auth-secrets -o jsonpath='{.data.smtp-uri}' 2>/dev/null | grep -q .; then
+  echo "--build-arg RECOVERY_ENABLED=true --build-arg VERIFICATION_ENABLED=true"
+fi
+"""
+
+[tasks."ui:auth:dev"]
+description = "Next.js dev server for the sign-in UI on :3002 (needs KRATOS_*/HYDRA_ADMIN_URL reachable; see ui/auth/README.md)"
+depends = ["ui:auth:install"]
+dir = "ui/auth"
+run = "pnpm dev --port 3002"
+
+[tasks."ui:auth:install"]
+hide = true
+dir = "ui/auth"
+run = "pnpm install --frozen-lockfile"
+
+[tasks."ui:auth:check"]
+description = "ui/auth: prettier, eslint, tsc (same bar as ui/chaos)"
+depends = ["ui:auth:install"]
+dir = "ui/auth"
+run = """
+pnpm format:check
+pnpm lint
+pnpm typecheck
+"""
+
+[tasks."ui:auth:build"]
+description = "Build the sign-in UI image (ghcr.io/0x19/tbd-auth-ui:dev)"
+run = "docker build -f devops/docker/Dockerfile.auth-ui $(mise run -q auth:ui-build-args) -t $IMAGE_REGISTRY/tbd-auth-ui:dev ."
 
 [tasks."auth:secrets"]
 description = "Create the auth-secrets Secret in the cluster once (random values; never on disk)"
@@ -343,6 +379,60 @@ kubectl -n tbd create secret generic envoy-oauth --from-literal=hmac="$hmac" --f
 kubectl -n tbd create secret generic chaos-auth --from-literal=CHAOS_AUTH_CLIENT_SECRET="$chaos" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 echo "envoy-oauth and chaos-auth secrets in tbd are current"
 """
+
+[tasks."auth:smtp"]
+description = "Configure the e-mail relay and turn recovery/verification on: mise run auth:smtp 'smtps://user:pass@host:465/' no-reply@example.com"
+usage = '''
+arg "<uri>" help="SMTP connection URI (smtps://user:pass@host:465/ or smtp://...:587/?disable_starttls=false)"
+arg "<from>" help="From address"
+'''
+run = '''
+kubectl -n auth patch secret auth-secrets --type merge -p "$(printf '{"stringData":{"smtp-uri":"%s","smtp-from":"%s"}}' "$usage_uri" "$usage_from")"
+kubectl -n auth rollout restart deployment/kratos
+kubectl -n auth rollout status deployment/kratos --timeout=180s
+kubectl -n auth logs deployment/kratos -c render-config | grep '^flows:'
+echo "Rebuild the sign-in UI so its pages offer recovery and verification: mise run ui:auth:build && k3d image import -m direct -c tbd ghcr.io/0x19/tbd-auth-ui:dev && kubectl -n auth rollout restart deployment/auth-ui"
+'''
+
+[tasks."auth:rotate"]
+description = "Rotate a secret: mise run auth:rotate client-ui | client-chaos | hmac | hydra-system (see docs/auth/README.md)"
+usage = '''
+arg "<what>" help="client-ui, client-chaos, hmac or hydra-system"
+'''
+run = '''
+what="$usage_what"
+case "$what" in
+  client-ui|client-chaos)
+    kubectl -n auth patch secret auth-secrets --type merge -p "$(printf '{"stringData":{"%s-secret":"%s"}}' "$what" "$(openssl rand -hex 24)")"
+    mise run auth:deploy            # re-seeds the client with the new secret
+    mise run auth:envoy-secrets     # hands it to Envoy / the chaos pod
+    kubectl -n tbd rollout restart deployment/envoy deployment/chaos
+    echo "$what rotated; Envoy and chaos restarted with the new secret" ;;
+  hmac)
+    kubectl -n tbd delete secret envoy-oauth --ignore-not-found >/dev/null
+    mise run auth:envoy-secrets
+    kubectl -n tbd rollout restart deployment/envoy
+    echo "cookie HMAC rotated; every browser session on the UI hosts signs in again" ;;
+  hydra-system)
+    old=$(kubectl -n auth get secret auth-secrets -o jsonpath='{.data.hydra-system}' | base64 -d)
+    kubectl -n auth patch secret auth-secrets --type merge -p "$(printf '{"stringData":{"hydra-system":"%s,%s"}}' "$(openssl rand -hex 32)" "$old")"
+    kubectl -n auth rollout restart deployment/hydra
+    kubectl -n auth rollout status deployment/hydra --timeout=180s
+    echo "hydra system secret rotated (new first, old kept for decryption); drop the old one from the list later" ;;
+  *) echo "unknown: $what (client-ui, client-chaos, hmac, hydra-system)"; exit 1 ;;
+esac
+'''
+
+[tasks."auth:role"]
+description = "Set a person's role (admin|editor|viewer): mise run auth:role someone@example.com admin"
+usage = '''
+arg "<email>" help="the identity's e-mail"
+arg "<role>" help="admin, editor or viewer"
+'''
+run = '''
+case "$usage_role" in admin|editor|viewer) ;; *) echo "role must be admin, editor or viewer"; exit 1;; esac
+kubectl -n auth run "auth-role-$(date +%s)" --rm -i --restart=Never --image=curlimages/curl:8.16.0 --quiet -- sh -s -- "$usage_email" "$usage_role" < devops/k8s/auth/role.sh
+'''
 
 [tasks."auth:deploy"]
 description = "Apply the identity stack (Postgres, Hydra, Kratos, login UI, seeded clients) and wait for it"

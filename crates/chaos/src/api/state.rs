@@ -1,5 +1,5 @@
-//! Shared state: config, the long-lived stack, run records, the global feed,
-//! and the jobs that drive runs in the background.
+//! Shared state: config, the long-lived stack, run records, the queue and
+//! schedules, the global feed, and the jobs that drive runs in the background.
 
 use std::{
     path::{Path, PathBuf},
@@ -7,11 +7,14 @@ use std::{
     time::{Duration, Instant},
 };
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{Mutex, broadcast, mpsc};
+use tokio_util::sync::CancellationToken;
 
 use super::{
     error::ApiError,
+    jobs::{Job, Queue, QueuedRun, Schedule, Schedules},
     runs::{ActiveRun, RunFeed, RunKind, RunRecord, RunStatus, RunStore, RunSummary},
 };
 use crate::{
@@ -41,6 +44,16 @@ pub enum GlobalEvent {
     StackChanged {
         /// Every launcher.
         instances: Vec<InstanceInfo>,
+    },
+    /// The queue changed: something was queued, started, or removed.
+    QueueChanged {
+        /// What is waiting now, front first.
+        queue: Vec<QueuedRun>,
+    },
+    /// A schedule was created, changed, deleted, fired or skipped.
+    SchedulesChanged {
+        /// Every schedule.
+        schedules: Vec<Schedule>,
     },
 }
 
@@ -102,13 +115,20 @@ pub struct AppState {
     pub stack: Mutex<Option<Stack>>,
     /// Run records.
     pub runs: RunStore,
+    /// Jobs waiting for the active slot.
+    pub queue: Queue,
+    /// Cron schedules.
+    pub schedules: Schedules,
     global: broadcast::Sender<GlobalEvent>,
+    stop: CancellationToken,
 }
 
 impl AppState {
     /// Open the run store, seed the scenario directory, start the stack.
     pub async fn new(config: ChaosConfig, source: Source) -> anyhow::Result<Arc<Self>> {
         let runs = RunStore::open(&config.paths.results)?;
+        let schedules = Schedules::open(&config.paths.schedules)
+            .map_err(|e| anyhow::anyhow!("open schedules: {e}"))?;
         seed_scenarios(&config.paths.scenarios, &config.paths.scenarios_seed)?;
         let stack = if config.serve.start_stack {
             let path = &config.paths.topology;
@@ -130,8 +150,16 @@ impl AppState {
             source,
             stack: Mutex::new(stack),
             runs,
+            queue: Queue::default(),
+            schedules,
             global,
+            stop: CancellationToken::new(),
         }))
+    }
+
+    /// Cancelled on shutdown; the scheduler loop watches it.
+    pub fn stopped(&self) -> CancellationToken {
+        self.stop.clone()
     }
 
     /// Subscribe to the global feed.
@@ -143,8 +171,9 @@ impl AppState {
         let _ = self.global.send(event);
     }
 
-    /// Cancel the active run and stop the stack.
+    /// Stop the scheduler, cancel the active run and stop the stack.
     pub async fn shutdown(&self) {
+        self.stop.cancel();
         if let Some(active) = self.runs.current().await {
             active.cancel.cancel();
         }
@@ -313,7 +342,11 @@ impl AppState {
     }
 
     /// Start a scenario run in the background. 409 while another run is active.
-    pub async fn spawn_scenario(self: &Arc<Self>, id: &str) -> Result<RunSummary, ApiError> {
+    pub async fn spawn_scenario(
+        self: &Arc<Self>,
+        id: &str,
+        schedule_id: Option<String>,
+    ) -> Result<RunSummary, ApiError> {
         let path = self.scenario_path(id)?;
         let text = tokio::fs::read_to_string(&path)
             .await
@@ -322,6 +355,7 @@ impl AppState {
 
         let mut record = RunRecord::start(RunKind::Scenario, &file.scenario.name);
         record.scenario_id = Some(id.to_owned());
+        record.schedule_id = schedule_id;
         let active = self.begin(&record).await?;
         let summary = record.summary();
 
@@ -351,12 +385,17 @@ impl AppState {
             record.error.clone_from(&result.error);
             record.scenario = Some(result);
             state.end(record, status, started.elapsed()).await;
+            state.pump().await;
         });
         Ok(summary)
     }
 
     /// Start an ad-hoc load run in the background.
-    pub async fn spawn_load(self: &Arc<Self>, req: LoadRequest) -> Result<RunSummary, ApiError> {
+    pub async fn spawn_load(
+        self: &Arc<Self>,
+        req: LoadRequest,
+        schedule_id: Option<String>,
+    ) -> Result<RunSummary, ApiError> {
         req.load.check().map_err(ApiError::invalid)?;
         let targets = if req.targets.is_empty() {
             self.stack_targets().await
@@ -375,6 +414,7 @@ impl AppState {
 
         let mut record = RunRecord::start(RunKind::Load, req.name.as_deref().unwrap_or("load"));
         record.request = serde_json::to_value(&req).ok();
+        record.schedule_id = schedule_id;
         let active = self.begin(&record).await?;
         let summary = record.summary();
 
@@ -403,12 +443,17 @@ impl AppState {
             };
             record.load = Some(snapshot);
             state.end(record, status, started.elapsed()).await;
+            state.pump().await;
         });
         Ok(summary)
     }
 
     /// Run validate now and record it. Independent of the active run slot.
-    pub async fn run_validate(&self, req: ValidateRequest) -> Result<RunRecord, ApiError> {
+    pub async fn run_validate(
+        &self,
+        req: ValidateRequest,
+        schedule_id: Option<String>,
+    ) -> Result<RunRecord, ApiError> {
         let targets = validate::Targets {
             protocol: req
                 .protocol
@@ -427,6 +472,7 @@ impl AppState {
         }
         let mut record = RunRecord::start(RunKind::Validate, "validate");
         record.request = Some(targets_json(&targets));
+        record.schedule_id = schedule_id;
         self.publish(GlobalEvent::RunStarted {
             run: record.summary(),
         });
@@ -444,6 +490,188 @@ impl AppState {
             run: record.summary(),
         });
         Ok(record)
+    }
+
+    // ------------------------------------------------------------ queue --
+
+    /// Queue jobs, in order, and start the first one when the slot is free.
+    /// `all_scenarios` expands to every scenario that checks and is not
+    /// skipped; each scenario id is checked to exist before anything is queued.
+    pub async fn enqueue(
+        self: &Arc<Self>,
+        jobs: Vec<Job>,
+        schedule_id: Option<&str>,
+    ) -> Result<Vec<QueuedRun>, ApiError> {
+        let mut expanded = Vec::new();
+        for job in jobs {
+            match job {
+                Job::AllScenarios => {
+                    expanded.extend(
+                        self.list_scenarios()
+                            .into_iter()
+                            .filter(|s| s.ok && !s.skip)
+                            .map(|s| Job::Scenario(s.id)),
+                    );
+                }
+                Job::Scenario(id) => {
+                    let path = self.scenario_path(&id)?;
+                    if !path.is_file() {
+                        return Err(ApiError::not_found(format!("no scenario {id:?}")));
+                    }
+                    expanded.push(Job::Scenario(id));
+                }
+                Job::Load(req) => {
+                    req.load.check().map_err(ApiError::invalid)?;
+                    expanded.push(Job::Load(req));
+                }
+                Job::Validate(req) => expanded.push(Job::Validate(req)),
+            }
+        }
+        if expanded.is_empty() {
+            return Err(ApiError::invalid(
+                "nothing to queue: give at least one job; all_scenarios needs a scenario that checks and is not skipped",
+            ));
+        }
+        let items = self.queue.push(expanded, schedule_id).await;
+        self.publish_queue().await;
+        self.pump().await;
+        Ok(items)
+    }
+
+    /// Start the next queued job when no run is active. Called after every
+    /// enqueue and after every run ends. A job that cannot start (its scenario
+    /// was deleted, its targets are gone) is recorded as an `error` run so the
+    /// failure is visible, and the next one is tried.
+    pub fn pump(self: &Arc<Self>) -> futures::future::BoxFuture<'_, ()> {
+        // Boxed: the run task calls pump, and pump starts the next run, so the
+        // future types would otherwise be recursive.
+        Box::pin(self.pump_inner())
+    }
+
+    async fn pump_inner(self: &Arc<Self>) {
+        loop {
+            if self.runs.current().await.is_some() {
+                return;
+            }
+            let Some(item) = self.queue.pop().await else {
+                return;
+            };
+            let schedule_id = item.schedule_id.clone();
+            let result = match item.job.clone() {
+                Job::Scenario(id) => self.spawn_scenario(&id, schedule_id).await.map(drop),
+                Job::Load(req) => self.spawn_load(req, schedule_id).await.map(drop),
+                Job::Validate(req) => {
+                    // Validate does not take the slot; run it alongside.
+                    let state = Arc::clone(self);
+                    tokio::spawn(async move {
+                        if let Err(error) = state.run_validate(req, schedule_id).await {
+                            tracing::warn!(error = %error.message, "queued validate failed");
+                        }
+                    });
+                    self.publish_queue().await;
+                    continue;
+                }
+                // Expanded at enqueue time; never queued as such.
+                Job::AllScenarios => Ok(()),
+            };
+            match result {
+                Ok(()) => {
+                    self.publish_queue().await;
+                    return;
+                }
+                Err(e) if e.status == axum::http::StatusCode::CONFLICT => {
+                    // Someone took the slot between the check and the start.
+                    self.queue.push_front(item).await;
+                    return;
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e.message, name = item.name, "queued run could not start");
+                    self.record_failed(&item, &e.message).await;
+                    self.publish_queue().await;
+                }
+            }
+        }
+    }
+
+    /// Drop a queued item. 404 when it is not queued.
+    pub async fn dequeue(&self, id: &str) -> Result<(), ApiError> {
+        if !self.queue.remove(id).await {
+            return Err(ApiError::not_found(format!("no queued run {id}")));
+        }
+        self.publish_queue().await;
+        Ok(())
+    }
+
+    /// Drop every queued item.
+    pub async fn clear_queue(&self) {
+        self.queue.clear().await;
+        self.publish_queue().await;
+    }
+
+    async fn publish_queue(&self) {
+        self.publish(GlobalEvent::QueueChanged {
+            queue: self.queue.list().await,
+        });
+    }
+
+    /// An `error` record for a queued job that never started.
+    async fn record_failed(&self, item: &QueuedRun, message: &str) {
+        let mut record = RunRecord::start(item.kind, &item.name);
+        record.scenario_id.clone_from(&item.scenario_id);
+        record.schedule_id.clone_from(&item.schedule_id);
+        record.error = Some(message.to_owned());
+        record.finish(RunStatus::Error, 0.0);
+        if let Err(error) = self.runs.put(&record).await {
+            tracing::error!(%error, id = record.id, "could not write run record");
+        }
+        self.publish(GlobalEvent::RunFinished {
+            run: record.summary(),
+        });
+    }
+
+    // -------------------------------------------------------- schedules --
+
+    /// Announce a schedule change to the feed.
+    pub async fn publish_schedules(&self) {
+        self.publish(GlobalEvent::SchedulesChanged {
+            schedules: self.schedules.list().await,
+        });
+    }
+
+    /// Queue every schedule that fell due. A schedule whose previous job is
+    /// still queued or running is skipped, not stacked: a cron faster than
+    /// the run it starts does not pile up.
+    pub async fn tick_schedules(self: &Arc<Self>, now: DateTime<Utc>) {
+        let due = self.schedules.take_due(now).await;
+        if due.is_empty() {
+            return;
+        }
+        let running = match self.runs.current().await {
+            Some(active) => self.runs.get(&active.id).await.and_then(|r| r.schedule_id),
+            None => None,
+        };
+        for s in due {
+            let busy = running.as_deref() == Some(&s.id) || self.queue.has_schedule(&s.id).await;
+            if busy {
+                tracing::warn!(
+                    schedule = s.name,
+                    "schedule due while its last job is still going; skipped"
+                );
+                self.schedules.mark(&s.id, false, now).await;
+                continue;
+            }
+            match self.enqueue(vec![s.job.clone()], Some(&s.id)).await {
+                Ok(_) => {
+                    tracing::info!(schedule = s.name, cron = s.cron, "schedule fired");
+                    self.schedules.mark(&s.id, true, now).await;
+                }
+                Err(error) => {
+                    tracing::warn!(schedule = s.name, error = %error.message, "schedule could not queue its job");
+                    self.schedules.mark(&s.id, false, now).await;
+                }
+            }
+        }
+        self.publish_schedules().await;
     }
 }
 

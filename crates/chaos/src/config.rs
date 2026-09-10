@@ -109,6 +109,13 @@ pub struct Paths {
     pub scenarios_seed: PathBuf,
     /// Run records.
     pub results: PathBuf,
+    /// Schedules file (`chaos serve` cron jobs). Missing: no schedules yet.
+    #[serde(default = "default_schedules")]
+    pub schedules: PathBuf,
+}
+
+fn default_schedules() -> PathBuf {
+    PathBuf::from(".chaos/schedules.json")
 }
 
 /// `[targets]`

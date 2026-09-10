@@ -13,7 +13,7 @@ import { StatusBadge } from "../status-badge";
 export function SubHeader() {
   const pathname = usePathname();
   const trail = crumbs(pathname);
-  const { overview } = useChaos();
+  const { overview, queue } = useChaos();
   const active = overview?.active_run;
 
   return (
@@ -33,11 +33,20 @@ export function SubHeader() {
           ))}
         </div>
 
-        {active ? (
-          <Link href={`/runs/view/?id=${active.id}`} className="flex items-center gap-2 text-sm xl:ml-auto">
-            <StatusBadge status={active.status} />
-            <span className="text-muted-foreground">{active.name}</span>
-          </Link>
+        {active || queue.length ? (
+          <div className="flex items-center gap-3 text-sm xl:ml-auto">
+            {active ? (
+              <Link href={`/runs/view/?id=${active.id}`} className="flex items-center gap-2">
+                <StatusBadge status={active.status} />
+                <span className="text-muted-foreground">{active.name}</span>
+              </Link>
+            ) : null}
+            {queue.length ? (
+              <Link href="/runs/" className="text-muted-foreground hover:text-foreground text-xs">
+                +{queue.length} queued
+              </Link>
+            ) : null}
+          </div>
         ) : null}
       </div>
     </header>

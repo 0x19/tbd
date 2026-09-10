@@ -8,7 +8,7 @@ behind Envoy has its own login, and no service trusts a caller it cannot see a t
 |---|---|---|
 | **Ory Hydra** | the OAuth2 / OIDC provider: issues JWT access tokens, ID tokens, refresh tokens; OAuth 2.1 discovery | `devops/k8s/auth/hydra.yaml`, config in `config/hydra.yml` |
 | **Ory Kratos** | identities and credentials: registration, login, passkeys, TOTP, sessions; acts as Hydra's login provider | `devops/k8s/auth/kratos.yaml`, `config/kratos.yml`, `config/identity.schema.json` |
-| **self-service UI** | Ory's reference pages for login, registration, settings and the consent step | `devops/k8s/auth/ui.yaml` |
+| **sign-in UI** | our pages (`ui/auth`, Next.js on Ory Elements): login, registration, settings, recovery, verification, the consent step, global sign-out | `ui/auth/`, `devops/docker/Dockerfile.auth-ui`, `devops/k8s/auth/ui.yaml` |
 | **Postgres** | one instance, databases `hydra` and `kratos` | `devops/k8s/auth/postgres.yaml` |
 | **Envoy** | routes `auth.<domain>` to the three above; verifies tokens on every other host (phase 2) | `devops/envoy/envoy.yaml` |
 
@@ -101,6 +101,37 @@ The access token is a JWT signed by Hydra. Its `iss` is the issuer above, `aud` 
 the client asked for (`tbd-api`), `scp` the granted scopes, `sub` the client id (or the
 person's identity id for user tokens), `exp` one hour out.
 
+## Roles and what they may do
+
+A person has one role, `admin`, `editor` or `viewer`, stored on the identity as
+`metadata_admin.role` (operators set it: `mise run auth:role someone@example.com admin`;
+a person cannot edit it, unlike their traits). New identities have no role and count as
+`viewer`. The consent step stamps it into every token as `role`, plus `grafana_role`
+(`Admin`, `Editor`, `Viewer`); a changed role reaches the tokens at the next sign-in.
+
+| Who | API (`api.<domain>`) | `grafana.`, `logs.`, `profiles.`, `metrics.` | `chaosadmin.` |
+|---|---|---|---|
+| machine token with scope `tbd.api` | yes | yes | yes |
+| person, role `admin` | with a `tbd-app` token carrying `tbd.api` | yes, Grafana Admin | yes |
+| person, role `editor` | same | yes, Grafana Editor | no (403) |
+| person, role `viewer` (default) | same | yes, Grafana Viewer | no (403) |
+| no valid token or session | no (401) | sent to sign in | sent to sign in |
+
+Envoy's RBAC filter enforces this per host on the verified claims
+(`devops/envoy/envoy.yaml`): the API needs `scp` to contain `tbd.api`; the observability
+hosts need any role (or the scope); the chaos admin host needs `admin` (or the scope).
+Grafana's role comes from `X-WEBAUTH-ROLE`, set from the `grafana_role` claim.
+
+## Rate limits
+
+Envoy's local token buckets, per route and per Envoy replica: the credential endpoints
+on `auth.<domain>` (`/self-service/login`, `/self-service/registration`,
+`/self-service/recovery`, `/oauth2/token`) allow 20 requests per 10 s across all
+clients of a replica, which caps password guessing without a shared store; the API
+allows 1000 requests per second per subject with bursts to 2000, which a
+`mise run local:load` run stays under. Over the limit Envoy answers 429. Per-address
+limits need Envoy's global rate limit service; add it when abuse patterns call for it.
+
 ## The gates: what Envoy checks
 
 Every check lives in `devops/envoy/envoy.yaml`; nothing behind Envoy checks anything.
@@ -168,25 +199,30 @@ check runs.
 
 ## What is not done yet
 
-- **Authorization.** Any valid token with audience `tbd-api` reaches every API route,
-  and every signed-in person gets every UI host and Grafana's Editor role. Scopes exist
-  (`tbd.api`) but nothing checks them per route yet; roles and org membership are not
-  modelled. Next: a `scp`/role requirement per route in Envoy (RBAC filter on the
-  verified claims) and Grafana role mapping from a claim.
-- **E-mail.** Recovery and verification are configured but off: no SMTP relay. Until
-  then a lost password is an admin task (`kratos` admin API).
+- **Authorization is coarse.** One role per person and one API scope; no per-object
+  permissions, organisations or teams. When the product needs "who may see whom", that
+  is a permission model (Ory Keto or the engine's own rules), not more Envoy policy.
+- **E-mail needs a relay.** `mise run auth:smtp 'smtps://user:pass@host:465/' no-reply@<domain>`
+  stores the relay, turns recovery and verification on (Kratos' one-time-code method)
+  and asks new registrations to verify. Until it is run, both flows are off and a lost
+  password is an operator task (`kratos` admin API). After running it, rebuild the sign-in
+  UI image so its pages offer the flows (`auth:ui-build-args` picks the flag up).
 - **Apple sign-in** is not wired (needs key-based credentials); Apple requires it once
   the iOS app offers Google.
 - **Google's app is in Testing** in Google Auth Platform: only listed test users can use
   the button until it is published.
-- **Ory's reference UI** renders the pages. Replace it with our own pages (Ory Elements)
-  when the product's look is decided; the flows stay the same.
-- **Logout across hosts.** `/oauth2/signout` on a UI host clears that host's cookies;
-  the Kratos session and other hosts' cookies live on. A global logout goes through
-  Hydra's `/oauth2/sessions/logout` and Kratos' logout flow.
-- **Secrets management.** Secrets are random values in Kubernetes Secrets created by
-  mise tasks. A real environment wants them in an external secret store and rotated;
-  the tasks are where that hooks in.
+- **Look and feel.** The pages render Ory Elements' flows through the same shadcn kit
+  primitives, tokens and fonts as the chaos UI (`ui/auth/src/components/ory/components.tsx`,
+  `ui/auth/src/app/globals.css` copied from `ui/chaos`). A product theme is a change to
+  those tokens in both apps, not to the flows.
+- **Sign-out and role changes take up to five minutes on the UI hosts.** Their tokens
+  (client `tbd-ui`) live five minutes; a revoked session or a new role is felt when the
+  next refresh fails or a fresh token is issued. `/oauth2/signout` on a host ends it
+  there at once.
+- **Secret storage.** Secrets are random values in Kubernetes Secrets created by mise
+  tasks, rotated with `mise run auth:rotate <what>`. A real environment should source
+  them from an external store (External Secrets Operator or SOPS) into the same Secret
+  names; the tasks are the hook.
 - **The engine load balancer (port 50051)** has no gate: it is LAN-only on the local
   cluster and internal in a real one. Do not publish it.
 - **Rate limiting and bot protection** are not in Envoy yet; Cloudflare covers the public
@@ -198,15 +234,39 @@ check runs.
 - `.env.example` still lacks the `CHAOS_AUTH_TOKEN_URL`, `CHAOS_AUTH_CLIENT_ID`,
   `CHAOS_AUTH_CLIENT_SECRET` and `CHAOS_TOKEN` lines (edit blocked by tooling policy).
 
+## Global sign-out
+
+`https://auth.<domain>/logout` signs a person out everywhere: the server revokes every
+Hydra login session and consent for them (their refresh tokens die, so each UI host's
+cookie stops refreshing and Envoy sends the browser back to sign in), then the page ends
+the Kratos session and returns to `/login`. The same page answers Hydra's own
+RP-initiated logout (`/oauth2/sessions/logout`, which sends a `logout_challenge`).
+Per-host `/oauth2/signout` only clears that host's cookies; the other hosts follow within
+five minutes, when their short-lived tokens (client `tbd-ui`: five-minute access and ID
+tokens, 30-day refresh tokens, set by `seed-clients.sh`) fail to refresh.
+
 ## Operating it
 
 ```sh
-mise run auth:secrets     # once per cluster; refuses to overwrite
-mise run auth:deploy      # apply + wait; part of local:deploy
-mise run auth:token       # a token for the chaos client
+mise run auth:secrets              # once per cluster; refuses to overwrite
+mise run auth:deploy               # apply + wait; part of local:deploy
+mise run auth:envoy-secrets        # hand Envoy and chaos their client secrets
+mise run auth:token                # a token for the chaos client
+mise run auth:role EMAIL ROLE      # admin | editor | viewer
+mise run auth:oidc google ID SECRET
+mise run auth:smtp URI FROM        # e-mail relay; turns recovery/verification on
+mise run auth:rotate client-ui | client-chaos | hmac | hydra-system
+mise run auth:e2e                  # browser check: sign-up, PKCE, roles, sign-out
+mise run ui:auth:check | ui:auth:build
 kubectl -n auth logs deploy/hydra
 kubectl -n auth logs deploy/kratos
+kubectl -n auth logs deploy/auth-ui
 ```
+
+Rotation: `client-ui` and `client-chaos` write a new secret, re-seed the client and
+restart Envoy / chaos; `hmac` re-keys the browser cookies (everyone signs in again);
+`hydra-system` prepends a new system secret and keeps the old one for decryption (drop
+it from the list on a later rotation).
 
 - Hydra and Kratos render their config at pod start (`__AUTH_PUBLIC_URL__`,
   `__BASE_DOMAIN__` substituted from the `auth-env` ConfigMap) and run their SQL

@@ -133,6 +133,7 @@ export const RunSummary = z.object({
   kind: RunKind,
   name: z.string(),
   scenario_id: z.string().nullable(),
+  schedule_id: z.string().nullable(),
   status: RunStatus,
   started_at: z.string(),
   finished_at: z.string().nullable(),
@@ -183,6 +184,56 @@ export const RunFeed = z.discriminatedUnion("type", [
 ]);
 export type RunFeed = z.infer<typeof RunFeed>;
 
+/** A queued or scheduled unit of work, the API's `Job` shape. */
+export type Job =
+  | { scenario: string }
+  | "all_scenarios"
+  | { load: LoadRequest }
+  | { validate: { protocol?: string | null; engine?: string | null; timeout?: string | null } };
+
+export const Job: z.ZodType<Job> = z.union([
+  z.literal("all_scenarios"),
+  z.object({ scenario: z.string() }),
+  z.object({ load: z.custom<LoadRequest>((v) => typeof v === "object" && v !== null && "load" in v) }),
+  z.object({
+    // The API writes absent fields as null.
+    validate: z.object({
+      protocol: z.string().nullish(),
+      engine: z.string().nullish(),
+      timeout: z.string().nullish(),
+    }),
+  }),
+]);
+
+export const QueuedRun = z.object({
+  id: z.string(),
+  job: Job,
+  kind: RunKind,
+  name: z.string(),
+  scenario_id: z.string().nullable(),
+  schedule_id: z.string().nullable(),
+  queued_at: z.string(),
+});
+export type QueuedRun = z.infer<typeof QueuedRun>;
+
+export const Schedule = z.object({
+  id: z.string(),
+  name: z.string(),
+  cron: z.string(),
+  job: Job,
+  enabled: z.boolean(),
+  created_at: z.string(),
+  updated_at: z.string(),
+  next_at: z.string().nullable(),
+  last_fired_at: z.string().nullable(),
+  last_skipped_at: z.string().nullable(),
+  fired: z.number(),
+  skipped: z.number(),
+});
+export type Schedule = z.infer<typeof Schedule>;
+
+export type ScheduleSpec = { name: string; cron: string; job: Job; enabled: boolean };
+
 export const GlobalEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("run_started"), run: RunSummary }),
   z.object({ type: z.literal("run_finished"), run: RunSummary }),
@@ -190,6 +241,8 @@ export const GlobalEvent = z.discriminatedUnion("type", [
     type: z.literal("stack_changed"),
     instances: z.array(InstanceInfo),
   }),
+  z.object({ type: z.literal("queue_changed"), queue: z.array(QueuedRun) }),
+  z.object({ type: z.literal("schedules_changed"), schedules: z.array(Schedule) }),
 ]);
 export type GlobalEvent = z.infer<typeof GlobalEvent>;
 
@@ -214,6 +267,7 @@ export const ChaosConfig = z.object({
     topology: z.string(),
     scenarios: z.string(),
     results: z.string(),
+    schedules: z.string(),
   }),
   targets: z.object({ protocol: z.string(), engine: z.string() }),
   validate: z.object({ timeout: z.string() }),
@@ -228,10 +282,14 @@ export const Overview = z.object({
   config: ChaosConfig,
   stack: z.array(InstanceInfo).nullable(),
   active_run: RunSummary.nullable(),
+  queue: z.array(QueuedRun),
   recent_runs: z.array(RunSummary),
   last_validate: RunSummary.nullable(),
   scenarios: z.number(),
   runs: z.number(),
+  schedules: z.number(),
+  schedules_enabled: z.number(),
+  next_schedule: Schedule.nullable(),
 });
 export type Overview = z.infer<typeof Overview>;
 

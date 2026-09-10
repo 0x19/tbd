@@ -31,7 +31,12 @@ Where things are:
   and spawns run jobs; `runs.rs` is the record store (one JSON per run under
   `[paths] results`) and the live feed; `routes.rs` only translates HTTP. Runs reuse
   `scenario::run_file_with` / `load::run_with` with `Hooks` (event channel +
-  `CancellationToken`); do not add a second executor for the API.
+  `CancellationToken`); do not add a second executor for the API. `jobs.rs` is the
+  queue (in memory, FIFO into the single slot; `AppState::pump` starts the next item
+  after every enqueue and every run end, boxed because it recurses through the run
+  task) and the schedules file (cron via `croner`, UTC, checked once a second by the
+  loop `api::state` spawns; a due schedule whose last job is still queued or running is
+  skipped, not stacked).
 
 Gotchas:
 - Every config struct is `deny_unknown_fields`. `TimelineEvent` is an internally tagged
@@ -69,5 +74,7 @@ Tests: `tests/it/main.rs` boots stacks in-process: validate passes, a fault maps
 503, an engine restarts on its port, a full scenario with a fault timeline runs, bad
 files are rejected. `tests/it/api.rs` boots `chaos serve` on port 0 with a temp
 scenarios directory and drives it like the UI: stack calls, scenario run over SSE,
-ad-hoc load cancel, scenario write/check/delete, validate. The shipped scenarios are run
-by `mise run ci`.
+ad-hoc load cancel, scenario write/check/delete, validate, the queue (run all expands,
+items drain one at a time, remove and clear) and schedules (persist to the file, fire on
+their own within seconds on a per-second cron, run now, disable, delete). The shipped
+scenarios are run by `mise run ci`.

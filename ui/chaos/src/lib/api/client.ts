@@ -7,13 +7,17 @@ import {
   CheckReply,
   GlobalEvent,
   InstanceInfo,
+  type Job,
   type LoadRequest,
   Overview,
+  QueuedRun,
   RunFeed,
   RunRecord,
   RunSummary,
   ScenarioDetail,
   ScenarioEntry,
+  Schedule,
+  type ScheduleSpec,
 } from "./schema";
 
 /**
@@ -109,6 +113,16 @@ export const api = {
   runDelete: (id: string) => call(none, `/runs/${id}`, { method: "DELETE" }),
   validate: (body?: { protocol?: string; engine?: string; timeout?: string }) =>
     call(RunRecord, "/validate", { method: "POST", json: body ?? {} }),
+  queue: () => call(QueuedRun.array(), "/queue"),
+  enqueue: (jobs: Job[]) => call(QueuedRun.array(), "/queue", { method: "POST", json: { jobs } }),
+  queueRemove: (id: string) => call(none, `/queue/${id}`, { method: "DELETE" }),
+  queueClear: () => call(none, "/queue", { method: "DELETE" }),
+  schedules: () => call(Schedule.array(), "/schedules"),
+  scheduleCreate: (spec: ScheduleSpec) => call(Schedule, "/schedules", { method: "POST", json: spec }),
+  scheduleUpdate: (id: string, spec: ScheduleSpec) =>
+    call(Schedule, `/schedules/${id}`, { method: "PUT", json: spec }),
+  scheduleDelete: (id: string) => call(none, `/schedules/${id}`, { method: "DELETE" }),
+  scheduleRun: (id: string) => call(QueuedRun.array(), `/schedules/${id}/run`, { method: "POST", json: {} }),
 };
 
 /** Subscribe to an SSE endpoint; frames are parsed through `schema`. */
@@ -138,6 +152,8 @@ export function subscribe<T>(
     "run_started",
     "run_finished",
     "stack_changed",
+    "queue_changed",
+    "schedules_changed",
   ]) {
     source.addEventListener(type, handler as EventListener);
   }

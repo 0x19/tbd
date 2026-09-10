@@ -1,5 +1,6 @@
 // Browser smoke of the built UI: every page renders real data, no console
-// errors, a scenario run streams to the end, a fault applies, load cancels.
+// errors, a scenario run streams to the end, a fault applies, load cancels,
+// run-all queues, a schedule is created, fired by hand, paused and deleted.
 // Run with `mise run ui:e2e` against the local cluster (UI_BASE overrides).
 import { mkdirSync } from "node:fs";
 
@@ -105,6 +106,56 @@ await step("run a scenario live to the end", async () => {
     .waitFor();
   await page.getByText("Latency grid").waitFor();
   await page.screenshot({ path: `${SHOTS}/run-done.png`, fullPage: true });
+});
+
+await step("run all queues every ready scenario and drains one at a time", async () => {
+  await page.goto(`${BASE}/scenarios/`);
+  await page.getByRole("button", { name: /run all \(\d+\)/i }).click();
+  await page.waitForURL(/\/runs\//, { timeout: 10000 });
+  await page.getByTestId("queue-panel").waitFor({ timeout: 10000 });
+  await page
+    .getByText(/\+\d+ queued/)
+    .first()
+    .waitFor();
+  await page.screenshot({ path: `${SHOTS}/queue.png`, fullPage: true });
+  await page.getByRole("button", { name: "Clear all" }).click();
+  await page.getByTestId("queue-panel").waitFor({ state: "hidden", timeout: 10000 });
+  // The run that already started finishes on its own.
+  await page.getByText("running", { exact: true }).first().waitFor({ state: "hidden", timeout: 60000 });
+});
+
+await step("schedules: create from a scenario, run now, pause, delete", async () => {
+  await page.goto(`${BASE}/schedules/?new=scenario:error_injection`);
+  await page.getByRole("dialog").waitFor({ timeout: 10000 });
+  await page.getByRole("button", { name: "Create schedule" }).click();
+  const row = page.getByRole("row", { name: /error_injection on a schedule/ });
+  await row.waitFor({ timeout: 10000 });
+  await row.getByText("Every 15 minutes").waitFor();
+  await row.getByRole("button", { name: /run now/i }).click();
+  await page
+    .getByText(/queued|started/)
+    .first()
+    .waitFor({ timeout: 10000 });
+  await row.getByRole("switch").click();
+  await row.getByText("paused").waitFor({ timeout: 10000 });
+  await page.screenshot({ path: `${SHOTS}/schedules.png`, fullPage: true });
+  page.once("dialog", (d) => d.accept());
+  await row.getByRole("button", { name: "More" }).click();
+  await page.getByRole("menuitem", { name: "Delete" }).click();
+  await row.waitFor({ state: "hidden", timeout: 10000 });
+  await page.getByText("No schedules yet").waitFor({ timeout: 10000 });
+  // A validate schedule round-trips through the API's null fields.
+  await page.getByRole("button", { name: "New schedule" }).click();
+  await page.getByRole("combobox", { name: "Runs" }).click();
+  await page.getByRole("option", { name: "Validate" }).click();
+  await page.getByRole("button", { name: "Create schedule" }).click();
+  const vrow = page.getByRole("row", { name: /scheduled validate/ });
+  await vrow.waitFor({ timeout: 10000 });
+  page.once("dialog", (d) => d.accept());
+  await vrow.getByRole("button", { name: "More" }).click();
+  await page.getByRole("menuitem", { name: "Delete" }).click();
+  await vrow.waitFor({ state: "hidden", timeout: 10000 });
+  await page.getByText("running", { exact: true }).first().waitFor({ state: "hidden", timeout: 60000 });
 });
 
 await step("runs list filters by kind from the sidebar link", async () => {

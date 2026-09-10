@@ -24,7 +24,8 @@ earlier idea material for a product direction, not a spec; do not "fix" it.
 - Identity stack (Ory Hydra + Kratos, `devops/k8s/auth`): `mise run auth:secrets` once,
   `auth:deploy` (part of `local:deploy`), `auth:envoy-secrets`, `auth:token` for a
   machine JWT, `auth:e2e` for the browser check, `auth:oidc <provider> <id> <secret>` for
-  social sign-in. Envoy gates every host (`devops/envoy/envoy.yaml`); against a deployed
+  social sign-in, `auth:role EMAIL ROLE`, `auth:smtp URI FROM`, `auth:rotate WHAT`. The
+  sign-in pages are `ui/auth` (Next.js on Ory Elements, `ui:auth:check` in `ci`). Envoy gates every host (`devops/envoy/envoy.yaml`); against a deployed
   stack `chaos validate` and load need `CHAOS_AUTH_*` or `--token`. Docs:
   `docs/auth/README.md`.
 - Binaries read layered config from `configs/<binary>/base.toml` + `<TBD_ENV>.toml`

@@ -16,7 +16,7 @@ oauth2_provider:
   url: http://hydra-admin.auth.svc:4445
 
 selfservice:
-  default_browser_return_url: __AUTH_PUBLIC_URL__/welcome
+  default_browser_return_url: __AUTH_PUBLIC_URL__/
   allowed_return_urls:
     - __AUTH_PUBLIC_URL__
     - https://__BASE_DOMAIN__
@@ -58,12 +58,11 @@ selfservice:
       ui_url: __AUTH_PUBLIC_URL__/settings
       privileged_session_max_age: 15m
       required_aal: highest_available
-    # Recovery and verification need outbound email; off until an SMTP relay exists.
+    # On/off and the code method live in flows.yml (config/flows.sh), driven by
+    # whether an SMTP relay is configured.
     recovery:
-      enabled: false
       ui_url: __AUTH_PUBLIC_URL__/recovery
     verification:
-      enabled: false
       ui_url: __AUTH_PUBLIC_URL__/verification
     logout:
       after:
@@ -96,7 +95,7 @@ identity:
     - id: default
       url: file:///etc/config/kratos/identity.schema.json
 
-# Placeholder until an SMTP relay is configured; only recovery/verification use it.
+# Overridden by flows.yml when an SMTP relay is configured; never used otherwise.
 courier:
   smtp:
     connection_uri: smtp://placeholder:1025/?disable_starttls=true

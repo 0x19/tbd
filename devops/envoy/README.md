@@ -18,9 +18,10 @@ streams are the normal case here, so timeouts are per route, not per connection.
 ## Routing on the edge
 
 Evaluated top to bottom; first match wins. Every route on the catch-all host needs a
-bearer JWT (audience `tbd-api`) except the health paths; the UI hosts need the browser
-login; `auth.*` and `chaos.*` are open. The filters and what they check:
-[docs/auth/README.md](../../docs/auth/README.md).
+bearer JWT (audience `tbd-api`, scope `tbd.api`) except the health paths; the UI hosts
+need the browser login plus a role (`chaosadmin.*`: admin); `auth.*` and `chaos.*` are
+open. Credential endpoints on `auth.*` and the API are rate limited (429). The filters
+and what they check: [docs/auth/README.md](../../docs/auth/README.md).
 
 | Match | To | Timeout | Retries |
 |---|---|---|---|

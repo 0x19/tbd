@@ -61,6 +61,9 @@ pub struct RunRecord {
     /// Scenario id (`scenarios/<id>.toml`) for scenario runs.
     #[serde(default)]
     pub scenario_id: Option<String>,
+    /// The schedule that queued it, when one did.
+    #[serde(default)]
+    pub schedule_id: Option<String>,
     /// Status.
     pub status: RunStatus,
     /// RFC 3339.
@@ -105,6 +108,9 @@ pub struct RunSummary {
     pub name: String,
     /// Scenario id.
     pub scenario_id: Option<String>,
+    /// Schedule that queued it.
+    #[serde(default)]
+    pub schedule_id: Option<String>,
     /// Status.
     pub status: RunStatus,
     /// Started.
@@ -139,6 +145,7 @@ impl RunRecord {
             kind,
             name: name.to_owned(),
             scenario_id: None,
+            schedule_id: None,
             status: RunStatus::Running,
             started_at: now(),
             finished_at: None,
@@ -182,6 +189,7 @@ impl RunRecord {
             kind: self.kind,
             name: self.name.clone(),
             scenario_id: self.scenario_id.clone(),
+            schedule_id: self.schedule_id.clone(),
             status: self.status,
             started_at: self.started_at.clone(),
             finished_at: self.finished_at.clone(),

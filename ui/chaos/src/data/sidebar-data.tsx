@@ -1,6 +1,7 @@
 import {
   IconActivity,
   IconBook2,
+  IconCalendarClock,
   IconChecklist,
   IconFlask,
   IconGauge,
@@ -42,6 +43,7 @@ export const navGroups: NavGroup[] = [
       },
       { title: "Load", url: "/load/", icon: IconGauge },
       { title: "Validate", url: "/validate/", icon: IconChecklist },
+      { title: "Schedules", url: "/schedules/", icon: IconCalendarClock },
     ],
   },
   {

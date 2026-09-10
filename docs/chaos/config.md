@@ -57,6 +57,7 @@ TBD_ENV=production chaos config    # production
 | `paths.scenarios` | `scenarios` | `--scenarios`, `CHAOS_SCENARIOS_DIR` | scenario files the API lists and edits |
 | `paths.scenarios_seed` | `""` | `--scenarios-seed`, `CHAOS_SCENARIOS_SEED` | copied into `paths.scenarios` on `serve` start when it is missing or empty; containers set it to the image's read-only `scenarios/` and point `paths.scenarios` at a volume |
 | `paths.results` | `.chaos/results` | `--results`, `CHAOS_RESULTS_DIR` | run records |
+| `paths.schedules` | `.chaos/schedules.json` | `--schedules`, `CHAOS_SCHEDULES_FILE` | the schedules file (`chaos serve` cron jobs, [api.md](api.md#schedules)); created on first write; containers put it on the `/data` volume next to the results |
 | `targets.protocol` | `http://127.0.0.1:8080` | `--protocol`, `CHAOS_PROTOCOL_URL` | default for `validate` and API validate |
 | `targets.engine` | `http://127.0.0.1:50051` | `--engine`, `CHAOS_ENGINE_URL` | same, engine gRPC |
 | `validate.timeout` | `5s` | `--timeout` | per-check timeout |

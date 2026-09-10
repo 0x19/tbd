@@ -99,6 +99,9 @@ struct ServeArgs {
     /// Run records directory. Default: `[paths] results`.
     #[arg(long, env = "CHAOS_RESULTS_DIR")]
     results: Option<PathBuf>,
+    /// Schedules file. Default: `[paths] schedules`.
+    #[arg(long, env = "CHAOS_SCHEDULES_FILE")]
+    schedules: Option<PathBuf>,
     /// Do not start the topology stack; API only.
     #[arg(long)]
     no_stack: bool,
@@ -132,6 +135,9 @@ impl ServeArgs {
         }
         if let Some(v) = self.results {
             config.paths.results = v;
+        }
+        if let Some(v) = self.schedules {
+            config.paths.schedules = v;
         }
         if self.no_stack {
             config.serve.start_stack = false;

@@ -24,6 +24,15 @@ Job that seeds the OAuth2 clients. Read `docs/auth/README.md` first.
 - The Envoy short names `hydra`, `kratos`, `auth-ui` are ExternalName Services in
   `base/envoy/service.yaml`, so the app namespace's Envoy can reach the `auth` namespace
   the same way it reaches `otel-collector`.
+- `ui.yaml` is our own sign-in UI (`ui/auth`, image `tbd-auth-ui`), not Ory's reference
+  container. It needs `AUTH_PUBLIC_URL` (server-rendered consent) and the in-cluster
+  Kratos/Hydra URLs; `TRUSTED_CLIENT_IDS` decides which clients skip the consent screen.
+- Roles are `metadata_admin.role`; `mise run auth:role` patches them through the Kratos
+  admin API from a one-off curl pod. Tokens carry the role from the consent step
+  (`ui/auth/lib/server.ts`), so a change shows at the next sign-in.
+- E-mail flows are rendered by `config/flows.sh` into `flows.yml` from the optional
+  `smtp-uri` / `smtp-from` keys of `auth-secrets` (`mise run auth:smtp`); without a
+  relay recovery and verification are off and Kratos never sends mail.
 - Social sign-in is rendered by `config/oidc.sh` into a second config file (`-c oidc.yml`)
   so the provider list is data, never a hand-edited YAML with secrets in it. Credentials
   are optional keys on `auth-secrets` (`oidc-<provider>-id/secret`); `mise run auth:oidc`

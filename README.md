@@ -108,10 +108,11 @@ is the development loop.
 Every call into a deployed environment is authenticated by Envoy against the identity
 stack in `devops/k8s/auth` (Ory Hydra for OAuth2/OIDC, Ory Kratos for identities):
 
-- **People** sign up and in at `https://auth.<domain>/` with a password, a passkey or
-  Google, and get a 30-day session. Browser hosts (`grafana.`, `logs.`, `profiles.`,
-  `metrics.`, `chaosadmin.`) send them there when they are not signed in and let them
-  through afterwards; Grafana creates their user on the spot.
+- **People** sign up and in at `https://auth.<domain>/` (our pages on Ory Elements) with
+  a password, a passkey or Google, and get a 30-day session. Browser hosts (`grafana.`,
+  `logs.`, `profiles.`, `metrics.`, `chaosadmin.`) send them there when they are not
+  signed in and let them through by role afterwards; Grafana creates their user with
+  the matching role. `/logout` signs out everywhere.
 - **Programs** present a bearer JWT on `api.<domain>`; only `/healthz` and `/readyz`
   are open. The `tbd-chaos` client uses the client-credentials grant, the future app is
   the public PKCE client `tbd-app`.
@@ -122,6 +123,8 @@ stack in `devops/k8s/auth` (Ory Hydra for OAuth2/OIDC, Ory Kratos for identities
 mise run auth:token                      # a JWT for the chaos client, from the deployed Hydra
 mise run auth:e2e                        # browser check: sign-up, PKCE flow, the gated UI hosts
 mise run auth:oidc google <id> <secret>  # switch a social provider on
+mise run auth:role someone@example.com admin   # roles: admin | editor | viewer
+mise run auth:smtp 'smtps://…' no-reply@…  # e-mail relay: recovery + verification on
 CHAOS_AUTH_TOKEN_URL=https://auth.<domain>/oauth2/token CHAOS_AUTH_CLIENT_SECRET=... \
   chaos validate --protocol https://api.<domain> --engine https://api.<domain>
 ```

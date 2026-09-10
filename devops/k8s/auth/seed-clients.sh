@@ -30,6 +30,17 @@ upsert tbd-ui "{
   \"skip_consent\": true, \"skip_logout_consent\": true,
   \"access_token_strategy\": \"jwt\"
 }"
+# Short-lived browser tokens: a revoked session (global sign-out, role change) is
+# felt on every UI host within five minutes, when Envoy's refresh fails.
+code=$(curl -sS -o /tmp/out -w '%{http_code}' -X PUT -H 'content-type: application/json' "$HYDRA_ADMIN/admin/clients/tbd-ui/lifespans" -d '{
+  "authorization_code_grant_access_token_lifespan": "5m",
+  "authorization_code_grant_id_token_lifespan": "5m",
+  "authorization_code_grant_refresh_token_lifespan": "720h",
+  "refresh_token_grant_access_token_lifespan": "5m",
+  "refresh_token_grant_id_token_lifespan": "5m",
+  "refresh_token_grant_refresh_token_lifespan": "720h"
+}')
+case "$code" in 200|201) echo "client tbd-ui: lifespans set ($code)";; *) echo "client tbd-ui lifespans: HTTP $code"; cat /tmp/out; exit 1;; esac
 # Machine access to the API: chaos validate/load, CI, scripts.
 upsert tbd-chaos "{
   \"client_id\": \"tbd-chaos\", \"client_name\": \"chaos tool\",

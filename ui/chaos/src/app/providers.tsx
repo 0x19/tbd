@@ -6,7 +6,7 @@ import SearchProvider from "@/components/search-provider";
 import { ThemeProvider } from "@/components/theme-provider";
 import { api } from "@/lib/api/client";
 import { useFetch, useGlobalFeed } from "@/lib/api/hooks";
-import type { GlobalEvent, Overview } from "@/lib/api/schema";
+import type { GlobalEvent, Overview, QueuedRun } from "@/lib/api/schema";
 
 export type ActivityItem = { at: number; event: GlobalEvent };
 
@@ -18,6 +18,8 @@ type ChaosContext = {
   lastEvent: GlobalEvent | null;
   /** The last events of this session, newest first. */
   activity: ActivityItem[];
+  /** What waits for the active slot, front first. */
+  queue: QueuedRun[];
 };
 
 const Ctx = createContext<ChaosContext>({
@@ -27,6 +29,7 @@ const Ctx = createContext<ChaosContext>({
   reload: () => {},
   lastEvent: null,
   activity: [],
+  queue: [],
 });
 
 export function useChaos() {
@@ -65,11 +68,16 @@ function ChaosProvider({ children }: Props) {
   const overview = useFetch(() => api.overview(), 10_000);
   const [lastEvent, setLastEvent] = useState<GlobalEvent | null>(null);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
+  const [liveQueue, setLiveQueue] = useState<QueuedRun[] | null>(null);
   const { connected } = useGlobalFeed((e) => {
     setLastEvent(e);
     setActivity((a) => [{ at: Date.now(), event: e }, ...a].slice(0, 30));
-    if (e.type === "run_started" || e.type === "run_finished") overview.reload();
+    if (e.type === "queue_changed") setLiveQueue(e.queue);
+    if (e.type === "run_started" || e.type === "run_finished" || e.type === "schedules_changed")
+      overview.reload();
   });
+  const overviewQueue = overview.data?.queue;
+  const queue = useMemo(() => liveQueue ?? overviewQueue ?? [], [liveQueue, overviewQueue]);
   const value = useMemo<ChaosContext>(
     () => ({
       overview: overview.data,
@@ -78,8 +86,9 @@ function ChaosProvider({ children }: Props) {
       reload: overview.reload,
       lastEvent,
       activity,
+      queue,
     }),
-    [overview.data, overview.error, overview.reload, connected, lastEvent, activity],
+    [overview.data, overview.error, overview.reload, connected, lastEvent, activity, queue],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

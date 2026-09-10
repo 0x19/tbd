@@ -28,6 +28,8 @@ scenarios = "scenarios"
 scenarios_seed = ""
 # Where run records (scenario, load, validate) are written as JSON.
 results = ".chaos/results"
+# Schedules (cron jobs created in the UI or through the API), one JSON file.
+schedules = ".chaos/schedules.json"
 
 [targets]
 # Defaults for `chaos validate` and for API load runs against an external stack.
