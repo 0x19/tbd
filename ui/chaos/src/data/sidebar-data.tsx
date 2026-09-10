@@ -3,6 +3,7 @@ import {
   IconBook2,
   IconCalendarClock,
   IconChecklist,
+  IconFileText,
   IconFlask,
   IconGauge,
   IconLayoutDashboard,
@@ -48,7 +49,10 @@ export const navGroups: NavGroup[] = [
   },
   {
     title: "Operate",
-    items: [{ title: "Runbook", url: "/runbook/", icon: IconBook2 }],
+    items: [
+      { title: "Runbook", url: "/runbook/", icon: IconBook2 },
+      { title: "Scenario reference", url: "/reference/", icon: IconFileText },
+    ],
   },
 ];
 

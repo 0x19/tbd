@@ -14,8 +14,10 @@ first; `docs/chaos/api.md` is the contract the pages consume.
   Compiler rules relaxed like the kit) and Prettier (tailwind plugin). Regenerate `ui/`
   files from the kit or `pnpm dlx shadcn@latest add`, do not hand-edit.
 - What is ours: pages under `src/app/`, `src/components/{kit,charts,status-badge,
-runs-table,behavior-dialog,instances-table,field,queue-panel,schedule-dialog}.tsx`,
-  `src/lib/{api,format,runs,jobs}`,
+runs-table,behavior-dialog,instances-table,field,queue-panel,schedule-dialog,
+toml-editor,markdown,scenario-reference}.tsx`, `src/lib/{api,format,runs,jobs,toml-highlight}`,
+  `src/app/editor.css` (TOML token colours and the `.doc` styles; globals.css stays the
+  kit's),
   `src/data/{site,sidebar-data}`, `src/app/providers.tsx` (chaos overview context +
   the kit's search state), `command-menu.tsx`, `header-notifications.tsx` (finished
   runs from the live feed).
@@ -34,6 +36,11 @@ runs-table,behavior-dialog,instances-table,field,queue-panel,schedule-dialog}.ts
 - Detail pages are `/x/view/?id=` with `useSearchParams` under `Suspense`; a dynamic
   segment cannot be exported.
 - `pnpm dev` is on 3001 because Grafana owns 3000 locally.
+- `src/generated/docs.ts` is written by `scripts/gen-docs.mjs` from `docs/chaos/scenarios.md`
+  before dev, build, lint and typecheck (`pnpm gen`); it is gitignored. Edit the markdown,
+  never the generated file. The editor is CodeMirror 6 (`toml-editor.tsx`, the legacy
+  TOML mode, tokens styled by class); `markdown.tsx` renders the doc with the same
+  highlighter for `toml` fences.
 - Checks: `mise run ui:check` (prettier, eslint, tsc) is part of `mise run ci`; `mise run
 ui:build` must pass before the chaos image is built (`local:build` does both).
 - `e2e/smoke.mjs` (`mise run ui:e2e`) is the browser check against a running cluster;

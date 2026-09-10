@@ -11,7 +11,9 @@ a typo fails at `chaos check` instead of silently doing nothing.
 [assertions]    what must be true afterwards
 ```
 
-The shipped files under `scenarios/` are the reference. Copy the closest one.
+The shipped files under `scenarios/` are the reference. Copy the closest one. This page
+is also bundled into the admin UI (the Scenario reference page and the editor's
+"Reference" sheet), so keep it self-contained: no relative links to other pages.
 
 ## `[scenario]`
 

@@ -40,3 +40,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 /e2e/shots/
+
+# generated from docs/chaos (scripts/gen-docs.mjs)
+/src/generated/

@@ -1,25 +1,27 @@
 "use client";
 
-import { ArrowLeft, Play, Save, Trash2 } from "lucide-react";
+import { ArrowLeft, BookOpen, Play, Save, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { DetailList, PageTitle, StageBar } from "@/components/kit";
+import { ScenarioReference } from "@/components/scenario-reference";
 import { StatusBadge } from "@/components/status-badge";
+import { TomlEditor, type TomlEditorHandle } from "@/components/toml-editor";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api/client";
 import { describe } from "@/lib/api/hooks";
 import type { CheckReply, ScenarioDetail } from "@/lib/api/schema";
 import { ago } from "@/lib/format";
 
-const TEMPLATE = `# New scenario. Every table rejects unknown keys; docs/chaos/scenarios.md is the reference.
+const TEMPLATE = `# New scenario. Every table rejects unknown keys; open Reference (top right) for every key.
 [scenario]
 name = "my_scenario"
 description = "What this proves"
@@ -103,6 +105,8 @@ function ScenarioView() {
   const [check, setCheck] = useState<CheckReply | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [reference, setReference] = useState(false);
+  const editor = useRef<TomlEditorHandle>(null);
 
   useEffect(() => {
     if (isNew) return;
@@ -222,6 +226,9 @@ function ScenarioView() {
           )
         }
       >
+        <Button variant="ghost" size="sm" onClick={() => setReference(true)}>
+          <BookOpen /> Reference
+        </Button>
         {!isNew ? (
           <Button variant="ghost" size="sm" onClick={remove}>
             <Trash2 /> Delete
@@ -287,11 +294,12 @@ function ScenarioView() {
               {check.error}
             </div>
           ) : null}
-          <Textarea
+          <TomlEditor
+            ref={editor}
             value={text}
-            onChange={(e) => setText(e.target.value)}
-            spellCheck={false}
-            className="min-h-[34rem] font-mono text-xs leading-5"
+            onChange={setText}
+            ariaLabel="Scenario TOML"
+            className="min-h-[34rem]"
           />
         </div>
 
@@ -391,6 +399,25 @@ function ScenarioView() {
           </Card>
         </div>
       </div>
+
+      <Sheet open={reference} onOpenChange={setReference}>
+        <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-2xl">
+          <SheetHeader>
+            <SheetTitle>Scenario reference</SheetTitle>
+            <SheetDescription>
+              What a scenario file can say, key by key. Insert a block and it lands at the cursor.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="mt-4">
+            <ScenarioReference
+              onInsert={(toml) => {
+                editor.current?.insert(toml);
+                setReference(false);
+              }}
+            />
+          </div>
+        </SheetContent>
+      </Sheet>
     </>
   );
 }

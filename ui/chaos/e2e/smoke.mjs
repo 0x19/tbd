@@ -88,7 +88,21 @@ await step("scenarios list and editor check", async () => {
   await page.getByText("error_injection").first().waitFor();
   await page.goto(`${BASE}/scenarios/view/?id=error_injection`);
   await page.getByText("checks", { exact: true }).waitFor({ timeout: 10000 });
+  await page.locator(".cm-editor .tok-string").first().waitFor({ timeout: 10000 });
   await page.screenshot({ path: `${SHOTS}/scenario.png`, fullPage: true });
+  // The reference sheet inserts a block at the cursor and the file still checks.
+  await page.getByRole("button", { name: "Reference" }).click();
+  await page.getByRole("heading", { name: "Writing scenarios" }).waitFor({ timeout: 10000 });
+  await page.screenshot({ path: `${SHOTS}/reference-sheet.png` });
+  await page.getByRole("button", { name: "Log marker" }).click();
+  await page.locator(".cm-editor").getByText("halfway").waitFor({ timeout: 5000 });
+  await page.getByText("checks", { exact: true }).waitFor({ timeout: 10000 });
+});
+
+await step("scenario reference page renders the bundled doc", async () => {
+  await page.goto(`${BASE}/reference/`);
+  await page.getByRole("heading", { name: "Behaviours" }).waitFor({ timeout: 10000 });
+  await page.getByText("delayed_failure").first().waitFor();
 });
 
 await step("run a scenario live to the end", async () => {

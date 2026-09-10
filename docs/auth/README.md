@@ -163,8 +163,11 @@ a bearer token skip the browser flow, so scripts can hit `chaosadmin.<domain>/ap
 with a machine token.
 
 **Grafana** runs with its auth proxy on: Envoy adds `X-WEBAUTH-USER` (email),
-`X-WEBAUTH-NAME` and `X-WEBAUTH-ROLE: Editor` from the verified claims, Grafana creates
-the user on first sight and signs it in. Anonymous access is off. The admin form is still
+`X-WEBAUTH-NAME` and `X-WEBAUTH-ROLE` (Admin, Editor or Viewer, from the `grafana_role`
+claim) from the verified claims; Grafana creates the user on first sight, signs it in and
+re-reads the role every minute (`GF_AUTH_PROXY_SYNC_TTL`). After a role change, a person
+sees it in Grafana once they hold a fresh token (five minutes, or `/oauth2/signout` on
+the Grafana host) and the next sync has run. Anonymous access is off. The admin form is still
 reachable on the LAN port 3000 for break-glass; the proxy headers are only accepted from
 the pod network (`GF_AUTH_PROXY_WHITELIST`).
 

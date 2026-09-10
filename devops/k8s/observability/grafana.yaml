@@ -62,6 +62,10 @@ spec:
               value: "true"
             - name: GF_AUTH_PROXY_ENABLE_LOGIN_TOKEN
               value: "true"
+            # Re-read the identity headers (role) every minute instead of Grafana's
+            # default 15, so a role change lands soon after the next sign-in.
+            - name: GF_AUTH_PROXY_SYNC_TTL
+              value: "1"
             # Only the pod network may present the headers; Envoy strips them from
             # clients, this is the second layer. Override per environment.
             - name: GF_AUTH_PROXY_WHITELIST
