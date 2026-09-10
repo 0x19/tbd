@@ -31,3 +31,12 @@ pub mod ledger {
             include_bytes!(concat!(env!("OUT_DIR"), "/ledger_descriptor.bin"));
     }
 }
+
+pub mod humans {
+    pub mod v1 {
+        tonic::include_proto!("tbd.humans.v1");
+        /// Encoded `FileDescriptorSet` for this package, for gRPC reflection.
+        pub const DESCRIPTOR_SET: &[u8] =
+            include_bytes!(concat!(env!("OUT_DIR"), "/humans_descriptor.bin"));
+    }
+}

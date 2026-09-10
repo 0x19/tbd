@@ -38,6 +38,7 @@ stack = ".chaos/stack.json"
 # Defaults for `chaos validate` and for API load runs against an external stack.
 protocol = "http://127.0.0.1:8080"
 engine = "http://127.0.0.1:50051"
+humans = "http://127.0.0.1:50053"
 # The ledger's own port in-process; through Envoy it is the engine listener.
 ledger = "http://127.0.0.1:50052"
 

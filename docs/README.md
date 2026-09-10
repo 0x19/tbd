@@ -14,6 +14,7 @@
 | You are adding a service | [tbd/README.md](tbd/README.md), the scaffolding CLI |
 | You want to know what the ledger service is today | [ledger/README.md](ledger/README.md) |
 | You are working on the `ledger` service | [../crates/ledger/CLAUDE.md](../crates/ledger/CLAUDE.md) |
+| You are working on the `humans` service | [../crates/humans/CLAUDE.md](../crates/humans/CLAUDE.md) |
 | A check failed in CI, or you are changing CI | [ci.md](ci.md) |
 | You want metrics, traces, logs, dashboards, or to run the local cluster | [observability.md](observability/README.md) |
 | You want to know how sign-in, tokens and API access work | [auth/README.md](auth/README.md) |

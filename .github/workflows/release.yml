@@ -24,6 +24,8 @@ jobs:
             port: "50051"
           - bin: protocol
             port: "8080"
+          - bin: humans
+            port: "50053"
           - bin: ledger
             port: "50052"
     steps:

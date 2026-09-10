@@ -10,3 +10,6 @@ engine = "engine-1"
 
 [stack.ledgers.ledger-1]
 listen = "127.0.0.1:50052"
+
+[stack.humans.humans-1]
+listen = "127.0.0.1:50053"

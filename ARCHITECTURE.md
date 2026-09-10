@@ -39,6 +39,7 @@ hop; the same observability stack runs locally and in production.
 | `tbd-common` | telemetry (logs, OTLP traces, trace propagation, the shared gRPC span), Prometheus metrics with the shared metric names, shutdown, shared CLI flags, fault injection, the embedder `Runtime`, layered config | tokio, tracing, clap, opentelemetry, metrics, http (types) |
 | `tbd-proto` | code generated from `/proto` at build time via `protox` + `tonic-prost-build` | tonic, prost |
 | `tbd-engine` | `tbd.engine.v1.EngineService` implementation, health, reflection | common, proto |
+| `tbd-humans` | `tbd.humans.v1.HumansService` implementation, health, reflection; scaffolded by `tbd new service`, a stub until its RPCs land | common, proto |
 | `tbd-ledger` | `tbd.ledger.v1.LedgerService` implementation, health, reflection; scaffolded by `tbd new service`, a stub until its RPCs land | common, proto |
 | `tbd-protocol` | axum router: REST, SSE, WebSocket bridge, GraphQL, protocol gRPC; traced and measured engine client | common, proto |
 | `tbd-cli` | the `tbd` binary: scaffolds services from embedded templates and registers them in every shared file; owns no runtime code | clap, toml |
@@ -63,6 +64,7 @@ Envoy routes, from `devops/envoy/envoy.yaml`:
 |---|---|---|
 | `/healthz`, `/readyz` (no token needed; everything else below needs a bearer JWT) | protocol | 5 s |
 | gRPC `/tbd.engine.v1.EngineService/*` | engine | none, retries on connect failure and `UNAVAILABLE` |
+| internal LB (50051) gRPC `/tbd.humans.v1.HumansService/*` | humans | none, retries on connect failure and `UNAVAILABLE` |
 | internal LB (50051) gRPC `/tbd.ledger.v1.LedgerService/*` | ledger | none, retries on connect failure and `UNAVAILABLE` |
 | any other gRPC (`tbd.protocol.v1`, health, reflection) | protocol | none |
 | `/ws` | protocol, WebSocket upgrade | none |

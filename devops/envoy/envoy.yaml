@@ -7,7 +7,7 @@
 #                     so engine replicas are a pure scale-out.
 #   :9901  admin      /ready, /stats/prometheus, /clusters, /config_dump.
 #
-# Clusters resolve by DNS name: `engine`, `protocol`, `ledger`, `chaos`, `otel-collector`,
+# Clusters resolve by DNS name: `engine`, `protocol`, `humans`, `ledger`, `chaos`, `otel-collector`,
 # `hydra`, `kratos`, `auth-ui`, `grafana`, `victoria-logs`, `pyroscope`,
 # `victoria-metrics`.
 #
@@ -591,6 +591,12 @@ static_resources:
                             cluster: ledger
                             timeout: 0s
                             retry_policy: *grpc_retry
+                        # humans, matched by service name; the engine stays the catch-all.
+                        - match: { prefix: "/tbd.humans.v1.HumansService/", grpc: {} }
+                          route:
+                            cluster: humans
+                            timeout: 0s
+                            retry_policy: *grpc_retry
                         - match: { prefix: "/" }
                           route:
                             cluster: engine
@@ -688,6 +694,37 @@ static_resources:
           healthy_threshold: 1
           grpc_health_check:
             service_name: tbd.ledger.v1.LedgerService
+      outlier_detection:
+        consecutive_gateway_failure: 5
+        interval: 5s
+        base_ejection_time: 30s
+        max_ejection_percent: 50
+
+    - name: humans
+      type: STRICT_DNS
+      dns_lookup_family: V4_ONLY
+      dns_refresh_rate: 5s
+      lb_policy: LEAST_REQUEST
+      connect_timeout: 1s
+      typed_extension_protocol_options:
+        envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+          "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+          explicit_http_config:
+            http2_protocol_options: {}
+      load_assignment:
+        cluster_name: humans
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address: { address: humans, port_value: 50053 }
+      health_checks:
+        - timeout: 1s
+          interval: 5s
+          unhealthy_threshold: 2
+          healthy_threshold: 1
+          grpc_health_check:
+            service_name: tbd.humans.v1.HumansService
       outlier_detection:
         consecutive_gateway_failure: 5
         interval: 5s

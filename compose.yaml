@@ -73,6 +73,7 @@ services:
       CHAOS_LISTEN_ADDR: 0.0.0.0:7700
       CHAOS_PROTOCOL_URL: http://envoy:8080
       CHAOS_ENGINE_URL: http://envoy:50051
+      CHAOS_HUMANS_URL: http://envoy:50051
       CHAOS_LEDGER_URL: http://envoy:50051
       CHAOS_RESULTS_DIR: /data/results
       CHAOS_SCHEDULES_FILE: /data/schedules.json
@@ -111,6 +112,23 @@ services:
       - "9466:9464"
     restart: unless-stopped
 
+  humans:
+    image: ${IMAGE_REGISTRY:-ghcr.io/0x19}/tbd-humans:${IMAGE_TAG:-dev}
+    build:
+      context: .
+      dockerfile: devops/docker/Dockerfile
+      args:
+        BIN: humans
+        PORT: "50053"
+    environment:
+      <<: *common-env
+      TBD_ENV: ${TBD_ENV:-local}
+      HUMANS_LISTEN_ADDR: 0.0.0.0:50053
+      HUMANS_METRICS_ADDR: 0.0.0.0:9464
+    ports:
+      - "9467:9464"
+    restart: unless-stopped
+
   envoy:
     image: envoyproxy/envoy:v1.39.1
     # Renders the one environment-specific value (the browser-facing auth URL) and
@@ -140,6 +158,7 @@ services:
       - engine
       - protocol
       - chaos
+      - humans
       - ledger
       - hydra
       - kratos

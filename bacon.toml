@@ -31,7 +31,14 @@ need_stdout = true
 background = false
 on_change_strategy = "kill_then_restart"
 
+[jobs.humans]
+command = ["cargo", "run", "-p", "tbd-humans", "--color", "always"]
+need_stdout = true
+background = false
+on_change_strategy = "kill_then_restart"
+
 [keybindings]
 e = "job:engine"
 p = "job:protocol"
+h = "job:humans"
 l = "job:ledger"

@@ -4,6 +4,7 @@
 [targets]
 protocol = "http://envoy:8080"
 engine = "http://envoy:50051"
+humans = "http://envoy:50051"
 ledger = "http://envoy:50051"
 
 [notify.slack]

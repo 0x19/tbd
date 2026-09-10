@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package tbd.humans.v1;
+
+// The humans service. Ping is the liveness RPC every service carries; real
+// RPCs are added beside it.
+service HumansService {
+  // Echo a message. Proves configuration, telemetry and fault injection reach
+  // an RPC.
+  rpc Ping(PingRequest) returns (PingResponse);
+}
+
+message PingRequest {
+  string message = 1;
+}
+
+message PingResponse {
+  string message = 1;
+  // Version of the binary that answered.
+  string version = 2;
+  // True while the service is a placeholder with nothing real behind it.
+  bool stub = 3;
+}

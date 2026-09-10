@@ -1,0 +1,18 @@
+# humans configuration, shared layer. `configs/humans/<env>.toml` is merged
+# over this file; tables merge key by key, any other value replaces. Every key
+# is listed here so an environment file only needs what it changes. Flags and
+# their environment variables (HUMANS_*) override both.
+
+[server]
+# Where the gRPC server listens. Loopback on purpose; containers bind 0.0.0.0
+# through HUMANS_LISTEN_ADDR.
+listen = "127.0.0.1:50053"
+
+[metrics]
+# Prometheus /metrics listener. Embedders (tests, the chaos tool) turn it off.
+listen = "0.0.0.0:9464"
+
+[ping]
+# Longest message Ping echoes; longer is INVALID_ARGUMENT. The one knob that
+# proves TOML reaches an RPC.
+max_message_len = 1024

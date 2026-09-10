@@ -2,7 +2,18 @@
 
 // Monochrome charts in the kit's style: a big number with an uppercase
 // caption above, greys for series, a legend on the right.
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ComposedChart,
+  Line,
+  LineChart,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 import { type ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import type { LoadSnapshot } from "@/lib/api/schema";
@@ -248,5 +259,94 @@ export function LatencyBars({
         />
       </BarChart>
     </ChartContainer>
+  );
+}
+
+const loadTrend = {
+  rps: { label: "req/s", color: "var(--foreground)" },
+  p99: { label: "p99", color: "var(--chart-2)" },
+} satisfies ChartConfig;
+
+/** Throughput (bars) and p99 (line) of the last load runs, oldest first. */
+export function LoadTrend({
+  rows,
+  height = 200,
+}: {
+  rows: { id: string; label: string; rps: number; p99: number; errors: number }[];
+  height?: number;
+}) {
+  if (!rows.length)
+    return (
+      <div className="text-muted-foreground flex h-40 items-center justify-center text-sm">
+        No finished load runs yet. Start one from Load.
+      </div>
+    );
+  return (
+    <ChartContainer config={loadTrend} className="aspect-auto w-full" style={{ height }}>
+      <ComposedChart data={rows} margin={{ left: 0, right: 8, top: 8, bottom: 0 }} barSize={18}>
+        <CartesianGrid vertical={false} strokeDasharray="3 3" />
+        <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 11 }} />
+        <YAxis yAxisId="rps" tickLine={false} axisLine={false} width={40} tick={{ fontSize: 11 }} />
+        <YAxis
+          yAxisId="p99"
+          orientation="right"
+          tickLine={false}
+          axisLine={false}
+          width={48}
+          unit="ms"
+          tick={{ fontSize: 11 }}
+        />
+        <ChartTooltip
+          content={
+            <ChartTooltipContent
+              formatter={(value, name, item) => {
+                const p = item.payload as { errors: number };
+                const v = Number(value);
+                return (
+                  <span className="flex w-full justify-between gap-4">
+                    <span className="text-muted-foreground">{String(name)}</span>
+                    <span className="font-mono tabular-nums">
+                      {name === "p99" ? `${v.toFixed(1)} ms` : `${Math.round(v)} req/s`}
+                      {name === "rps" && p.errors ? ` · ${p.errors.toFixed(2)}% err` : ""}
+                    </span>
+                  </span>
+                );
+              }}
+            />
+          }
+        />
+        <Bar yAxisId="rps" dataKey="rps" fill="var(--color-rps)" radius={3} isAnimationActive={false} />
+        <Line
+          yAxisId="p99"
+          dataKey="p99"
+          stroke="var(--color-p99)"
+          strokeWidth={2}
+          dot={{ r: 2 }}
+          isAnimationActive={false}
+        />
+      </ComposedChart>
+    </ChartContainer>
+  );
+}
+
+/** Pass/fail history as a row of squares, oldest first; each links to its run. */
+export function PassStrip({ items }: { items: { id: string; ok: boolean; title: string }[] }) {
+  if (!items.length)
+    return (
+      <div className="text-muted-foreground flex h-24 items-center justify-center text-sm">
+        No validate runs yet. Run one from Validate.
+      </div>
+    );
+  return (
+    <div className="flex flex-wrap gap-1">
+      {items.map((i) => (
+        <a
+          key={i.id}
+          href={`/runs/view/?id=${i.id}`}
+          title={i.title}
+          className={`size-4 rounded-[3px] ${i.ok ? "bg-emerald-500" : "bg-destructive"} opacity-90 hover:opacity-100`}
+        />
+      ))}
+    </div>
   );
 }

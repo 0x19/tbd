@@ -54,11 +54,12 @@
       loop:
         - { bin: engine, port: 50051 }
         - { bin: protocol, port: 8080 }
+        - { bin: humans, port: 50053 }
         - { bin: ledger, port: 50052 }
       when: rebuild | bool
 
     - name: Import images into the cluster
-      command: k3d image import -m direct -c {{ cluster }} {{ registry }}/tbd-engine:{{ tag }} {{ registry }}/tbd-protocol:{{ tag }} {{ registry }}/tbd-ledger:{{ tag }}
+      command: k3d image import -m direct -c {{ cluster }} {{ registry }}/tbd-engine:{{ tag }} {{ registry }}/tbd-protocol:{{ tag }} {{ registry }}/tbd-ledger:{{ tag }} {{ registry }}/tbd-humans:{{ tag }}
       when: rebuild | bool
 
     - name: Apply observability
@@ -83,7 +84,7 @@
       changed_when: "'configured' in app.stdout or 'created' in app.stdout"
 
     - name: Roll the app onto rebuilt images
-      command: kubectl -n tbd rollout restart deployment/engine deployment/protocol deployment/ledger
+      command: kubectl -n tbd rollout restart deployment/engine deployment/protocol deployment/ledger deployment/humans
       when: rebuild | bool
 
     - name: Wait for observability
@@ -102,6 +103,7 @@
       loop:
         - deployment/engine
         - deployment/protocol
+        - deployment/humans
         - deployment/ledger
         - deployment/envoy
       changed_when: false

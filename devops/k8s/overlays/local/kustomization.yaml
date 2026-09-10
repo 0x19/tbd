@@ -17,6 +17,8 @@ images:
     newTag: dev
   - name: ghcr.io/0x19/tbd-ledger
     newTag: dev
+  - name: ghcr.io/0x19/tbd-humans
+    newTag: dev
 patches:
   - target:
       kind: Deployment
@@ -41,6 +43,16 @@ patches:
   - target:
       kind: Deployment
       name: ledger
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+      - op: replace
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: IfNotPresent
+  - target:
+      kind: Deployment
+      name: humans
     patch: |-
       - op: replace
         path: /spec/replicas

@@ -3287,6 +3287,7 @@ dependencies = [
  "serde_json",
  "tbd-common",
  "tbd-engine",
+ "tbd-humans",
  "tbd-ledger",
  "tbd-proto",
  "tbd-protocol",
@@ -3366,6 +3367,25 @@ dependencies = [
  "tonic-reflection",
  "tracing",
  "uuid",
+]
+
+[[package]]
+name = "tbd-humans"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "metrics",
+ "serde",
+ "tbd-common",
+ "tbd-proto",
+ "thiserror 2.0.20",
+ "tokio",
+ "toml",
+ "tonic",
+ "tonic-health",
+ "tonic-reflection",
+ "tracing",
 ]
 
 [[package]]

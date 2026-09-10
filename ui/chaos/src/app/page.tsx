@@ -5,6 +5,8 @@ import {
   AlertTriangle,
   BarChart3,
   CalendarClock,
+  ClipboardCheck,
+  Gauge,
   ListChecks,
   ListOrdered,
   RefreshCw,
@@ -14,7 +16,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import { useChaos } from "@/app/providers";
-import { ChartHeadline, CompareChart, LatencyBars, Legend } from "@/components/charts";
+import { ChartHeadline, CompareChart, LatencyBars, Legend, LoadTrend, PassStrip } from "@/components/charts";
 import { describeBehavior } from "@/components/instances-table";
 import { DetailList, KpiStrip, PageTitle } from "@/components/kit";
 import { RunsTable } from "@/components/runs-table";
@@ -60,6 +62,34 @@ export default function OverviewPage() {
   const up = stack.filter((i) => i.running).length;
   const faulty = stack.filter((i) => i.behavior && i.behavior.type !== "healthy").length;
   const lv = overview?.last_validate ?? null;
+  const loadRuns = all.filter(
+    (r) => r.kind === "load" && r.status !== "running" && r.throughput_rps !== null,
+  );
+  const lastLoad = loadRuns[0] ?? null;
+  const loadTrend = loadRuns
+    .slice(0, 12)
+    .reverse()
+    .map((r) => ({
+      id: r.id,
+      label: ago(r.started_at).replace(" ago", ""),
+      rps: r.throughput_rps ?? 0,
+      p99: r.p99_ms ?? 0,
+      errors: (r.error_rate ?? 0) * 100,
+    }));
+  const validateRuns = all.filter((r) => r.kind === "validate" && r.status !== "running");
+  const lastValidate = validateRuns[0] ?? null;
+  const validateStrip = validateRuns
+    .slice(0, 40)
+    .reverse()
+    .map((r) => ({
+      id: r.id,
+      ok: r.status === "passed",
+      title: `${r.status}${r.passed ? ` · ${r.passed[0]}/${r.passed[1]} checks` : ""} · ${ago(r.started_at)}`,
+    }));
+  const validatePassRate = validateRuns.length
+    ? validateRuns.slice(0, 40).filter((r) => r.status === "passed").length /
+      Math.min(validateRuns.length, 40)
+    : null;
   const latest = latestPerScenario(all);
   const lastScenario = latest[0] ?? null;
   const previousOfSame = lastScenario
@@ -213,6 +243,77 @@ export default function OverviewPage() {
                   }))}
               />
             </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-5">
+        <Card className="xl:col-span-3">
+          <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0">
+            <CardTitle className="flex items-center gap-2">
+              <span className="flex size-8 items-center justify-center rounded-lg border">
+                <Gauge className="size-4" />
+              </span>
+              Load runs
+            </CardTitle>
+            <div className="flex items-center gap-3">
+              <Legend
+                items={[
+                  { label: "req/s", color: "var(--foreground)" },
+                  { label: "p99", color: "var(--chart-2)" },
+                ]}
+              />
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/runs/?kind=load">All</Link>
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <ChartHeadline
+              value={lastLoad ? `${Math.round(lastLoad.throughput_rps ?? 0)} req/s` : "–"}
+              caption={
+                lastLoad
+                  ? `last load · ${lastLoad.name} · p99 ${(lastLoad.p99_ms ?? 0).toFixed(1)} ms · ${((lastLoad.error_rate ?? 0) * 100).toFixed(2)}% errors · ${ago(lastLoad.started_at)}`
+                  : "no load run yet"
+              }
+            />
+            <LoadTrend rows={loadTrend} />
+          </CardContent>
+        </Card>
+        <Card className="xl:col-span-2">
+          <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0">
+            <CardTitle className="flex items-center gap-2">
+              <span className="flex size-8 items-center justify-center rounded-lg border">
+                <ClipboardCheck className="size-4" />
+              </span>
+              Validate
+            </CardTitle>
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/validate/">Run</Link>
+            </Button>
+          </CardHeader>
+          <CardContent>
+            <ChartHeadline
+              value={
+                lastValidate ? (
+                  <span className="flex items-center gap-3">
+                    {lastValidate.passed ? `${lastValidate.passed[0]}/${lastValidate.passed[1]}` : "–"}
+                    <StatusBadge status={lastValidate.status} />
+                  </span>
+                ) : (
+                  "–"
+                )
+              }
+              caption={
+                lastValidate
+                  ? `last validate · ${ago(lastValidate.started_at)} · ${validatePassRate === null ? "" : `${Math.round(validatePassRate * 100)}% of the last ${Math.min(validateRuns.length, 40)} passed`}`
+                  : "never run"
+              }
+            />
+            <PassStrip items={validateStrip} />
+            {lastValidate?.error ? (
+              <p className="text-destructive mt-3 text-xs">{lastValidate.error}</p>
+            ) : null}
           </CardContent>
         </Card>
       </div>

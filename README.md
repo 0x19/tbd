@@ -10,6 +10,7 @@ project as-is.
 | Piece | What it is |
 |---|---|
 | **engine** | gRPC streaming compute service: unary `Evaluate`, server-streaming `Subscribe`, bidirectional `Session`. Health and reflection built in. Port 50051. |
+| **humans** | gRPC service scaffolded by `tbd new service`: health, reflection, metrics, one labelled-stub `Ping` until its real RPCs land. Port 50053. |
 | **ledger** | gRPC service scaffolded by `tbd new service`: health, reflection, metrics, one labelled-stub `Ping` until its real RPCs land. Port 50052. |
 | **protocol** | One port, four surfaces: REST and SSE under `/v1`, WebSocket at `/ws`, GraphQL at `/graphql`, gRPC over h2c. Forwards to the engine, owns no logic. Port 8080. |
 | **envoy** | The load balancer in front of everything: edge on 8080 for REST, SSE, GraphQL, WebSocket and gRPC; engine load balancer on 50051. One config for compose, Ansible and Kubernetes. |
@@ -175,6 +176,7 @@ crates/
   common/     telemetry, shutdown, shared CLI flags, fault injection. Transport-free.
   proto/      generated gRPC code from proto/. No hand-written logic.
   engine/     the engine service (lib + bin + tests/it)
+  humans/     the humans service (lib + bin + tests/it)
   ledger/     the ledger service (lib + bin + tests/it)
   protocol/   the protocol service (lib + bin + tests/it)
   chaos/      the chaos tool (lib + bin + tests/it)

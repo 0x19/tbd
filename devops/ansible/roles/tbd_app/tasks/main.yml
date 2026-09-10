@@ -30,6 +30,7 @@
   loop:
     - "{{ engine_image }}"
     - "{{ protocol_image }}"
+    - "{{ humans_image }}"
     - "{{ ledger_image }}"
 
 - name: Bring the stack up
