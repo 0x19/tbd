@@ -3,9 +3,9 @@ kind: Kustomization
 resources:
   - ../../base
 images:
-  - name: ghcr.io/ORG/tbd-engine
+  - name: ghcr.io/0x19/tbd-engine
     newTag: dev
-  - name: ghcr.io/ORG/tbd-protocol
+  - name: ghcr.io/0x19/tbd-protocol
     newTag: dev
 patches:
   - target:

@@ -3,7 +3,7 @@
 use std::{net::SocketAddr, time::Duration};
 
 use async_trait::async_trait;
-use tbd_common::{fault::Behavior, telemetry::LogArgs};
+use tbd_common::{fault::Behavior, telemetry::TelemetryArgs};
 use tbd_engine::{Config, Runtime};
 use tonic::transport::Endpoint;
 use tonic_health::pb::{HealthCheckRequest, health_client::HealthClient};
@@ -84,10 +84,8 @@ impl Service for Engine {
         let config = Config {
             listen_addr: addr,
             heartbeat_ms: u64::try_from(self.heartbeat.as_millis()).unwrap_or(u64::MAX),
-            log: LogArgs {
-                format: tbd_common::telemetry::LogFormat::Text,
-                filter: "info".into(),
-            },
+            metrics_addr: None,
+            telemetry: TelemetryArgs::default(),
         };
         let runtime = Runtime {
             fault: tbd_common::fault::FaultHandle::new(self.behavior.clone()),

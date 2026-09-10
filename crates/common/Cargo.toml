@@ -1,6 +1,6 @@
 [package]
 name = "tbd-common"
-description = "Cross-service plumbing: telemetry init, shutdown signal, shared CLI args, fault injection. Must not depend on tonic, axum or any transport."
+description = "Cross-service plumbing: telemetry (logs, OTLP traces, Prometheus metrics), shutdown, shared CLI args, fault injection. No service transport: the OTLP exporter and the metrics listener are the only network code here."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,11 +11,21 @@ publish.workspace = true
 [dependencies]
 clap.workspace = true
 humantime-serde.workspace = true
+metrics.workspace = true
+metrics-exporter-prometheus.workspace = true
+metrics-process.workspace = true
+opentelemetry.workspace = true
+opentelemetry-otlp.workspace = true
+opentelemetry-semantic-conventions.workspace = true
+opentelemetry_sdk.workspace = true
+pyroscope.workspace = true
+pyroscope_pprofrs.workspace = true
 rand.workspace = true
 serde.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
+tracing-opentelemetry.workspace = true
 tracing-subscriber.workspace = true
 
 [dev-dependencies]

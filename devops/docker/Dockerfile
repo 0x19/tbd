@@ -2,8 +2,8 @@
 #
 # One Dockerfile for every workspace binary. Select with --build-arg BIN=engine|protocol.
 #
-#   docker build -f devops/docker/Dockerfile --build-arg BIN=engine   -t ghcr.io/ORG/tbd-engine   .
-#   docker build -f devops/docker/Dockerfile --build-arg BIN=protocol -t ghcr.io/ORG/tbd-protocol .
+#   docker build -f devops/docker/Dockerfile --build-arg BIN=engine   -t ghcr.io/0x19/tbd-engine   .
+#   docker build -f devops/docker/Dockerfile --build-arg BIN=protocol -t ghcr.io/0x19/tbd-protocol .
 #
 # Stages: chef (toolchain + cargo-chef) -> planner (recipe.json) -> cacher (deps only)
 #         -> builder (workspace) -> runtime (distroless).
@@ -20,6 +20,7 @@ WORKDIR /app
 # ---------------------------------------------------------------------------
 FROM chef AS planner
 COPY Cargo.toml Cargo.lock ./
+COPY .cargo ./.cargo
 COPY crates ./crates
 COPY proto ./proto
 RUN cargo chef prepare --recipe-path recipe.json
@@ -36,6 +37,7 @@ ARG BIN=engine
 COPY --from=cacher /app/target ./target
 COPY --from=cacher /usr/local/cargo /usr/local/cargo
 COPY Cargo.toml Cargo.lock ./
+COPY .cargo ./.cargo
 COPY crates ./crates
 COPY proto ./proto
 RUN cargo build --locked --release -p tbd-${BIN} \

@@ -104,7 +104,7 @@ pub async fn serve_with(
     let incoming = TcpIncoming::from(listener).with_nodelay(Some(true));
 
     Server::builder()
-        .trace_fn(|_| tracing::info_span!("grpc"))
+        .trace_fn(request_span)
         .add_service(health_service)
         .add_service(reflection)
         .add_service(EngineServiceServer::new(service))
@@ -113,4 +113,34 @@ pub async fn serve_with(
 
     tracing::info!("engine stopped");
     Ok(())
+}
+
+/// One span per gRPC request, parented to the caller's trace when the
+/// `traceparent` metadata is present, with the trace id recorded so JSON
+/// logs inside it can be joined to the trace.
+struct Headers<'a>(&'a http::HeaderMap);
+
+impl tbd_common::telemetry::propagation::Extractor for Headers<'_> {
+    fn get(&self, key: &str) -> Option<&str> {
+        self.0.get(key).and_then(|v| v.to_str().ok())
+    }
+    fn keys(&self) -> Vec<&str> {
+        self.0.keys().map(http::HeaderName::as_str).collect()
+    }
+}
+
+fn request_span(request: &http::Request<()>) -> tracing::Span {
+    let route = request.uri().path().trim_start_matches('/').to_owned();
+    let span = tracing::info_span!(
+        "grpc.request",
+        rpc.system = "grpc",
+        rpc.method = %route,
+        trace_id = tracing::field::Empty,
+    );
+    if let Some(id) =
+        tbd_common::telemetry::propagation::adopt_parent(&span, &Headers(request.headers()))
+    {
+        span.record("trace_id", id);
+    }
+    span
 }

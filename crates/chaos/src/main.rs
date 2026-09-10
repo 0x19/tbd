@@ -7,7 +7,7 @@ use std::{path::PathBuf, time::Duration};
 
 use anyhow::Context;
 use clap::{Parser, Subcommand};
-use tbd_common::telemetry::LogArgs;
+use tbd_common::telemetry::TelemetryArgs;
 
 #[derive(Parser)]
 #[command(name = "chaos", version = tbd_common::VERSION, about = "Validate, load-test and fault-test the stack")]
@@ -15,7 +15,7 @@ struct Cli {
     #[command(subcommand)]
     command: Command,
     #[command(flatten)]
-    log: LogArgs,
+    telemetry: TelemetryArgs,
 }
 
 #[derive(Subcommand)]
@@ -77,10 +77,10 @@ const DEFAULT_FILTER: &str = "warn,tbd_chaos=info,tbd_protocol::error=off,tower_
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let mut cli = Cli::parse();
-    if std::env::var_os("RUST_LOG").is_none() && cli.log.filter == "info" {
-        DEFAULT_FILTER.clone_into(&mut cli.log.filter);
+    if std::env::var_os("RUST_LOG").is_none() && cli.telemetry.filter == "info" {
+        DEFAULT_FILTER.clone_into(&mut cli.telemetry.filter);
     }
-    tbd_common::telemetry::init(&cli.log)?;
+    let _telemetry = tbd_common::telemetry::init(&cli.telemetry, "chaos")?;
     match cli.command {
         Command::Up { file } => up(file).await,
         Command::Run { files, dir, json } => run(files, dir, json).await,

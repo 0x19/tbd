@@ -3,7 +3,7 @@
 use std::net::SocketAddr;
 
 use async_trait::async_trait;
-use tbd_common::telemetry::{LogArgs, LogFormat};
+use tbd_common::telemetry::TelemetryArgs;
 use tbd_protocol::Config;
 
 use super::{Instance, InstanceHandle, Peers, Service, TaskHandle};
@@ -60,10 +60,8 @@ impl Service for Protocol {
         let config = Config {
             listen_addr: addr,
             engine_url: format!("http://{engine_addr}"),
-            log: LogArgs {
-                format: LogFormat::Text,
-                filter: "info".into(),
-            },
+            metrics_addr: None,
+            telemetry: TelemetryArgs::default(),
         };
         let (stop, stopped) = tokio::sync::oneshot::channel();
         let instance_name = name.to_owned();

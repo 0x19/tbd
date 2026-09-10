@@ -3,7 +3,7 @@
 use std::{net::SocketAddr, time::Duration};
 
 use clap::Parser;
-use tbd_common::telemetry::LogArgs;
+use tbd_common::telemetry::TelemetryArgs;
 
 /// Engine configuration.
 #[derive(Debug, Clone, Parser)]
@@ -17,9 +17,13 @@ pub struct Config {
     #[arg(long, env = "ENGINE_HEARTBEAT_MS", default_value_t = 1_000)]
     pub heartbeat_ms: u64,
 
-    /// Logging.
+    /// Prometheus `/metrics` listener. Unset in embedded use.
+    #[arg(long, env = "ENGINE_METRICS_ADDR", default_value = "0.0.0.0:9464")]
+    pub metrics_addr: Option<SocketAddr>,
+
+    /// Logs and traces.
     #[command(flatten)]
-    pub log: LogArgs,
+    pub telemetry: TelemetryArgs,
 }
 
 impl Config {

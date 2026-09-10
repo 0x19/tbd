@@ -10,6 +10,11 @@ earlier idea material for a product direction, not a spec; do not "fix" it.
   docs, cargo-deny, typos. Run it before saying a change is done and show the output.
 - Single test: `cargo nextest run -p tbd-protocol -E 'test(name)'`.
 - `mise run run:engine` / `mise run run:protocol`; `mise run up` for the compose stack.
+- Local cluster with Envoy and the observability stack: `mise run local:up`, `local:build`,
+  `local:deploy`, then `local:traffic`; after code changes `local:restart`. Grafana on
+  :3000 (admin/admin), Envoy edge on :18080, engine LB on :15051. Dashboards reload with
+  `mise run grafana:reload`; Envoy config check with `mise run envoy:validate`.
+  Docs: `docs/local-cluster.md`, `docs/observability/README.md`.
 - `mise run chaos:up` runs both in one process; `mise run validate` checks every surface;
   `mise run chaos:run` runs the scenarios. Docs under `docs/chaos/` are the tool's
   contract: a change to a flag, output field, TOML key, behaviour or check updates the
@@ -23,6 +28,8 @@ earlier idea material for a product direction, not a spec; do not "fix" it.
 
 - Clippy pedantic is on and warnings are errors. `unwrap`/`expect` denied outside tests;
   `println`/`dbg` denied; `unsafe` forbidden.
+- Release builds keep symbols and frame pointers on purpose (profiling); do not add
+  `strip` back.
 - Stub values are labelled stubs on every surface (`stub: true`, `stub-` model versions).
   Never let a placeholder look like a measurement.
 - Protocol handlers translate and forward only. Business logic goes in the engine.
@@ -30,7 +37,11 @@ earlier idea material for a product direction, not a spec; do not "fix" it.
 - Integration tests boot real servers on port 0 via `serve_on`; no mocks of our own
   services.
 - Every new env var goes on a clap flag with `env = ...` and into `.env.example`,
-  `compose.yaml` and `devops/k8s/base/configmap.yaml`.
+  `compose.yaml`, `devops/k8s/base/configmap.yaml` and the ansible compose template.
+- Every new metric name goes into `crates/common/src/metrics.rs` `names` and the table in
+  `docs/observability/metrics.md`; every request path gets a span with `trace_id`
+  recorded and a `RequestTimer`; streams get a `StreamGuard`.
+- Services never address each other directly: the engine URL is Envoy's engine LB.
 
 ## Git
 

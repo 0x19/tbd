@@ -1,0 +1,11 @@
+# eBPF profiling of every container on the node, for clusters whose nodes are real
+# machines or VMs. Not part of the main observability kustomization: in k3d and kind
+# the node is itself a container, `hostPID` gives the node container's PID namespace,
+# and the profiler's self-check fails. Services profile themselves in-process there.
+#
+#   kubectl apply -k devops/k8s/observability/ebpf
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: observability
+resources:
+  - alloy-profiles.yaml

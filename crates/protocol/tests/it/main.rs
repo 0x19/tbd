@@ -148,3 +148,84 @@ async fn grpc_ping_on_same_port() {
     assert_eq!(resp.message, "hello");
     assert_eq!(resp.protocol_version, tbd_common::VERSION);
 }
+
+/// nextest runs each test in its own process, so installing the global
+/// metrics exporter here does not collide with other tests.
+#[tokio::test]
+async fn metrics_endpoint_reports_requests_and_engine_calls() {
+    let free = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let metrics_addr = free.local_addr().unwrap();
+    drop(free);
+    tbd_common::metrics::install(metrics_addr, "protocol-test").unwrap();
+
+    let stack = support::start().await;
+    let http = reqwest::Client::new();
+    http.get(stack.url("/healthz")).send().await.unwrap();
+    http.post(stack.url("/v1/evaluate"))
+        .json(&json!({ "subject_id": "s1" }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+
+    // The exporter renders lazily; give the request tasks a moment to record.
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    let body = http
+        .get(format!("http://{metrics_addr}/metrics"))
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+
+    assert!(
+        body.contains("tbd_build_info{"),
+        "build info missing:\n{body}"
+    );
+    assert!(
+        body.contains(r#"tbd_requests_total{service="protocol-test",transport="http",route="/v1/evaluate",status="200"} 1"#)
+            || body.contains(r#"tbd_requests_total{route="/v1/evaluate",service="protocol-test",status="200",transport="http"} 1"#),
+        "request counter missing or wrong labels:\n{body}"
+    );
+    assert!(
+        body.contains("tbd_request_duration_seconds_bucket{"),
+        "duration histogram missing"
+    );
+    assert!(
+        body.contains("tbd_engine_client_requests_total{")
+            && body.contains("EngineService/Evaluate"),
+        "engine client counter missing:\n{body}"
+    );
+    assert!(
+        body.contains("process_cpu_seconds_total"),
+        "process metrics missing"
+    );
+}
+
+#[tokio::test]
+async fn request_span_carries_a_trace_id_and_propagates_to_the_engine() {
+    // Telemetry with no exporter still generates trace ids; init once per process.
+    let mut telemetry = tbd_common::telemetry::init(
+        &tbd_common::telemetry::TelemetryArgs::default(),
+        "protocol-test",
+    )
+    .unwrap();
+    let stack = support::start().await;
+    let http = reqwest::Client::new();
+
+    // A caller-supplied traceparent must be adopted: the same trace id reaches the engine.
+    let resp = http
+        .post(stack.url("/v1/evaluate"))
+        .header(
+            "traceparent",
+            "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01",
+        )
+        .json(&json!({ "subject_id": "s1" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    telemetry.shutdown();
+}

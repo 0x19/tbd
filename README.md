@@ -11,8 +11,10 @@ project as-is.
 |---|---|
 | **engine** | gRPC streaming compute service: unary `Evaluate`, server-streaming `Subscribe`, bidirectional `Session`. Health and reflection built in. Port 50051. |
 | **protocol** | One port, four surfaces: REST and SSE under `/v1`, WebSocket at `/ws`, GraphQL at `/graphql`, gRPC over h2c. Forwards to the engine, owns no logic. Port 8080. |
-| **chaos** | Runs both in one process, validates every surface, generates load, injects faults on a timeline and asserts. Used for development and in CI. |
-| **devops** | One Dockerfile, kustomize overlays, Ansible playbooks, compose for local. |
+| **envoy** | The load balancer in front of everything: edge on 8080 for REST, SSE, GraphQL, WebSocket and gRPC; engine load balancer on 50051. One config for compose, Ansible and Kubernetes. |
+| **chaos** | Runs both services in one process, validates every surface, generates load, injects faults on a timeline and asserts. Used for development and in CI. |
+| **observability** | Prometheus metrics, OpenTelemetry traces, JSON logs with trace ids and continuous CPU profiles from every service and Envoy, into VictoriaMetrics, Tempo, VictoriaLogs and Pyroscope, with Grafana dashboards. |
+| **devops** | One Dockerfile, kustomize overlays including a local k3d cluster, Ansible playbooks, compose. |
 
 Every score the engine returns today is a **stub** and carries `stub: true` on every
 surface. There is no model yet. That flag is part of the contract, not metadata.
@@ -89,6 +91,24 @@ Start with [docs/chaos/README.md](docs/chaos/README.md). Writing scenarios:
 [docs/chaos/scenarios.md](docs/chaos/scenarios.md). Adding services or operations:
 [docs/chaos/extending.md](docs/chaos/extending.md).
 
+## Local cluster with Grafana
+
+```sh
+mise run local:up          # k3d on this machine, k3s 1.34, storage on the RAID
+mise run local:build       # both images into the cluster
+mise run local:deploy      # Envoy + services + VictoriaMetrics + Tempo + VictoriaLogs + collector + Grafana
+mise run local:traffic     # some requests through Envoy
+mise run local:load        # sustained load: dashboards, traces and CPU profiles fill up
+open http://localhost:3000 # admin / admin, dashboards tagged "tbd"
+mise run k9s
+```
+
+`mise run ansible:local` does the same through Ansible. Dashboards live in
+`devops/grafana/dashboards/`; `mise run grafana:reload` pushes edits in seconds. The
+cluster itself: [docs/local-cluster.md](docs/local-cluster.md). How the signals flow and
+how to follow one request across Envoy, protocol and engine:
+[docs/observability/README.md](docs/observability/README.md).
+
 ## Ship
 
 ```sh
@@ -100,8 +120,8 @@ mise run ansible:deploy             # IMAGE_TAG to ANSIBLE_INVENTORY hosts
 mise run ship                       # ci → docker:push → ansible:deploy
 ```
 
-Before the first real deploy a human fills in `ORG` in image names, the hosts in
-`devops/ansible/inventory/`, and registry credentials in an Ansible vault. See
+Before the first real deploy a human fills in the hosts in `devops/ansible/inventory/`
+and registry credentials in an Ansible vault. See
 [devops/README.md](devops/README.md).
 
 ## Layout
@@ -116,9 +136,9 @@ crates/
 proto/        .proto sources, buf STANDARD naming
 scenarios/    chaos scenarios: load + timeline + assertions
 topologies/   stacks for `chaos up`
-devops/       docker/, k8s/, ansible/
-docs/         ci.md, chaos/, design/ (earlier idea material, not a spec)
-compose.yaml  local stack from the same images
+devops/       docker/, envoy/, k8s/ (base, overlays, observability), grafana/, ansible/
+docs/         ci.md, observability.md, chaos/, design/ (earlier idea material, not a spec)
+compose.yaml  Envoy + services from the same images
 ```
 
 [ARCHITECTURE.md](ARCHITECTURE.md) has the shape and the invariants. Each crate and the

@@ -11,6 +11,10 @@ spec:
       app.kubernetes.io/name: engine
   template:
     metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9464"
+        prometheus.io/path: /metrics
       labels:
         app.kubernetes.io/name: engine
     spec:
@@ -23,12 +27,14 @@ spec:
           type: RuntimeDefault
       containers:
         - name: engine
-          # ORG is a placeholder; overlays pin the tag.
-          image: ghcr.io/ORG/tbd-engine:dev
+          # Overlays pin the tag.
+          image: ghcr.io/0x19/tbd-engine:dev
           imagePullPolicy: IfNotPresent
           ports:
             - name: grpc
               containerPort: 50051
+            - name: metrics
+              containerPort: 9464
               protocol: TCP
           envFrom:
             - configMapRef:
@@ -55,3 +61,12 @@ spec:
             readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
+          volumeMounts:
+            # The in-process profiler (pprof-rs) needs a writable temp dir for
+            # its sample buffers; the root filesystem stays read-only.
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi

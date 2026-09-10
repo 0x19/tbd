@@ -1,0 +1,16 @@
+# Grafana dashboard provisioning. Mounted at /etc/grafana/provisioning/dashboards.
+# Dashboards are JSON files under /var/lib/grafana/dashboards (a ConfigMap built
+# from devops/grafana/dashboards/*.json). Grafana re-reads them every 10 s, so an
+# edited file shows up without a restart.
+apiVersion: 1
+
+providers:
+  - name: tbd
+    folder: tbd
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false
