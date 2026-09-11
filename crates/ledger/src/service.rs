@@ -1,8 +1,10 @@
-//! `tbd.ledger.v1.LedgerService` implementation.
-//!
-//! Everything here is a **stub** and says so on the wire (`stub = true`).
-//! Every RPC first consults the fault handle in [`Runtime`], so an embedder can
-//! make this service slow, failing or hung at runtime.
+//! `tbd.ledger.v1.LedgerService` implementation: a thin adapter over the
+//! [`Store`]. `Ping` is still a **stub** and says so on the wire; the facts
+//! RPCs land beside it. Every RPC first consults the fault handle in
+//! [`Runtime`], so an embedder can make this service slow, failing or hung at
+//! runtime.
+
+use std::sync::Arc;
 
 use tbd_common::{
     fault::{ErrorKind, Fault},
@@ -11,20 +13,43 @@ use tbd_common::{
 use tbd_proto::ledger::v1::{PingRequest, PingResponse, ledger_service_server::LedgerService};
 use tonic::{Code, Request, Response, Status};
 
-use crate::{Runtime, config::Ping};
+use crate::{
+    Runtime,
+    config::Ping,
+    store::{Store, StoreKind},
+};
 
 /// The service. Cheap to clone; holds its configuration section and shared handles.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Ledger {
     ping: Ping,
     runtime: Runtime,
+    store: Arc<dyn Store>,
+}
+
+impl std::fmt::Debug for Ledger {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Ledger")
+            .field("store", &self.store.kind())
+            .finish_non_exhaustive()
+    }
 }
 
 impl Ledger {
-    /// Build a service from its `[ping]` configuration.
+    /// Build a service from its `[ping]` configuration and a store.
     #[must_use]
-    pub fn new(ping: Ping, runtime: Runtime) -> Self {
-        Self { ping, runtime }
+    pub fn new(ping: Ping, runtime: Runtime, store: Arc<dyn Store>) -> Self {
+        Self {
+            ping,
+            runtime,
+            store,
+        }
+    }
+
+    /// Which store backs this service.
+    #[must_use]
+    pub fn store_kind(&self) -> StoreKind {
+        self.store.kind()
     }
 
     /// Count the request, start its timer and apply any injected fault
@@ -75,7 +100,7 @@ impl LedgerService for Ledger {
                 )),
             ));
         }
-        tracing::debug!(len = message.len(), "ping (stub)");
+        tracing::debug!(len = message.len(), store = %self.store.kind(), "ping (stub)");
         Ok(Response::new(PingResponse {
             message,
             version: tbd_common::VERSION.to_owned(),

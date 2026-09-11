@@ -75,7 +75,10 @@ pyroscope          = "0.5"   # the pprof-rs backend targets this line; 2.x is a 
 pyroscope_pprofrs  = "0.2"
 
 # misc
-uuid = { version = "1", features = ["v4", "v7"] }
+uuid = { version = "1", features = ["v4", "v7", "serde"] }
+chrono          = { version = "0.4", default-features = false, features = ["clock", "std", "serde"] }
+sha2            = "0.10"
+proptest        = "1"
 rand            = "0.9"
 humantime       = "2"
 humantime-serde = "1"

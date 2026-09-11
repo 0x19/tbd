@@ -1,35 +1,46 @@
 <!-- tbd new service ledger --kind grpc --port 50052 --metrics-port 9466 --bacon-key l (tbd-cli 0.1.0) -->
 # crates/ledger
 
-The ledger service. gRPC only. Scaffolded by `tbd new service` (docs/tbd/README.md);
-`Ping` is a labelled stub until the service's real RPCs land beside it.
+The facts ledger: append-only facts about an opaque subject, with provenance,
+tombstones and erasure (`docs/design/humans/`), behind a `Store` trait with two
+backends, and a thin gRPC service on top. Scaffolded by `tbd new service`
+(docs/tbd/README.md); the crate has evolved past the template, which `tbd service check`
+reports as `diverged`. The contract is `docs/ledger/README.md`.
 
-- `lib.rs`: `serve` (binds `[server] listen`), `serve_on` (caller-supplied listener,
-  default `Runtime`), `serve_with` (listener plus a `Runtime`). Tests and the chaos
-  tool use the last two on port 0.
-- `service.rs`: the `LedgerService` trait impl on `Ledger`. Every RPC starts with
-  `admit()`: count the request, start the `RequestTimer`, apply the fault handle, map
-  a `Fault` to a gRPC status.
-- `config.rs`: layered TOML, `configs/ledger/base.toml` < `<env>.toml` < flags and
-  `LEDGER_*` environment variables (`Overrides`). Every key lives in `base.toml`;
-  `deny_unknown_fields` makes a mistyped key fail at start. `ledger config` prints
-  the effective result.
-- `main.rs`: the only file that prints (the `config` subcommand).
-
-- Observability: `tbd_common::telemetry::grpc_request_span` is the `trace_fn`, so every
-  call gets a `grpc.request` span with the caller's `traceparent` adopted and
-  `trace_id` recorded; `admit()` starts the `RequestTimer`. Metrics listen on
-  `[metrics] listen` (`LEDGER_METRICS_ADDR`), `None` for embedders.
+- `store/mod.rs`: the crate's API. `Store` (append, current, history, retract,
+  request_erasure, restore, execute_due_erasures, claim_events, ack_events,
+  purge_idempotency), the types (`Fact`, `NewFact`, `Envelope`, `Query`, `Page`,
+  `Cursor`, `PathPattern`, `OutboxEvent`), `StoreError` and its gRPC mapping. No
+  driver type appears here: a gRPC-backed implementation could satisfy it unchanged.
+- `store/validate.rs` and `store/registry.rs`: write and query validation every backend
+  runs first; the path registry is injected (`Registry`), phase 1 ships `ShapeOnly`.
+- `store/memory.rs`: `MemoryStore`, one mutex, a monotonic microsecond clock
+  (`store/clock.rs`, `ManualClock` for tests). Not a stub: the same contract as Postgres,
+  nothing survives the process. Chaos stacks and host runs without a database use it.
+- `lib.rs`: `serve`, `serve_on`, `serve_with` (the store comes from `[store]`),
+  `serve_store` (an explicit store). `config.rs`: `[store]`, `[analytics]`, `[erasure]`,
+  `[idempotency]`, `[health]`; `Config::in_memory(addr)` for embedders;
+  `Config::validate()` after flags. The URLs (`LEDGER_DATABASE_URL`,
+  `LEDGER_CLICKHOUSE_URL`) are environment only and never serialised.
+- `service.rs`: the `LedgerService` impl on `Ledger`. Every RPC starts with `admit()`:
+  count the request, start the `RequestTimer`, apply the fault handle, map a `Fault`
+  to a gRPC status. `main.rs`: the only file that prints (the `config` subcommand).
 
 Invariants:
-- A stub says so on the wire: `PingResponse.stub` is `true` until a real implementation
-  replaces it, and the tests assert it. Do not let a placeholder look like a
-  measurement.
-- `TCP_NODELAY` is set on `TcpIncoming`, not the server builder. With a caller-supplied
-  listener the builder setting does nothing, and small responses stall 40 ms.
-- Services never address each other directly; a caller reaches this one through
-  Envoy's internal listener (`http://envoy:50051`, matched by service name).
+- Retraction physically deletes the valued rows and appends a tombstone in the same
+  transaction; a retracted value is absent from every cut of history. Erasure denies
+  every read and write from the request, cascades at window end, and the erasure
+  record survives to publish `subject.erased`. The conformance suite asserts both:
+  a privacy claim is a test.
+- `recorded_at` is minted by the store after the subject lock and is strictly
+  increasing per subject; `(recorded_at, id)` is the order and the cursor.
+- The outbox payload carries clear columns only, never a value or an origin.
+- `PingResponse.stub` stays `true` until the facts RPCs land; `TCP_NODELAY` is set on
+  `TcpIncoming`, not the builder; callers reach this service through Envoy's internal
+  listener (`http://envoy:50051`, matched by service name).
 
-Tests: `tests/it/main.rs` boots the server on port 0 through `support.rs` with the
-shipped `configs/ledger` and env `local`, and exposes the `Runtime` so tests can
-inject faults and read counters.
+Tests: `tests/it/conformance.rs` is the store contract, generic over the backend, run
+through the `conformance_suite!` macro (`memory` in `tests/it/main.rs`); `main.rs` boots
+the gRPC server on port 0 through `support.rs` with the shipped `configs/ledger` and env
+`local`. Never enumerate a backend's behaviour outside the suite: a case added there
+runs on every store.

@@ -6,10 +6,7 @@ use std::net::SocketAddr;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use tbd_common::fault::Behavior;
-use tbd_ledger::{
-    Config, Runtime,
-    config::{Metrics, Ping, Server},
-};
+use tbd_ledger::{Config, Runtime};
 use tbd_proto::ledger::v1::{PingRequest, ledger_service_client::LedgerServiceClient};
 use tonic::transport::Endpoint;
 use tonic_health::pb::{HealthCheckRequest, health_client::HealthClient};
@@ -105,11 +102,7 @@ impl Service for Ledger {
     ) -> anyhow::Result<Instance> {
         let listener = tokio::net::TcpListener::bind(listen).await?;
         let addr = listener.local_addr()?;
-        let config = Config {
-            server: Server { listen: addr },
-            metrics: Metrics { listen: None },
-            ping: Ping::default(),
-        };
+        let config = Config::in_memory(addr);
         let runtime = Runtime {
             fault: tbd_common::fault::FaultHandle::new(self.behavior.clone()),
             ..Default::default()

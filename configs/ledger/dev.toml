@@ -1,2 +1,4 @@
-# ledger, environment "dev": nothing differs from base.toml yet. The file
-# must exist so a mistyped TBD_ENV fails at start instead of running on base.
+# ledger, environment "dev".
+
+[store]
+max_connections = 8

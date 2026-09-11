@@ -3,7 +3,14 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+mod conformance;
 mod support;
+
+use std::sync::Arc;
+
+use tbd_ledger::MemoryStore;
+
+conformance_suite!(memory, async { Arc::new(MemoryStore::new()) });
 
 use tbd_ledger::{Behavior, FaultHandle, Runtime};
 use tbd_proto::ledger::v1::PingRequest;

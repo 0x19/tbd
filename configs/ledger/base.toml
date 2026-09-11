@@ -16,3 +16,38 @@ listen = "0.0.0.0:9464"
 # Longest message Ping echoes; longer is INVALID_ARGUMENT. The one knob that
 # proves TOML reaches an RPC.
 max_message_len = 1024
+
+[store]
+# "postgres" is the real store; "memory" holds nothing past the process and is
+# what tests, chaos stacks and host runs without a database use. The Postgres
+# URL comes only from LEDGER_DATABASE_URL (a secret; never in a file).
+kind = "memory"
+max_connections = 16
+acquire_timeout = "5s"
+# Run the embedded migrations at start under an advisory lock. Production runs
+# `ledger migrate` on its own and sets this false.
+migrate_on_start = true
+
+[analytics]
+# The outbox drain into ClickHouse. The URL comes only from
+# LEDGER_CLICKHOUSE_URL (it carries a credential); empty means off.
+batch = 500
+period = "1s"
+lease = "30s"
+
+[erasure]
+# The window between an erasure request and the cascade; a restore inside it
+# reopens the subject. The sweeper executes due erasures and purges stale
+# idempotency keys every sweep_interval.
+grace = "7d"
+sweep_interval = "1h"
+batch = 100
+
+[idempotency]
+ttl = "24h"
+
+[health]
+# Readiness: the store is probed every probe_interval; a probe slower than
+# probe_timeout marks the service NOT_SERVING.
+probe_interval = "5s"
+probe_timeout = "2s"

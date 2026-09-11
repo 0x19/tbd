@@ -1,2 +1,11 @@
-# ledger, environment "local": nothing differs from base.toml yet. The file
-# must exist so a mistyped TBD_ENV fails at start instead of running on base.
+# ledger, environment "local": the k3d cluster and the compose stack, with a
+# small pool and a fast outbox and sweeper so changes show up quickly.
+
+[store]
+max_connections = 4
+
+[analytics]
+period = "250ms"
+
+[erasure]
+sweep_interval = "1m"

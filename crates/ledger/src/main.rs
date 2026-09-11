@@ -35,8 +35,22 @@ async fn main() -> anyhow::Result<()> {
             println!("# {}", f.display());
         }
         print!("{}", toml::to_string_pretty(&config)?);
+        println!(
+            "# store.url: {} (LEDGER_DATABASE_URL); analytics.clickhouse_url: {} (LEDGER_CLICKHOUSE_URL)",
+            if config.store.url.is_empty() {
+                "unset"
+            } else {
+                "set"
+            },
+            if config.analytics.clickhouse_url.is_empty() {
+                "unset"
+            } else {
+                "set"
+            },
+        );
         return Ok(());
     }
+    config.validate()?;
 
     let mut telemetry = tbd_common::telemetry::init(&cli.telemetry, "ledger")?;
     tracing::info!(env = %source.env, files = ?source.files, "config");

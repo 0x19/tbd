@@ -1,2 +1,7 @@
-# ledger, environment "production": nothing differs from base.toml yet. The file
-# must exist so a mistyped TBD_ENV fails at start instead of running on base.
+# ledger, environment "production": a bigger pool, and migrations run by
+# `ledger migrate` before the rollout rather than by every replica at start.
+
+[store]
+max_connections = 32
+acquire_timeout = "10s"
+migrate_on_start = false

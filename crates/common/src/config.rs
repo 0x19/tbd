@@ -62,6 +62,9 @@ pub enum ConfigError {
     /// The environment name is `base` or not a plain file stem.
     #[error("invalid env name {0:?}: use a plain name such as local, dev or production")]
     InvalidEnv(String),
+    /// The loaded values do not hold together (a binary's own cross-field check).
+    #[error("invalid config: {0}")]
+    Invalid(String),
 }
 
 /// A loaded configuration and where it came from.

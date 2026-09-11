@@ -1,13 +1,17 @@
-//! The ledger service: a gRPC server.
+//! The facts ledger: append-only facts about an opaque subject, with
+//! provenance, tombstones and erasure, on a [`store::Store`] (Postgres, or in
+//! memory for tests and embedders), and a thin gRPC service on top.
 //!
 //! The library exposes [`serve`], [`serve_on`] and [`serve_with`] so the same
 //! server can be run from `main`, from integration tests on an ephemeral port,
-//! and from the chaos tool with fault injection and counters attached.
+//! and from the chaos tool with fault injection and counters attached;
+//! [`serve_store`] takes an explicit store for embedders that build their own.
 
 pub mod config;
 mod service;
+pub mod store;
 
-use std::net::SocketAddr;
+use std::{net::SocketAddr, sync::Arc};
 
 use tbd_proto::ledger::v1::ledger_service_server::LedgerServiceServer;
 use tokio::net::TcpListener;
@@ -15,6 +19,7 @@ use tonic::transport::{Server, server::TcpIncoming};
 
 pub use config::{Config, Overrides, Source};
 pub use service::Ledger;
+pub use store::{Store, StoreError, StoreKind, memory::MemoryStore};
 pub use tbd_common::{
     fault::{Behavior, FaultHandle},
     runtime::{Runtime, Stats, StatsHandle, StatsSnapshot},
@@ -37,6 +42,28 @@ pub enum ServeError {
     /// The gRPC server failed while running.
     #[error("transport: {0}")]
     Transport(#[from] tonic::transport::Error),
+    /// The configuration does not hold together (a Postgres store without a URL).
+    #[error("config: {0}")]
+    Config(#[from] tbd_common::config::ConfigError),
+    /// The store could not be built.
+    #[error("store: {0}")]
+    Store(#[from] StoreError),
+}
+
+/// Build the store the configuration names.
+///
+/// # Errors
+/// The configuration is inconsistent, or the backend cannot be reached.
+// Async for the Postgres backend, which connects here; the memory store does not await.
+#[allow(clippy::unused_async)]
+pub async fn build_store(config: &Config) -> Result<Arc<dyn Store>, ServeError> {
+    config.validate()?;
+    match config.store.kind {
+        StoreKind::Memory => Ok(Arc::new(MemoryStore::new())),
+        StoreKind::Postgres => Err(ServeError::Store(StoreError::Internal(
+            "the postgres store is not built yet; run with LEDGER_STORE_KIND=memory".into(),
+        ))),
+    }
 }
 
 /// Bind `[server] listen` and serve until `shutdown` resolves.
@@ -64,10 +91,23 @@ pub async fn serve_on(
 }
 
 /// Serve on an already-bound listener with the embedder's [`Runtime`] attached.
+/// The store comes from `[store]`.
 pub async fn serve_with(
     listener: TcpListener,
     config: Config,
     runtime: Runtime,
+    shutdown: impl Future<Output = ()> + Send + 'static,
+) -> Result<(), ServeError> {
+    let store = build_store(&config).await?;
+    serve_store(listener, config, runtime, store, shutdown).await
+}
+
+/// Serve on an already-bound listener with an explicit store.
+pub async fn serve_store(
+    listener: TcpListener,
+    config: Config,
+    runtime: Runtime,
+    store: Arc<dyn Store>,
     shutdown: impl Future<Output = ()> + Send + 'static,
 ) -> Result<(), ServeError> {
     let addr = listener.local_addr().map_err(|source| ServeError::Bind {
@@ -85,9 +125,9 @@ pub async fn serve_with(
         .register_encoded_file_descriptor_set(tonic_health::pb::FILE_DESCRIPTOR_SET)
         .build_v1()?;
 
-    let service = Ledger::new(config.ping.clone(), runtime);
+    let service = Ledger::new(config.ping.clone(), runtime, store);
 
-    tracing::info!(%addr, version = tbd_common::VERSION, "ledger listening");
+    tracing::info!(%addr, version = tbd_common::VERSION, store = %service.store_kind(), "ledger listening");
 
     // `tcp_nodelay` on the builder only applies to tonic's own listener. With
     // a caller-supplied listener it must be set on the incoming stream, or
