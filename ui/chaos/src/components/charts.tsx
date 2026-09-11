@@ -12,6 +12,7 @@ import {
   Line,
   LineChart,
   XAxis,
+  type XAxisTickContentProps,
   YAxis,
 } from "recharts";
 
@@ -263,16 +264,21 @@ export function LatencyBars({
 }
 
 const loadTrend = {
-  rps: { label: "req/s", color: "var(--foreground)" },
+  ok: { label: "req/s ok", color: "var(--foreground)" },
+  err: { label: "req/s failed", color: "var(--destructive)" },
   p99: { label: "p99", color: "var(--chart-2)" },
 } satisfies ChartConfig;
 
-/** Throughput (bars) and p99 (line) of the last load runs, oldest first. */
+/**
+ * Throughput of the last load runs as stacked bars, the failed share in red so
+ * an error rate is visible without the tooltip, and p99 as a line; oldest
+ * first. Runs with errors get a marker under the label.
+ */
 export function LoadTrend({
   rows,
   height = 200,
 }: {
-  rows: { id: string; label: string; rps: number; p99: number; errors: number }[];
+  rows: { id: string; label: string; rps: number; p99: number; errors: number; failed: boolean }[];
   height?: number;
 }) {
   if (!rows.length)
@@ -281,11 +287,39 @@ export function LoadTrend({
         No finished load runs yet. Start one from Load.
       </div>
     );
+  const data = rows.map((r) => {
+    const err = (r.rps * r.errors) / 100;
+    return { ...r, err, ok: Math.max(0, r.rps - err) };
+  });
   return (
     <ChartContainer config={loadTrend} className="aspect-auto w-full" style={{ height }}>
-      <ComposedChart data={rows} margin={{ left: 0, right: 8, top: 8, bottom: 0 }} barSize={18}>
+      <ComposedChart data={data} margin={{ left: 0, right: 8, top: 8, bottom: 0 }} barSize={18}>
         <CartesianGrid vertical={false} strokeDasharray="3 3" />
-        <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 11 }} />
+        <XAxis
+          dataKey="label"
+          tickLine={false}
+          axisLine={false}
+          tick={(props: XAxisTickContentProps) => {
+            const row = data[props.index];
+            const bad = !!row && (row.errors > 0 || row.failed);
+            return (
+              <text
+                x={props.x}
+                y={Number(props.y) + 10}
+                textAnchor="middle"
+                fontSize={11}
+                className="fill-muted-foreground"
+              >
+                {String(props.payload.value)}
+                {bad ? (
+                  <tspan className="fill-destructive" dx={3}>
+                    ●
+                  </tspan>
+                ) : null}
+              </text>
+            );
+          }}
+        />
         <YAxis yAxisId="rps" tickLine={false} axisLine={false} width={40} tick={{ fontSize: 11 }} />
         <YAxis
           yAxisId="p99"
@@ -300,14 +334,23 @@ export function LoadTrend({
           content={
             <ChartTooltipContent
               formatter={(value, name, item) => {
-                const p = item.payload as { errors: number };
+                const p = item.payload as { errors: number; rps: number; failed: boolean };
                 const v = Number(value);
+                if (name === "err") {
+                  return (
+                    <span className="flex w-full justify-between gap-4">
+                      <span className="text-muted-foreground">errors</span>
+                      <span className={`font-mono tabular-nums ${p.errors ? "text-destructive" : ""}`}>
+                        {p.errors.toFixed(2)}%{p.failed ? " · run failed" : ""}
+                      </span>
+                    </span>
+                  );
+                }
                 return (
                   <span className="flex w-full justify-between gap-4">
-                    <span className="text-muted-foreground">{String(name)}</span>
+                    <span className="text-muted-foreground">{name === "p99" ? "p99" : "req/s"}</span>
                     <span className="font-mono tabular-nums">
-                      {name === "p99" ? `${v.toFixed(1)} ms` : `${Math.round(v)} req/s`}
-                      {name === "rps" && p.errors ? ` · ${p.errors.toFixed(2)}% err` : ""}
+                      {name === "p99" ? `${v.toFixed(1)} ms` : `${Math.round(p.rps)} req/s`}
                     </span>
                   </span>
                 );
@@ -315,7 +358,15 @@ export function LoadTrend({
             />
           }
         />
-        <Bar yAxisId="rps" dataKey="rps" fill="var(--color-rps)" radius={3} isAnimationActive={false} />
+        <Bar yAxisId="rps" dataKey="ok" stackId="rps" fill="var(--color-ok)" isAnimationActive={false} />
+        <Bar
+          yAxisId="rps"
+          dataKey="err"
+          stackId="rps"
+          fill="var(--color-err)"
+          radius={[3, 3, 0, 0]}
+          isAnimationActive={false}
+        />
         <Line
           yAxisId="p99"
           dataKey="p99"

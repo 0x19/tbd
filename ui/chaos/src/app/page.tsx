@@ -17,8 +17,8 @@ import { useEffect, useMemo, useState } from "react";
 
 import { useChaos } from "@/app/providers";
 import { ChartHeadline, CompareChart, LatencyBars, Legend, LoadTrend, PassStrip } from "@/components/charts";
-import { describeBehavior } from "@/components/instances-table";
-import { DetailList, KpiStrip, PageTitle } from "@/components/kit";
+import { KpiStrip, PageTitle } from "@/components/kit";
+import { EnvironmentCard, StackCard } from "@/components/overview-cards";
 import { RunsTable } from "@/components/runs-table";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
@@ -27,11 +27,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api/client";
 import { useFetch } from "@/lib/api/hooks";
 import type { RunRecord, RunSummary } from "@/lib/api/schema";
-import { ago, ms, num, pct } from "@/lib/format";
+import { ago, ms, pct } from "@/lib/format";
 import { delta, failed, inWindow, latestPerScenario } from "@/lib/runs";
 
 export default function OverviewPage() {
-  const { overview, error, reload, lastEvent, activity } = useChaos();
+  const { overview, error, reload, lastEvent, activity, kinds } = useChaos();
   const [allActivity, setAllActivity] = useState(false);
   // One row per thing that happened: a run's "started" folds into its
   // "finished" once that arrives, and consecutive queue changes collapse into
@@ -79,11 +79,13 @@ export default function OverviewPage() {
     .reverse()
     .map((r) => ({
       id: r.id,
-      label: ago(r.started_at).replace(" ago", ""),
+      label: loadLabel(r.started_at),
       rps: r.throughput_rps ?? 0,
       p99: r.p99_ms ?? 0,
       errors: (r.error_rate ?? 0) * 100,
+      failed: failed(r),
     }));
+  const loadWithErrors = loadTrend.filter((r) => r.errors > 0 || r.failed).length;
   const validateRuns = all.filter((r) => r.kind === "validate" && r.status !== "running");
   const lastValidate = validateRuns[0] ?? null;
   const validateStrip = validateRuns
@@ -268,6 +270,7 @@ export default function OverviewPage() {
               <Legend
                 items={[
                   { label: "req/s", color: "var(--foreground)" },
+                  { label: "failed", color: "var(--destructive)" },
                   { label: "p99", color: "var(--chart-2)" },
                 ]}
               />
@@ -278,10 +281,23 @@ export default function OverviewPage() {
           </CardHeader>
           <CardContent>
             <ChartHeadline
-              value={lastLoad ? `${Math.round(lastLoad.throughput_rps ?? 0)} req/s` : "–"}
+              value={
+                lastLoad ? (
+                  <span className="flex items-baseline gap-3">
+                    {Math.round(lastLoad.throughput_rps ?? 0)} req/s
+                    {(lastLoad.error_rate ?? 0) > 0 ? (
+                      <span className="text-destructive text-base font-medium">
+                        {((lastLoad.error_rate ?? 0) * 100).toFixed(2)}% errors
+                      </span>
+                    ) : null}
+                  </span>
+                ) : (
+                  "–"
+                )
+              }
               caption={
                 lastLoad
-                  ? `last load · ${lastLoad.name} · p99 ${(lastLoad.p99_ms ?? 0).toFixed(1)} ms · ${((lastLoad.error_rate ?? 0) * 100).toFixed(2)}% errors · ${ago(lastLoad.started_at)}`
+                  ? `last load · ${lastLoad.name} · p99 ${(lastLoad.p99_ms ?? 0).toFixed(1)} ms · ${ago(lastLoad.started_at)}${loadWithErrors ? ` · ${loadWithErrors} of the last ${loadTrend.length} with errors` : ` · the last ${loadTrend.length} clean`}`
                   : "no load run yet"
               }
             />
@@ -327,42 +343,7 @@ export default function OverviewPage() {
       </div>
 
       <div className="grid gap-4 xl:grid-cols-3">
-        <Card>
-          <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
-            <div className="space-y-1.5">
-              <CardTitle>Stack</CardTitle>
-              <CardDescription>{overview.config.paths.topology} in this process.</CardDescription>
-            </div>
-            <Button variant="outline" size="sm" asChild>
-              <Link href="/stack/">Manage</Link>
-            </Button>
-          </CardHeader>
-          <CardContent>
-            {overview.stack ? (
-              <ul className="divide-y">
-                {stack.map((i) => (
-                  <li key={i.name} className="flex items-center gap-3 py-2.5 text-sm">
-                    <span
-                      className={`size-2 rounded-full ${!i.running ? "bg-muted-foreground/40" : i.behavior && i.behavior.type !== "healthy" ? "bg-amber-500" : "bg-emerald-500"}`}
-                    />
-                    <span className="font-mono text-xs">{i.name}</span>
-                    <span className="text-muted-foreground">{i.kind}</span>
-                    <span className="text-muted-foreground ml-auto text-xs">
-                      {!i.running ? "stopped" : i.behavior ? describeBehavior(i.behavior) : "running"}
-                    </span>
-                    {i.requests ? (
-                      <span className="w-20 text-right text-xs tabular-nums">
-                        {num(i.requests.total)} req
-                      </span>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-muted-foreground text-sm">serve runs with --no-stack</p>
-            )}
-          </CardContent>
-        </Card>
+        <StackCard stack={overview.stack} kinds={kinds} topology={overview.config.paths.topology} />
         <Card>
           <CardHeader>
             <CardTitle>Recent activity</CardTitle>
@@ -438,77 +419,7 @@ export default function OverviewPage() {
             ) : null}
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Where to look</CardTitle>
-            <CardDescription>What this environment points at.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <DetailList
-              rows={[
-                {
-                  k: "Serve stack",
-                  v: (
-                    <Link href="/stack/" className="text-xs hover:underline">
-                      {overview.stack ? describeStack(overview.stack) : "not started (--no-stack)"}
-                    </Link>
-                  ),
-                },
-                {
-                  k: "Validate hits",
-                  v: (
-                    <span className="grid font-mono text-xs">
-                      {Object.entries(overview.config.targets).map(([kind, url], i) => (
-                        <span key={kind} className={i ? "text-muted-foreground" : ""}>
-                          {url} <span className="text-muted-foreground">({kind})</span>
-                        </span>
-                      ))}
-                    </span>
-                  ),
-                },
-                {
-                  k: "Scenarios",
-                  v: <span className="font-mono text-xs">{overview.config.paths.scenarios}</span>,
-                },
-                {
-                  k: "Campaigns",
-                  v: (
-                    <span className="font-mono text-xs">
-                      {overview.config.paths.campaigns}{" "}
-                      <span className="text-muted-foreground font-sans">({overview.campaigns})</span>
-                    </span>
-                  ),
-                },
-                {
-                  k: "Findings",
-                  v: (
-                    <span className="font-mono text-xs">
-                      {overview.config.paths.findings}{" "}
-                      <span className="text-muted-foreground font-sans">
-                        ({overview.findings} in {overview.finding_signatures} signature
-                        {overview.finding_signatures === 1 ? "" : "s"})
-                      </span>
-                    </span>
-                  ),
-                },
-                {
-                  k: "Run records",
-                  v: <span className="font-mono text-xs">{overview.config.paths.results}</span>,
-                },
-                ...Object.entries(overview.config.links)
-                  .filter(([k, v]) => v && !["domain", "chaos", "auth"].includes(k))
-                  .map(([k, v]) => ({
-                    k: k.replace("_", " "),
-                    v: (
-                      <a className="font-mono text-xs underline" href={v} target="_blank" rel="noreferrer">
-                        {v.replace(/^https?:\/\//, "")}
-                      </a>
-                    ),
-                  })),
-              ]}
-            />
-          </CardContent>
-        </Card>
+        <EnvironmentCard overview={overview} />
       </div>
 
       <Card>
@@ -568,14 +479,12 @@ function ThroughputCompare({
   );
 }
 
+/** Bar labels: minutes and seconds stay relative, anything older is a clock time, so twelve bars read as twelve runs. */
+function loadLabel(iso: string): string {
+  const age = Date.now() - new Date(iso).getTime();
+  if (age < 3600_000) return ago(iso).replace(" ago", "");
+  return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
 const ACTIVITY_WINDOW_MS = 10 * 60_000;
 const ACTIVITY_ROWS = 6;
-
-/** "2 engines, 1 protocol · 3/3 running", counted live from the stack. */
-function describeStack(stack: { kind: string; running: boolean }[]): string {
-  const byKind = new Map<string, number>();
-  for (const i of stack) byKind.set(i.kind, (byKind.get(i.kind) ?? 0) + 1);
-  const parts = [...byKind.entries()].map(([k, n]) => `${n} ${k}${n === 1 ? "" : "s"}`);
-  const up = stack.filter((i) => i.running).length;
-  return `${parts.join(", ")} · ${up}/${stack.length} running`;
-}

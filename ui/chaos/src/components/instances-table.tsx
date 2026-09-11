@@ -21,7 +21,7 @@ export function describeBehavior(b: Behavior | null): string {
     case "hang":
       return "hang";
     case "slow":
-      return `slow ${b.latency}${b.jitter ? ` ± ${b.jitter}` : ""}`;
+      return `slow ${b.latency}${b.jitter && !/^0\w*$/.test(b.jitter) ? ` ± ${b.jitter}` : ""}`;
     case "error":
       return `error ${b.kind} ${Math.round((b.rate ?? 1) * 100)}%`;
     case "delayed_failure":
