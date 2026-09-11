@@ -381,6 +381,45 @@ async fn me_reports_the_caller_kind_and_key_claims() {
     assert_eq!(person["scopes"], json!(["openid", "tbd.api"]));
 }
 
+/// The served `OpenAPI` document is the committed one, so the file cannot drift
+/// from the handlers; regenerate with `mise run protocol:openapi`.
+#[tokio::test]
+async fn openapi_is_served_and_matches_the_committed_document() {
+    let stack = support::start().await;
+    let http = reqwest::Client::new();
+    let res = http.get(stack.url("/openapi.json")).send().await.unwrap();
+    assert_eq!(res.status(), 200);
+    assert!(
+        res.headers()["content-type"]
+            .to_str()
+            .unwrap()
+            .starts_with("application/json")
+    );
+    let served: Value = res.json().await.unwrap();
+    assert_eq!(served["openapi"].as_str().map(|v| &v[..2]), Some("3."));
+    assert_eq!(served["info"]["version"], tbd_common::VERSION);
+    for path in [
+        "/healthz",
+        "/readyz",
+        "/v1/evaluate",
+        "/v1/me",
+        "/v1/subjects/{subject_id}/events",
+    ] {
+        assert!(
+            served["paths"][path].is_object(),
+            "{path} missing from the document"
+        );
+    }
+    assert!(served["components"]["schemas"]["Problem"].is_object());
+
+    let committed: Value =
+        serde_json::from_str(include_str!("../../../../docs/protocol/openapi.json")).unwrap();
+    assert_eq!(
+        served, committed,
+        "docs/protocol/openapi.json is stale: run `mise run protocol:openapi`"
+    );
+}
+
 /// Unknown paths are 404s, not tonic's "unimplemented" 200. gRPC callers of an
 /// unknown method still get the gRPC answer.
 #[tokio::test]

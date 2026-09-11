@@ -47,6 +47,12 @@ the logic belongs in the service. The contract is `docs/protocol/README.md`.
   `details` in `extensions`. The chaos error classes (`http 503`, `http 500`, `http 429`,
   `http 504`) reflect this table; change it and update `docs/chaos/scenarios.md` and
   the chaos test that asserts it.
+- OpenAPI: `http::openapi_router()` builds the REST routes from `#[utoipa::path]`
+  annotations (utoipa-axum), so the router and the document share one source;
+  `lib::openapi()` is the document, served at `/openapi.json` and printed by `protocol
+  openapi`. `docs/protocol/openapi.json` is committed and a test keeps it equal to the
+  served document: after touching a handler or a body type, `mise run protocol:openapi`.
+  Bodies derive `ToSchema`; `ErrorBody` is the envelope's schema, named `Problem`.
 - `json.rs`: the request-side `Json<T>` extractor. Every body is JSON in and JSON out,
   health included; a non-JSON body is `unsupported_media_type`, a body that does not
   parse is `bad_request` with a `field` detail named `body`.

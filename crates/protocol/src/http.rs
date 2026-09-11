@@ -10,37 +10,50 @@ use axum::{
         IntoResponse,
         sse::{Event as SseEvent, KeepAlive, Sse},
     },
-    routing::{get, post},
 };
 use futures::{Stream, StreamExt};
 use serde::{Deserialize, Serialize};
 use tbd_proto::engine::v1::{EvaluateRequest, SubscribeRequest, subscribe_response};
+use utoipa::ToSchema;
+use utoipa_axum::{router::OpenApiRouter, routes};
 
-use crate::{AppState, Principal, Problem, principal::Key};
+use crate::{AppState, Principal, Problem, error::ErrorBody, principal::Key, state::Readiness};
 use tbd_common::metrics::StreamGuard;
 
+/// The REST routes with their `OpenAPI` paths: one source for both, so the
+/// document cannot drift from the router.
+pub fn openapi_router() -> OpenApiRouter<AppState> {
+    OpenApiRouter::new()
+        .routes(routes!(healthz))
+        .routes(routes!(readyz))
+        .routes(routes!(evaluate))
+        .routes(routes!(me))
+        .routes(routes!(events))
+}
+
 pub fn routes() -> Router<AppState> {
-    Router::new()
-        .route("/healthz", get(healthz))
-        .route("/readyz", get(readyz))
-        .route("/v1/evaluate", post(evaluate))
-        .route("/v1/me", get(me))
-        .route("/v1/subjects/{subject_id}/events", get(events))
+    openapi_router().split_for_parts().0
 }
 
 /// Liveness: the process is up.
+#[utoipa::path(get, path = "/healthz", tag = "health",
+    responses((status = 200, description = "The process answers", body = Health)))]
 async fn healthz() -> Json<Health> {
     Json(Health { status: "ok" })
 }
 
 /// `GET /healthz` body.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct Health {
     /// Always `ok` when the process answers.
     pub status: &'static str,
 }
 
 /// Who the verified caller is; 401 when Envoy forwarded no identity.
+#[utoipa::path(get, path = "/v1/me", tag = "identity",
+    responses(
+        (status = 200, description = "The principal Envoy verified", body = Me),
+        (status = 401, description = "Envoy forwarded no identity", body = ErrorBody)))]
 async fn me(principal: Principal) -> Json<Me> {
     Json(Me {
         client_id: principal.client_id().map(str::to_owned),
@@ -54,7 +67,7 @@ async fn me(principal: Principal) -> Json<Me> {
 }
 
 /// `GET /v1/me` body.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct Me {
     /// The `sub` claim.
     pub subject: String,
@@ -75,6 +88,10 @@ pub struct Me {
 /// Readiness: every required backend answers `SERVING` to a live health
 /// check. The body lists every registered backend either way, so an optional
 /// one that is down is visible without failing the probe.
+#[utoipa::path(get, path = "/readyz", tag = "health",
+    responses(
+        (status = 200, description = "Every required backend is serving", body = Readiness),
+        (status = 503, description = "A required backend is not serving", body = Readiness)))]
 async fn readyz(State(state): State<AppState>) -> impl IntoResponse {
     let readiness = state.readiness().await;
     let status = if readiness.ready {
@@ -86,7 +103,7 @@ async fn readyz(State(state): State<AppState>) -> impl IntoResponse {
 }
 
 /// `POST /v1/evaluate` body.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct EvaluateBody {
     /// Subject to score.
     pub subject_id: String,
@@ -96,7 +113,7 @@ pub struct EvaluateBody {
 }
 
 /// `POST /v1/evaluate` response. `stub` is forwarded from the engine untouched.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct Evaluation {
     /// Subject that was scored.
     pub subject_id: String,
@@ -108,6 +125,14 @@ pub struct Evaluation {
     pub model_version: String,
 }
 
+/// Score a subject once; the engine's `stub` flag is forwarded untouched.
+#[utoipa::path(post, path = "/v1/evaluate", tag = "engine",
+    request_body = EvaluateBody,
+    responses(
+        (status = 200, description = "The score", body = Evaluation),
+        (status = 400, description = "A malformed body or an empty subject_id", body = ErrorBody),
+        (status = 415, description = "The body is not JSON", body = ErrorBody),
+        (status = 503, description = "The engine is unavailable", body = ErrorBody)))]
 async fn evaluate(
     State(state): State<AppState>,
     crate::json::Json(body): crate::json::Json<EvaluateBody>,
@@ -132,7 +157,7 @@ async fn evaluate(
 }
 
 /// One SSE event body.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum EventBody {
     /// Periodic liveness tick from the engine.
@@ -150,6 +175,12 @@ pub enum EventBody {
 }
 
 /// `GET /v1/subjects/{subject_id}/events`: engine `Subscribe` as SSE.
+#[utoipa::path(get, path = "/v1/subjects/{subject_id}/events", tag = "engine",
+    params(("subject_id" = String, Path, description = "The subject to follow")),
+    responses(
+        (status = 200, description = "A stream of `EventBody` events; a failure is an `error` event carrying `Problem`",
+            content_type = "text/event-stream", body = EventBody),
+        (status = 503, description = "The engine is unavailable", body = ErrorBody)))]
 async fn events(
     State(state): State<AppState>,
     principal: Option<Principal>,

@@ -22,6 +22,8 @@ struct Cli {
 enum Command {
     /// Print the effective configuration for the environment as TOML.
     Config,
+    /// Print the `OpenAPI` document for the REST surface as JSON.
+    Openapi,
 }
 
 #[tokio::main]
@@ -29,6 +31,13 @@ async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     let (mut config, source) = Config::load(&cli.overrides.config_dir, &cli.overrides.env)?;
     cli.overrides.apply(&mut config);
+    if let Some(Command::Openapi) = cli.command {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&tbd_protocol::openapi())?
+        );
+        return Ok(());
+    }
     if let Some(Command::Config) = cli.command {
         println!("# env: {}", source.env);
         for f in &source.files {

@@ -20,6 +20,7 @@ use axum::{
 };
 use base64::Engine as _;
 use serde::Serialize;
+use utoipa::ToSchema;
 
 use crate::{AppState, Problem};
 
@@ -62,7 +63,7 @@ pub enum CallerKind {
 }
 
 /// A key the id plane issued: a client, or a sub-key under a parent client.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ToSchema)]
 pub struct Key {
     /// Key id.
     pub id: String,

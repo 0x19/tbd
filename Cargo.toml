@@ -46,6 +46,8 @@ tower-http         = { version = "0.6", features = ["trace", "cors"] }
 http               = "1"
 async-graphql      = { version = "7.2", features = ["playground"] }
 async-graphql-axum = "7.2"
+utoipa            = { version = "5.5", features = ["axum_extras"] }
+utoipa-axum       = "0.2"
 async-trait        = "0.1"
 tempfile           = "3"
 

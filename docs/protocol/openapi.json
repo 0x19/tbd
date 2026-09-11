@@ -1,0 +1,567 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "tbd protocol",
+    "description": "The edge: REST and server-sent events over the registered gRPC backends. Every body is JSON; every error is the `Problem` envelope.",
+    "license": {
+      "name": "Proprietary"
+    },
+    "version": "0.1.0"
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Same origin, behind Envoy"
+    }
+  ],
+  "paths": {
+    "/healthz": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Liveness: the process is up.",
+        "operationId": "healthz",
+        "responses": {
+          "200": {
+            "description": "The process answers",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/readyz": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Readiness: every required backend answers `SERVING` to a live health\ncheck. The body lists every registered backend either way, so an optional\none that is down is visible without failing the probe.",
+        "operationId": "readyz",
+        "responses": {
+          "200": {
+            "description": "Every required backend is serving",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Readiness"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A required backend is not serving",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Readiness"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/evaluate": {
+      "post": {
+        "tags": [
+          "engine"
+        ],
+        "summary": "Score a subject once; the engine's `stub` flag is forwarded untouched.",
+        "operationId": "evaluate",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EvaluateBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The score",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Evaluation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A malformed body or an empty subject_id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "The body is not JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The engine is unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/me": {
+      "get": {
+        "tags": [
+          "identity"
+        ],
+        "summary": "Who the verified caller is; 401 when Envoy forwarded no identity.",
+        "operationId": "me",
+        "responses": {
+          "200": {
+            "description": "The principal Envoy verified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Me"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Envoy forwarded no identity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/subjects/{subject_id}/events": {
+      "get": {
+        "tags": [
+          "engine"
+        ],
+        "summary": "`GET /v1/subjects/{subject_id}/events`: engine `Subscribe` as SSE.",
+        "operationId": "events",
+        "parameters": [
+          {
+            "name": "subject_id",
+            "in": "path",
+            "description": "The subject to follow",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A stream of `EventBody` events; a failure is an `error` event carrying `Problem`",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The engine is unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Code": {
+        "type": "string",
+        "description": "The stable error vocabulary. The slug (`snake_case`) is what clients see in\n`code`; the HTTP status follows the standard gRPC mapping, plus the two\nHTTP-only codes for request bodies.",
+        "enum": [
+          "bad_request",
+          "not_found",
+          "already_exists",
+          "conflict",
+          "forbidden",
+          "unauthenticated",
+          "rate_limited",
+          "failed_precondition",
+          "unimplemented",
+          "unavailable",
+          "timeout",
+          "cancelled",
+          "internal",
+          "unsupported_media_type",
+          "payload_too_large"
+        ]
+      },
+      "Detail": {
+        "oneOf": [
+          {
+            "type": "object",
+            "description": "`google.rpc.BadRequest.FieldViolation`: which field, and why.",
+            "required": [
+              "field",
+              "description",
+              "type"
+            ],
+            "properties": {
+              "description": {
+                "type": "string",
+                "description": "What is wrong with it."
+              },
+              "field": {
+                "type": "string",
+                "description": "Field path in the request."
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "field"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "`google.rpc.ErrorInfo`: a machine-readable reason.",
+            "required": [
+              "reason",
+              "domain",
+              "metadata",
+              "type"
+            ],
+            "properties": {
+              "domain": {
+                "type": "string",
+                "description": "Who owns the reason."
+              },
+              "metadata": {
+                "type": "object",
+                "description": "Extra key/values.",
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "propertyNames": {
+                  "type": "string"
+                }
+              },
+              "reason": {
+                "type": "string",
+                "description": "Reason, `UPPER_SNAKE_CASE` by convention."
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "info"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "`google.rpc.RetryInfo`: when to try again; also the `Retry-After` header.",
+            "required": [
+              "after_seconds",
+              "type"
+            ],
+            "properties": {
+              "after_seconds": {
+                "type": "integer",
+                "format": "int64",
+                "description": "Seconds to wait, rounded up.",
+                "minimum": 0
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "retry"
+                ]
+              }
+            }
+          }
+        ],
+        "description": "A typed detail, translated from `google.rpc` error details."
+      },
+      "EvaluateBody": {
+        "type": "object",
+        "description": "`POST /v1/evaluate` body.",
+        "required": [
+          "subject_id"
+        ],
+        "properties": {
+          "payload": {
+            "type": "string",
+            "description": "Opaque payload, passed through to the engine."
+          },
+          "subject_id": {
+            "type": "string",
+            "description": "Subject to score."
+          }
+        }
+      },
+      "Evaluation": {
+        "type": "object",
+        "description": "`POST /v1/evaluate` response. `stub` is forwarded from the engine untouched.",
+        "required": [
+          "subject_id",
+          "score",
+          "stub",
+          "model_version"
+        ],
+        "properties": {
+          "model_version": {
+            "type": "string",
+            "description": "Model version that produced the score."
+          },
+          "score": {
+            "type": "number",
+            "format": "double",
+            "description": "The score."
+          },
+          "stub": {
+            "type": "boolean",
+            "description": "True while the score is a placeholder, not a model output."
+          },
+          "subject_id": {
+            "type": "string",
+            "description": "Subject that was scored."
+          }
+        }
+      },
+      "EventBody": {
+        "oneOf": [
+          {
+            "type": "object",
+            "description": "Periodic liveness tick from the engine.",
+            "required": [
+              "seq",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "heartbeat"
+                ]
+              },
+              "seq": {
+                "type": "integer",
+                "format": "int64",
+                "description": "Monotonic sequence number.",
+                "minimum": 0
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "The subject's score changed.",
+            "required": [
+              "score",
+              "stub",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "score_updated"
+                ]
+              },
+              "score": {
+                "type": "number",
+                "format": "double",
+                "description": "New score."
+              },
+              "stub": {
+                "type": "boolean",
+                "description": "True while the score is a placeholder."
+              }
+            }
+          }
+        ],
+        "description": "One SSE event body."
+      },
+      "Health": {
+        "type": "object",
+        "description": "`GET /healthz` body.",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "description": "Always `ok` when the process answers."
+          }
+        }
+      },
+      "Key": {
+        "type": "object",
+        "description": "A key the id plane issued: a client, or a sub-key under a parent client.",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Key id."
+          },
+          "parent": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The parent key, for a sub-key."
+          }
+        }
+      },
+      "Me": {
+        "type": "object",
+        "description": "`GET /v1/me` body.",
+        "required": [
+          "subject",
+          "kind",
+          "scopes"
+        ],
+        "properties": {
+          "client_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The OAuth client the call came through, if any."
+          },
+          "key": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Key",
+                "description": "Key and parent key, when minted."
+              }
+            ]
+          },
+          "kind": {
+            "type": "string",
+            "description": "`person`, `client` or `service`."
+          },
+          "org": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Organisation, when minted."
+          },
+          "role": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Role, when the consent step stamped one."
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Granted scopes."
+          },
+          "subject": {
+            "type": "string",
+            "description": "The `sub` claim."
+          }
+        }
+      },
+      "Problem": {
+        "type": "object",
+        "description": "`{\"code\",\"error\",\"details\"}`: the REST body and the SSE `error` payload.",
+        "required": [
+          "code",
+          "error",
+          "details"
+        ],
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/Code",
+            "description": "The slug."
+          },
+          "details": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Detail"
+            },
+            "description": "Typed details."
+          },
+          "error": {
+            "type": "string",
+            "description": "The sentence."
+          }
+        }
+      },
+      "Readiness": {
+        "type": "object",
+        "description": "`GET /readyz`: every backend's live state; `ready` when every required one\nis serving.",
+        "required": [
+          "ready",
+          "services"
+        ],
+        "properties": {
+          "ready": {
+            "type": "boolean",
+            "description": "Every required backend is `serving`."
+          },
+          "services": {
+            "type": "object",
+            "description": "Per backend, by registry name.",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ServiceState"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "ServiceState": {
+        "type": "string",
+        "description": "What a backend's health service last answered, as `/readyz` reports it.",
+        "enum": [
+          "serving",
+          "not_serving",
+          "unknown"
+        ]
+      }
+    }
+  }
+}

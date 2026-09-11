@@ -16,11 +16,12 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use tonic_types::StatusExt as _;
+use utoipa::ToSchema;
 
 /// The stable error vocabulary. The slug (`snake_case`) is what clients see in
 /// `code`; the HTTP status follows the standard gRPC mapping, plus the two
 /// HTTP-only codes for request bodies.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Code {
     /// `INVALID_ARGUMENT`, `OUT_OF_RANGE`, or a body that does not parse.
@@ -123,7 +124,7 @@ impl Code {
 }
 
 /// A typed detail, translated from `google.rpc` error details.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Detail {
     /// `google.rpc.BadRequest.FieldViolation`: which field, and why.
@@ -163,8 +164,12 @@ pub struct Problem {
     downstream: Option<String>,
 }
 
+/// The wire shape as an owned type, for the `OpenAPI` document (`Problem`).
+pub type ErrorBody = Wire<'static>;
+
 /// `{"code","error","details"}`: the REST body and the SSE `error` payload.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
+#[schema(as = Problem)]
 pub struct Wire<'a> {
     /// The slug.
     pub code: Code,

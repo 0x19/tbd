@@ -7,6 +7,7 @@
 //! | `/v1/*`     | REST (JSON) and server-sent events       |
 //! | `/ws`       | WebSocket bridged to an engine session   |
 //! | `/graphql`  | GraphQL (POST) and `GraphiQL` (GET)      |
+//! | `/openapi.json` | the `OpenAPI` document for the REST surface |
 //! | gRPC        | `tbd.protocol.v1.Protocol` + health, h2c  |
 //!
 //! The protocol holds no business logic. Every request is translated and
@@ -36,7 +37,7 @@ pub use config::{
     Config, ENGINE, Health, Metrics, Overrides, Principals, Server, ServiceConfig, Source,
     grpc_service_name, service_url_var,
 };
-pub use error::{Code, Detail, Problem, Wire};
+pub use error::{Code, Detail, ErrorBody, Problem, Wire};
 pub use grpc::ENGINE_SERVICE;
 pub use principal::{CallerKind, Key, Principal};
 pub use state::{AppState, Backend, EngineClient, Readiness, ServiceState, Transport};
@@ -132,11 +133,41 @@ async fn fallback(request: axum::extract::Request) -> axum::response::Response {
     }
 }
 
+/// The `OpenAPI` document for the REST surface, generated from the handlers
+/// (`docs/protocol/openapi.json` is this, committed; a test keeps them equal).
+/// GraphQL, WebSocket and gRPC are outside it.
+#[must_use]
+pub fn openapi() -> utoipa::openapi::OpenApi {
+    use utoipa::OpenApi as _;
+
+    #[derive(utoipa::OpenApi)]
+    #[openapi(
+        info(
+            title = "tbd protocol",
+            description = "The edge: REST and server-sent events over the registered gRPC backends. Every body is JSON; every error is the `Problem` envelope.",
+            license(name = "Proprietary")
+        ),
+        servers((url = "/", description = "Same origin, behind Envoy"))
+    )]
+    struct Doc;
+
+    let mut doc = Doc::openapi();
+    tbd_common::VERSION.clone_into(&mut doc.info.version);
+    doc.merge(http::openapi_router().split_for_parts().1);
+    doc
+}
+
+/// `GET /openapi.json`.
+async fn openapi_json() -> axum::Json<utoipa::openapi::OpenApi> {
+    axum::Json(openapi())
+}
+
 /// The full router: REST, SSE, WebSocket, GraphQL and gRPC on one port, each
 /// request traced and measured.
 pub fn router(state: &AppState) -> Router {
     Router::new()
         .merge(http::routes())
+        .route("/openapi.json", axum::routing::get(openapi_json))
         .merge(ws::routes())
         .merge(graphql::routes(state))
         .with_state(state.clone())

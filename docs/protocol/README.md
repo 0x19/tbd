@@ -10,7 +10,7 @@ this page is the contract of what exists today.
 | Piece | Where |
 |---|---|
 | Crate | `crates/protocol` ([CLAUDE.md](../../crates/protocol/CLAUDE.md)) |
-| Own contract | `proto/tbd/protocol/v1/protocol.proto`: `ProtocolService/Ping`; the REST, SSE, WebSocket and GraphQL surfaces below |
+| Own contract | `proto/tbd/protocol/v1/protocol.proto`: `ProtocolService/Ping`; the REST, SSE, WebSocket and GraphQL surfaces below; `docs/protocol/openapi.json` (served at `/openapi.json`) for REST |
 | Config layers | `configs/protocol/{base,local,dev,production}.toml`; `protocol config` prints the merged result |
 | Deployment | `devops/k8s/base/protocol`, port 8080, metrics 9465 (9464 in the cluster); Envoy's edge (`:8080`) routes every host to it and health-checks `/readyz` |
 | Chaos | the `protocol` kind (`crates/chaos/src/kinds/protocol.rs`): `[stack.protocols.X]` with an `engine`, the `http_*`, `rest_evaluate`, `sse_events`, `graphql_evaluate`, `ws_echo`, `grpc_protocol_*` checks, the protocol load operations |
@@ -158,6 +158,17 @@ are read now and minted by the id plane later. `GET /v1/me` returns the principa
 streams as an optional one. Span fields `enduser.id`, `enduser.kind`, `enduser.org` and
 `enduser.key` carry it into traces and logs.
 
+## OpenAPI
+
+`GET /openapi.json` is the OpenAPI 3.1 document of the REST surface, generated from the
+handlers with utoipa (`#[utoipa::path]` on each handler, `ToSchema` on each body; the
+router is built from the same annotations, so a route cannot exist without its path).
+`docs/protocol/openapi.json` is the same document, committed; `mise run protocol:openapi`
+regenerates it and a protocol test fails when the two differ, which is the CI diff.
+The `Problem` schema is the error envelope above. GraphQL, WebSocket and gRPC are
+outside the document; the descriptor-driven step replaces this hand-annotated set with
+one generated from the protos.
+
 ## Metrics
 
 Client-side, per backend: `tbd_engine_client_requests_total{backend,route,status}` and
@@ -168,6 +179,6 @@ Client-side, per backend: `tbd_engine_client_requests_total{backend,route,status
 
 ## What comes next
 
-OpenAPI generated from the handlers, then the descriptor-driven transcoder that exposes
-any registered service over REST and a multiplexed WebSocket, with policy (scopes,
-weighted rate limits, idempotency) declared in the proto contract.
+The descriptor-driven transcoder that exposes any registered service over REST and a
+multiplexed WebSocket from the proto descriptors, with policy (scopes, weighted rate
+limits, idempotency) declared in the proto contract.

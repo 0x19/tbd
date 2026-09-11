@@ -22,6 +22,7 @@ use tonic::{
 use tonic_health::pb::{
     HealthCheckRequest, health_check_response::ServingStatus, health_client::HealthClient,
 };
+use utoipa::ToSchema;
 
 use crate::{
     ServeError,
@@ -100,7 +101,7 @@ impl Backend {
 }
 
 /// What a backend's health service last answered, as `/readyz` reports it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ServiceState {
     /// `SERVING`.
@@ -124,7 +125,7 @@ impl ServiceState {
 
 /// `GET /readyz`: every backend's live state; `ready` when every required one
 /// is serving.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct Readiness {
     /// Every required backend is `serving`.
     pub ready: bool,

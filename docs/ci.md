@@ -12,7 +12,7 @@ name. If you add a check, add it in both places; this page lists the mapping.
 | `typos` | `typos` | a misspelling anywhere `_typos.toml` does not exclude |
 | `deny` | `deny` | a RUSTSEC advisory, a licence outside the allow list, a banned crate, an unknown registry |
 | `lint` | `lint` | any clippy warning (pedantic is on), any `buf lint` finding |
-| `test` | `test` | any failing test, `cargo nextest` plus doctests. The ledger's store tests (`pg::*`, `clickhouse::*`) run against real databases: in CI from the job's `services:` containers through `LEDGER_TEST_DATABASE_URL` and `LEDGER_TEST_CLICKHOUSE_URL`; locally from containers each test starts through Docker (`mise run test` pre-pulls the images). With neither, `mise run test` skips them with a warning; under `CI=1` it fails instead |
+| `test` | `test` | any failing test, `cargo nextest` plus doctests. The protocol's `openapi_is_served_and_matches_the_committed_document` fails when `docs/protocol/openapi.json` is stale (`mise run protocol:openapi` regenerates it). The ledger's store tests (`pg::*`, `clickhouse::*`) run against real databases: in CI from the job's `services:` containers through `LEDGER_TEST_DATABASE_URL` and `LEDGER_TEST_CLICKHOUSE_URL`; locally from containers each test starts through Docker (`mise run test` pre-pulls the images). With neither, `mise run test` skips them with a warning; under `CI=1` it fails instead |
 | `doc` | `doc` | any rustdoc warning, broken intra-doc links included |
 | `chaos:docs:check` | `scenarios` | `docs/chaos/kinds.md` differs from `chaos kinds --md` (run `mise run chaos:docs` and commit) |
 | `chaos:run` | `scenarios` | any scenario under `scenarios/` failing an assertion or timeline action |
