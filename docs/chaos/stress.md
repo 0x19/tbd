@@ -60,7 +60,7 @@ keys exist for, and the re-drive rule above is how the model stays exact through
 [campaign]
 name = "smoke"                      # required
 description = "..."                 # what it proves
-skip = false                        # skipped when a directory is run (the long ones)
+skip = false                        # passed over by a directory or glob run (the long ones)
 duration = "3s"                     # the measured phase
 warmup = "300ms"                    # same workload first; numbers discarded
 seed = 1                            # every random choice derives from it
@@ -142,7 +142,10 @@ factor = 2.0                        # ...or grows by this much over the previous
 max_findings = 0                    # stop early after this many; 0 = never
 ```
 
-Every table is `deny_unknown_fields`; `chaos stress check` names the first problem. At
+Every table is `deny_unknown_fields`; `chaos stress check` names the first problem.
+`skip` means "not in a batch": `chaos stress run --dir stress` and a glob pass the file
+over, while naming it alone (`chaos stress run stress/soak.toml`) or running it from the
+API or the admin UI runs it, because someone asked for that campaign. At
 least one class needs workers. A campaign may `stop` an instance only when its store
 survives a restart (a ledger with a `database_url`): a stopped memory store forgets every
 fact, the model would be right, the ledger honest, and the campaign would still fail.

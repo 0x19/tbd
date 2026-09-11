@@ -763,6 +763,8 @@ impl AppState {
             let options = crate::stress::RunOptions {
                 targets: explicit,
                 seed: None,
+                // Someone asked for this campaign by name.
+                run_skipped: true,
                 trust,
             };
             let result = crate::stress::run_campaign_with(&file, &options, &hooks).await;
