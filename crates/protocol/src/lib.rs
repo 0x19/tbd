@@ -40,7 +40,9 @@ pub use config::{
 pub use error::{Code, Detail, ErrorBody, Problem, Wire};
 pub use grpc::ENGINE_SERVICE;
 pub use principal::{CallerKind, Key, Principal};
-pub use state::{AppState, Backend, EngineClient, Readiness, ServiceState, Transport};
+pub use state::{
+    AppState, BACKEND_HEADER, Backend, EngineClient, Readiness, ServiceState, Transport,
+};
 
 /// Errors from starting or running the protocol.
 #[derive(Debug, thiserror::Error)]

@@ -64,7 +64,10 @@ is liveness only.
 
 The protocol's own gRPC health service reports its own name and every backend under
 its `service` name, refreshed every `[health] probe_interval` by one task per backend
-(transitions logged at info). Behind the edge every `grpc.health.v1.Health/Check` lands
+(transitions logged at info). A probe carries `x-tbd-backend: <name>`: the health path is
+the same for every service and Envoy's internal listener routes by path, so the header
+is what sends a ledger probe to the ledger instead of the engine catch-all (an RPC path
+routes itself and needs no header). Behind the edge every `grpc.health.v1.Health/Check` lands
 on the protocol, so an edge-only client learns each backend's state from there.
 
 ## Configuration

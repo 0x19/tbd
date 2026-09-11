@@ -599,8 +599,22 @@ static_resources:
                             cluster: ledger
                             timeout: 0s
                             retry_policy: *grpc_retry
+                        # ledger health: the grpc.health.v1 path is shared, so the protocol
+                        # names the backend it is asking about in x-tbd-backend.
+                        - match: { prefix: "/grpc.health.v1.Health/", grpc: {}, headers: [{ name: x-tbd-backend, string_match: { exact: ledger } }] }
+                          route:
+                            cluster: ledger
+                            timeout: 0s
+                            retry_policy: *grpc_retry
                         # humans, matched by service name; the engine stays the catch-all.
                         - match: { prefix: "/tbd.humans.v1.HumansService/", grpc: {} }
+                          route:
+                            cluster: humans
+                            timeout: 0s
+                            retry_policy: *grpc_retry
+                        # humans health: the grpc.health.v1 path is shared, so the protocol
+                        # names the backend it is asking about in x-tbd-backend.
+                        - match: { prefix: "/grpc.health.v1.Health/", grpc: {}, headers: [{ name: x-tbd-backend, string_match: { exact: humans } }] }
                           route:
                             cluster: humans
                             timeout: 0s

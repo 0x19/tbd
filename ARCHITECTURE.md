@@ -67,6 +67,7 @@ Envoy routes, from `devops/envoy/envoy.yaml`:
 | gRPC `/tbd.engine.v1.EngineService/*` | engine | none, retries on connect failure and `UNAVAILABLE` |
 | internal LB (50051) gRPC `/tbd.humans.v1.HumansService/*` | humans | none, retries on connect failure and `UNAVAILABLE` |
 | internal LB (50051) gRPC `/tbd.ledger.v1.LedgerService/*` | ledger | none, retries on connect failure and `UNAVAILABLE` |
+| internal LB (50051) gRPC `/grpc.health.v1.Health/*` with `x-tbd-backend: <name>` | that service (the protocol's backend probes; the health path is shared) | none |
 | any other gRPC (`tbd.protocol.v1`, health, reflection) | protocol | none |
 | `/ws` | protocol, WebSocket upgrade | none |
 | `/v1/subjects/*` (SSE) | protocol | none |

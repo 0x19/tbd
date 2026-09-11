@@ -19,7 +19,9 @@ the logic belongs in the service. The contract is `docs/protocol/README.md`.
   name with its `grpc.health.v1` name and `required` flag. `engine()` is the typed
   engine client; any other backend is `client(name, Client::new)` over the same
   `Transport` (`Measured` client metrics with a `backend` label, `TraceInject`).
-  `readiness()` probes every backend concurrently within `[health] probe_timeout`.
+  `readiness()` probes every backend concurrently within `[health] probe_timeout`; a
+  probe names its backend in `x-tbd-backend` (`BACKEND_HEADER`) because the health path
+  is shared and Envoy's internal listener routes on the header for it.
 - The router has an explicit `fallback`: tonic's merged router would otherwise answer
   every unknown REST path with HTTP 200 + `grpc-status: 12`. Unknown paths are a JSON
   404 (`Problem::not_found`) with route label `unmatched`; unknown gRPC methods keep the

@@ -4,3 +4,10 @@
                             cluster: @@name@@
                             timeout: 0s
                             retry_policy: *grpc_retry
+                        # @@name@@ health: the grpc.health.v1 path is shared, so the protocol
+                        # names the backend it is asking about in x-tbd-backend.
+                        - match: { prefix: "/grpc.health.v1.Health/", grpc: {}, headers: [{ name: x-tbd-backend, string_match: { exact: @@name@@ } }] }
+                          route:
+                            cluster: @@name@@
+                            timeout: 0s
+                            retry_policy: *grpc_retry

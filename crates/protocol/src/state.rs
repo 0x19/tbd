@@ -29,6 +29,9 @@ use crate::{
     config::{Config, ENGINE},
 };
 
+/// Metadata naming the backend a shared-path request (health) is meant for.
+pub const BACKEND_HEADER: &str = "x-tbd-backend";
+
 /// The transport every backend client is built on: channel, client metrics,
 /// trace propagation.
 pub type Transport = InterceptedService<Measured, TraceInject>;
@@ -75,8 +78,21 @@ impl Backend {
 
     /// One live `grpc.health.v1` check of [`Backend::health_name`], bounded
     /// by `timeout`. A transport error or a timeout is `Unknown`.
+    ///
+    /// The health path is the same for every service, so the request names
+    /// the backend in [`BACKEND_HEADER`]; Envoy's internal listener routes on
+    /// it (an RPC path routes itself).
     pub async fn check(&self, timeout: Duration) -> ServiceState {
-        let mut health = HealthClient::new(self.channel.clone());
+        let name = Arc::clone(&self.name);
+        let mut health = HealthClient::with_interceptor(
+            self.channel.clone(),
+            move |mut request: tonic::Request<()>| {
+                if let Ok(value) = name.parse() {
+                    request.metadata_mut().insert(BACKEND_HEADER, value);
+                }
+                Ok(request)
+            },
+        );
         let request = HealthCheckRequest {
             service: self.health_name.clone(),
         };
