@@ -17,8 +17,8 @@ backend is visible instead of clipped.
 | `tbd_requests_in_flight` | gauge | `transport` | incremented on admission, decremented on completion, including early returns |
 | `tbd_streams_active` | gauge | `kind` (`subscribe`, `session`, `ws`, `sse`) | a stream opens or closes |
 | `tbd_stream_items_total` | counter | `kind`, `direction` (`in`, `out`) | an item crosses a stream |
-| `tbd_engine_client_requests_total` | counter | `route`, `status` | the protocol finishes a call to the engine, measured on the client side |
-| `tbd_engine_client_duration_seconds` | histogram | `route` | same moment |
+| `tbd_engine_client_requests_total` | counter | `backend` (`engine`, `ledger`, …: the protocol's `[services]` name), `route`, `status` | the protocol finishes a call to a backend, measured on the client side |
+| `tbd_engine_client_duration_seconds` | histogram | `backend`, `route` | same moment |
 | `tbd_faults_injected_total` | counter | `kind` | the fault handle rejects a request (chaos) |
 | `tbd_build_info` | gauge | `version` | once at start, always 1; join on it to label by version |
 | `tbd_ledger_store_up` | gauge | | the ledger's readiness probe of its store: 1 while it answers within `[health] probe_timeout`; the gRPC health status follows it |

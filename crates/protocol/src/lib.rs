@@ -10,7 +10,8 @@
 //! | gRPC        | `tbd.protocol.v1.Protocol` + health, h2c  |
 //!
 //! The protocol holds no business logic. Every request is translated and
-//! forwarded to the engine; every engine `stub` flag is forwarded untouched.
+//! forwarded to a registered backend (`[services]` in `configs/protocol`); every
+//! engine `stub` flag is forwarded untouched.
 
 mod config;
 mod error;
@@ -28,10 +29,13 @@ use axum::{Router, serve::ListenerExt as _};
 use tokio::net::TcpListener;
 use tower_http::trace::TraceLayer;
 
-pub use config::Config;
+pub use config::{
+    Config, ENGINE, Health, Metrics, Overrides, Principals, Server, ServiceConfig, Source,
+    grpc_service_name, service_url_var,
+};
 pub use error::ApiError;
 pub use grpc::ENGINE_SERVICE;
-pub use state::AppState;
+pub use state::{AppState, Backend, EngineClient, Readiness, ServiceState, Transport};
 
 /// Errors from starting or running the protocol.
 #[derive(Debug, thiserror::Error)]
@@ -44,28 +48,33 @@ pub enum ServeError {
         /// Underlying I/O error.
         source: std::io::Error,
     },
-    /// The engine URL did not parse.
-    #[error("engine url {url:?}: {source}")]
-    EngineUrl {
+    /// A backend URL did not parse.
+    #[error("services.{name}.url {url:?}: {source}")]
+    BackendUrl {
+        /// Registry name.
+        name: String,
         /// The configured URL.
         url: String,
         /// Underlying transport error.
         source: tonic::transport::Error,
     },
+    /// The registry lacks a backend the protocol cannot run without.
+    #[error("[services.{0}] is not configured")]
+    MissingBackend(&'static str),
     /// The HTTP server failed while running.
     #[error("serve: {0}")]
     Io(#[from] std::io::Error),
 }
 
-/// Bind `config.listen_addr` and serve until `shutdown` resolves.
+/// Bind `[server] listen` and serve until `shutdown` resolves.
 pub async fn serve(
     config: Config,
     shutdown: impl Future<Output = ()> + Send + 'static,
 ) -> Result<(), ServeError> {
-    let listener = TcpListener::bind(config.listen_addr)
+    let listener = TcpListener::bind(config.server.listen)
         .await
         .map_err(|source| ServeError::Bind {
-            addr: config.listen_addr,
+            addr: config.server.listen,
             source,
         })?;
     serve_on(listener, config, shutdown).await
@@ -82,7 +91,12 @@ pub async fn serve_on(
     let state = AppState::connect_lazy(&config)?;
     let app = router(&state);
 
-    tracing::info!(%addr, engine = %config.engine_url, version = tbd_common::VERSION, "protocol listening");
+    let backends: Vec<String> = config
+        .services
+        .iter()
+        .map(|(name, s)| format!("{name}={}", s.url))
+        .collect();
+    tracing::info!(%addr, ?backends, version = tbd_common::VERSION, "protocol listening");
 
     // Accepted sockets keep Nagle on by default. A WebSocket upgrade writes
     // the 101 and the first frame back to back, so without this the first

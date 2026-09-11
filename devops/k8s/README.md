@@ -29,7 +29,7 @@ kubectl apply -k devops/k8s/overlays/local                       # or dev | prod
 ## Base
 
 - `configmap.yaml` (`tbd-env`) holds every service env var: listen and metrics addresses,
-  `PROTOCOL_ENGINE_URL=http://envoy:50051`, `OTEL_EXPORTER_OTLP_ENDPOINT`, sampling, log
+  `PROTOCOL_<NAME>_URL=http://envoy:50051` per protocol backend, `OTEL_EXPORTER_OTLP_ENDPOINT`, sampling, log
   format and filter. Overlays merge into it with `configMapGenerator` + `behavior: merge`.
 - `engine/` and `protocol/`: Deployments with gRPC or HTTP probes, non-root, read-only
   root filesystem, all capabilities dropped, `prometheus.io/*` annotations on the pod

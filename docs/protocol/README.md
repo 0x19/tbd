@@ -1,0 +1,102 @@
+# protocol
+
+The edge service: one port serving REST and server-sent events, WebSocket, GraphQL and
+gRPC, forwarding every request to a registered backend over gRPC and owning no
+business logic. Envoy in front of it verifies tokens and balances; the protocol routes
+by service and adds policy. It is becoming a gateway that exposes any gRPC service
+(engine, humans, ledger, whatever `tbd new service` adds) with JSON in and JSON out;
+this page is the contract of what exists today.
+
+| Piece | Where |
+|---|---|
+| Crate | `crates/protocol` ([CLAUDE.md](../../crates/protocol/CLAUDE.md)) |
+| Own contract | `proto/tbd/protocol/v1/protocol.proto`: `ProtocolService/Ping`; the REST, SSE, WebSocket and GraphQL surfaces below |
+| Config layers | `configs/protocol/{base,local,dev,production}.toml`; `protocol config` prints the merged result |
+| Deployment | `devops/k8s/base/protocol`, port 8080, metrics 9465 (9464 in the cluster); Envoy's edge (`:8080`) routes every host to it and health-checks `/readyz` |
+| Chaos | the `protocol` kind (`crates/chaos/src/kinds/protocol.rs`): `[stack.protocols.X]` with an `engine`, the `http_*`, `rest_evaluate`, `sse_events`, `graphql_evaluate`, `ws_echo`, `grpc_protocol_*` checks, the protocol load operations |
+
+## The services registry
+
+`[services.<name>]` in `configs/protocol/base.toml` names every backend the gateway can
+forward to:
+
+```toml
+[services.ledger]
+url = "http://127.0.0.1:50052"            # gRPC endpoint
+service = "tbd.ledger.v1.LedgerService"   # grpc.health.v1 name probed and re-reported
+required = false                           # whether /readyz fails while it is down
+```
+
+- **One lazy channel per distinct URL.** Behind Envoy every backend is
+  `http://envoy:50051`, the internal listener, which routes by gRPC service name and
+  balances across replicas; the protocol then holds one connection pool for all of
+  them. On the host every backend is on its own loopback port (`local.toml` keeps the
+  base values); `dev.toml` and `production.toml` point everything at Envoy.
+- **`PROTOCOL_<NAME>_URL` overrides `url`** for any registered name, read generically
+  so a scaffolded service needs no new flag; `--service-url name=URL` is the flag form
+  and wins over the variable. `PROTOCOL_ENGINE_URL` is one of them. `.env.example`,
+  `compose.yaml`, the ConfigMap and the ansible template carry one per backend.
+- **`engine` is mandatory**: the typed engine client (`AppState::engine()`) needs it.
+  Any other backend is reached through `AppState::client(name, Client::new)` or
+  `backend(name).transport()`, the same traced and measured transport.
+- **`tbd new service <name>`** inserts a `[services.<name>]` table (`required = false`)
+  before the `# tbd:services-end` marker and the `PROTOCOL_<NAME>_URL` line in every
+  deployed environment ([tbd/README.md](../tbd/README.md)).
+- **Embedders** (tests, the chaos tool) build the registry with
+  `Config::embedded(listen, [(name, url)])`: every backend required, health names by the
+  scaffolder's convention (`tbd.<name>.v1.<Name>Service`), no metrics listener.
+
+## Readiness and health
+
+`GET /readyz` probes every backend's `grpc.health.v1` service concurrently, within
+`[health] probe_timeout`, and answers:
+
+```json
+{"ready": true, "services": {"engine": "serving", "humans": "serving", "ledger": "not_serving"}}
+```
+
+`ready` is true, and the status 200, when every `required` backend is `serving`; else
+503 with the same body. States are `serving`, `not_serving` (the backend answered so) and
+`unknown` (unreachable or slower than the probe timeout). Envoy and Kubernetes take a
+replica out of rotation on a failed `/readyz`, which is why only the engine is required
+today: a required ledger would turn a ledger outage into an edge outage. `GET /healthz`
+is liveness only.
+
+The protocol's own gRPC health service reports its own name and every backend under
+its `service` name, refreshed every `[health] probe_interval` by one task per backend
+(transitions logged at info). Behind the edge every `grpc.health.v1.Health/Check` lands
+on the protocol, so an edge-only client learns each backend's state from there.
+
+## Configuration
+
+Every key lives in `configs/protocol/base.toml`; an environment file carries
+differences; flags and `PROTOCOL_*` variables override both; `protocol config` prints
+the effective result.
+
+| Table | Keys | Flags / env |
+|---|---|---|
+| `[server]` | `listen` | `--listen-addr`, `PROTOCOL_LISTEN_ADDR` |
+| `[metrics]` | `listen` (optional) | `--metrics-addr`, `PROTOCOL_METRICS_ADDR` |
+| `[services.<name>]` | `url`, `service`, `required` | `PROTOCOL_<NAME>_URL`, `--service-url name=URL` |
+| `[health]` | `probe_interval`, `probe_timeout` | |
+| `[principals]` | `services` (token subjects that are our own services) | |
+| | environment and directory | `--env`/`TBD_ENV`, `--config-dir`/`PROTOCOL_CONFIG_DIR` |
+
+`Config::validate()` refuses a registry without `engine`, a name that cannot be an
+environment variable (2 to 24 lowercase letters or digits, starting with a letter), a
+URL that does not parse, an empty health name, or a zero duration.
+
+## Metrics
+
+Client-side, per backend: `tbd_engine_client_requests_total{backend,route,status}` and
+`tbd_engine_client_duration_seconds{backend,route}` (the names predate the registry;
+`backend` is the `[services]` name). Per request: the shared `tbd_requests_*` with
+`transport` and `route`; streams: `tbd_streams_active{kind}` and
+`tbd_stream_items_total`. See [observability/metrics.md](../observability/metrics.md).
+
+## What comes next
+
+One error envelope with the standard gRPC-to-HTTP mapping and JSON on every surface,
+a `Principal` with the caller's kind and the organisation and key claims, OpenAPI
+generated from the handlers, then the descriptor-driven transcoder that exposes any
+registered service over REST and a multiplexed WebSocket.

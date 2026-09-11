@@ -23,6 +23,7 @@ pub mod names {
     pub const STREAM_ITEMS_TOTAL: &str = "tbd_stream_items_total";
     /// Counter: calls from a service to the engine. Labels `route`, `status`.
     pub const ENGINE_CLIENT_REQUESTS_TOTAL: &str = "tbd_engine_client_requests_total";
+    // Labels: `backend` (the protocol's registry name), `route`, `status`.
     /// Histogram (seconds): engine call latency from the caller's side. Label `route`.
     pub const ENGINE_CLIENT_DURATION: &str = "tbd_engine_client_duration_seconds";
     /// Counter: faults injected by the fault handle. Label `kind`.

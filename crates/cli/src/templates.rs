@@ -68,6 +68,7 @@ pub fn snippet(name: &str) -> &'static str {
         "proto-mod" => include_str!("../templates/snippets/proto-mod.rs.tmpl"),
         "env-example" => include_str!("../templates/snippets/env-example.tmpl"),
         "configmap" => include_str!("../templates/snippets/configmap.yaml.tmpl"),
+        "protocol-service" => include_str!("../templates/snippets/protocol-service.toml.tmpl"),
         "overlay-image" => include_str!("../templates/snippets/overlay-image.yaml.tmpl"),
         "overlay-patch-pull" => include_str!("../templates/snippets/overlay-patch-pull.yaml.tmpl"),
         "overlay-patch-prod" => include_str!("../templates/snippets/overlay-patch-prod.yaml.tmpl"),

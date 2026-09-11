@@ -29,11 +29,10 @@ pub async fn start() -> Stack {
 
     let protocol_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let protocol_addr = protocol_listener.local_addr().unwrap();
-    let protocol_config = tbd_protocol::Config::parse_from([
-        "protocol",
-        "--engine-url",
-        &format!("http://{engine_addr}"),
-    ]);
+    let protocol_config = tbd_protocol::Config::embedded(
+        protocol_addr,
+        [("engine".to_owned(), format!("http://{engine_addr}"))],
+    );
     let (stop_protocol, protocol_stopped) = oneshot::channel();
     tokio::spawn(async move {
         tbd_protocol::serve_on(protocol_listener, protocol_config, async {

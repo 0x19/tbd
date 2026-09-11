@@ -17,8 +17,12 @@ data:
   LEDGER_METRICS_ADDR: 0.0.0.0:9464
   # The ledger's store; its URL is in the ledger-db Secret.
   LEDGER_STORE_KIND: postgres
-  # Through Envoy, never straight to an engine.
+  # The protocol's backends ([services] in configs/protocol), every one through
+  # Envoy's internal listener, which routes by gRPC service name; never straight
+  # to a service. PROTOCOL_<NAME>_URL overrides [services.<name>] url.
   PROTOCOL_ENGINE_URL: http://envoy:50051
+  PROTOCOL_HUMANS_URL: http://envoy:50051
+  PROTOCOL_LEDGER_URL: http://envoy:50051
   # OTLP/gRPC collector for traces. Alloy in the observability namespace.
   OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector.observability.svc:4317
   OTEL_TRACES_SAMPLER_ARG: "1.0"

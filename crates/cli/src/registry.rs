@@ -227,6 +227,37 @@ pub fn registrations(service: &Service) -> Result<Vec<Registration>, TemplateErr
         templates::snippet("configmap"),
         "@@NAME@@_LISTEN_ADDR:",
     )?;
+    // The protocol's services registry: the backend table, and its URL in every
+    // deployed environment next to the ledger's (through Envoy in containers,
+    // direct in the ansible compose file).
+    b.before(
+        "protocol:registry",
+        "configs/protocol/base.toml",
+        Anchor::line(prefix("# tbd:services-end")),
+        templates::snippet("protocol-service"),
+        "[services.@@name@@]",
+    )?;
+    b.after(
+        "protocol:k8s-env",
+        "devops/k8s/base/configmap.yaml",
+        Anchor::line(prefix("  PROTOCOL_LEDGER_URL:")),
+        "  PROTOCOL_@@NAME@@_URL: http://envoy:50051",
+        "PROTOCOL_@@NAME@@_URL:",
+    )?;
+    b.after(
+        "protocol:compose-env",
+        "compose.yaml",
+        Anchor::line(prefix("      PROTOCOL_LEDGER_URL:")),
+        "      PROTOCOL_@@NAME@@_URL: http://envoy:50051",
+        "PROTOCOL_@@NAME@@_URL:",
+    )?;
+    b.after(
+        "protocol:ansible-env",
+        "devops/ansible/roles/tbd_app/templates/compose.yaml.j2",
+        Anchor::line(prefix("      PROTOCOL_LEDGER_URL:")),
+        "      PROTOCOL_@@NAME@@_URL: http://@@name@@:{{ @@name@@_port }}",
+        "PROTOCOL_@@NAME@@_URL:",
+    )?;
     b.after(
         "k8s:base",
         "devops/k8s/base/kustomization.yaml",

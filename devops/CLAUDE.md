@@ -27,7 +27,9 @@ this file is the non-obvious part.
   `-e image_tag=...`; it refuses `REPLACE_ME`. Secrets go in `group_vars/vault.yml`
   (ansible-vault), never in `all.yml`.
 - Env vars the services read: `ENGINE_LISTEN_ADDR`, `PROTOCOL_LISTEN_ADDR`,
-  `PROTOCOL_ENGINE_URL`, `RUST_LOG`, `LOG_FORMAT`, `TBD_ENV`; chaos adds `CHAOS_*`
+  `PROTOCOL_<NAME>_URL` for every backend in the protocol's `[services]` registry
+  (`ENGINE`, `HUMANS`, `LEDGER`, and one per scaffolded service), `RUST_LOG`,
+  `LOG_FORMAT`, `TBD_ENV`; chaos adds `CHAOS_*`
   (see `docs/chaos/config.md`). A new one must be added to `k8s/base/configmap.yaml`
   (or `k8s/chaos/deployment.yaml`), `compose.yaml`, `.env.example` and the ansible
   compose template.

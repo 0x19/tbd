@@ -6,7 +6,6 @@ use async_trait::async_trait;
 use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use tbd_common::telemetry::TelemetryArgs;
 use tbd_proto::protocol::v1::{PingRequest, protocol_service_client::ProtocolServiceClient};
 use tbd_protocol::Config;
 use tokio_tungstenite::tungstenite::Message;
@@ -50,7 +49,7 @@ pub static KIND: Kind = Kind {
         Check {
             name: "http_readyz",
             surface: "http",
-            doc: "`GET /readyz` is 2xx (the engine is reachable)",
+            doc: "`GET /readyz` is 2xx (every required backend is SERVING)",
             run: |e| Box::pin(http_readyz(e)),
         },
         Check {
@@ -143,12 +142,10 @@ impl Service for Protocol {
         })?;
         let listener = tokio::net::TcpListener::bind(listen).await?;
         let addr = listener.local_addr()?;
-        let config = Config {
-            listen_addr: addr,
-            engine_url: format!("http://{engine_addr}"),
-            metrics_addr: None,
-            telemetry: TelemetryArgs::default(),
-        };
+        let config = Config::embedded(
+            addr,
+            [("engine".to_owned(), format!("http://{engine_addr}"))],
+        );
         let (stop, stopped) = tokio::sync::oneshot::channel();
         let instance_name = name.to_owned();
         let task = tokio::spawn(async move {

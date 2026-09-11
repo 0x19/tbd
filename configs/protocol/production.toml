@@ -1,0 +1,12 @@
+# protocol, environment "production". Every backend is reached through Envoy's
+# internal listener, which routes by gRPC service name; the ConfigMap or compose
+# file may still override a url with PROTOCOL_<NAME>_URL.
+
+[services.engine]
+url = "http://envoy:50051"
+
+[services.humans]
+url = "http://envoy:50051"
+
+[services.ledger]
+url = "http://envoy:50051"

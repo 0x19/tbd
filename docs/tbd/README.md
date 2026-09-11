@@ -31,6 +31,7 @@ A name is 2 to 24 lowercase letters and digits starting with a letter. Reserved:
 | `crates/<name>/` | `lib.rs` with `serve`/`serve_on`/`serve_with`, health, reflection, `TCP_NODELAY` on the incoming stream, the shared `grpc_request_span`; `service.rs` with `admit()` (counter, `RequestTimer`, fault handle) and a `Ping` RPC that answers `stub: true`; `config.rs` on the layered TOML loader with `deny_unknown_fields` and `<NAME>_*` flag overrides; `main.rs` with a `config` subcommand; `tests/it` booting on port 0 with the shipped `local` config; `CLAUDE.md` whose first line is the marker |
 | `proto/tbd/<name>/v1/<name>.proto` | `<Name>Service { rpc Ping }`, buf STANDARD clean |
 | `configs/<name>/{base,local,dev,production}.toml` | every key in `base.toml`; the others exist so a mistyped `TBD_ENV` fails at start |
+| `[services.<name>]` in `configs/protocol/base.toml` | the protocol's backend registry ([protocol/README.md](../protocol/README.md)): the service is reachable from the gateway, probed and reported on its health service, `required = false` so it never fails `/readyz`; its URL is `PROTOCOL_<NAME>_URL` in every deployed environment |
 | `devops/k8s/base/<name>/` | Deployment (gRPC probes, `/tmp` emptyDir, non-root, read-only), headless Service, kustomization |
 | `crates/chaos/src/kinds/<name>.rs` | the chaos kind ([chaos/kinds.md](../chaos/kinds.md)): the spec struct that starts the service in-process with a `Runtime`, readiness by named health check, a `grpc_<name>_ping` validate check, and `KIND` (fault injection, counters, addable, target on the service's port) |
 
@@ -65,7 +66,8 @@ when the file exists with different content, unless `--force`.
 | `chaos:topology` | `topologies/dev.toml` | end of file | `[stack.<plural>.` (`<name>s`, or `<name>` when it already ends in `s`) |
 | `chaos:targets:{base,dev,production,cluster}` | `configs/chaos/*.toml` | after `engine = ` under `[targets]` | `<name> = "http` |
 | `chaos:k8s-env`, `chaos:compose-env`, `chaos:ansible-env` | `devops/k8s/chaos/deployment.yaml`, `compose.yaml`, the ansible compose template | after `CHAOS_ENGINE_URL` | `CHAOS_<NAME>_URL` |
-| `env:example` | `.env.example` | end of file | `<NAME>_LISTEN_ADDR=` (the block also carries a commented `CHAOS_<NAME>_URL`) |
+| `env:example` | `.env.example` | end of file | `<NAME>_LISTEN_ADDR=` (the block also carries a commented `CHAOS_<NAME>_URL` and the protocol's `PROTOCOL_<NAME>_URL`) |
+| `protocol:registry`, `protocol:{k8s,compose,ansible}-env` | `configs/protocol/base.toml`, `devops/k8s/base/configmap.yaml`, `compose.yaml`, the ansible compose template | before the `# tbd:services-end` marker; after `PROTOCOL_LEDGER_URL:` | `[services.<name>]`, `PROTOCOL_<NAME>_URL:` |
 | `k8s:configmap`, `k8s:base` | `devops/k8s/base/{configmap,kustomization}.yaml` | after `PROTOCOL_METRICS_ADDR:`, after `  - protocol` | `<NAME>_LISTEN_ADDR:`, `  - <name>` |
 | `k8s:overlay:{local,dev,prod}:{image,patch}` | the overlay kustomizations | before `patches:`, before `configMapGenerator:` | the image name, the patch target line |
 | `envoy:header`, `envoy:route`, `envoy:cluster` | `devops/envoy/envoy.yaml` | the cluster list comment; before the `engine-lb` catch-all route; before `- name: chaos` under `clusters:` | `` `<name>`, ``, `/tbd.<name>.v1.<Name>Service/`, `    - name: <name>` |

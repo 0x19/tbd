@@ -1,0 +1,4 @@
+# protocol, environment "local": the host (`mise run dev`), the k3d cluster and
+# compose. Nothing differs from base.toml: on the host every backend is on its
+# loopback port, and containers override the urls with PROTOCOL_<NAME>_URL
+# (http://envoy:50051, Envoy's internal listener).

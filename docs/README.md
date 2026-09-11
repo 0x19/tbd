@@ -13,6 +13,8 @@
 | You are adding a service, operation, action, assertion or check | [chaos/extending.md](chaos/extending.md) |
 | You are adding a service | [tbd/README.md](tbd/README.md), the scaffolding CLI |
 | You want to know what the ledger service is today | [ledger/README.md](ledger/README.md) |
+| You want to know what the protocol service is today | [protocol/README.md](protocol/README.md) |
+| You are working on the `protocol` service | [../crates/protocol/CLAUDE.md](../crates/protocol/CLAUDE.md) |
 | You are working on the `ledger` service | [../crates/ledger/CLAUDE.md](../crates/ledger/CLAUDE.md) |
 | You are working on the `humans` service | [../crates/humans/CLAUDE.md](../crates/humans/CLAUDE.md) |
 | A check failed in CI, or you are changing CI | [ci.md](ci.md) |

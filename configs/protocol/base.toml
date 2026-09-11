@@ -1,0 +1,49 @@
+# protocol configuration, shared layer. `configs/protocol/<env>.toml` is merged
+# over this file (tables merge key by key, any other value replaces), then flags
+# and their environment variables (PROTOCOL_*) override both. Every key is listed
+# here so an environment file only needs what it changes.
+#
+# `PROTOCOL_<NAME>_URL` overrides `[services.<name>] url` for any registered
+# service; `--service-url name=URL` is the flag form.
+
+[server]
+# HTTP/1.1 and h2c (gRPC) on one port. Loopback on purpose; containers bind
+# 0.0.0.0 through PROTOCOL_LISTEN_ADDR.
+listen = "127.0.0.1:8080"
+
+[metrics]
+# Prometheus /metrics listener. Embedders (tests, the chaos tool) turn it off.
+listen = "0.0.0.0:9465"
+
+# The backends this gateway forwards to, one lazy gRPC channel each (channels to
+# the same url are shared). `service` is the grpc.health.v1 name probed and
+# re-reported on the protocol's own health service; `required` backends gate
+# /readyz, the others are reported but never fail it. Deployed environments
+# point every url at Envoy's internal listener, which routes by service name.
+[services.engine]
+url = "http://127.0.0.1:50051"
+service = "tbd.engine.v1.EngineService"
+required = true
+
+[services.humans]
+url = "http://127.0.0.1:50053"
+service = "tbd.humans.v1.HumansService"
+required = false
+
+[services.ledger]
+url = "http://127.0.0.1:50052"
+service = "tbd.ledger.v1.LedgerService"
+required = false
+# tbd:services-end (tbd new service inserts above this line; do not edit)
+
+[health]
+# Every backend is probed every probe_interval; a probe slower than
+# probe_timeout counts as NOT_SERVING. /readyz is a live probe with the same
+# timeout, which keeps it inside Envoy's health-check budget.
+probe_interval = "5s"
+probe_timeout = "1s"
+
+[principals]
+# Token subjects that are our own services (callers of kind `service`). Empty
+# until the id plane mints service credentials.
+services = []

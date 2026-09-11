@@ -1,14 +1,25 @@
 # crates/protocol
 
 The protocol service: one port, four surfaces, no business logic. Every handler
-translates and forwards to the engine; if a handler does more than that, the logic
-belongs in the engine.
+translates and forwards to a registered backend; if a handler does more than that,
+the logic belongs in the service. The contract is `docs/protocol/README.md`.
 
+- `config.rs`: layered TOML (`configs/protocol/base.toml` + `<TBD_ENV>.toml`) with
+  `deny_unknown_fields`, the `[services.<name>]` registry, `Overrides` (flags with
+  `PROTOCOL_*` env vars) and `Config::validate()`. The backend URLs are the one generic
+  env family in the workspace: `Overrides::apply` reads `PROTOCOL_<NAME>_URL` for every
+  registered name, so `tbd new service` adds a table and no flag; `--service-url
+  name=URL` is the flag form. `Config::embedded(listen, [(name, url)])` is what chaos
+  and the tests build. `main.rs` has the `config` subcommand and is the only file that
+  prints.
 - `lib.rs`: `router()` merges `http` (REST + SSE), `ws`, `graphql` and `grpc` routes;
   `serve_on` runs it with h2c so gRPC and HTTP/1.1 share the port.
-- `state.rs`: `AppState` holds one lazy, reconnecting tonic channel to the engine.
-  `engine_ready()` is the readiness check and asks the engine's health service for
-  `tbd.engine.v1.EngineService`.
+- `state.rs`: `AppState` is the registry. One lazy, reconnecting tonic channel per
+  distinct URL (behind Envoy every backend is `http://envoy:50051`), a `Backend` per
+  name with its `grpc.health.v1` name and `required` flag. `engine()` is the typed
+  engine client; any other backend is `client(name, Client::new)` over the same
+  `Transport` (`Measured` client metrics with a `backend` label, `TraceInject`).
+  `readiness()` probes every backend concurrently within `[health] probe_timeout`.
 - The router has an explicit `fallback`: tonic's merged router would otherwise answer
   every unknown REST path with HTTP 200 + `grpc-status: 12`. Unknown paths are a JSON
   404 (`ApiError::NotFound`) with route label `unmatched`; unknown gRPC methods keep the
@@ -26,24 +37,31 @@ belongs in the engine.
   JSON envelope `{type: data|heartbeat|close|error, ...}` outbound.
 - `grpc.rs`: the protocol's own gRPC (`ProtocolService/Ping`), health and reflection,
   mounted into the axum router via `Routes::into_axum_router`. Health also reports
-  `tbd.engine.v1.EngineService` (exported as `ENGINE_SERVICE`), refreshed every 5 s
-  from `engine_ready()`: behind the Envoy edge every `grpc.health.v1.Health` call lands
-  on the protocol, so this is how an edge-only client learns the engine is up. `routes()`
-  spawns that task and therefore needs a Tokio runtime.
+  every registered backend under its `service` name (`ENGINE_SERVICE` is the engine's),
+  refreshed every `[health] probe_interval` by one task per backend: behind the Envoy
+  edge every `grpc.health.v1.Health` call lands on the protocol, so this is how an
+  edge-only client learns a backend is up. `routes()` spawns those tasks and therefore
+  needs a Tokio runtime.
 
 - Observability: `observe.rs` has the span factory (parents to `traceparent`, records
   `trace_id`, classifies gRPC by content type) and the metrics middleware; `state.rs`
-  wraps the engine channel in `Measured` (client metrics per route) and `TraceInject`
-  (propagates `traceparent`). Metrics listen on `PROTOCOL_METRICS_ADDR` (default `:9465`).
-  The engine URL is Envoy's engine LB in every deployed environment.
+  wraps every backend channel in `Measured` (client metrics per backend and route) and
+  `TraceInject` (propagates `traceparent`). Metrics listen on `[metrics] listen`
+  (`PROTOCOL_METRICS_ADDR`, default `:9465`). Every backend URL is Envoy's internal
+  listener in every deployed environment.
 
 Invariants:
 - Forward the engine's `stub` flag untouched on REST, GraphQL and SSE.
+- `/readyz` fails only for a `required` backend (the engine today). Envoy and
+  Kubernetes eject a replica on a failed `/readyz`, so an optional backend's outage
+  must show in the body, never in the status.
 - `TCP_NODELAY` is applied with `ListenerExt::tap_io` in `serve_on`. axum 0.8 has no
   `tcp_nodelay` on `Serve`; without the tap, a WebSocket's first frame after the 101
   waits 40 ms.
 - Server errors are logged at `error` level per request. Under chaos that is expected
   noise and filtered by `RUST_LOG`; do not downgrade the level to quiet the tool.
 
-Tests: `tests/it/main.rs` boots a real engine and this service on port 0 and drives
-every surface, including a raw WebSocket client and a gRPC client on the HTTP port.
+Tests: `config.rs` loads every shipped environment file and exercises the overrides;
+`tests/it/main.rs` boots a real engine and this service on port 0 through
+`support.rs` (`Config::embedded`) and drives every surface, including a raw WebSocket
+client and a gRPC client on the HTTP port.

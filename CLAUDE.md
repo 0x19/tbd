@@ -55,6 +55,9 @@ earlier idea material for a product direction, not a spec; do not "fix" it.
   services.
 - Every new env var goes on a clap flag with `env = ...` and into `.env.example`,
   `compose.yaml`, `devops/k8s/base/configmap.yaml` and the ansible compose template.
+  The one generic family is the protocol's `PROTOCOL_<NAME>_URL`, one per backend in
+  `configs/protocol/base.toml` `[services]`, read by name (`--service-url name=URL` is
+  the flag form); `tbd new service` registers it everywhere.
 - Every new metric name goes into `crates/common/src/metrics.rs` `names` and the table in
   `docs/observability/metrics.md`; every request path gets a span with `trace_id`
   recorded and a `RequestTimer`; streams get a `StreamGuard`.

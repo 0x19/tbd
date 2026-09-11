@@ -41,7 +41,7 @@ hop; the same observability stack runs locally and in production.
 | `tbd-engine` | `tbd.engine.v1.EngineService` implementation, health, reflection | common, proto |
 | `tbd-humans` | `tbd.humans.v1.HumansService` implementation, health, reflection; scaffolded by `tbd new service`, a stub until its RPCs land | common, proto |
 | `tbd-ledger` | the facts ledger: `store::Store` (Postgres via sqlx, or in memory), outbox drained into ClickHouse, erasure sweeper, and the thin `tbd.ledger.v1.LedgerService` over it; readiness follows the store | common, proto |
-| `tbd-protocol` | axum router: REST, SSE, WebSocket bridge, GraphQL, protocol gRPC; traced and measured engine client | common, proto |
+| `tbd-protocol` | axum router: REST, SSE, WebSocket bridge, GraphQL, protocol gRPC; a registry of traced, measured gRPC backends from `[services]` in `configs/protocol` | common, proto |
 | `tbd-cli` | the `tbd` binary: scaffolds services from embedded templates and registers them in every shared file; owns no runtime code | clap, toml |
 | `tbd-chaos` | `chaos` binary: runs the services in-process, validates, loads, injects faults; `chaos serve` exposes all of it as an HTTP API and serves the admin UI from `ui/chaos` | everything above |
 
@@ -56,7 +56,7 @@ Protocol surfaces map onto engine RPCs:
 | `POST /v1/evaluate`, GraphQL `evaluate` | `Evaluate` (unary) |
 | `GET /v1/subjects/{id}/events` (SSE) | `Subscribe` (server stream) |
 | `/ws` | `Session` (bidirectional stream) |
-| `GET /readyz`, GraphQL `engineReady` | `grpc.health.v1.Health/Check` |
+| `GET /readyz`, GraphQL `engineReady` | `grpc.health.v1.Health/Check` on every registered backend (`/readyz` reports each; the `required` ones gate it) |
 
 Envoy routes, from `devops/envoy/envoy.yaml`:
 
@@ -84,11 +84,12 @@ Envoy routes, from `devops/envoy/envoy.yaml`:
    only. The OTLP exporter and the metrics listener are the only network code in it.
 4. **`tbd-proto` is generated only.** Wrap generated types where the behaviour lives.
 5. **One port per service, plus one for metrics.** The protocol multiplexes HTTP/1.1 and
-   h2c on 8080; the engine serves gRPC on 50051; each exposes Prometheus metrics on its
-   own port.
-6. **Services never address each other directly.** The protocol's engine URL is Envoy's
-   engine load balancer in every deployed environment. Only tests and the chaos tool
-   connect straight to an engine.
+   h2c on 8080 and re-reports every registered backend's health name on it; the engine
+   serves gRPC on 50051; each exposes Prometheus metrics on its own port.
+6. **Services never address each other directly.** Every URL in the protocol's
+   `[services]` registry is Envoy's internal listener in every deployed environment
+   (`PROTOCOL_<NAME>_URL`); Envoy routes by gRPC service name and balances. Only tests
+   and the chaos tool connect straight to a service.
 7. **Every request is traced and measured.** Envoy starts the trace; each hop adopts the
    caller's `traceparent`, records `trace_id` on its span, and records one metrics sample
    with the shared metric names. A caller-supplied `traceparent` is honoured.
@@ -102,8 +103,11 @@ Envoy routes, from `devops/envoy/envoy.yaml`:
 
 ## Cross-cutting
 
-- **Config**: clap derive, every flag has an env var. `TelemetryArgs` is flattened into
-  every binary and its flags are global, so they work after a subcommand.
+- **Config**: layered TOML (`configs/<binary>/base.toml` + `<TBD_ENV>.toml`) with clap
+  flags over it, every flag with an env var. The one generic family is the protocol's
+  `PROTOCOL_<NAME>_URL`, one per registered backend, so a scaffolded service needs no
+  new flag. `TelemetryArgs` is flattened into every binary and its flags are global, so
+  they work after a subcommand.
 - **Logging**: `tracing`; `LOG_FORMAT=json` in containers, `text` locally. JSON lines
   carry the enclosing span's fields, including `trace_id`. Per-request lines are `debug`;
   Envoy's access log is the request-level record at `info`.

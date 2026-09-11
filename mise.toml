@@ -288,7 +288,7 @@ description = "Run the engine (gRPC on ENGINE_LISTEN_ADDR)"
 run = "cargo run -p tbd-engine"
 
 [tasks."run:protocol"]
-description = "Run the protocol service (HTTP/WS/GraphQL/gRPC on PROTOCOL_LISTEN_ADDR)"
+description = "Run the protocol service (HTTP/WS/GraphQL/gRPC on PROTOCOL_LISTEN_ADDR; TBD_ENV picks configs/protocol/<env>.toml)"
 run = "cargo run -p tbd-protocol"
 
 [tasks."run:ledger"]

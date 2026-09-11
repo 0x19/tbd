@@ -6,15 +6,13 @@ use tbd_proto::protocol::v1::{
     protocol_service_server::{ProtocolService, ProtocolServiceServer},
 };
 use tonic::{Request, Response, Status, service::Routes};
-use tonic_health::{ServingStatus, server::HealthReporter};
+use tonic_health::server::HealthReporter;
 
-use crate::AppState;
+use crate::{AppState, state::Backend};
 
-/// The engine's gRPC service name, as reported on this port's health service.
+/// The engine's gRPC service name, as reported on this port's health service
+/// and as `Config::embedded` names the `engine` backend.
 pub const ENGINE_SERVICE: &str = "tbd.engine.v1.EngineService";
-
-/// How often the engine's status is refreshed on the health service.
-const ENGINE_HEALTH_INTERVAL: std::time::Duration = std::time::Duration::from_secs(5);
 
 /// `tbd.protocol.v1.Protocol` implementation.
 #[derive(Debug, Clone, Default)]
@@ -35,14 +33,22 @@ impl ProtocolService for ProtocolGrpc {
 /// Reflection is best-effort: a descriptor set that fails to parse is a build
 /// bug, so it is logged and the protocol still serves without reflection.
 ///
-/// Health reports two names: the protocol's own service (always SERVING) and
-/// [`ENGINE_SERVICE`], which mirrors `/readyz` (whether the engine answers). Behind
-/// the Envoy edge every `grpc.health.v1.Health` call lands here, so a client that
-/// only sees the edge still gets a truthful answer for the engine. A background
-/// task refreshes it; must be called on a Tokio runtime.
+/// Health reports the protocol's own service (always SERVING) and every
+/// registered backend under its `grpc.health.v1` name, refreshed every
+/// `[health] probe_interval` by one task per backend. Behind the Envoy edge
+/// every `grpc.health.v1.Health` call lands here, so a client that only sees
+/// the edge still gets a truthful answer for each backend. Must be called on a
+/// Tokio runtime.
 pub fn routes(state: &AppState) -> Router {
     let (reporter, health) = tonic_health::server::health_reporter();
-    tokio::spawn(report_engine_health(state.clone(), reporter));
+    for backend in state.backends() {
+        tokio::spawn(report_backend_health(
+            backend.clone(),
+            reporter.clone(),
+            state.probe_interval(),
+            state.probe_timeout(),
+        ));
+    }
     let mut routes = Routes::new(health).add_service(ProtocolServiceServer::new(ProtocolGrpc));
     match tonic_reflection::server::Builder::configure()
         .register_encoded_file_descriptor_set(tbd_proto::protocol::v1::DESCRIPTOR_SET)
@@ -55,20 +61,28 @@ pub fn routes(state: &AppState) -> Router {
     routes.into_axum_router()
 }
 
-async fn report_engine_health(state: AppState, reporter: HealthReporter) {
+async fn report_backend_health(
+    backend: Backend,
+    reporter: HealthReporter,
+    interval: std::time::Duration,
+    timeout: std::time::Duration,
+) {
     let mut last = None;
-    let mut tick = tokio::time::interval(ENGINE_HEALTH_INTERVAL);
+    let mut tick = tokio::time::interval(interval);
     loop {
         tick.tick().await;
-        let status = if state.engine_ready().await {
-            ServingStatus::Serving
-        } else {
-            ServingStatus::NotServing
-        };
-        if last != Some(status) {
-            tracing::info!(service = ENGINE_SERVICE, ?status, "engine health changed");
-            last = Some(status);
+        let state = backend.check(timeout).await;
+        if last != Some(state) {
+            tracing::info!(
+                backend = backend.name(),
+                service = %backend.health_name,
+                ?state,
+                "backend health changed"
+            );
+            last = Some(state);
         }
-        reporter.set_service_status(ENGINE_SERVICE, status).await;
+        reporter
+            .set_service_status(&backend.health_name, state.serving_status())
+            .await;
     }
 }

@@ -1,0 +1,11 @@
+# protocol, environment "dev": the shared cluster. Every backend is reached
+# through Envoy's internal listener, which routes by gRPC service name.
+
+[services.engine]
+url = "http://envoy:50051"
+
+[services.humans]
+url = "http://envoy:50051"
+
+[services.ledger]
+url = "http://envoy:50051"

@@ -19,7 +19,7 @@ declared and what derives from it: [extending.md](extending.md#add-a-service-kin
 | `grpc_engine_evaluate` | grpc | `engine` | `Evaluate` answers with a stub-labelled response |
 | `grpc_engine_subscribe` | grpc | `engine` | `Subscribe` streams two events |
 | `http_healthz` | http | `protocol` | `GET /healthz` is 2xx |
-| `http_readyz` | http | `protocol` | `GET /readyz` is 2xx (the engine is reachable) |
+| `http_readyz` | http | `protocol` | `GET /readyz` is 2xx (every required backend is SERVING) |
 | `rest_evaluate` | rest | `protocol` | `POST /v1/evaluate` echoes the subject and is labelled a stub |
 | `sse_events` | sse | `protocol` | `GET /v1/subjects/{id}/events` delivers two events |
 | `graphql_evaluate` | graphql | `protocol` | `version`, `engineReady` and `evaluate` resolve without errors |

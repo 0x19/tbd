@@ -43,13 +43,17 @@ struct Me {
     subject: String,
 }
 
-/// Readiness: the engine answers its health check.
+/// Readiness: every required backend answers `SERVING` to a live health
+/// check. The body lists every registered backend either way, so an optional
+/// one that is down is visible without failing the probe.
 async fn readyz(State(state): State<AppState>) -> impl IntoResponse {
-    if state.engine_ready().await {
-        (StatusCode::OK, "ready")
+    let readiness = state.readiness().await;
+    let status = if readiness.ready {
+        StatusCode::OK
     } else {
-        (StatusCode::SERVICE_UNAVAILABLE, "engine unavailable")
-    }
+        StatusCode::SERVICE_UNAVAILABLE
+    };
+    (status, Json(readiness))
 }
 
 /// `POST /v1/evaluate` body.

@@ -6,8 +6,8 @@ Read `README.md` here first. Non-obvious facts:
   `OTEL_EXPORTER_OTLP_ENDPOINT` at `otel-collector.observability.svc`.
 - `engine` and `protocol` Services are headless on purpose (`clusterIP: None`). Envoy
   does the balancing. Giving them a ClusterIP silently moves balancing to kube-proxy.
-- Never change ports on the in-cluster `envoy` Service; `PROTOCOL_ENGINE_URL` is
-  `http://envoy:50051`. Host-facing ports go on `overlays/local/envoy-lb.yaml` and must
+- Never change ports on the in-cluster `envoy` Service; every `PROTOCOL_<NAME>_URL` is
+  `http://envoy:50051` (the internal listener routes by gRPC service name). Host-facing ports go on `overlays/local/envoy-lb.yaml` and must
   match the `-p` flags in `mise.toml` `local:up` and `ansible/playbooks/local.yml`.
 - `local-services.yaml` under `observability/` is applied with `-f`, not part of the
   kustomization, so other environments never get `LoadBalancer` Services.
