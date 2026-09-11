@@ -115,6 +115,17 @@ try {
     headers: { authorization: `Bearer ${tokens.access_token}` },
   });
   console.log("userinfo:", info.status(), await info.json());
+  // Graceful rotation: a UI polling several endpoints redeems the same refresh
+  // token more than once when the access token expires. Both must succeed;
+  // strict single use made the second one revoke the whole session.
+  const refresh = () =>
+    page.request.post(`${BASE}/oauth2/token`, {
+      form: { grant_type: "refresh_token", client_id: "tbd-app", refresh_token: tokens.refresh_token },
+    });
+  const [first, second] = await Promise.all([refresh(), refresh()]);
+  console.log("refresh twice at once:", first.status(), second.status(), "(200 200 expected)");
+  if (first.status() !== 200 || second.status() !== 200)
+    throw new Error(`refresh token reuse within the grace period failed: ${await second.text()}`);
 
   // 4. the gated UI hosts and the role model. A new person is a viewer: the
   // observability hosts let them in (Grafana as Viewer), the chaos admin UI does
@@ -140,16 +151,16 @@ try {
       const body = (await page.textContent("body")) ?? "";
       return body.includes("RBAC: access denied") ? 403 : resp?.status();
     };
+    // Sign-in happens on a page: `/api/...` paths are never redirected to it
+    // (deny_redirect_matcher), so the API is read with the cookies afterwards.
     const grafanaRole = async () => {
-      await status(host("grafana", "/api/user/orgs")); // completes any sign-in prompt
-      return JSON.parse((await page.textContent("body")) ?? "[]")[0]?.role;
+      await status(host("grafana")); // completes any sign-in prompt
+      const orgs = await ctx.request.get(host("grafana", "/api/user/orgs"), {
+        headers: { accept: "application/json" },
+      });
+      return (await orgs.json())[0]?.role;
     };
-    console.log(
-      "grafana as viewer:",
-      await status(host("grafana", "/api/user")),
-      "role",
-      await grafanaRole(),
-    );
+    console.log("grafana as viewer:", await status(host("grafana")), "role", await grafanaRole());
     const viewer = await status(host("chaosadmin"));
     console.log("chaosadmin as viewer:", viewer, "(403 expected)");
     if (viewer !== 403) throw new Error("a viewer reached the chaos admin UI");
@@ -181,6 +192,27 @@ try {
     console.log("chaosadmin as admin:", admin, adminOk ? "ok" : `FAILED at ${page.url().slice(0, 60)}`);
     if (!adminOk) throw new Error("an admin could not reach the chaos admin UI");
     console.log("grafana as admin: role", await grafanaRole());
+    // The page's own API calls: signed in they work; without a session they get
+    // 401, never the sign-in redirect a fetch cannot follow (deny_redirect_matcher).
+    const me = await ctx.request.get(host("chaosadmin", "/api/chaos/v1/me"), {
+      headers: { accept: "application/json" },
+      maxRedirects: 0,
+    });
+    const anon = await browser.newContext();
+    const noSession = await anon.request.get(host("chaosadmin", "/api/chaos/v1/me"), {
+      headers: { accept: "application/json" },
+      maxRedirects: 0,
+    });
+    await anon.close();
+    console.log(
+      "api as admin:",
+      me.status(),
+      "api without a session:",
+      noSession.status(),
+      "(200 401 expected)",
+    );
+    if (me.status() !== 200 || noSession.status() !== 401)
+      throw new Error("an API call without a session must get 401, not a redirect");
   }
   console.log(errors.length ? `page errors: ${errors}` : "no page errors");
 } finally {

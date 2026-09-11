@@ -166,6 +166,14 @@ static_resources:
                         auth_scopes: [openid, offline_access, email, profile]
                         use_refresh_token: true
                         forward_bearer_token: false
+                        # A browser's own API calls never get the sign-in redirect: a
+                        # fetch cannot follow it (auth.<domain> is another origin), so
+                        # it failed silently. They still get the token refresh; when
+                        # that fails they get 401 and the UI reloads the page, which
+                        # is a document navigation and takes the redirect.
+                        deny_redirect_matcher:
+                          - name: ":path"
+                            string_match: { prefix: "/api/" }
                         # Scripts with their own bearer token skip the browser login.
                         pass_through_matcher:
                           - name: authorization

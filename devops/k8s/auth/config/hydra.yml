@@ -50,6 +50,16 @@ oauth2:
   # Clients may only request audiences they are registered for.
   allowed_top_level_claims: []
   mirror_top_level_claims: false
+  grant:
+    refresh_token:
+      # Envoy's OAuth2 filter refreshes on the first request that finds the access
+      # token expired; an admin UI polling several endpoints sends that request
+      # several times at once, and with strict rotation the second use counted as
+      # theft and revoked the whole session (a sign-in every five minutes). Within
+      # this window a refresh token may be redeemed again; reuse after it, or from
+      # a revoked consent, still revokes everything.
+      rotation_grace_period: 30s
+      rotation_grace_reuse_count: 10
 
 log:
   level: info

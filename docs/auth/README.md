@@ -162,6 +162,16 @@ claims to `x-user-sub`, `x-user-email`, `x-user-name`. Access tokens refresh on 
 a bearer token skip the browser flow, so scripts can hit `chaosadmin.<domain>/api/chaos/v1`
 with a machine token.
 
+A page's own API calls (`/api/...` on a UI host, `deny_redirect_matcher`) are never
+redirected to sign in: a `fetch` cannot follow a redirect to another origin, so it would
+fail silently. They still get the token refresh, and 401 when that fails; the chaos UI
+answers a 401 by reloading the page, which takes the redirect and comes back signed in.
+Refreshes are graceful: the filter refreshes on the first request that finds the access
+token expired, and a UI polling several endpoints sends that request several times at
+once, so Hydra accepts the same refresh token again for 30 seconds (up to ten times,
+`oauth2.grant.refresh_token.rotation_grace_period`); reuse outside that window still
+revokes the session.
+
 **Grafana** runs with its auth proxy on: Envoy adds `X-WEBAUTH-USER` (email),
 `X-WEBAUTH-NAME` and `X-WEBAUTH-ROLE` (Admin, Editor or Viewer, from the `grafana_role`
 claim) from the verified claims; Grafana creates the user on first sight, signs it in and
@@ -264,7 +274,7 @@ mise run auth:role EMAIL ROLE      # admin | editor | viewer
 mise run auth:oidc google ID SECRET
 mise run auth:smtp URI FROM        # e-mail relay; turns recovery/verification on
 mise run auth:rotate client-ui | client-chaos | hmac | hydra-system
-mise run auth:e2e                  # browser check: sign-up, PKCE, roles, sign-out
+mise run auth:e2e                  # browser check: sign-up, PKCE, refresh grace, roles, API 401, sign-out
 mise run ui:auth:check | ui:auth:build
 kubectl -n auth logs deploy/hydra
 kubectl -n auth logs deploy/kratos
