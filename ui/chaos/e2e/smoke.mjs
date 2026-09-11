@@ -230,7 +230,8 @@ await step("campaigns list and editor check", async () => {
 
 await step("run the smoke campaign live to the end", async () => {
   await page.goto(`${BASE}/stress/`);
-  const row = page.getByRole("row", { name: /smoke/ });
+  // "smoke" by itself: the soak campaign's description mentions the smoke mix.
+  const row = page.getByRole("row").filter({ has: page.getByRole("link", { name: "smoke", exact: true }) });
   await row.getByRole("button", { name: /^run$/i }).click();
   await page.waitForURL(/runs\/view\/\?id=/, { timeout: 10000 });
   await page.getByText("Lifecycle").waitFor({ timeout: 10000 });
@@ -249,7 +250,11 @@ await step("run the smoke campaign live to the end", async () => {
   await shot({ path: `${SHOTS}/stress-done.png`, fullPage: true });
   // The stress entry under Campaigns is the one current Runs link for ?kind=stress.
   await page.goto(`${BASE}/runs/?kind=stress`);
-  await page.getByRole("row", { name: /smoke/ }).first().waitFor({ timeout: 10000 });
+  await page
+    .getByRole("row")
+    .filter({ hasText: /^smoke/ })
+    .first()
+    .waitFor({ timeout: 10000 });
   const current = page.locator('[data-sidebar="menu-sub-button"][data-active="true"]');
   await current.waitFor();
   if ((await current.count()) !== 1) throw new Error("more than one sidebar entry marked current");
