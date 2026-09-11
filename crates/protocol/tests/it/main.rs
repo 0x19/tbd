@@ -412,6 +412,7 @@ async fn openapi_is_served_and_matches_the_committed_document() {
         "/v1/ledger/subjects/{subject_id}",
         "/v1/ledger/subjects/{subject_id}/restore",
         "/v1/engine/subjects/{subject_id}/events",
+        "/v1/humans/ping",
     ] {
         assert!(
             served["paths"][path].is_object(),

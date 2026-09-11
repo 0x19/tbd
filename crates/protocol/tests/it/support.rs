@@ -54,8 +54,14 @@ pub async fn start() -> Stack {
         [
             ("engine".to_owned(), format!("http://{engine_addr}")),
             ("ledger".to_owned(), format!("http://{ledger_addr}")),
+            // Registered and never up, like a scaffolded service before its
+            // first deploy: its routes exist and answer `unavailable`.
+            ("humans".to_owned(), "http://127.0.0.1:1".to_owned()),
         ],
     );
+    if let Some(humans) = protocol_config.services.get_mut("humans") {
+        humans.required = false;
+    }
     // A subject the tests can present as one of our own services.
     protocol_config.principals.services = vec!["svc-ledger".to_owned()];
     let (stop_protocol, protocol_stopped) = oneshot::channel();

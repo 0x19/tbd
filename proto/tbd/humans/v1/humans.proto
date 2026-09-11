@@ -2,12 +2,16 @@ syntax = "proto3";
 
 package tbd.humans.v1;
 
+import "google/api/annotations.proto";
+
 // The humans service. Ping is the liveness RPC every service carries; real
 // RPCs are added beside it.
 service HumansService {
   // Echo a message. Proves configuration, telemetry and fault injection reach
   // an RPC.
-  rpc Ping(PingRequest) returns (PingResponse);
+  rpc Ping(PingRequest) returns (PingResponse) {
+    option (google.api.http) = {get: "/v1/humans/ping"};
+  }
 }
 
 message PingRequest {

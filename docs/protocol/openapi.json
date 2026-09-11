@@ -170,6 +170,48 @@
         }
       }
     },
+    "/v1/humans/ping": {
+      "get": {
+        "tags": [
+          "humans"
+        ],
+        "summary": "tbd.humans.v1.HumansService/Ping",
+        "description": "Transcoded from `/tbd.humans.v1.HumansService/Ping` on the `humans` backend.",
+        "operationId": "HumansService.Ping",
+        "parameters": [
+          {
+            "name": "message",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "`tbd.humans.v1.PingResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.humans.v1.PingResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/ledger/ping": {
       "get": {
         "tags": [
@@ -1086,6 +1128,21 @@
             "$ref": "#/components/schemas/tbd.engine.v1.ScoreUpdated"
           },
           "subject_id": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.humans.v1.PingResponse": {
+        "type": "object",
+        "description": "`tbd.humans.v1.PingResponse`",
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "stub": {
+            "type": "boolean"
+          },
+          "version": {
             "type": "string"
           }
         }

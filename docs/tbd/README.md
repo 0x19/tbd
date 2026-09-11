@@ -29,7 +29,7 @@ A name is 2 to 24 lowercase letters and digits starting with a letter. Reserved:
 | Path | What |
 |---|---|
 | `crates/<name>/` | `lib.rs` with `serve`/`serve_on`/`serve_with`, health, reflection, `TCP_NODELAY` on the incoming stream, the shared `grpc_request_span`; `service.rs` with `admit()` (counter, `RequestTimer`, fault handle) and a `Ping` RPC that answers `stub: true`; `config.rs` on the layered TOML loader with `deny_unknown_fields` and `<NAME>_*` flag overrides; `main.rs` with a `config` subcommand; `tests/it` booting on port 0 with the shipped `local` config; `CLAUDE.md` whose first line is the marker |
-| `proto/tbd/<name>/v1/<name>.proto` | `<Name>Service { rpc Ping }`, buf STANDARD clean |
+| `proto/tbd/<name>/v1/<name>.proto` | `<Name>Service { rpc Ping }` annotated `get: "/v1/<name>/ping"`, so the protocol serves `GET /v1/<name>/ping` the moment the service is registered ([protocol/README.md](../protocol/README.md), "Transcoding"); buf STANDARD clean |
 | `configs/<name>/{base,local,dev,production}.toml` | every key in `base.toml`; the others exist so a mistyped `TBD_ENV` fails at start |
 | `[services.<name>]` in `configs/protocol/base.toml` | the protocol's backend registry ([protocol/README.md](../protocol/README.md)): the service is reachable from the gateway, probed and reported on its health service, `required = false` so it never fails `/readyz`; its URL is `PROTOCOL_<NAME>_URL` in every deployed environment |
 | `devops/k8s/base/<name>/` | Deployment (gRPC probes, `/tmp` emptyDir, non-root, read-only), headless Service, kustomization |

@@ -160,6 +160,23 @@ async fn the_ledger_round_trip_over_rest() {
 }
 
 #[tokio::test]
+async fn a_registered_backend_that_is_down_is_503_unavailable() {
+    let stack = support::start().await;
+    let (status, problem) = body(
+        stack
+            .client()
+            .get(stack.url("/v1/humans/ping"))
+            .header(JWT, claims("c1"))
+            .send()
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, 503, "{problem}");
+    assert_eq!(problem["code"], "unavailable");
+}
+
+#[tokio::test]
 async fn grpc_status_becomes_the_envelope() {
     let stack = support::start().await;
     let (status, problem) = body(
