@@ -41,7 +41,7 @@ hop; the same observability stack runs locally and in production.
 | `tbd-engine` | `tbd.engine.v1.EngineService` implementation, health, reflection | common, proto |
 | `tbd-humans` | `tbd.humans.v1.HumansService` implementation, health, reflection; scaffolded by `tbd new service`, a stub until its RPCs land | common, proto |
 | `tbd-ledger` | the facts ledger: `store::Store` (Postgres via sqlx, or in memory), outbox drained into ClickHouse, erasure sweeper, and the thin `tbd.ledger.v1.LedgerService` over it; readiness follows the store | common, proto |
-| `tbd-protocol` | axum router: REST, SSE, WebSocket bridge, GraphQL, protocol gRPC; a registry of traced, measured gRPC backends from `[services]` in `configs/protocol` | common, proto |
+| `tbd-protocol` | axum router: REST, SSE, WebSocket bridge, GraphQL, protocol gRPC; a registry of traced, measured gRPC backends from `[services]` in `configs/protocol`; the descriptor-driven transcoder that serves every `google.api.http`-annotated RPC over REST or SSE | common, proto |
 | `tbd-cli` | the `tbd` binary: scaffolds services from embedded templates and registers them in every shared file; owns no runtime code | clap, toml |
 | `tbd-stress` | stress campaigns against the ledger: closed-loop workers with a client-side model per subject, the contract as invariant checkers, findings with the trace that led there; the load metrics type chaos reports | proto, tonic |
 | `tbd-chaos` | `chaos` binary: runs the services in-process, validates, loads, injects faults, runs stress campaigns around its stack and timeline; `chaos serve` exposes all of it as an HTTP API and serves the admin UI from `ui/chaos` | everything above |
@@ -56,6 +56,7 @@ Protocol surfaces map onto engine RPCs:
 |---|---|
 | `POST /v1/evaluate`, GraphQL `evaluate` | `Evaluate` (unary) |
 | `GET /v1/subjects/{id}/events` (SSE) | `Subscribe` (server stream) |
+| `GET /v1/engine/subjects/{id}/events` (SSE), `/v1/ledger/...` (REST) | transcoded from the `google.api.http` options in the protos: any registered backend's annotated RPCs (`docs/protocol/README.md`) |
 | `/ws` | `Session` (bidirectional stream) |
 | `GET /readyz`, GraphQL `engineReady` | `grpc.health.v1.Health/Check` on every registered backend (`/readyz` reports each; the `required` ones gate it) |
 

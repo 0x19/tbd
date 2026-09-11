@@ -35,6 +35,21 @@ pub fn routes() -> Router<AppState> {
     openapi_router().split_for_parts().0
 }
 
+/// The hand-written routes, so a transcoded binding cannot claim one.
+pub(crate) fn reserved_paths() -> &'static [(&'static str, &'static str)] {
+    &[
+        ("GET", "/healthz"),
+        ("GET", "/readyz"),
+        ("POST", "/v1/evaluate"),
+        ("GET", "/v1/me"),
+        ("GET", "/v1/subjects/{subject_id}/events"),
+        ("GET", "/openapi.json"),
+        ("GET", "/ws"),
+        ("GET", "/graphql"),
+        ("POST", "/graphql"),
+    ]
+}
+
 /// Liveness: the process is up.
 #[utoipa::path(get, path = "/healthz", tag = "health",
     responses((status = 200, description = "The process answers", body = Health)))]
@@ -202,19 +217,7 @@ async fn events(
         async move {
             let ev = match item {
                 Ok(ev) => ev,
-                Err(status) => {
-                    // The envelope as the event's JSON; the stream stays open,
-                    // the client decides.
-                    let problem = Problem::from(status);
-                    problem.log();
-                    let event = SseEvent::default().event("error");
-                    let event = event.json_data(problem.wire()).unwrap_or_else(|_| {
-                        SseEvent::default()
-                            .event("error")
-                            .data(r#"{"code":"internal","error":"serialize","details":[]}"#)
-                    });
-                    return Some(Ok(event));
-                }
+                Err(status) => return Some(Ok(Problem::from(status).sse_event())),
             };
             let body = match ev.kind? {
                 subscribe_response::Kind::Heartbeat(hb) => EventBody::Heartbeat { seq: hb.seq },

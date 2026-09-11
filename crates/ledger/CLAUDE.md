@@ -37,6 +37,11 @@ reports as `diverged`. The contract is `docs/ledger/README.md`.
   `PgStore::stats` feeds the sampled gauges (outbox backlog and age, erasures pending and
   due, rows and bytes per table) from `lib.rs`'s `store_gauges` task. Names live in
   `tbd_common::metrics::names`; the dashboard is `devops/grafana/dashboards/tbd-ledger.json`.
+- The proto's `google.api.http` options are the ledger's REST surface: the protocol
+  transcodes them at start (`docs/protocol/README.md`, "Transcoding"), so a new RPC
+  gets its route from the annotation and `docs/ledger/README.md`'s REST table plus
+  `mise run protocol:openapi` in the same commit. Templates carry `{subject_id}` and
+  nothing else; a streaming RPC would have to end in `/events`.
 - `lib.rs`: `serve`, `serve_on`, `serve_with` (the store comes from `[store]`),
   `serve_store` (an explicit store); it spawns the health, sweeper, drainer and
   pool-gauge tasks on a `CancellationToken` tied to the shutdown future. `config.rs`: `[store]`, `[analytics]`, `[erasure]`,

@@ -12,8 +12,9 @@ the logic belongs in the service. The contract is `docs/protocol/README.md`.
   name=URL` is the flag form. `Config::embedded(listen, [(name, url)])` is what chaos
   and the tests build. `main.rs` has the `config` subcommand and is the only file that
   prints.
-- `lib.rs`: `router()` merges `http` (REST + SSE), `ws`, `graphql` and `grpc` routes;
-  `serve_on` runs it with h2c so gRPC and HTTP/1.1 share the port.
+- `lib.rs`: `router()` merges `http` (REST + SSE), the transcoded routes, `ws`,
+  `graphql` and `grpc` routes; `serve_on` runs it with h2c so gRPC and HTTP/1.1 share
+  the port.
 - `state.rs`: `AppState` is the registry. One lazy, reconnecting tonic channel per
   distinct URL (behind Envoy every backend is `http://envoy:50051`), a `Backend` per
   name with its `grpc.health.v1` name and `required` flag. `engine()` is the typed
@@ -55,6 +56,18 @@ the logic belongs in the service. The contract is `docs/protocol/README.md`.
   openapi`. `docs/protocol/openapi.json` is committed and a test keeps it equal to the
   served document: after touching a handler or a body type, `mise run protocol:openapi`.
   Bodies derive `ToSchema`; `ErrorBody` is the envelope's schema, named `Problem`.
+- `transcode/`: the descriptor-driven routes. `mod.rs` reads `google.api.http` from
+  `tbd_proto::DESCRIPTOR_SET_ALL` (`pool()`), maps package `tbd.<name>.v1` to backend
+  `<name>` and builds one `Binding` per rule (`Transcoder::from_config` needs only the
+  registry names, so `protocol openapi` runs without a state); `template.rs` parses the
+  path subset (`/lit`, `{field}`, `{a.b}`; the rest is refused at startup with a
+  reason); `bind.rs` builds the `DynamicMessage` (body, then path variables, then query,
+  strict); `codec.rs` is the tonic codec for dynamic messages; `call.rs` forwards over
+  `backend.transport()` and answers JSON or SSE, `Out` being the one serializer
+  (proto names, defaults emitted, 64-bit ints as strings); `openapi.rs` builds the
+  document fragment with utoipa's runtime builders. Streaming templates end in
+  `/events` (Envoy's regex route). A hand-written path is in `http::reserved_paths()`
+  so a binding cannot shadow it; `Code::MethodNotAllowed` is the 405 envelope.
 - `json.rs`: the request-side `Json<T>` extractor. Every body is JSON in and JSON out,
   health included; a non-JSON body is `unsupported_media_type`, a body that does not
   parse is `bad_request` with a `field` detail named `body`.

@@ -54,6 +54,8 @@ pub enum Code {
     UnsupportedMediaType,
     /// A request body over the size limit.
     PayloadTooLarge,
+    /// A known path with a verb it does not serve.
+    MethodNotAllowed,
 }
 
 impl Code {
@@ -97,6 +99,7 @@ impl Code {
             Self::Internal => StatusCode::INTERNAL_SERVER_ERROR,
             Self::UnsupportedMediaType => StatusCode::UNSUPPORTED_MEDIA_TYPE,
             Self::PayloadTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
+            Self::MethodNotAllowed => StatusCode::METHOD_NOT_ALLOWED,
         }
     }
 
@@ -119,6 +122,7 @@ impl Code {
             Self::Internal => "internal",
             Self::UnsupportedMediaType => "unsupported_media_type",
             Self::PayloadTooLarge => "payload_too_large",
+            Self::MethodNotAllowed => "method_not_allowed",
         }
     }
 }
@@ -332,6 +336,20 @@ impl Problem {
     }
 }
 
+impl Problem {
+    /// The `error` event of a server-sent events stream: this envelope as the
+    /// event's JSON. The stream stays open; the client decides.
+    pub fn sse_event(&self) -> axum::response::sse::Event {
+        self.log();
+        let event = axum::response::sse::Event::default().event("error");
+        event.json_data(self.wire()).unwrap_or_else(|_| {
+            axum::response::sse::Event::default()
+                .event("error")
+                .data(r#"{"code":"internal","error":"serialize","details":[]}"#)
+        })
+    }
+}
+
 impl IntoResponse for Problem {
     fn into_response(self) -> Response {
         self.log();
@@ -380,6 +398,7 @@ mod tests {
         }
         assert_eq!(Code::UnsupportedMediaType.http().as_u16(), 415);
         assert_eq!(Code::PayloadTooLarge.http().as_u16(), 413);
+        assert_eq!(Code::MethodNotAllowed.http().as_u16(), 405);
     }
 
     #[test]

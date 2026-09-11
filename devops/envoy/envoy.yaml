@@ -546,6 +546,12 @@ static_resources:
                           route:
                             cluster: protocol
                             timeout: 0s
+                        # Transcoded server-streaming RPCs (SSE): by contract every one
+                        # ends in /events, so this is the one streaming rule they need.
+                        - match: { safe_regex: { regex: "^/v1/.*/events$" } }
+                          route:
+                            cluster: protocol
+                            timeout: 0s
                         # Everything else: REST, GraphQL, health.
                         - match: { prefix: "/" }
                           route:

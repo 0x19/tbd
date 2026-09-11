@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package tbd.engine.v1;
 
+import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";
 
 // The engine is the streaming compute service. Every call is scoped to a
@@ -10,7 +11,9 @@ service EngineService {
   // Score a single subject once. Unary.
   rpc Evaluate(EvaluateRequest) returns (EvaluateResponse);
   // Subscribe to engine events for a subject. Server streaming.
-  rpc Subscribe(SubscribeRequest) returns (stream SubscribeResponse);
+  rpc Subscribe(SubscribeRequest) returns (stream SubscribeResponse) {
+    option (google.api.http) = {get: "/v1/engine/subjects/{subject_id}/events"};
+  }
   // Long-lived bidirectional session. Client and server both stream frames.
   rpc Session(stream SessionRequest) returns (stream SessionResponse);
 }

@@ -67,6 +67,48 @@
         }
       }
     },
+    "/v1/engine/subjects/{subject_id}/events": {
+      "get": {
+        "tags": [
+          "engine"
+        ],
+        "summary": "tbd.engine.v1.EngineService/Subscribe",
+        "description": "Transcoded from `/tbd.engine.v1.EngineService/Subscribe` on the `engine` backend.",
+        "operationId": "EngineService.Subscribe",
+        "parameters": [
+          {
+            "name": "subject_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A stream of `tbd.engine.v1.SubscribeResponse` events, one JSON object per `data:`; a failure is an `error` event carrying `Problem`",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.engine.v1.SubscribeResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/evaluate": {
       "post": {
         "tags": [
@@ -117,6 +159,446 @@
           },
           "503": {
             "description": "The engine is unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/ledger/ping": {
+      "get": {
+        "tags": [
+          "ledger"
+        ],
+        "summary": "tbd.ledger.v1.LedgerService/Ping",
+        "description": "Transcoded from `/tbd.ledger.v1.LedgerService/Ping` on the `ledger` backend.",
+        "operationId": "LedgerService.Ping",
+        "parameters": [
+          {
+            "name": "message",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "`tbd.ledger.v1.PingResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.ledger.v1.PingResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/ledger/subjects/{subject_id}": {
+      "delete": {
+        "tags": [
+          "ledger"
+        ],
+        "summary": "tbd.ledger.v1.LedgerService/Erase",
+        "description": "Transcoded from `/tbd.ledger.v1.LedgerService/Erase` on the `ledger` backend.",
+        "operationId": "LedgerService.Erase",
+        "parameters": [
+          {
+            "name": "subject_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "`tbd.ledger.v1.EraseResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.ledger.v1.EraseResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/ledger/subjects/{subject_id}/facts": {
+      "get": {
+        "tags": [
+          "ledger"
+        ],
+        "summary": "tbd.ledger.v1.LedgerService/Current",
+        "description": "Transcoded from `/tbd.ledger.v1.LedgerService/Current` on the `ledger` backend.",
+        "operationId": "LedgerService.Current",
+        "parameters": [
+          {
+            "name": "subject_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "paths",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "explode": true
+          },
+          {
+            "name": "sources",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "`tbd.ledger.v1.Source`",
+              "enum": [
+                "SOURCE_UNSPECIFIED",
+                "SOURCE_VERIFIED",
+                "SOURCE_DECLARED",
+                "SOURCE_INFERRED",
+                "SOURCE_SYMBOLIC",
+                "SOURCE_OBSERVED"
+              ]
+            },
+            "explode": true
+          },
+          {
+            "name": "scopes",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "explode": true
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "`tbd.ledger.v1.CurrentResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.ledger.v1.CurrentResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "ledger"
+        ],
+        "summary": "tbd.ledger.v1.LedgerService/Append",
+        "description": "Transcoded from `/tbd.ledger.v1.LedgerService/Append` on the `ledger` backend.",
+        "operationId": "LedgerService.Append",
+        "parameters": [
+          {
+            "name": "subject_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "`tbd.ledger.v1.AppendRequest`; path variables override their fields",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/tbd.ledger.v1.AppendRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "`tbd.ledger.v1.AppendResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.ledger.v1.AppendResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/ledger/subjects/{subject_id}/history": {
+      "get": {
+        "tags": [
+          "ledger"
+        ],
+        "summary": "tbd.ledger.v1.LedgerService/History",
+        "description": "Transcoded from `/tbd.ledger.v1.LedgerService/History` on the `ledger` backend.",
+        "operationId": "LedgerService.History",
+        "parameters": [
+          {
+            "name": "subject_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "paths",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "explode": true
+          },
+          {
+            "name": "sources",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "`tbd.ledger.v1.Source`",
+              "enum": [
+                "SOURCE_UNSPECIFIED",
+                "SOURCE_VERIFIED",
+                "SOURCE_DECLARED",
+                "SOURCE_INFERRED",
+                "SOURCE_SYMBOLIC",
+                "SOURCE_OBSERVED"
+              ]
+            },
+            "explode": true
+          },
+          {
+            "name": "scopes",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "explode": true
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "at",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "`tbd.ledger.v1.HistoryResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.ledger.v1.HistoryResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/ledger/subjects/{subject_id}/restore": {
+      "post": {
+        "tags": [
+          "ledger"
+        ],
+        "summary": "tbd.ledger.v1.LedgerService/Restore",
+        "description": "Transcoded from `/tbd.ledger.v1.LedgerService/Restore` on the `ledger` backend.",
+        "operationId": "LedgerService.Restore",
+        "parameters": [
+          {
+            "name": "subject_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "`tbd.ledger.v1.RestoreRequest`; path variables override their fields",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/tbd.ledger.v1.RestoreRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "`tbd.ledger.v1.RestoreResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.ledger.v1.RestoreResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/ledger/subjects/{subject_id}/retractions": {
+      "post": {
+        "tags": [
+          "ledger"
+        ],
+        "summary": "tbd.ledger.v1.LedgerService/Retract",
+        "description": "Transcoded from `/tbd.ledger.v1.LedgerService/Retract` on the `ledger` backend.",
+        "operationId": "LedgerService.Retract",
+        "parameters": [
+          {
+            "name": "subject_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "`tbd.ledger.v1.RetractRequest`; path variables override their fields",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/tbd.ledger.v1.RetractRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "`tbd.ledger.v1.RetractResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.ledger.v1.RetractResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
             "content": {
               "application/json": {
                 "schema": {
@@ -222,7 +704,8 @@
           "cancelled",
           "internal",
           "unsupported_media_type",
-          "payload_too_large"
+          "payload_too_large",
+          "method_not_allowed"
         ]
       },
       "Detail": {
@@ -561,6 +1044,307 @@
           "not_serving",
           "unknown"
         ]
+      },
+      "tbd.engine.v1.Heartbeat": {
+        "type": "object",
+        "description": "`tbd.engine.v1.Heartbeat`",
+        "properties": {
+          "seq": {
+            "type": "string",
+            "format": "int64"
+          }
+        }
+      },
+      "tbd.engine.v1.ScoreUpdated": {
+        "type": "object",
+        "description": "`tbd.engine.v1.ScoreUpdated`",
+        "properties": {
+          "score": {
+            "type": "number",
+            "format": "double"
+          },
+          "stub": {
+            "type": "boolean"
+          }
+        }
+      },
+      "tbd.engine.v1.SubscribeResponse": {
+        "type": "object",
+        "description": "`tbd.engine.v1.SubscribeResponse`",
+        "properties": {
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "heartbeat": {
+            "$ref": "#/components/schemas/tbd.engine.v1.Heartbeat"
+          },
+          "id": {
+            "type": "string"
+          },
+          "score_updated": {
+            "$ref": "#/components/schemas/tbd.engine.v1.ScoreUpdated"
+          },
+          "subject_id": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.ledger.v1.AppendRequest": {
+        "type": "object",
+        "description": "`tbd.ledger.v1.AppendRequest`",
+        "properties": {
+          "confidence": {
+            "type": "number",
+            "format": "float"
+          },
+          "consent": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "counterparty_id": {
+            "type": "string"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "idempotency_key": {
+            "type": "string"
+          },
+          "observed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/tbd.ledger.v1.Envelope"
+          },
+          "path": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "description": "`tbd.ledger.v1.Source`",
+            "enum": [
+              "SOURCE_UNSPECIFIED",
+              "SOURCE_VERIFIED",
+              "SOURCE_DECLARED",
+              "SOURCE_INFERRED",
+              "SOURCE_SYMBOLIC",
+              "SOURCE_OBSERVED"
+            ]
+          },
+          "stub": {
+            "type": "boolean"
+          },
+          "subject_id": {
+            "type": "string"
+          },
+          "value": {
+            "$ref": "#/components/schemas/tbd.ledger.v1.Envelope"
+          }
+        }
+      },
+      "tbd.ledger.v1.AppendResponse": {
+        "type": "object",
+        "description": "`tbd.ledger.v1.AppendResponse`",
+        "properties": {
+          "fact": {
+            "$ref": "#/components/schemas/tbd.ledger.v1.Fact"
+          },
+          "replayed": {
+            "type": "boolean"
+          }
+        }
+      },
+      "tbd.ledger.v1.CurrentResponse": {
+        "type": "object",
+        "description": "`tbd.ledger.v1.CurrentResponse`",
+        "properties": {
+          "facts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/tbd.ledger.v1.Fact"
+            }
+          },
+          "next": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.ledger.v1.Envelope": {
+        "type": "object",
+        "description": "`tbd.ledger.v1.Envelope`",
+        "properties": {
+          "bytes": {
+            "type": "string",
+            "format": "byte"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "tbd.ledger.v1.EraseResponse": {
+        "type": "object",
+        "description": "`tbd.ledger.v1.EraseResponse`",
+        "properties": {
+          "executes_after": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "requested_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "tbd.ledger.v1.Fact": {
+        "type": "object",
+        "description": "`tbd.ledger.v1.Fact`",
+        "properties": {
+          "confidence": {
+            "type": "number",
+            "format": "float"
+          },
+          "consent": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "counterparty_id": {
+            "type": "string"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "string",
+            "format": "int64"
+          },
+          "observed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/tbd.ledger.v1.Envelope"
+          },
+          "path": {
+            "type": "string"
+          },
+          "recorded_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "source": {
+            "type": "string",
+            "description": "`tbd.ledger.v1.Source`",
+            "enum": [
+              "SOURCE_UNSPECIFIED",
+              "SOURCE_VERIFIED",
+              "SOURCE_DECLARED",
+              "SOURCE_INFERRED",
+              "SOURCE_SYMBOLIC",
+              "SOURCE_OBSERVED"
+            ]
+          },
+          "stub": {
+            "type": "boolean"
+          },
+          "subject_id": {
+            "type": "string"
+          },
+          "value": {
+            "$ref": "#/components/schemas/tbd.ledger.v1.Envelope"
+          }
+        }
+      },
+      "tbd.ledger.v1.HistoryResponse": {
+        "type": "object",
+        "description": "`tbd.ledger.v1.HistoryResponse`",
+        "properties": {
+          "facts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/tbd.ledger.v1.Fact"
+            }
+          },
+          "next": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.ledger.v1.PingResponse": {
+        "type": "object",
+        "description": "`tbd.ledger.v1.PingResponse`",
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "store": {
+            "type": "string"
+          },
+          "stub": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.ledger.v1.RestoreRequest": {
+        "type": "object",
+        "description": "`tbd.ledger.v1.RestoreRequest`",
+        "properties": {
+          "subject_id": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.ledger.v1.RestoreResponse": {
+        "type": "object",
+        "description": "`tbd.ledger.v1.RestoreResponse`"
+      },
+      "tbd.ledger.v1.RetractRequest": {
+        "type": "object",
+        "description": "`tbd.ledger.v1.RetractRequest`",
+        "properties": {
+          "origin": {
+            "$ref": "#/components/schemas/tbd.ledger.v1.Envelope"
+          },
+          "path": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "description": "`tbd.ledger.v1.Source`",
+            "enum": [
+              "SOURCE_UNSPECIFIED",
+              "SOURCE_VERIFIED",
+              "SOURCE_DECLARED",
+              "SOURCE_INFERRED",
+              "SOURCE_SYMBOLIC",
+              "SOURCE_OBSERVED"
+            ]
+          },
+          "subject_id": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.ledger.v1.RetractResponse": {
+        "type": "object",
+        "description": "`tbd.ledger.v1.RetractResponse`",
+        "properties": {
+          "tombstone": {
+            "$ref": "#/components/schemas/tbd.ledger.v1.Fact"
+          }
+        }
       }
     }
   }

@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package tbd.ledger.v1;
 
+import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";
 
 // The facts ledger: append-only facts about an opaque subject, with
@@ -10,24 +11,47 @@ import "google/protobuf/timestamp.proto";
 service LedgerService {
   // Echo a message. Proves configuration, telemetry and fault injection reach
   // an RPC; reports which store backs the service.
-  rpc Ping(PingRequest) returns (PingResponse);
+  rpc Ping(PingRequest) returns (PingResponse) {
+    option (google.api.http) = {get: "/v1/ledger/ping"};
+  }
   // Append one fact. The subject is created on its first write. A matching
   // idempotency_key replays the earlier fact (`replayed = true`); reused with
   // different content it is ABORTED.
-  rpc Append(AppendRequest) returns (AppendResponse);
+  rpc Append(AppendRequest) returns (AppendResponse) {
+    option (google.api.http) = {
+      post: "/v1/ledger/subjects/{subject_id}/facts"
+      body: "*"
+    };
+  }
   // The latest valued, unexpired fact per (path, source), under the given
   // scopes. Pages by cursor.
-  rpc Current(CurrentRequest) returns (CurrentResponse);
+  rpc Current(CurrentRequest) returns (CurrentResponse) {
+    option (google.api.http) = {get: "/v1/ledger/subjects/{subject_id}/facts"};
+  }
   // Everything the ledger still holds, tombstones included; `at` cuts history
   // at an instant (a retracted value is absent from every cut).
-  rpc History(HistoryRequest) returns (HistoryResponse);
+  rpc History(HistoryRequest) returns (HistoryResponse) {
+    option (google.api.http) = {get: "/v1/ledger/subjects/{subject_id}/history"};
+  }
   // Delete every valued fact of (path, source) and append a tombstone.
-  rpc Retract(RetractRequest) returns (RetractResponse);
+  rpc Retract(RetractRequest) returns (RetractResponse) {
+    option (google.api.http) = {
+      post: "/v1/ledger/subjects/{subject_id}/retractions"
+      body: "*"
+    };
+  }
   // Request erasure: every read and write answers FAILED_PRECONDITION from
   // now; the cascade runs after the grace window.
-  rpc Erase(EraseRequest) returns (EraseResponse);
+  rpc Erase(EraseRequest) returns (EraseResponse) {
+    option (google.api.http) = {delete: "/v1/ledger/subjects/{subject_id}"};
+  }
   // Cancel a pending erasure and reopen the subject. NOT_FOUND once executed.
-  rpc Restore(RestoreRequest) returns (RestoreResponse);
+  rpc Restore(RestoreRequest) returns (RestoreResponse) {
+    option (google.api.http) = {
+      post: "/v1/ledger/subjects/{subject_id}/restore"
+      body: "*"
+    };
+  }
 }
 
 message PingRequest {

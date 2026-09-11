@@ -5,6 +5,7 @@
 //! | Path        | Surface                                  |
 //! |-------------|------------------------------------------|
 //! | `/v1/*`     | REST (JSON) and server-sent events       |
+//! | `/v1/<backend>/*` | REST and SSE transcoded from `google.api.http` options in the protos |
 //! | `/ws`       | WebSocket bridged to an engine session   |
 //! | `/graphql`  | GraphQL (POST) and `GraphiQL` (GET)      |
 //! | `/openapi.json` | the `OpenAPI` document for the REST surface |
@@ -25,6 +26,7 @@ pub mod json;
 mod observe;
 pub mod principal;
 mod state;
+pub mod transcode;
 mod ws;
 
 use std::net::SocketAddr;
@@ -43,6 +45,7 @@ pub use principal::{CallerKind, Key, Principal};
 pub use state::{
     AppState, BACKEND_HEADER, Backend, EngineClient, Readiness, ServiceState, Transport,
 };
+pub use transcode::{Binding, BodyRule, TranscodeError, Transcoder};
 
 /// Errors from starting or running the protocol.
 #[derive(Debug, thiserror::Error)]
@@ -71,6 +74,9 @@ pub enum ServeError {
     /// The HTTP server failed while running.
     #[error("serve: {0}")]
     Io(#[from] std::io::Error),
+    /// A `google.api.http` annotation the gateway cannot serve.
+    #[error("transcoder: {0}")]
+    Transcode(#[from] TranscodeError),
 }
 
 /// Bind `[server] listen` and serve until `shutdown` resolves.
@@ -96,7 +102,12 @@ pub async fn serve_on(
 ) -> Result<(), ServeError> {
     let addr = listener.local_addr()?;
     let state = AppState::connect_lazy(&config)?;
-    let app = router(&state);
+    let transcoder = Transcoder::from_config(&transcode::pool()?, &config)?;
+    tracing::info!(
+        routes = transcoder.bindings().len(),
+        "transcoded routes bound from the proto annotations"
+    );
+    let app = router(&state, &transcoder);
 
     let backends: Vec<String> = config
         .services
@@ -135,11 +146,19 @@ async fn fallback(request: axum::extract::Request) -> axum::response::Response {
     }
 }
 
-/// The `OpenAPI` document for the REST surface, generated from the handlers
-/// (`docs/protocol/openapi.json` is this, committed; a test keeps them equal).
-/// GraphQL, WebSocket and gRPC are outside it.
-#[must_use]
-pub fn openapi() -> utoipa::openapi::OpenApi {
+/// The `OpenAPI` document: the hand-written REST surface from its handlers,
+/// plus every transcoded route from the proto descriptors, for the backends the
+/// configuration registers (`docs/protocol/openapi.json` is this, committed; a
+/// test keeps them equal). GraphQL, WebSocket and gRPC are outside it.
+///
+/// # Errors
+/// An annotation the gateway cannot serve.
+pub fn openapi(config: &Config) -> Result<utoipa::openapi::OpenApi, TranscodeError> {
+    let transcoder = Transcoder::from_config(&transcode::pool()?, config)?;
+    Ok(document(&transcoder))
+}
+
+fn document(transcoder: &Transcoder) -> utoipa::openapi::OpenApi {
     use utoipa::OpenApi as _;
 
     #[derive(utoipa::OpenApi)]
@@ -156,25 +175,43 @@ pub fn openapi() -> utoipa::openapi::OpenApi {
     let mut doc = Doc::openapi();
     tbd_common::VERSION.clone_into(&mut doc.info.version);
     doc.merge(http::openapi_router().split_for_parts().1);
+    doc.merge(transcoder.openapi());
     doc
 }
 
-/// `GET /openapi.json`.
-async fn openapi_json() -> axum::Json<utoipa::openapi::OpenApi> {
-    axum::Json(openapi())
+/// A known path with a verb it does not serve: the envelope, not axum's
+/// plain 405.
+async fn method_not_allowed(request: axum::extract::Request) -> axum::response::Response {
+    axum::response::IntoResponse::into_response(Problem::new(
+        Code::MethodNotAllowed,
+        format!(
+            "{} is not served on {}",
+            request.method(),
+            request.uri().path()
+        ),
+    ))
 }
 
 /// The full router: REST, SSE, WebSocket, GraphQL and gRPC on one port, each
 /// request traced and measured.
-pub fn router(state: &AppState) -> Router {
+pub fn router(state: &AppState, transcoder: &Transcoder) -> Router {
+    let doc = std::sync::Arc::new(document(transcoder));
     Router::new()
         .merge(http::routes())
-        .route("/openapi.json", axum::routing::get(openapi_json))
+        .merge(transcoder.router())
+        .route(
+            "/openapi.json",
+            axum::routing::get(move || {
+                let doc = std::sync::Arc::clone(&doc);
+                async move { axum::Json((*doc).clone()) }
+            }),
+        )
         .merge(ws::routes())
         .merge(graphql::routes(state))
         .with_state(state.clone())
         .merge(grpc::routes(state))
         .fallback(fallback)
+        .method_not_allowed_fallback(method_not_allowed)
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
             principal::attach,

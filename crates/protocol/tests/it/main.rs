@@ -4,6 +4,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 mod support;
+mod transcode;
 
 use futures::{SinkExt, StreamExt};
 use serde_json::{Value, json};
@@ -404,6 +405,13 @@ async fn openapi_is_served_and_matches_the_committed_document() {
         "/v1/evaluate",
         "/v1/me",
         "/v1/subjects/{subject_id}/events",
+        "/v1/ledger/ping",
+        "/v1/ledger/subjects/{subject_id}/facts",
+        "/v1/ledger/subjects/{subject_id}/history",
+        "/v1/ledger/subjects/{subject_id}/retractions",
+        "/v1/ledger/subjects/{subject_id}",
+        "/v1/ledger/subjects/{subject_id}/restore",
+        "/v1/engine/subjects/{subject_id}/events",
     ] {
         assert!(
             served["paths"][path].is_object(),
@@ -411,6 +419,12 @@ async fn openapi_is_served_and_matches_the_committed_document() {
         );
     }
     assert!(served["components"]["schemas"]["Problem"].is_object());
+    assert!(served["components"]["schemas"]["tbd.ledger.v1.Fact"].is_object());
+    assert_eq!(
+        served["paths"]["/v1/ledger/subjects/{subject_id}/facts"]["get"]["responses"]["default"]["content"]
+            ["application/json"]["schema"]["$ref"],
+        "#/components/schemas/Problem"
+    );
 
     let committed: Value =
         serde_json::from_str(include_str!("../../../../docs/protocol/openapi.json")).unwrap();
@@ -538,6 +552,12 @@ async fn metrics_endpoint_reports_requests_and_engine_calls() {
         .unwrap()
         .error_for_status()
         .unwrap();
+    http.get(stack.url("/v1/ledger/ping"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
 
     // The exporter renders lazily; give the request tasks a moment to record.
     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
@@ -558,6 +578,10 @@ async fn metrics_endpoint_reports_requests_and_engine_calls() {
         body.contains(r#"tbd_requests_total{service="protocol-test",transport="http",route="/v1/evaluate",status="200"} 1"#)
             || body.contains(r#"tbd_requests_total{route="/v1/evaluate",service="protocol-test",status="200",transport="http"} 1"#),
         "request counter missing or wrong labels:\n{body}"
+    );
+    assert!(
+        body.contains(r#"route="/v1/ledger/ping""#),
+        "transcoded routes are labelled by their template:\n{body}"
     );
     assert!(
         body.contains("tbd_request_duration_seconds_bucket{"),

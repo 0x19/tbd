@@ -8,7 +8,10 @@ crate that owns the behaviour.
   one descriptor set per package (`engine_descriptor.bin`, `protocol_descriptor.bin`,
   ...) for gRPC reflection, because `compile_fds` does not write them itself, and one
   combined set (`all_descriptor.bin`, `DESCRIPTOR_SET_ALL`, imports included) that the
-  protocol's transcoder reads `google.api.http` method options from. The
+  protocol's transcoder reads `google.api.http` method options from. That set is
+  encoded by `protox::Compiler::encode_file_descriptor_set`, never from the
+  `prost_types::FileDescriptorSet`: prost's descriptor types have no storage for
+  extension options, so a set encoded from them silently loses every annotation. The
   file list and the proto root are resolved when the script runs, never with `env!`:
   `mise run tbd:selfcheck` builds a copy of the tree into the shared target dir and
   Cargo reuses one build-script binary for a path package wherever it lives.

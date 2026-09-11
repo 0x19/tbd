@@ -14,7 +14,7 @@ embeds this crate and owns the JSON surface and the path registry.
 | Crate, scaffolded by `tbd new service ledger` | `crates/ledger` ([CLAUDE.md](../../crates/ledger/CLAUDE.md)) |
 | Contract | `proto/tbd/ledger/v1/ledger.proto`: `LedgerService` with `Ping`, `Append`, `Current`, `History`, `Retract`, `Erase`, `Restore` |
 | Config layers | `configs/ledger/{base,local,dev,production}.toml`; `ledger config` prints the merged result |
-| Deployment | `devops/k8s/base/ledger`, port 50052, metrics 9464; reached through Envoy's internal listener (`http://envoy:50051`, matched by service name); no edge route |
+| Deployment | `devops/k8s/base/ledger`, port 50052, metrics 9464; reached through Envoy's internal listener (`http://envoy:50051`, matched by service name); on the edge as the REST routes below, transcoded by the protocol |
 | Databases | `devops/k8s/ledger-db`: Postgres 17 + pgvector and ClickHouse, applied by `mise run ledger:deploy` (part of `local:deploy`) after `ledger:secrets` made the `ledger-db` Secret; `ledger:psql` and `ledger:clickhouse` for a shell; compose runs the same two on host ports 15432 and 18123 |
 | Chaos | the `ledger` kind (`crates/chaos/src/kinds/ledger.rs`): `[stack.ledgers.X]` in topologies and scenarios (`grace`, `database_url`), `chaos validate --target ledger=URL` (`CHAOS_LEDGER_URL`), the `grpc_ledger_ping` and `grpc_ledger_facts` checks, the `ledger_*` load operations and the five `scenarios/ledger_*.toml` (baseline, lifecycle, fault, erasure, fuzz; [docs/chaos/scenarios.md](../chaos/scenarios.md)), add and clone in the admin UI |
 
@@ -57,6 +57,34 @@ grpcurl -plaintext -d "{\"subject_id\":\"$S\",\"scopes\":[\"self\"]}" localhost:
 # through the cluster's internal listener (reflection there is the engine's, so pass the proto)
 grpcurl -plaintext -import-path proto -proto tbd/ledger/v1/ledger.proto \
   -d '{"message":"hi"}' localhost:15051 tbd.ledger.v1.LedgerService/Ping
+```
+
+## REST
+
+The protocol serves every RPC from its `google.api.http` annotation
+([protocol/README.md](../protocol/README.md), "Transcoding"): JSON with proto field
+names, `id`s as strings, enums by name, envelopes base64, errors as the `Problem`
+envelope with the standard status (`NOT_FOUND` → 404, `FAILED_PRECONDITION` → 400, …).
+
+| RPC | Route |
+|---|---|
+| `Ping` | `GET /v1/ledger/ping?message=hi` |
+| `Append` | `POST /v1/ledger/subjects/{subject_id}/facts`, body `AppendRequest` |
+| `Current` | `GET /v1/ledger/subjects/{subject_id}/facts?scopes=self&paths=profile.*&limit=50&cursor=` |
+| `History` | `GET /v1/ledger/subjects/{subject_id}/history?scopes=self&at=2026-01-01T00:00:00Z` |
+| `Retract` | `POST /v1/ledger/subjects/{subject_id}/retractions`, body `RetractRequest` |
+| `Erase` | `DELETE /v1/ledger/subjects/{subject_id}` |
+| `Restore` | `POST /v1/ledger/subjects/{subject_id}/restore`, body `{}` |
+
+```sh
+T=$(mise run auth:token)  # against a deployed stack; local edge: http://127.0.0.1:18080
+S=$(uuidgen | tr A-F a-f)
+curl -s -H "authorization: Bearer $T" -H 'content-type: application/json' \
+  -d '{"path":"profile.name","source":"SOURCE_DECLARED","consent":["self"],
+       "observed_at":"2026-01-01T00:00:00Z",
+       "value":{"version":0,"bytes":"IkFkYSI="},"origin":{"version":0,"bytes":"e30="}}' \
+  "http://127.0.0.1:18080/v1/ledger/subjects/$S/facts"
+curl -s -H "authorization: Bearer $T" "http://127.0.0.1:18080/v1/ledger/subjects/$S/facts?scopes=self"
 ```
 
 ## The store

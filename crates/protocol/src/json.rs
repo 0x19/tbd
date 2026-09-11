@@ -37,15 +37,27 @@ where
 #[must_use]
 pub fn problem(rejection: &JsonRejection) -> Problem {
     match rejection {
-        JsonRejection::MissingJsonContentType(_) => Problem::new(
-            Code::UnsupportedMediaType,
-            "the request body must be JSON (content-type: application/json)",
-        ),
+        JsonRejection::MissingJsonContentType(_) => not_json(),
         JsonRejection::BytesRejection(bytes)
             if bytes.status() == http::StatusCode::PAYLOAD_TOO_LARGE =>
         {
-            Problem::new(Code::PayloadTooLarge, "the request body is too large")
+            too_large()
         }
         other => Problem::field("body", other.body_text()),
     }
+}
+
+/// `415`: the body is not JSON.
+#[must_use]
+pub fn not_json() -> Problem {
+    Problem::new(
+        Code::UnsupportedMediaType,
+        "the request body must be JSON (content-type: application/json)",
+    )
+}
+
+/// `413`: the body is over the limit.
+#[must_use]
+pub fn too_large() -> Problem {
+    Problem::new(Code::PayloadTooLarge, "the request body is too large")
 }

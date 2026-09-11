@@ -168,9 +168,48 @@ handlers with utoipa (`#[utoipa::path]` on each handler, `ToSchema` on each body
 router is built from the same annotations, so a route cannot exist without its path).
 `docs/protocol/openapi.json` is the same document, committed; `mise run protocol:openapi`
 regenerates it and a protocol test fails when the two differ, which is the CI diff.
-The `Problem` schema is the error envelope above. GraphQL, WebSocket and gRPC are
-outside the document; the descriptor-driven step replaces this hand-annotated set with
-one generated from the protos.
+The `Problem` schema is the error envelope above. The transcoded routes below are in
+the same document, generated from the proto descriptors: one component per message,
+named by its proto full name (`tbd.ledger.v1.Fact`), `operationId` `Service.Method`,
+one tag per backend, and `default` → `Problem` on every operation. GraphQL, WebSocket
+and gRPC are outside the document. `protocol openapi` builds it from the loaded
+configuration, so the file carries exactly the backends `base.toml` registers.
+
+## Transcoding
+
+An RPC annotated with `option (google.api.http)` in its `.proto`
+(`proto/google/api/` is vendored for it) becomes a route at startup, read from the
+descriptor set in `tbd_proto::DESCRIPTOR_SET_ALL`. Nothing is written per RPC: a
+service in package `tbd.<name>.v1` forwards to the registry backend `<name>` over the
+same traced and measured transport as the engine, and an annotated service whose
+backend is not in `[services]` is skipped with one warning. `crates/protocol/src/
+transcode/` is the implementation.
+
+| Annotation | Route |
+|---|---|
+| `get: "/v1/ledger/subjects/{subject_id}/facts"` on a unary RPC | `GET`, the path variable sets `subject_id`, every other request field is a query parameter (`?scopes=self&scopes=other&limit=10`, dotted for nested messages) |
+| `post: "..." body: "*"` | the JSON body is the whole request; path variables override their fields; query parameters are refused |
+| `post: "..." body: "field"` | the JSON body is that message field; the rest binds as above |
+| `delete: "..."` | no body; a body is refused |
+| any verb on a server-streaming RPC | server-sent events; the template must end in `/events` (Envoy's one streaming rule) |
+| `additional_bindings` | one route each |
+
+Rules: the JSON uses proto field names, 64-bit integers as strings, enums by name
+(numbers accepted on input), `bytes` as base64, `Timestamp` as RFC 3339, and every
+field is emitted (a default too), so `stub` is present on every response. Input is
+strict: an unknown body field, an unknown query key, a singular field given twice or a
+value that does not convert is `400 bad_request` with a `field` detail. A body must be
+`application/json` (`415`) and at most 2 MiB (`413`); a gRPC response is capped at
+tonic's 4 MiB. A gRPC status becomes the envelope through the table above; a known
+path with a verb it does not serve is `405 method_not_allowed`. Refused at startup,
+each with its reason in the error: `*` and `**` segments, `{a=b/*}` sub-paths,
+`:verb` suffixes, custom verbs, `body: "*"` on `GET` or `DELETE`, client or
+bidirectional streaming, a streaming template without `/events` or a unary one with
+it, and a duplicate `(verb, path)` including the hand-written routes.
+
+The ledger is the first service exposed this way ([ledger/README.md](../ledger/README.md)
+lists its routes); the engine's `Subscribe` is `GET /v1/engine/subjects/{subject_id}/events`.
+`Evaluate` and `Session` stay hand-written.
 
 ## Metrics
 
@@ -182,6 +221,5 @@ Client-side, per backend: `tbd_engine_client_requests_total{backend,route,status
 
 ## What comes next
 
-The descriptor-driven transcoder that exposes any registered service over REST and a
-multiplexed WebSocket from the proto descriptors, with policy (scopes, weighted rate
+The multiplexed WebSocket over the same bindings, then policy (scopes, weighted rate
 limits, idempotency) declared in the proto contract.

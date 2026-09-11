@@ -34,7 +34,7 @@ async fn main() -> anyhow::Result<()> {
     if let Some(Command::Openapi) = cli.command {
         println!(
             "{}",
-            serde_json::to_string_pretty(&tbd_protocol::openapi())?
+            serde_json::to_string_pretty(&tbd_protocol::openapi(&config)?)?
         );
         return Ok(());
     }
