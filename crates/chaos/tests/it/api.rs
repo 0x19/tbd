@@ -63,6 +63,34 @@ message = "midway"
 "#,
     )
     .unwrap();
+    // A sweep, and `skip` so only an explicit run starts it.
+    std::fs::write(
+        dir.join("stress/swept.toml"),
+        r#"
+[campaign]
+name = "swept"
+description = "two owner worker counts, twice each"
+skip = true
+warmup = "100ms"
+seed = 4
+
+[stack.ledgers.l]
+grace = "0s"
+
+[workload.owner]
+subjects = 2
+
+[sweep]
+parameter = "owner.workers"
+values = [1, 2]
+repeat = 2
+point_duration = "300ms"
+
+[sweep.knee]
+factor = 2.0
+"#,
+    )
+    .unwrap();
     if with_ui {
         std::fs::create_dir_all(dir.join("ui/runs")).unwrap();
         std::fs::write(dir.join("ui/index.html"), "<title>chaos</title>").unwrap();
@@ -961,7 +989,7 @@ async fn stress_campaigns_run_through_the_api_and_findings_have_routes() {
     let (status, list) = s.get("/stress").await;
     assert_eq!(status, 200);
     let list = list.as_array().unwrap();
-    assert_eq!(list.len(), 1);
+    assert_eq!(list.len(), 2);
     assert_eq!(list[0]["id"], "quick");
     assert_eq!(list[0]["ok"], true);
     assert_eq!(list[0]["has_stack"], true);
@@ -1023,7 +1051,7 @@ async fn stress_campaigns_run_through_the_api_and_findings_have_routes() {
     let (_, detail) = s.get("/stress/quick").await;
     assert_eq!(detail["last_run"]["id"], id);
     let (_, overview) = s.get("/overview").await;
-    assert_eq!(overview["campaigns"], 1);
+    assert_eq!(overview["campaigns"], 2);
     assert_eq!(overview["findings"], 0);
 }
 
@@ -1065,6 +1093,34 @@ async fn findings_routes_and_queued_campaigns() {
             >= 1
     })
     .await;
+
+    // A sweep: skipped in a batch, run when asked for by name, and the record
+    // carries a point per value with the interval around each estimate.
+    let (status, run) = s
+        .post("/runs", json!({"stress": {"campaign": "swept"}}))
+        .await;
+    assert_eq!(status, 202, "{run}");
+    let id = run["id"].as_str().unwrap().to_owned();
+    s.follow(&id).await;
+    let (status, record) = s.get(&format!("/runs/{id}")).await;
+    assert_eq!(status, 200);
+    assert_eq!(record["status"], "passed", "{}", record["stress"]);
+    let sweep = &record["stress"]["sweep"];
+    assert_eq!(sweep["parameter"], "owner.workers", "{record}");
+    let points = sweep["points"].as_array().unwrap();
+    assert_eq!(points.len(), 2, "{sweep}");
+    for p in points {
+        assert_eq!(p["repeats"], 2, "{p}");
+        assert!(p["requests"].as_u64().unwrap() > 0, "{p}");
+        let (low, estimate, high) = (
+            p["p99"]["low"].as_f64().unwrap(),
+            p["p99"]["estimate"].as_f64().unwrap(),
+            p["p99"]["high"].as_f64().unwrap(),
+        );
+        assert!(low <= estimate && estimate <= high, "{p}");
+    }
+    assert_eq!(points[0]["value"], 1);
+    assert_eq!(points[1]["value"], 2);
 
     // The file can be written and deleted like a scenario.
     let (status, entry) = s
