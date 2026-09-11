@@ -4,6 +4,12 @@ modules:
 lint:
   use:
     - STANDARD
+  # google/api/{http,annotations}.proto are vendored from googleapis so protox can
+  # resolve `option (google.api.http)`; they follow Google's layout, not ours.
+  ignore:
+    - google
 breaking:
   use:
     - FILE
+  ignore:
+    - google

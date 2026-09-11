@@ -39,7 +39,9 @@ earlier idea material for a product direction, not a spec; do not "fix" it.
 - Protos compile without `protoc` (`protox` in `crates/proto/build.rs`); edit `/proto`
   and rebuild. `buf lint proto` runs in `mise run lint` with buf's STANDARD rules:
   directory matches package (`proto/tbd/engine/v1/`), services end in `Service`,
-  streaming RPCs use distinct `XRequest`/`XResponse` messages.
+  streaming RPCs use distinct `XRequest`/`XResponse` messages. `proto/google/api/` is
+  vendored (not linted) so an RPC can carry `option (google.api.http)`; the protocol
+  serves every annotated RPC over REST or SSE (`docs/protocol/README.md`).
 
 ## Conventions that differ from defaults
 

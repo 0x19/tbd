@@ -39,6 +39,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let fds = protox::compile(&files, [proto_root.as_path()])?;
 
+    // The whole contract in one set, imports included (`google/api/*`,
+    // `google/protobuf/*`): the input of the protocol's descriptor-driven
+    // transcoder, which reads `google.api.http` method options at start.
+    fs::write(out_dir.join("all_descriptor.bin"), fds.encode_to_vec())?;
+
     // `compile_fds` does not write descriptor sets itself; reflection needs them.
     // One set per package so each service advertises only what it serves. The
     // package name is the second path segment: `tbd/<name>/v1/<name>.proto`.

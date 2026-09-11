@@ -5,6 +5,13 @@
 
 #![allow(missing_docs, clippy::pedantic, clippy::all, unused_qualifications)]
 
+/// Every compiled file, imports included (`google/api/http.proto`,
+/// `google/api/annotations.proto`, `google/protobuf/*`), as one encoded
+/// `FileDescriptorSet`. The protocol's transcoder reads the `google.api.http`
+/// method options from it; the per-package sets below serve reflection.
+pub const DESCRIPTOR_SET_ALL: &[u8] =
+    include_bytes!(concat!(env!("OUT_DIR"), "/all_descriptor.bin"));
+
 pub mod engine {
     pub mod v1 {
         tonic::include_proto!("tbd.engine.v1");
