@@ -63,7 +63,7 @@ pub struct SlackConfig {
     /// Outcomes that post: `failed`, `error`, `cancelled`, `passed`, `completed`.
     /// A schedule with `notify = "always"` posts every outcome regardless.
     pub on: Vec<crate::api::RunStatus>,
-    /// Kinds that post: `scenario`, `load`, `validate`.
+    /// Kinds that post: `scenario`, `load`, `validate`, `stress`.
     pub kinds: Vec<crate::api::RunKind>,
 }
 
@@ -77,6 +77,7 @@ impl Default for SlackConfig {
                 crate::api::RunKind::Scenario,
                 crate::api::RunKind::Load,
                 crate::api::RunKind::Validate,
+                crate::api::RunKind::Stress,
             ],
         }
     }
@@ -162,6 +163,23 @@ pub struct Paths {
     /// of any kind), re-added on start. Missing: none yet.
     #[serde(default = "default_stack_file")]
     pub stack: PathBuf,
+    /// Stress campaign files (`docs/chaos/stress.md`).
+    #[serde(default = "default_campaigns")]
+    pub campaigns: PathBuf,
+    /// Seeded into `campaigns` on `serve` start, like `scenarios_seed`.
+    #[serde(default)]
+    pub campaigns_seed: PathBuf,
+    /// Findings, one JSON file each.
+    #[serde(default = "default_findings")]
+    pub findings: PathBuf,
+}
+
+fn default_campaigns() -> PathBuf {
+    PathBuf::from("stress")
+}
+
+fn default_findings() -> PathBuf {
+    PathBuf::from(".chaos/findings")
 }
 
 fn default_stack_file() -> PathBuf {

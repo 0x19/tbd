@@ -5,7 +5,12 @@ import type { z } from "zod";
 import {
   type AddInstance,
   type Behavior,
+  CampaignDetail,
+  CampaignEntry,
   CheckReply,
+  Finding,
+  FindingGroup,
+  FindingSummary,
   GlobalEvent,
   InstanceInfo,
   type Job,
@@ -13,6 +18,7 @@ import {
   Me,
   Overview,
   QueuedRun,
+  type ReplayRequest,
   RunFeed,
   RunRecord,
   RunSummary,
@@ -20,8 +26,21 @@ import {
   ScenarioEntry,
   Schedule,
   type ScheduleSpec,
+  type StressRequest,
   type ValidateRequest,
 } from "./schema";
+
+/** What `GET /findings` filters on; every key optional. */
+export type FindingQuery = { run?: string; invariant?: string; campaign?: string; limit?: number };
+
+function findingQuery(q: FindingQuery, grouped: boolean): string {
+  const params = new URLSearchParams();
+  if (grouped) params.set("grouped", "true");
+  if (q.limit) params.set("limit", String(q.limit));
+  for (const k of ["run", "invariant", "campaign"] as const) if (q[k]) params.set(k, q[k]);
+  const s = params.toString();
+  return s ? `?${s}` : "";
+}
 
 /**
  * Where the API is. Same origin in every deployment (chaos serve and Envoy
@@ -151,6 +170,20 @@ export const api = {
       json: { text },
     }),
   runs: (limit = 50) => call(RunSummary.array(), `/runs?limit=${limit}`),
+  campaigns: () => call(CampaignEntry.array(), "/stress"),
+  campaign: (id: string) => call(CampaignDetail, `/stress/${id}`),
+  campaignSave: (id: string, text: string) =>
+    call(CampaignEntry, `/stress/${id}`, { method: "PUT", json: { text } }),
+  campaignDelete: (id: string) => call(none, `/stress/${id}`, { method: "DELETE" }),
+  campaignCheck: (text: string) => call(CheckReply, "/stress/check", { method: "POST", json: { text } }),
+  runStress: (req: StressRequest) => call(RunSummary, "/runs", { method: "POST", json: { stress: req } }),
+  runReplay: (req: ReplayRequest) => call(RunSummary, "/runs", { method: "POST", json: { replay: req } }),
+  findings: (q: FindingQuery = {}) => call(FindingSummary.array(), `/findings${findingQuery(q, false)}`),
+  findingGroups: (q: FindingQuery = {}) => call(FindingGroup.array(), `/findings${findingQuery(q, true)}`),
+  finding: (id: string) => call(Finding, `/findings/${id}`),
+  findingDelete: (id: string) => call(none, `/findings/${id}`, { method: "DELETE" }),
+  findingReplay: (id: string, body: { targets?: StressRequest["targets"]; attempts?: number } = {}) =>
+    call(RunSummary, `/findings/${id}/replay`, { method: "POST", json: body }),
   run: (id: string) => call(RunRecord, `/runs/${id}`),
   runScenario: (scenario: string) => call(RunSummary, "/runs", { method: "POST", json: { scenario } }),
   runLoad: (req: LoadRequest) => call(RunSummary, "/runs", { method: "POST", json: req }),
@@ -192,6 +225,8 @@ export function subscribe<T>(
     "phase",
     "load",
     "timeline",
+    "stress",
+    "finding",
     "finished",
     "run_started",
     "run_finished",

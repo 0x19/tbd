@@ -86,6 +86,9 @@ services:
       CHAOS_SLACK_WEBHOOK: ${CHAOS_SLACK_WEBHOOK:-}
       CHAOS_SCENARIOS_DIR: /data/scenarios
       CHAOS_SCENARIOS_SEED: /app/scenarios
+      CHAOS_CAMPAIGNS_DIR: /data/stress
+      CHAOS_CAMPAIGNS_SEED: /app/stress
+      CHAOS_FINDINGS_DIR: /data/findings
       CHAOS_UI_DIR: /app/ui
       # Base domain of the public edge (devops/edge); empty keeps localhost links.
       CHAOS_PUBLIC_DOMAIN: ${BASE_DOMAIN:-}

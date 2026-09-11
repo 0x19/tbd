@@ -15,6 +15,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { api } from "@/lib/api/client";
+import type { RunLive } from "@/lib/api/hooks";
 import { describe, useRunFeed } from "@/lib/api/hooks";
 import type { CheckResult, LoadSnapshot, RunRecord } from "@/lib/api/schema";
 import { ms, num, pct, seconds, when } from "@/lib/format";
@@ -28,6 +29,26 @@ export default function RunViewPage() {
 }
 
 const STAGES = ["Setup", "Load + timeline", "Assert", "Teardown", "Done"];
+const STRESS_STAGES = ["Setup", "Warmup", "Run + timeline", "Shrink", "Teardown", "Done"];
+
+function stressStageIndex(phase: string | null, finished: boolean, record: RunRecord | null) {
+  if (finished || (record && record.status !== "running")) return STRESS_STAGES.length;
+  switch (phase) {
+    case "setup":
+      return 0;
+    case "warmup":
+      return 1;
+    case "run":
+      return 2;
+    case "shrink":
+      return 3;
+    case "done":
+    case "teardown":
+      return 4;
+    default:
+      return record ? 2 : 0;
+  }
+}
 
 function stageIndex(phase: string | null, finished: boolean, record: RunRecord | null) {
   if (finished || (record && record.status !== "running")) return STAGES.length;
@@ -106,6 +127,18 @@ function RunView() {
                   </Link>
                 </>
               ) : null}
+              {record.campaign_id ? (
+                <>
+                  {" "}
+                  · from{" "}
+                  <Link
+                    className="underline"
+                    href={`/stress/view/?id=${encodeURIComponent(record.campaign_id)}`}
+                  >
+                    stress/{record.campaign_id}.toml
+                  </Link>
+                </>
+              ) : null}
             </>
           ) : (
             id
@@ -127,6 +160,8 @@ function RunView() {
 
       {record?.kind === "validate" && record.validate ? (
         <ValidateView record={record} />
+      ) : record?.kind === "stress" || live.stress ? (
+        <StressView live={live} record={record} running={running} latest={latest} />
       ) : (
         <>
           {record?.kind !== "load" ? (
@@ -277,6 +312,240 @@ function RunView() {
           {latest ? <Breakdown snapshot={latest} services={record?.scenario?.services} /> : null}
         </>
       )}
+    </>
+  );
+}
+
+/**
+ * A campaign or a replay: the stages, the checks as they are evaluated, the
+ * findings as they arrive, the load numbers, and for a replay its verdict.
+ */
+function StressView({
+  live,
+  record,
+  running,
+  latest,
+}: {
+  live: RunLive;
+  record: RunRecord | null;
+  running: boolean;
+  latest: LoadSnapshot | null;
+}) {
+  const result = record?.stress ?? null;
+  const checks = (!running && result?.checks) || live.stress?.checks || result?.checks || {};
+  const rows = Object.entries(checks).sort(([a], [b]) => a.localeCompare(b));
+  const evaluated = rows.reduce((n, [, c]) => n + c.passed + c.violated, 0);
+  const violated = rows.reduce((n, [, c]) => n + c.violated, 0);
+  const findings = live.findings.length ? live.findings : (result?.findings ?? []);
+  const ops = live.stress?.ops_total ?? latest?.requests_total;
+  const failed = live.stress?.ops_failed ?? latest?.requests_failed;
+  const tolerated = live.stress?.tolerated ?? result?.tolerated ?? 0;
+  const redriven = live.stress?.redriven ?? result?.redriven ?? 0;
+  const replay = record?.replay ?? null;
+  return (
+    <>
+      <div className="bg-muted/30 rounded-xl border p-4">
+        <div className="mb-3 flex justify-between text-sm">
+          <span>
+            Lifecycle
+            {running && live.phase ? <span className="text-muted-foreground"> · in {live.phase}</span> : null}
+            {result?.store ? <span className="text-muted-foreground"> · {result.store} store</span> : null}
+            {result?.targets.length ? (
+              <span className="text-muted-foreground"> · {result.targets.join(", ")}</span>
+            ) : null}
+          </span>
+          <span className="text-muted-foreground">
+            {running
+              ? `${seconds(live.stress?.elapsed_s ?? latest?.elapsed_s)} elapsed`
+              : `took ${seconds(record?.duration_s)}`}
+          </span>
+        </div>
+        <StageBar stages={STRESS_STAGES} current={stressStageIndex(live.phase, live.finished, record)} />
+      </div>
+
+      {replay ? (
+        <div
+          className={`rounded-lg border px-3 py-2 text-sm ${
+            replay.reproduced
+              ? "border-destructive/30 bg-destructive/5 text-destructive"
+              : "border-emerald-500/30 bg-emerald-500/5 text-emerald-700 dark:text-emerald-400"
+          }`}
+        >
+          {replay.reproduced ? "Reproduced" : "Not reproduced"} on {replay.target} after {replay.steps_run}{" "}
+          steps
+          {replay.message ? `: ${replay.message}` : ""}
+        </div>
+      ) : null}
+      {result?.stopped_early ? (
+        <p className="text-muted-foreground text-sm">Stopped early: `[stop] max_findings` was reached.</p>
+      ) : null}
+
+      <StatRow
+        items={[
+          {
+            label: "Requests",
+            value: num(ops),
+            sub: ops !== undefined ? `${num(failed)} failed` : undefined,
+          },
+          {
+            label: "Invariant evaluations",
+            value: num(evaluated),
+            sub: `${num(violated)} violated`,
+            tone: evaluated ? (violated ? "bad" : "good") : undefined,
+          },
+          {
+            label: "Findings",
+            value: findings.length,
+            tone: findings.length ? "bad" : record && !running ? "good" : undefined,
+            sub: live.stress ? `${num(live.stress.subjects)} subjects` : undefined,
+          },
+          {
+            label: "Tolerated / re-driven",
+            value: `${num(tolerated)} / ${num(redriven)}`,
+            sub: latest ? `${ms(latest.latency.p50_ms)} p50 · ${ms(latest.latency.p99_ms)} p99` : undefined,
+          },
+        ]}
+      />
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Invariants</CardTitle>
+            <CardDescription>
+              Every rule the workers judged, how often it was evaluated and how often it broke.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {rows.length ? (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Invariant</TableHead>
+                    <TableHead className="text-right">Evaluated</TableHead>
+                    <TableHead className="text-right">Violated</TableHead>
+                    <TableHead />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {rows.map(([name, c]) => (
+                    <TableRow key={name}>
+                      <TableCell className="font-mono text-xs">{name}</TableCell>
+                      <TableCell className="text-right tabular-nums">{num(c.passed + c.violated)}</TableCell>
+                      <TableCell
+                        className={`text-right tabular-nums ${c.violated ? "text-destructive" : ""}`}
+                      >
+                        {num(c.violated)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {c.passed + c.violated ? (
+                          <BoolBadge ok={!c.violated} yes="held" no="broken" />
+                        ) : (
+                          <Badge variant="outline">not evaluated</Badge>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            ) : (
+              <p className="text-muted-foreground text-sm">
+                {running ? "Evaluations arrive once the measured phase starts." : "Nothing was evaluated."}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Findings</CardTitle>
+            <CardDescription>
+              Each is one broken rule with the trace that got there; shrunk after the workers stop.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {findings.length ? (
+              <ol className="divide-y">
+                {findings.map((f) => (
+                  <li key={f.id} className="grid gap-0.5 py-2.5 text-sm">
+                    <div className="flex items-center justify-between gap-2">
+                      <Link
+                        href={`/findings/view/?id=${f.id}`}
+                        className="font-mono text-xs font-medium hover:underline"
+                      >
+                        {f.invariant}
+                      </Link>
+                      <span className="text-muted-foreground text-xs tabular-nums">
+                        {f.trace_len} steps{f.shrunk ? ", shrunk" : ""}
+                      </span>
+                    </div>
+                    <Link
+                      href={`/findings/view/?id=${f.id}`}
+                      className="text-muted-foreground line-clamp-2 text-xs hover:underline"
+                    >
+                      {f.message}
+                    </Link>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p className="text-muted-foreground text-sm">
+                {running ? "None so far." : "None. Every evaluated invariant held."}
+              </p>
+            )}
+            {record?.id && findings.length ? (
+              <Button variant="outline" size="sm" className="mt-3" asChild>
+                <Link href={`/findings/?run=${record.id}`}>All findings of this run</Link>
+              </Button>
+            ) : null}
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Load over time</CardTitle>
+          <CardDescription>
+            <Legend
+              items={[
+                { label: "req/s", color: "var(--foreground)" },
+                { label: "p50 ms", color: "var(--chart-2)" },
+                { label: "p99 ms", color: "var(--chart-4)" },
+                { label: "error %", color: "var(--destructive)" },
+              ]}
+            />
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ChartHeadline
+            value={latest ? `${Math.round(latest.throughput_rps)} req/s` : "–"}
+            caption="closed-loop workers, one sample per second; a tolerated fault counts as an error here"
+          />
+          <RunChart samples={live.samples} />
+        </CardContent>
+      </Card>
+
+      {live.events.length ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Timeline</CardTitle>
+            <CardDescription>Actions as they fired, seconds after the measured phase began.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ol className="divide-y">
+              {live.events.map((e, i) => (
+                <li key={i} className="flex items-start gap-3 py-2.5 text-sm">
+                  <span className="text-muted-foreground w-16 font-mono text-xs tabular-nums">
+                    {e.at_s.toFixed(2)} s
+                  </span>
+                  <span className="flex-1 font-mono text-xs">{e.action}</span>
+                  {e.error ? <LevelChip level="error" /> : <LevelChip level="ok" />}
+                </li>
+              ))}
+            </ol>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {latest ? <Breakdown snapshot={latest} /> : null}
     </>
   );
 }

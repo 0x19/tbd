@@ -12,11 +12,72 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::{Mutex, broadcast};
 use tokio_util::sync::CancellationToken;
 
+use tbd_stress::{CampaignResult, CheckCount, FindingSummary, ReplayOutcome, StressSnapshot};
+
 use crate::{
     load::LoadSnapshot,
     scenario::{ScenarioResult, executor::EventOutcome},
     validate,
 };
+
+/// A campaign's result as a run record keeps it: the findings by summary,
+/// their traces live in the finding files.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StressResult {
+    /// `[campaign] name`.
+    pub name: String,
+    /// No findings, no error.
+    pub passed: bool,
+    /// `skip = true`.
+    pub skipped: bool,
+    /// The store the targets reported.
+    #[serde(default)]
+    pub store: Option<String>,
+    /// Target names.
+    pub targets: Vec<String>,
+    /// The measured phase's load numbers.
+    #[serde(default)]
+    pub load: Option<LoadSnapshot>,
+    /// Per invariant.
+    pub checks: BTreeMap<String, CheckCount>,
+    /// Failures the campaign tolerated.
+    #[serde(default)]
+    pub tolerated: u64,
+    /// Writes re-driven.
+    #[serde(default)]
+    pub redriven: u64,
+    /// The findings, by summary.
+    pub findings: Vec<FindingSummary>,
+    /// `[stop] max_findings` was reached.
+    #[serde(default)]
+    pub stopped_early: bool,
+    /// Failure outside the checks.
+    #[serde(default)]
+    pub error: Option<String>,
+}
+
+impl From<&CampaignResult> for StressResult {
+    fn from(r: &CampaignResult) -> Self {
+        Self {
+            name: r.name.clone(),
+            passed: r.passed,
+            skipped: r.skipped,
+            store: r.store.clone(),
+            targets: r.targets.clone(),
+            load: r.load.clone(),
+            checks: r.checks.clone(),
+            tolerated: r.tolerated,
+            redriven: r.redriven,
+            findings: r
+                .findings
+                .iter()
+                .map(tbd_stress::Finding::summary)
+                .collect(),
+            stopped_early: r.stopped_early,
+            error: r.error.clone(),
+        }
+    }
+}
 
 /// What kind of run.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -28,6 +89,8 @@ pub enum RunKind {
     Load,
     /// `chaos validate`.
     Validate,
+    /// A stress campaign (`docs/chaos/stress.md`), or a finding's replay.
+    Stress,
 }
 
 /// Where a run is.
@@ -100,6 +163,15 @@ pub struct RunRecord {
     /// field existed derive it from `request` where they can.
     #[serde(default)]
     pub services: Vec<String>,
+    /// A stress campaign's result.
+    #[serde(default)]
+    pub stress: Option<StressResult>,
+    /// The campaign id (`stress/<id>.toml`) for stress runs.
+    #[serde(default)]
+    pub campaign_id: Option<String>,
+    /// A finding's replay outcome, for replay runs.
+    #[serde(default)]
+    pub replay: Option<ReplayOutcome>,
 }
 
 /// The list view: a record without its bulky parts.
@@ -143,6 +215,12 @@ pub struct RunSummary {
     /// The service kinds this run exercised, sorted.
     #[serde(default)]
     pub services: Vec<String>,
+    /// The campaign id, for stress runs.
+    #[serde(default)]
+    pub campaign_id: Option<String>,
+    /// Findings so far, for stress runs.
+    #[serde(default)]
+    pub findings: Option<u64>,
 }
 
 impl RunRecord {
@@ -166,6 +244,9 @@ impl RunRecord {
             request: None,
             error: None,
             services: Vec::new(),
+            stress: None,
+            campaign_id: None,
+            replay: None,
         }
     }
 
@@ -211,7 +292,7 @@ impl RunRecord {
                 .as_object()
                 .map(|m| m.keys().filter(|k| *k != "timeout").cloned().collect())
                 .unwrap_or_default(),
-            RunKind::Scenario => Vec::new(),
+            RunKind::Scenario | RunKind::Stress => Vec::new(),
         };
         v.sort();
         v.dedup();
@@ -231,7 +312,8 @@ impl RunRecord {
             .scenario
             .as_ref()
             .and_then(|s| s.load.as_ref())
-            .or(self.load.as_ref());
+            .or(self.load.as_ref())
+            .or(self.stress.as_ref().and_then(|s| s.load.as_ref()));
         let passed = match self.kind {
             RunKind::Scenario => self.scenario.as_ref().map(|s| {
                 (
@@ -240,6 +322,13 @@ impl RunRecord {
                 )
             }),
             RunKind::Validate => self.validate.as_ref().map(|r| (r.passed, r.checks.len())),
+            // Invariants that never broke, over the invariants evaluated.
+            RunKind::Stress => self.stress.as_ref().map(|s| {
+                (
+                    s.checks.values().filter(|c| c.violated == 0).count(),
+                    s.checks.len(),
+                )
+            }),
             RunKind::Load => None,
         };
         RunSummary {
@@ -261,6 +350,12 @@ impl RunRecord {
             passed,
             error: self.error.clone(),
             services: self.services(),
+            campaign_id: self.campaign_id.clone(),
+            findings: self
+                .stress
+                .as_ref()
+                .map(|s| s.findings.len() as u64)
+                .or_else(|| self.replay.as_ref().map(|r| u64::from(r.reproduced))),
         }
     }
 }
@@ -298,6 +393,20 @@ pub enum RunFeed {
         id: String,
         /// Event.
         event: EventOutcome,
+    },
+    /// A stress campaign's checks and findings, once a second.
+    Stress {
+        /// Run id.
+        id: String,
+        /// Snapshot.
+        snapshot: StressSnapshot,
+    },
+    /// A stress campaign found something.
+    Finding {
+        /// Run id.
+        id: String,
+        /// The list view.
+        finding: FindingSummary,
     },
     /// The run ended; the record is final.
     Finished {

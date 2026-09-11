@@ -34,6 +34,12 @@ schedules = ".chaos/schedules.json"
 # Instances added to the serve stack at runtime (replicas, new engines and
 # protocols); re-added on the next start. One JSON file.
 stack = ".chaos/stack.json"
+# Stress campaign files the API lists, edits and runs (docs/chaos/stress.md);
+# `campaigns_seed` works like `scenarios_seed`.
+campaigns = "stress"
+campaigns_seed = ""
+# Findings from stress runs, one JSON file each.
+findings = ".chaos/findings"
 
 [targets]
 # Defaults for `chaos validate` and for API load runs against an external stack.

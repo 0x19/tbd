@@ -25,6 +25,10 @@ use super::{
     runs::{RunFeed, RunKind, RunRecord, RunSummary},
     state::{AppState, LoadRequest, ScenarioEntry, ValidateRequest},
 };
+use super::{
+    findings::{FindingFilter, FindingGroup},
+    state::{CampaignEntry, ReplayRequest, StressRequest},
+};
 use crate::{kinds, scenario::ScenarioFile, stack::InstanceInfo, validate};
 
 type Shared = Arc<AppState>;
@@ -50,6 +54,15 @@ pub fn router() -> Router<Shared> {
             "/scenarios/{*id}",
             get(scenario_get).put(scenario_put).delete(scenario_delete),
         )
+        .route("/stress", get(campaigns))
+        .route("/stress/check", post(campaign_check))
+        .route(
+            "/stress/{*id}",
+            get(campaign_get).put(campaign_put).delete(campaign_delete),
+        )
+        .route("/findings", get(findings))
+        .route("/findings/{id}", get(finding_get).delete(finding_delete))
+        .route("/findings/{id}/replay", post(finding_replay))
         .route("/runs", get(runs).post(run_start))
         .route("/runs/{id}", get(run_get).delete(run_delete))
         .route("/runs/{id}/events", get(run_events))
@@ -86,6 +99,9 @@ struct Overview {
     recent_runs: Vec<RunSummary>,
     last_validate: Option<RunSummary>,
     scenarios: usize,
+    campaigns: usize,
+    findings: usize,
+    finding_signatures: usize,
     runs: usize,
     schedules: usize,
     schedules_enabled: usize,
@@ -101,6 +117,7 @@ struct ValidateInfo {
 
 async fn overview(State(state): State<Shared>) -> Json<Overview> {
     let schedules = state.schedules.list().await;
+    let finding_counts = state.findings.counts().await;
     let active = match state.runs.current().await {
         Some(a) => state.runs.get(&a.id).await.map(|r| r.summary()),
         None => None,
@@ -129,6 +146,9 @@ async fn overview(State(state): State<Shared>) -> Json<Overview> {
             .await
             .map(|r| r.summary()),
         scenarios: state.list_scenarios().len(),
+        campaigns: state.list_campaigns().len(),
+        findings: finding_counts.0,
+        finding_signatures: finding_counts.1,
         runs: state.runs.count().await,
         schedules: schedules.len(),
         schedules_enabled: schedules.iter().filter(|s| s.enabled).count(),
@@ -424,6 +444,9 @@ struct RunsQuery {
     /// Only runs that exercised this service kind.
     #[serde(default)]
     service: Option<String>,
+    /// Only runs of this kind.
+    #[serde(default)]
+    kind: Option<RunKind>,
 }
 
 fn default_limit() -> usize {
@@ -432,20 +455,22 @@ fn default_limit() -> usize {
 
 async fn runs(State(state): State<Shared>, Query(q): Query<RunsQuery>) -> Json<Vec<RunSummary>> {
     let runs = state.runs.list(q.limit).await;
-    Json(match q.service {
-        Some(kind) => runs
-            .into_iter()
-            .filter(|r| r.services.contains(&kind))
+    Json(
+        runs.into_iter()
+            .filter(|r| q.service.as_ref().is_none_or(|s| r.services.contains(s)))
+            .filter(|r| q.kind.is_none_or(|k| r.kind == k))
             .collect(),
-        None => runs,
-    })
+    )
 }
 
-/// Body of `POST /runs`: a scenario by id, or an ad-hoc load run.
+/// Body of `POST /runs`: a scenario by id, a stress campaign, a finding's
+/// replay, or an ad-hoc load run.
 #[derive(Deserialize)]
 #[serde(untagged)]
 enum RunRequest {
     Scenario { scenario: String },
+    Stress { stress: StressRequest },
+    Replay { replay: ReplayRequest },
     Load(LoadRequest),
 }
 
@@ -455,6 +480,8 @@ async fn run_start(
 ) -> Result<(StatusCode, Json<RunSummary>)> {
     let summary = match body {
         RunRequest::Scenario { scenario } => state.spawn_scenario(&scenario, None).await?,
+        RunRequest::Stress { stress } => state.spawn_stress(stress, None).await?,
+        RunRequest::Replay { replay } => state.spawn_replay(replay, None).await?,
         RunRequest::Load(req) => state.spawn_load(req, None).await?,
     };
     Ok((StatusCode::ACCEPTED, Json(summary)))
@@ -519,6 +546,159 @@ async fn run_events(
     };
     let once = stream::once(async move { sse_event(&finished) });
     Ok(Sse::new(once.boxed()).keep_alive(KeepAlive::default()))
+}
+
+// ---------------------------------------------------------- campaigns --
+
+async fn campaigns(State(state): State<Shared>) -> Json<Vec<CampaignEntry>> {
+    Json(state.list_campaigns())
+}
+
+/// `GET /stress/{id}`
+#[derive(Serialize)]
+struct CampaignDetail {
+    #[serde(flatten)]
+    entry: CampaignEntry,
+    text: String,
+    parsed: Option<tbd_stress::Campaign>,
+    last_run: Option<RunSummary>,
+}
+
+async fn campaign_get(
+    State(state): State<Shared>,
+    Path(id): Path<String>,
+) -> Result<Json<CampaignDetail>> {
+    let (entry, text, parsed) = state.read_campaign(&id).await?;
+    let last_run = state.last_run_of_campaign(&id).await;
+    Ok(Json(CampaignDetail {
+        entry,
+        text,
+        parsed,
+        last_run,
+    }))
+}
+
+async fn campaign_put(
+    State(state): State<Shared>,
+    Path(id): Path<String>,
+    Json(body): Json<ScenarioText>,
+) -> Result<Json<CampaignEntry>> {
+    Ok(Json(state.write_campaign(&id, &body.text).await?))
+}
+
+async fn campaign_delete(
+    State(state): State<Shared>,
+    Path(id): Path<String>,
+) -> Result<StatusCode> {
+    state.delete_campaign(&id).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// `POST /stress/check` reply.
+#[derive(Serialize)]
+struct CampaignCheckReply {
+    ok: bool,
+    name: Option<String>,
+    error: Option<String>,
+    parsed: Option<tbd_stress::Campaign>,
+}
+
+async fn campaign_check(Json(body): Json<ScenarioText>) -> Json<CampaignCheckReply> {
+    Json(match crate::stress::parse_campaign(&body.text) {
+        Ok(file) => CampaignCheckReply {
+            ok: true,
+            name: Some(file.campaign.campaign.name.clone()),
+            error: None,
+            parsed: Some(file.campaign),
+        },
+        Err(error) => CampaignCheckReply {
+            ok: false,
+            name: None,
+            error: Some(error),
+            parsed: None,
+        },
+    })
+}
+
+// ----------------------------------------------------------- findings --
+
+/// Query of `GET /findings`.
+#[derive(Deserialize)]
+struct FindingsQuery {
+    #[serde(default = "default_limit")]
+    limit: usize,
+    #[serde(default)]
+    grouped: bool,
+    #[serde(flatten)]
+    filter: FindingFilter,
+}
+
+/// `GET /findings`: summaries newest first, or groups by signature.
+#[derive(Serialize)]
+#[serde(untagged)]
+enum FindingsReply {
+    List(Vec<tbd_stress::FindingSummary>),
+    Groups(Vec<FindingGroup>),
+}
+
+async fn findings(
+    State(state): State<Shared>,
+    Query(q): Query<FindingsQuery>,
+) -> Json<FindingsReply> {
+    Json(if q.grouped {
+        FindingsReply::Groups(state.findings.grouped(&q.filter).await)
+    } else {
+        FindingsReply::List(state.findings.list(q.limit, &q.filter).await)
+    })
+}
+
+async fn finding_get(
+    State(state): State<Shared>,
+    Path(id): Path<String>,
+) -> Result<Json<tbd_stress::Finding>> {
+    state
+        .findings
+        .get(&id)
+        .await
+        .map(Json)
+        .ok_or_else(|| ApiError::not_found(format!("no finding {id}")))
+}
+
+async fn finding_delete(State(state): State<Shared>, Path(id): Path<String>) -> Result<StatusCode> {
+    if state.findings.delete(&id).await? {
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(ApiError::not_found(format!("no finding {id}")))
+    }
+}
+
+/// Body of `POST /findings/{id}/replay`.
+#[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+struct ReplayBody {
+    #[serde(default)]
+    targets: Vec<crate::load::Target>,
+    #[serde(default)]
+    attempts: Option<u32>,
+}
+
+async fn finding_replay(
+    State(state): State<Shared>,
+    Path(id): Path<String>,
+    body: Option<Json<ReplayBody>>,
+) -> Result<(StatusCode, Json<RunSummary>)> {
+    let Json(body) = body.unwrap_or_default();
+    let summary = state
+        .spawn_replay(
+            ReplayRequest {
+                finding: id,
+                targets: body.targets,
+                attempts: body.attempts,
+            },
+            None,
+        )
+        .await?;
+    Ok((StatusCode::ACCEPTED, Json(summary)))
 }
 
 /// Pass items through until, and including, `finished`.

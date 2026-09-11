@@ -1,6 +1,7 @@
 import {
   IconActivity,
   IconBook2,
+  IconBug,
   IconCalendarClock,
   IconChecklist,
   IconFileText,
@@ -8,6 +9,7 @@ import {
   IconGauge,
   IconLayoutDashboard,
   IconServer,
+  IconTestPipe,
 } from "@tabler/icons-react";
 
 import { type NavGroup, type NavItem } from "@/components/layout/types";
@@ -49,10 +51,25 @@ export const navGroups: NavGroup[] = [
     ],
   },
   {
+    title: "Stress",
+    items: [
+      {
+        title: "Campaigns",
+        icon: IconTestPipe,
+        items: [
+          { title: "All campaigns", url: "/stress/" },
+          { title: "New campaign", url: "/stress/view/?id=new" },
+          { title: "Stress runs", url: "/runs/?kind=stress" },
+        ],
+      },
+      { title: "Findings", url: "/findings/", icon: IconBug },
+    ],
+  },
+  {
     title: "Operate",
     items: [
       { title: "Runbook", url: "/runbook/", icon: IconBook2 },
-      { title: "Scenario reference", url: "/reference/", icon: IconFileText },
+      { title: "Reference", url: "/reference/", icon: IconFileText },
     ],
   },
 ];

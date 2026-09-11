@@ -11,6 +11,7 @@
 
 mod added;
 mod error;
+mod findings;
 mod jobs;
 mod notify;
 mod routes;
@@ -26,10 +27,12 @@ use tower_http::cors::CorsLayer;
 
 pub use added::{AddedInstance, AddedSpec};
 pub use error::ApiError;
+pub use findings::{FindingFilter, FindingGroup, FindingStore};
 pub use jobs::{Job, QueuedRun, Schedule, ScheduleSpec};
 pub use notify::{Notifier, NotifyMode};
-pub use runs::{RunFeed, RunKind, RunRecord, RunStatus, RunStore, RunSummary};
+pub use runs::{RunFeed, RunKind, RunRecord, RunStatus, RunStore, RunSummary, StressResult};
 pub use state::AppState;
+pub use state::{ReplayRequest, StressRequest};
 
 use crate::config::{ChaosConfig, Source};
 

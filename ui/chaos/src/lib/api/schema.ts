@@ -165,7 +165,7 @@ export const ValidateReport = z.object({
 });
 export type ValidateReport = z.infer<typeof ValidateReport>;
 
-export const RunKind = z.enum(["scenario", "load", "validate"]);
+export const RunKind = z.enum(["scenario", "load", "validate", "stress"]);
 export type RunKind = z.infer<typeof RunKind>;
 export const RunStatus = z.enum(["running", "passed", "failed", "error", "cancelled", "completed"]);
 export type RunStatus = z.infer<typeof RunStatus>;
@@ -190,8 +190,125 @@ export const RunSummary = z.object({
   error: z.string().nullable(),
   /** The service kinds the run exercised (stack, load targets or validated kinds). */
   services: z.array(z.string()).default([]),
+  /** The campaign a stress run came from (`stress/<id>.toml`). */
+  campaign_id: z.string().nullish(),
+  /** Findings so far, for stress runs. */
+  findings: z.number().nullish(),
 });
 export type RunSummary = z.infer<typeof RunSummary>;
+
+// ---- stress campaigns and findings (docs/chaos/stress.md, api.md) ----
+
+export const CheckCount = z.object({ passed: z.number(), violated: z.number() });
+export type CheckCount = z.infer<typeof CheckCount>;
+
+/** One `stress` SSE frame: the checks a second. */
+export const StressSnapshot = z.object({
+  elapsed_s: z.number(),
+  phase: z.string(),
+  ops_total: z.number(),
+  ops_failed: z.number(),
+  tolerated: z.number(),
+  redriven: z.number(),
+  checks: z.record(z.string(), CheckCount),
+  findings: z.number(),
+  subjects: z.number(),
+  workers: z.record(z.string(), z.number()),
+});
+export type StressSnapshot = z.infer<typeof StressSnapshot>;
+
+export const WorkerClass = z.enum(["owner", "contention", "fuzz"]);
+export type WorkerClass = z.infer<typeof WorkerClass>;
+
+export const FindingSummary = z.object({
+  id: z.string(),
+  invariant: z.string(),
+  signature: z.string(),
+  message: z.string(),
+  subject: z.string(),
+  worker: WorkerClass,
+  campaign: z.string(),
+  run_id: z.string().nullish(),
+  target: z.string(),
+  found_at: z.string(),
+  trace_len: z.number(),
+  shrunk: z.boolean(),
+});
+export type FindingSummary = z.infer<typeof FindingSummary>;
+
+export const ReplayOutcome = z.object({
+  at: z.string(),
+  target: z.string(),
+  reproduced: z.boolean(),
+  message: z.string().nullish(),
+  steps_run: z.number(),
+});
+export type ReplayOutcome = z.infer<typeof ReplayOutcome>;
+
+/** Why a call in a trace failed: a gRPC status, a broken connection or a timeout. */
+export const CallError = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("status"), code: z.string(), message: z.string() }),
+  z.object({ kind: z.literal("transport") }).passthrough(),
+  z.object({ kind: z.literal("timeout") }),
+]);
+export type CallError = z.infer<typeof CallError>;
+
+/** One step of a finding's trace; the request is symbolic (`op` plus its fields). */
+export const Step = z.object({
+  index: z.number(),
+  request: z.object({ op: z.string() }).passthrough(),
+  response: z.unknown().optional(),
+  error: CallError.optional(),
+  at_ms: z.number(),
+  tolerated: z.boolean().default(false),
+});
+export type Step = z.infer<typeof Step>;
+
+export const Finding = FindingSummary.omit({ trace_len: true }).extend({
+  expected: z.unknown(),
+  actual: z.unknown(),
+  store: z.string().nullish(),
+  trace: z.array(Step),
+  original_len: z.number(),
+  shrink_note: z.string().nullish(),
+  replays: z.array(ReplayOutcome).default([]),
+});
+export type Finding = z.infer<typeof Finding>;
+
+/** Findings that share a signature: the same rule broken the same way. */
+export const FindingGroup = z.object({
+  invariant: z.string(),
+  signature: z.string(),
+  count: z.number(),
+  first: z.string(),
+  last: z.string(),
+  runs: z.array(z.string()),
+  campaigns: z.array(z.string()),
+  sample: FindingSummary,
+});
+export type FindingGroup = z.infer<typeof FindingGroup>;
+
+/** A stress run's result, on `RunRecord.stress`. */
+export const StressResult = z.object({
+  name: z.string(),
+  passed: z.boolean(),
+  skipped: z.boolean(),
+  store: z.string().nullish(),
+  targets: z.array(z.string()),
+  load: LoadSnapshot.nullish(),
+  checks: z.record(z.string(), CheckCount),
+  tolerated: z.number().default(0),
+  redriven: z.number().default(0),
+  findings: z.array(FindingSummary),
+  stopped_early: z.boolean().default(false),
+  error: z.string().nullish(),
+});
+export type StressResult = z.infer<typeof StressResult>;
+
+/** A ledger target for a campaign or a replay: `http_url` carries the gRPC URL. */
+export type StressTarget = { name: string; http_url: string; kind?: string };
+export type StressRequest = { campaign: string; targets?: StressTarget[]; name?: string };
+export type ReplayRequest = { finding: string; targets?: StressTarget[]; attempts?: number };
 
 export const RunRecord = RunSummary.omit({
   requests_total: true,
@@ -208,6 +325,8 @@ export const RunRecord = RunSummary.omit({
   samples: z.array(LoadSnapshot),
   events: z.array(EventOutcome),
   request: z.unknown().nullable(),
+  stress: StressResult.nullish(),
+  replay: ReplayOutcome.nullish(),
 });
 export type RunRecord = z.infer<typeof RunRecord>;
 
@@ -224,13 +343,20 @@ export const RunFeed = z.discriminatedUnion("type", [
     id: z.string(),
     event: EventOutcome,
   }),
+  z.object({ type: z.literal("stress"), id: z.string(), snapshot: StressSnapshot }),
+  z.object({ type: z.literal("finding"), id: z.string(), finding: FindingSummary }),
   z.object({ type: z.literal("finished"), run: RunRecord }),
 ]);
 export type RunFeed = z.infer<typeof RunFeed>;
 
 /** A queued or scheduled unit of work, the API's `Job` shape. */
 export type Job =
-  { scenario: string } | "all_scenarios" | { load: LoadRequest } | { validate: ValidateRequest };
+  | { scenario: string }
+  | "all_scenarios"
+  | { load: LoadRequest }
+  | { validate: ValidateRequest }
+  | { stress: StressRequest }
+  | { replay: ReplayRequest };
 
 export const Job: z.ZodType<Job> = z.union([
   z.literal("all_scenarios"),
@@ -238,6 +364,10 @@ export const Job: z.ZodType<Job> = z.union([
   z.object({ load: z.custom<LoadRequest>((v) => typeof v === "object" && v !== null && "load" in v) }),
   // The API writes absent keys as null; the keys are the kinds with a target plus `timeout`.
   z.object({ validate: z.record(z.string(), z.string().nullish()) }),
+  z.object({
+    stress: z.custom<StressRequest>((v) => typeof v === "object" && v !== null && "campaign" in v),
+  }),
+  z.object({ replay: z.custom<ReplayRequest>((v) => typeof v === "object" && v !== null && "finding" in v) }),
 ]);
 
 export const QueuedRun = z.object({
@@ -325,6 +455,8 @@ export const ChaosConfig = z.object({
     scenarios: z.string(),
     results: z.string(),
     schedules: z.string(),
+    campaigns: z.string(),
+    findings: z.string(),
   }),
   // One URL per kind with a validate target, resolved (defaults filled in).
   targets: z.record(z.string(), z.string()),
@@ -346,6 +478,9 @@ export const Overview = z.object({
   recent_runs: z.array(RunSummary),
   last_validate: RunSummary.nullable(),
   scenarios: z.number(),
+  campaigns: z.number(),
+  findings: z.number(),
+  finding_signatures: z.number(),
   runs: z.number(),
   schedules: z.number(),
   schedules_enabled: z.number(),
@@ -371,6 +506,17 @@ export const ScenarioDetail = ScenarioEntry.extend({
   last_run: RunSummary.nullable(),
 });
 export type ScenarioDetail = z.infer<typeof ScenarioDetail>;
+
+/** A campaign file as listed (`GET /stress`). */
+export const CampaignEntry = ScenarioEntry.extend({ has_stack: z.boolean() });
+export type CampaignEntry = z.infer<typeof CampaignEntry>;
+
+export const CampaignDetail = CampaignEntry.extend({
+  text: z.string(),
+  parsed: z.unknown().nullable(),
+  last_run: RunSummary.nullable(),
+});
+export type CampaignDetail = z.infer<typeof CampaignDetail>;
 
 export const CheckReply = z.object({
   ok: z.boolean(),

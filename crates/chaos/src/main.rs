@@ -142,6 +142,16 @@ struct ServeArgs {
     /// File of instances added to the stack at runtime. Default: `[paths] stack`.
     #[arg(long, env = "CHAOS_STACK_FILE")]
     stack_file: Option<PathBuf>,
+    /// Stress campaign directory. Default: `[paths] campaigns`.
+    #[arg(long, env = "CHAOS_CAMPAIGNS_DIR")]
+    campaigns: Option<PathBuf>,
+    /// Seeded into the campaign directory on start, like `--scenarios-seed`.
+    /// Default: `[paths] campaigns_seed`.
+    #[arg(long, env = "CHAOS_CAMPAIGNS_SEED")]
+    campaigns_seed: Option<PathBuf>,
+    /// Findings directory. Default: `[paths] findings`.
+    #[arg(long, env = "CHAOS_FINDINGS_DIR")]
+    findings: Option<PathBuf>,
     /// Slack incoming webhook for run notifications. Default: `[notify.slack] webhook`, none.
     #[arg(long, env = "CHAOS_SLACK_WEBHOOK", hide_env_values = true)]
     slack_webhook: Option<String>,
@@ -184,6 +194,15 @@ impl ServeArgs {
         }
         if let Some(v) = self.stack_file {
             config.paths.stack = v;
+        }
+        if let Some(v) = self.campaigns {
+            config.paths.campaigns = v;
+        }
+        if let Some(v) = self.campaigns_seed {
+            config.paths.campaigns_seed = v;
+        }
+        if let Some(v) = self.findings {
+            config.paths.findings = v;
         }
         if let Some(v) = self.slack_webhook {
             config.notify.slack.webhook = v;
@@ -286,9 +305,10 @@ enum StressCmd {
         /// Extra PEM root to trust for an https target. Default: `[validate] ca_cert`.
         #[arg(long, env = "CHAOS_CA_CERT")]
         ca_cert: Option<PathBuf>,
-        /// Where findings are written, one JSON file per finding.
-        #[arg(long, env = "CHAOS_FINDINGS_DIR", default_value = ".chaos/findings")]
-        findings_dir: PathBuf,
+        /// Where findings are written, one JSON file per finding. Default:
+        /// `[paths] findings`.
+        #[arg(long, env = "CHAOS_FINDINGS_DIR")]
+        findings_dir: Option<PathBuf>,
     },
     /// Parse and check campaign files without running them.
     Check {
@@ -313,9 +333,9 @@ enum StressCmd {
         /// Extra PEM root to trust for an https target. Default: `[validate] ca_cert`.
         #[arg(long, env = "CHAOS_CA_CERT")]
         ca_cert: Option<PathBuf>,
-        /// Where findings live.
-        #[arg(long, env = "CHAOS_FINDINGS_DIR", default_value = ".chaos/findings")]
-        findings_dir: PathBuf,
+        /// Where findings live. Default: `[paths] findings`.
+        #[arg(long, env = "CHAOS_FINDINGS_DIR")]
+        findings_dir: Option<PathBuf>,
     },
 }
 
@@ -456,6 +476,7 @@ async fn stress(command: StressCmd, mut config: ChaosConfig) -> anyhow::Result<(
                 config.validate.ca_cert = v;
             }
             config.check()?;
+            let findings_dir = findings_dir.unwrap_or_else(|| config.paths.findings.clone());
             stress_replay(&config, &findings_dir, &finding, attempts, json).await
         }
         StressCmd::Run {
@@ -468,62 +489,20 @@ async fn stress(command: StressCmd, mut config: ChaosConfig) -> anyhow::Result<(
             ca_cert,
             findings_dir,
         } => {
-            // Explicit targets mean "no stack": the ledger URL from the flags
-            // (or CHAOS_LEDGER_URL), never the config's default.
-            let explicit = !targets.targets.is_empty()
-                || targets.ledger.is_some()
-                || kinds::by_name("ledger").is_some_and(|k| {
-                    std::env::var(k.env_var()).is_ok_and(|v| !v.trim().is_empty())
-                });
-            targets.apply(&mut config);
-            auth.apply(&mut config);
-            if let Some(v) = ca_cert {
-                config.validate.ca_cert = v;
-            }
-            config.check()?;
-            let options = tbd_chaos::stress::RunOptions {
-                targets: explicit.then(|| {
-                    config
-                        .targets
-                        .url("ledger")
-                        .map(|url| {
-                            vec![tbd_chaos::load::Target {
-                                name: "ledger".into(),
-                                http_url: url,
-                                kind: "ledger".into(),
-                            }]
-                        })
-                        .unwrap_or_default()
-                }),
-                seed,
-                trust: config.trust()?,
-            };
-            let paths = expand_paths(files, dir)?;
-            anyhow::ensure!(!paths.is_empty(), "no campaign files found");
-            let hooks = tbd_chaos::stress::Hooks::default();
-            let mut results = Vec::with_capacity(paths.len());
-            for path in &paths {
-                let result = tbd_chaos::stress::run_file_with(path, &options, &hooks).await;
-                let written = tbd_chaos::stress::write_findings(&findings_dir, &result)
-                    .map_err(|e| anyhow::anyhow!(e))?;
-                if !json {
-                    print!("{}", tbd_stress::render(&result));
-                    for w in &written {
-                        println!("      written   {}", w.display());
-                    }
-                }
-                results.push(result);
-            }
-            if json {
-                println!("{}", serde_json::to_string_pretty(&results)?);
-            } else {
-                println!("{}", tbd_stress::summary(&results));
-            }
-            if results.iter().all(|r| r.passed) {
-                Ok(())
-            } else {
-                std::process::exit(1)
-            }
+            stress_run(
+                StressRunArgs {
+                    files,
+                    dir,
+                    json,
+                    seed,
+                    targets,
+                    auth,
+                    ca_cert,
+                    findings_dir,
+                },
+                config,
+            )
+            .await
         }
     }
 }
@@ -731,4 +710,86 @@ async fn stress_replay(
         std::process::exit(1)
     }
     Ok(())
+}
+
+/// The flags of `chaos stress run`, moved as one.
+struct StressRunArgs {
+    files: Vec<String>,
+    dir: Option<PathBuf>,
+    json: bool,
+    seed: Option<u64>,
+    targets: TargetArgs,
+    auth: AuthArgs,
+    ca_cert: Option<PathBuf>,
+    findings_dir: Option<PathBuf>,
+}
+
+async fn stress_run(args: StressRunArgs, mut config: ChaosConfig) -> anyhow::Result<()> {
+    let StressRunArgs {
+        files,
+        dir,
+        json,
+        seed,
+        targets,
+        auth,
+        ca_cert,
+        findings_dir,
+    } = args;
+
+    // Explicit targets mean "no stack": the ledger URL from the flags
+    // (or CHAOS_LEDGER_URL), never the config's default.
+    let explicit = !targets.targets.is_empty()
+        || targets.ledger.is_some()
+        || kinds::by_name("ledger")
+            .is_some_and(|k| std::env::var(k.env_var()).is_ok_and(|v| !v.trim().is_empty()));
+    targets.apply(&mut config);
+    auth.apply(&mut config);
+    if let Some(v) = ca_cert {
+        config.validate.ca_cert = v;
+    }
+    config.check()?;
+    let options = tbd_chaos::stress::RunOptions {
+        targets: explicit.then(|| {
+            config
+                .targets
+                .url("ledger")
+                .map(|url| {
+                    vec![tbd_chaos::load::Target {
+                        name: "ledger".into(),
+                        http_url: url,
+                        kind: "ledger".into(),
+                    }]
+                })
+                .unwrap_or_default()
+        }),
+        seed,
+        trust: config.trust()?,
+    };
+    let findings_dir = findings_dir.unwrap_or_else(|| config.paths.findings.clone());
+    let paths = expand_paths(files, dir)?;
+    anyhow::ensure!(!paths.is_empty(), "no campaign files found");
+    let hooks = tbd_chaos::stress::Hooks::default();
+    let mut results = Vec::with_capacity(paths.len());
+    for path in &paths {
+        let result = tbd_chaos::stress::run_file_with(path, &options, &hooks).await;
+        let written = tbd_chaos::stress::write_findings(&findings_dir, &result)
+            .map_err(|e| anyhow::anyhow!(e))?;
+        if !json {
+            print!("{}", tbd_stress::render(&result));
+            for w in &written {
+                println!("      written   {}", w.display());
+            }
+        }
+        results.push(result);
+    }
+    if json {
+        println!("{}", serde_json::to_string_pretty(&results)?);
+    } else {
+        println!("{}", tbd_stress::summary(&results));
+    }
+    if results.iter().all(|r| r.passed) {
+        Ok(())
+    } else {
+        std::process::exit(1)
+    }
 }

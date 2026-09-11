@@ -35,13 +35,34 @@ async fn boot_with_ui(with_ui: bool) -> Server {
 
 /// `with_ui` serves a two-file stand-in for the built UI at the root, the way
 /// the image does; `slack` is a webhook URL for `[notify.slack]`.
-async fn boot_with(with_ui: bool, slack: &str) -> Server {
-    let dir = std::env::temp_dir().join(format!(
-        "chaos-api-{}-{}",
-        std::process::id(),
-        rand::random::<u32>()
-    ));
+/// The scenario, campaign, topology and UI files a test server starts with.
+fn write_fixtures(dir: &std::path::Path, with_ui: bool) {
     std::fs::create_dir_all(dir.join("scenarios")).unwrap();
+    std::fs::create_dir_all(dir.join("stress")).unwrap();
+    std::fs::write(
+        dir.join("stress/quick.toml"),
+        r#"
+[campaign]
+name = "quick"
+description = "a second of owner workers on a memory ledger"
+duration = "1s"
+warmup = "100ms"
+seed = 3
+
+[stack.ledgers.l]
+grace = "0s"
+
+[workload.owner]
+workers = 2
+subjects = 2
+
+[[timeline]]
+at = "300ms"
+action = "log"
+message = "midway"
+"#,
+    )
+    .unwrap();
     if with_ui {
         std::fs::create_dir_all(dir.join("ui/runs")).unwrap();
         std::fs::write(dir.join("ui/index.html"), "<title>chaos</title>").unwrap();
@@ -80,6 +101,15 @@ min_requests = 50
         "[stack.engines.engine-1]\nheartbeat = \"50ms\"\n[stack.protocols.protocol-1]\nengine = \"engine-1\"\n",
     )
     .unwrap();
+}
+
+async fn boot_with(with_ui: bool, slack: &str) -> Server {
+    let dir = std::env::temp_dir().join(format!(
+        "chaos-api-{}-{}",
+        std::process::id(),
+        rand::random::<u32>()
+    ));
+    write_fixtures(&dir, with_ui);
 
     let mut config: ChaosConfig = toml::from_str(
         &std::fs::read_to_string(concat!(
@@ -94,6 +124,8 @@ min_requests = 50
     config.paths.results = dir.join("results");
     config.paths.schedules = dir.join("schedules.json");
     config.paths.stack = dir.join("stack.json");
+    config.paths.campaigns = dir.join("stress");
+    config.paths.findings = dir.join("findings");
     config.notify.slack.webhook = slack.to_owned();
     "#chaos-test".clone_into(&mut config.notify.slack.channel);
     if with_ui {
@@ -150,6 +182,10 @@ impl Server {
 
     async fn post(&self, path: &str, body: Value) -> (u16, Value) {
         self.send(reqwest::Method::POST, path, Some(body)).await
+    }
+
+    async fn put(&self, path: &str, body: Value) -> (u16, Value) {
+        self.send(reqwest::Method::PUT, path, Some(body)).await
     }
 
     /// Poll `GET /runs` until `pred` holds for the list, within 20 s.
@@ -916,4 +952,133 @@ async fn added_instances_come_back_after_a_restart() {
     let file = std::fs::read_to_string(&again.config.paths.stack).unwrap();
     assert!(!file.contains("on-spare"), "{file}");
     again.shutdown().await;
+}
+
+#[tokio::test]
+async fn stress_campaigns_run_through_the_api_and_findings_have_routes() {
+    let s = boot().await;
+    // The campaign is listed and parsed; a bad file is refused with the reason.
+    let (status, list) = s.get("/stress").await;
+    assert_eq!(status, 200);
+    let list = list.as_array().unwrap();
+    assert_eq!(list.len(), 1);
+    assert_eq!(list[0]["id"], "quick");
+    assert_eq!(list[0]["ok"], true);
+    assert_eq!(list[0]["has_stack"], true);
+    let (status, reply) = s
+        .post(
+            "/stress/check",
+            json!({"text": "[campaign]\nname = \"x\"\nnope = 1\n"}),
+        )
+        .await;
+    assert_eq!(status, 200);
+    assert_eq!(reply["ok"], false);
+    assert!(reply["error"].as_str().unwrap().contains("nope"), "{reply}");
+    let (status, detail) = s.get("/stress/quick").await;
+    assert_eq!(status, 200, "{detail}");
+    assert!(detail["text"].as_str().unwrap().contains("[campaign]"));
+    assert_eq!(detail["parsed"]["campaign"]["name"], "quick");
+    assert!(detail["last_run"].is_null());
+
+    // A stress run: started, phases, load and stress frames, finished; passed.
+    let (status, run) = s
+        .post("/runs", json!({"stress": {"campaign": "quick"}}))
+        .await;
+    assert_eq!(status, 202, "{run}");
+    assert_eq!(run["kind"], "stress");
+    assert_eq!(run["campaign_id"], "quick");
+    let id = run["id"].as_str().unwrap().to_owned();
+    let names = s.follow(&id).await;
+    assert_eq!(names.first().map(String::as_str), Some("started"));
+    assert!(names.contains(&"phase".to_owned()), "{names:?}");
+    assert!(names.contains(&"load".to_owned()), "{names:?}");
+    assert!(names.contains(&"stress".to_owned()), "{names:?}");
+    assert!(names.contains(&"timeline".to_owned()), "{names:?}");
+    assert_eq!(names.last().map(String::as_str), Some("finished"));
+    let (status, record) = s.get(&format!("/runs/{id}")).await;
+    assert_eq!(status, 200);
+    assert_eq!(record["status"], "passed", "{}", record["stress"]);
+    assert_eq!(record["services"], json!(["ledger"]));
+    assert_eq!(record["stress"]["store"], "memory");
+    assert!(
+        record["stress"]["checks"]["append_echo"]["passed"]
+            .as_u64()
+            .unwrap()
+            > 0
+    );
+    assert_eq!(record["stress"]["findings"].as_array().unwrap().len(), 0);
+    assert!(!record["samples"].as_array().unwrap().is_empty());
+    assert!(
+        record["events"].as_array().unwrap().len() == 1,
+        "the log action"
+    );
+    let (_, runs) = s.get("/runs?kind=stress").await;
+    assert!(
+        runs.as_array()
+            .unwrap()
+            .iter()
+            .all(|r| r["kind"] == "stress")
+    );
+    assert!(runs.as_array().unwrap().iter().any(|r| r["id"] == id));
+    let (_, detail) = s.get("/stress/quick").await;
+    assert_eq!(detail["last_run"]["id"], id);
+    let (_, overview) = s.get("/overview").await;
+    assert_eq!(overview["campaigns"], 1);
+    assert_eq!(overview["findings"], 0);
+}
+
+#[tokio::test]
+async fn findings_routes_and_queued_campaigns() {
+    let s = boot().await;
+    // Findings: empty, and a replay of nothing is a 404.
+    let (status, findings) = s.get("/findings").await;
+    assert_eq!(status, 200);
+    assert_eq!(findings, json!([]));
+    let (status, groups) = s.get("/findings?grouped=true").await;
+    assert_eq!(status, 200);
+    assert_eq!(groups, json!([]));
+    let (status, _) = s.post("/findings/nope/replay", json!({})).await;
+    assert_eq!(status, 404);
+    let (status, _) = s.get("/findings/nope").await;
+    assert_eq!(status, 404);
+
+    // A campaign through the queue, and a missing one refused up front.
+    let (status, items) = s
+        .post(
+            "/queue",
+            json!({"jobs": [{"stress": {"campaign": "quick"}}]}),
+        )
+        .await;
+    assert_eq!(status, 202, "{items}");
+    assert_eq!(items[0]["kind"], "stress");
+    let (status, _) = s
+        .post(
+            "/queue",
+            json!({"jobs": [{"stress": {"campaign": "nope"}}]}),
+        )
+        .await;
+    assert_eq!(status, 404);
+    s.wait_runs("the queued campaign to finish", |runs| {
+        runs.iter()
+            .filter(|r| r["kind"] == "stress" && r["status"] != "running")
+            .count()
+            >= 1
+    })
+    .await;
+
+    // The file can be written and deleted like a scenario.
+    let (status, entry) = s
+        .put(
+            "/stress/mine",
+            json!({"text": "[campaign]\nname = \"mine\"\n[stack.ledgers.l]\n"}),
+        )
+        .await;
+    assert_eq!(status, 200, "{entry}");
+    assert_eq!(entry["ok"], true);
+    let (status, _) = s
+        .put("/stress/bad", json!({"text": "[campaign]\nname = \"bad\"\n[[timeline]]\nat = \"1s\"\naction = \"log\"\nmessage = \"x\"\n"}))
+        .await;
+    assert_eq!(status, 422);
+    let (status, _) = s.send(reqwest::Method::DELETE, "/stress/mine", None).await;
+    assert_eq!(status, 204);
 }

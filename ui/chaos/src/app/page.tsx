@@ -471,6 +471,27 @@ export default function OverviewPage() {
                   v: <span className="font-mono text-xs">{overview.config.paths.scenarios}</span>,
                 },
                 {
+                  k: "Campaigns",
+                  v: (
+                    <span className="font-mono text-xs">
+                      {overview.config.paths.campaigns}{" "}
+                      <span className="text-muted-foreground font-sans">({overview.campaigns})</span>
+                    </span>
+                  ),
+                },
+                {
+                  k: "Findings",
+                  v: (
+                    <span className="font-mono text-xs">
+                      {overview.config.paths.findings}{" "}
+                      <span className="text-muted-foreground font-sans">
+                        ({overview.findings} in {overview.finding_signatures} signature
+                        {overview.finding_signatures === 1 ? "" : "s"})
+                      </span>
+                    </span>
+                  ),
+                },
+                {
                   k: "Run records",
                   v: <span className="font-mono text-xs">{overview.config.paths.results}</span>,
                 },

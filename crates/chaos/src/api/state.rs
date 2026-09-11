@@ -16,9 +16,10 @@ use tokio_util::sync::CancellationToken;
 use super::{
     added::{AddedInstance, AddedSpec, AddedStore},
     error::ApiError,
+    findings::FindingStore,
     jobs::{Job, Queue, QueuedRun, Schedule, Schedules},
     notify::{Notifier, NotifyMode},
-    runs::{ActiveRun, RunFeed, RunKind, RunRecord, RunStatus, RunStore, RunSummary},
+    runs::{ActiveRun, RunFeed, RunKind, RunRecord, RunStatus, RunStore, RunSummary, StressResult},
 };
 use crate::{
     config::{ChaosConfig, Source},
@@ -93,6 +94,56 @@ pub struct LoadRequest {
     pub load: LoadConfig,
 }
 
+/// Body of `POST /runs` for a stress campaign: `{"stress": {...}}`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct StressRequest {
+    /// Campaign id (`stress/<id>.toml`).
+    pub campaign: String,
+    /// Ledger targets; empty: the campaign's `[stack]`, or the serve stack's
+    /// ledgers when the file has none.
+    #[serde(default)]
+    pub targets: Vec<Target>,
+    /// Shown in the run list. Default: the campaign id.
+    #[serde(default)]
+    pub name: Option<String>,
+}
+
+/// Body of `POST /runs` for a finding's replay: `{"replay": {...}}`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReplayRequest {
+    /// Finding id.
+    pub finding: String,
+    /// Ledger targets; empty: the serve stack's ledgers.
+    #[serde(default)]
+    pub targets: Vec<Target>,
+    /// Replays to try; a race needs more than one. Default 1.
+    #[serde(default)]
+    pub attempts: Option<u32>,
+}
+
+/// A campaign file as listed.
+#[derive(Debug, Clone, Serialize)]
+pub struct CampaignEntry {
+    /// Path under the campaigns directory without `.toml`.
+    pub id: String,
+    /// File path.
+    pub file: String,
+    /// `[campaign] name`, when it parses.
+    pub name: Option<String>,
+    /// `[campaign] description`.
+    pub description: String,
+    /// `[campaign] skip`.
+    pub skip: bool,
+    /// Parses and passes the checks.
+    pub ok: bool,
+    /// Why not.
+    pub error: Option<String>,
+    /// Has a `[stack]` of its own.
+    pub has_stack: bool,
+}
+
 /// Body of `POST /validate`: `{<kind>: url, ..., timeout}`. Every key
 /// defaults to the config; a key that is not a kind with a validate target
 /// is rejected.
@@ -124,6 +175,8 @@ pub struct AppState {
     pub queue: Queue,
     /// Cron schedules.
     pub schedules: Schedules,
+    /// Findings from stress runs.
+    pub findings: FindingStore,
     /// Slack.
     pub notifier: Notifier,
     global: broadcast::Sender<GlobalEvent>,
@@ -137,6 +190,8 @@ impl AppState {
         let schedules = Schedules::open(&config.paths.schedules)
             .map_err(|e| anyhow::anyhow!("open schedules: {e}"))?;
         seed_scenarios(&config.paths.scenarios, &config.paths.scenarios_seed)?;
+        seed_scenarios(&config.paths.campaigns, &config.paths.campaigns_seed)?;
+        let findings = FindingStore::open(&config.paths.findings)?;
         let added = AddedStore::open(&config.paths.stack)
             .map_err(|e| anyhow::anyhow!("open stack file: {e}"))?;
         let mut topology = StackConfig::default();
@@ -218,6 +273,7 @@ impl AppState {
             runs,
             queue: Queue::default(),
             schedules,
+            findings,
             notifier,
             global,
             stop: CancellationToken::new(),
@@ -357,43 +413,71 @@ impl AppState {
 
     /// `scenarios/<id>.toml`, after checking the id is a plain relative path.
     pub fn scenario_path(&self, id: &str) -> Result<PathBuf, ApiError> {
-        let valid = !id.is_empty()
-            && id.split('/').all(|seg| {
-                !seg.is_empty()
-                    && seg != "."
-                    && seg != ".."
-                    && seg
-                        .chars()
-                        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.')
-            });
-        if !valid {
-            return Err(ApiError::invalid(format!(
-                "scenario id {id:?}: use letters, digits, `_`, `-` and `/`"
-            )));
+        file_path(&self.config.paths.scenarios, "scenario", id)
+    }
+
+    /// `stress/<id>.toml`, after checking the id is a plain relative path.
+    pub fn campaign_path(&self, id: &str) -> Result<PathBuf, ApiError> {
+        file_path(&self.config.paths.campaigns, "campaign", id)
+    }
+
+    /// Every `*.toml` under the campaigns directory, sorted by id.
+    pub fn list_campaigns(&self) -> Vec<CampaignEntry> {
+        toml_files(&self.config.paths.campaigns)
+            .into_iter()
+            .map(|(id, path)| campaign_entry(&id, &path))
+            .collect()
+    }
+
+    /// Text and parse state of one campaign.
+    pub async fn read_campaign(
+        &self,
+        id: &str,
+    ) -> Result<(CampaignEntry, String, Option<tbd_stress::Campaign>), ApiError> {
+        let path = self.campaign_path(id)?;
+        let text = tokio::fs::read_to_string(&path)
+            .await
+            .map_err(|_| ApiError::not_found(format!("no campaign {id:?}")))?;
+        let parsed = crate::stress::parse_campaign(&text)
+            .ok()
+            .map(|f| f.campaign);
+        Ok((campaign_entry(id, &path), text, parsed))
+    }
+
+    /// Check, then write. The file is only written when it checks.
+    pub async fn write_campaign(&self, id: &str, text: &str) -> Result<CampaignEntry, ApiError> {
+        let path = self.campaign_path(id)?;
+        crate::stress::parse_campaign(text).map_err(ApiError::invalid)?;
+        if let Some(parent) = path.parent() {
+            tokio::fs::create_dir_all(parent).await?;
         }
-        Ok(self.config.paths.scenarios.join(format!("{id}.toml")))
+        tokio::fs::write(&path, text).await?;
+        Ok(campaign_entry(id, &path))
+    }
+
+    /// Remove a campaign file.
+    pub async fn delete_campaign(&self, id: &str) -> Result<(), ApiError> {
+        let path = self.campaign_path(id)?;
+        tokio::fs::remove_file(&path)
+            .await
+            .map_err(|_| ApiError::not_found(format!("no campaign {id:?}")))
+    }
+
+    /// The newest run of a campaign.
+    pub async fn last_run_of_campaign(&self, campaign_id: &str) -> Option<RunSummary> {
+        self.runs
+            .list(usize::MAX)
+            .await
+            .into_iter()
+            .find(|r| r.campaign_id.as_deref() == Some(campaign_id))
     }
 
     /// Every `*.toml` under the scenarios directory, sorted by id.
     pub fn list_scenarios(&self) -> Vec<ScenarioEntry> {
-        let root = &self.config.paths.scenarios;
-        let pattern = root.join("**/*.toml");
-        let mut out = Vec::new();
-        let Ok(paths) = glob::glob(&pattern.to_string_lossy()) else {
-            return out;
-        };
-        for path in paths.flatten() {
-            let Ok(rel) = path.strip_prefix(root) else {
-                continue;
-            };
-            let id = rel
-                .with_extension("")
-                .to_string_lossy()
-                .replace(std::path::MAIN_SEPARATOR, "/");
-            out.push(entry(&id, &path));
-        }
-        out.sort_by(|a, b| a.id.cmp(&b.id));
-        out
+        toml_files(&self.config.paths.scenarios)
+            .into_iter()
+            .map(|(id, path)| entry(&id, &path))
+            .collect()
     }
 
     /// Text and parse state of one scenario.
@@ -605,6 +689,195 @@ impl AppState {
         Ok(summary)
     }
 
+    /// The serve stack's running ledgers, as load targets.
+    async fn stack_ledgers(&self) -> Vec<Target> {
+        self.stack_targets()
+            .await
+            .into_iter()
+            .filter(|t| t.kind == "ledger")
+            .collect()
+    }
+
+    /// Start a stress campaign; the run takes the active slot.
+    pub async fn spawn_stress(
+        self: &Arc<Self>,
+        req: StressRequest,
+        schedule_id: Option<String>,
+    ) -> Result<RunSummary, ApiError> {
+        let path = self.campaign_path(&req.campaign)?;
+        let text = tokio::fs::read_to_string(&path)
+            .await
+            .map_err(|_| ApiError::not_found(format!("no campaign {:?}", req.campaign)))?;
+        let file = crate::stress::parse_campaign(&text).map_err(ApiError::invalid)?;
+        // Where the workers go: the request's targets, else the file's stack,
+        // else the serve stack's ledgers.
+        let explicit: Option<Vec<Target>> = if !req.targets.is_empty() {
+            for t in &req.targets {
+                url::Url::parse(&t.http_url)
+                    .map_err(|e| ApiError::invalid(format!("target {}: {e}", t.name)))?;
+                if t.kind != "ledger" {
+                    return Err(ApiError::invalid(format!(
+                        "target {}: a campaign runs against ledgers, not {}",
+                        t.name, t.kind
+                    )));
+                }
+            }
+            Some(req.targets.clone())
+        } else if file.stack.is_empty() {
+            let ledgers = self.stack_ledgers().await;
+            if ledgers.is_empty() {
+                return Err(ApiError::invalid(
+                    "the campaign has no [stack] and the serve stack has no running ledger: give `targets`",
+                ));
+            }
+            Some(ledgers)
+        } else {
+            None
+        };
+        let services = vec!["ledger".to_owned()];
+
+        let mut record = RunRecord::start(
+            RunKind::Stress,
+            req.name.as_deref().unwrap_or(&req.campaign),
+        );
+        record.set_services(services);
+        record.campaign_id = Some(req.campaign.clone());
+        record.request = serde_json::to_value(&req).ok();
+        record.schedule_id = schedule_id;
+        let active = self.begin(&record).await?;
+        let summary = record.summary();
+
+        let state = Arc::clone(self);
+        let trust = self
+            .config
+            .trust()
+            .map_err(|e| ApiError::internal(e.to_string()))?;
+        tokio::spawn(async move {
+            let started = Instant::now();
+            let (tx, rx) = mpsc::unbounded_channel();
+            let hooks = crate::stress::Hooks {
+                events: Some(tx),
+                cancel: active.cancel.clone(),
+            };
+            let collector = tokio::spawn(collect_stress(Arc::clone(&active), rx));
+            let options = crate::stress::RunOptions {
+                targets: explicit,
+                seed: None,
+                trust,
+            };
+            let result = crate::stress::run_campaign_with(&file, &options, &hooks).await;
+            drop(hooks);
+            let (samples, events) = collector.await.unwrap_or_default();
+            record.samples = samples;
+            record.events = events;
+            // Every finding, with its run, to the store; the record keeps summaries.
+            for f in &result.findings {
+                let mut f = f.clone();
+                f.run_id = Some(record.id.clone());
+                if let Err(error) = state.findings.put(&f).await {
+                    tracing::error!(%error, finding = f.id, "could not write finding");
+                }
+            }
+            let status = if active.cancel.is_cancelled() && !result.stopped_early {
+                RunStatus::Cancelled
+            } else if result.error.is_some() {
+                RunStatus::Error
+            } else if result.passed {
+                RunStatus::Passed
+            } else {
+                RunStatus::Failed
+            };
+            record.error = result.error.clone();
+            record.stress = Some(StressResult::from(&result));
+            state.end(record, status, started.elapsed()).await;
+            state.pump().await;
+        });
+        Ok(summary)
+    }
+
+    /// Replay a finding against ledgers; a run of kind `stress` named after it.
+    pub async fn spawn_replay(
+        self: &Arc<Self>,
+        req: ReplayRequest,
+        schedule_id: Option<String>,
+    ) -> Result<RunSummary, ApiError> {
+        let mut finding = self
+            .findings
+            .get(&req.finding)
+            .await
+            .ok_or_else(|| ApiError::not_found(format!("no finding {}", req.finding)))?;
+        let targets = if req.targets.is_empty() {
+            self.stack_ledgers().await
+        } else {
+            req.targets.clone()
+        };
+        let Some(first) = targets.iter().find(|t| t.kind == "ledger").cloned() else {
+            return Err(ApiError::conflict(
+                "no ledger to replay against: give `targets` or run serve with a ledger in its stack",
+            ));
+        };
+        let attempts = req.attempts.unwrap_or(1).max(1);
+        let mut record = RunRecord::start(RunKind::Stress, &format!("replay {}", finding.id));
+        record.set_services(["ledger"]);
+        record.request = serde_json::to_value(&req).ok();
+        record.schedule_id = schedule_id;
+        // The slot is held until `end`; a replay is short and not cancellable.
+        let _active = self.begin(&record).await?;
+        let summary = record.summary();
+        let state = Arc::clone(self);
+        let trust = self
+            .config
+            .trust()
+            .map_err(|e| ApiError::internal(e.to_string()))?;
+        tokio::spawn(async move {
+            let started = Instant::now();
+            let timeout = Duration::from_secs(5);
+            let outcome = match trust.channel(&first.http_url, Some(timeout)) {
+                Ok(channel) => {
+                    let target = tbd_stress::Target {
+                        name: first.name.clone(),
+                        channel,
+                        bearer: trust.authorization(),
+                    };
+                    let client: Arc<dyn tbd_stress::LedgerClient> =
+                        Arc::new(tbd_stress::GrpcLedger::new(&target, timeout));
+                    Some(
+                        tbd_stress::replay_finding(
+                            &finding.trace,
+                            &finding.invariant,
+                            &finding.signature,
+                            client,
+                            &first.name,
+                            attempts,
+                            Duration::from_millis(500),
+                            &[],
+                        )
+                        .await,
+                    )
+                }
+                Err(error) => {
+                    record.error = Some(format!("target {}: {error}", first.name));
+                    None
+                }
+            };
+            let status = match &outcome {
+                Some(o) if o.reproduced => RunStatus::Failed,
+                Some(_) => RunStatus::Passed,
+                None => RunStatus::Error,
+            };
+            if let Some(o) = &outcome {
+                finding.replays.push(o.clone());
+                if let Err(error) = state.findings.put(&finding).await {
+                    tracing::error!(%error, finding = finding.id, "could not write finding");
+                }
+            }
+            record.replay = outcome;
+            state.end(record, status, started.elapsed()).await;
+            state.pump().await;
+        });
+        Ok(summary)
+    }
+
     /// Run validate now and record it. Independent of the active run slot.
     pub async fn run_validate(
         &self,
@@ -670,6 +943,22 @@ impl AppState {
                     expanded.push(Job::Load(req));
                 }
                 Job::Validate(req) => expanded.push(Job::Validate(req)),
+                Job::Stress(req) => {
+                    let path = self.campaign_path(&req.campaign)?;
+                    if !path.is_file() {
+                        return Err(ApiError::not_found(format!(
+                            "no campaign {:?}",
+                            req.campaign
+                        )));
+                    }
+                    expanded.push(Job::Stress(req));
+                }
+                Job::Replay(req) => {
+                    if self.findings.get(&req.finding).await.is_none() {
+                        return Err(ApiError::not_found(format!("no finding {}", req.finding)));
+                    }
+                    expanded.push(Job::Replay(req));
+                }
             }
         }
         if expanded.is_empty() {
@@ -705,6 +994,8 @@ impl AppState {
             let result = match item.job.clone() {
                 Job::Scenario(id) => self.spawn_scenario(&id, schedule_id).await.map(drop),
                 Job::Load(req) => self.spawn_load(req, schedule_id).await.map(drop),
+                Job::Stress(req) => self.spawn_stress(req, schedule_id).await.map(drop),
+                Job::Replay(req) => self.spawn_replay(req, schedule_id).await.map(drop),
                 Job::Validate(req) => {
                     // Validate does not take the slot; run it alongside.
                     let state = Arc::clone(self);
@@ -874,6 +1165,74 @@ pub fn parse_scenario(text: &str) -> Result<ScenarioFile, String> {
     Ok(file)
 }
 
+/// `<root>/<id>.toml`, after checking the id is a plain relative path.
+fn file_path(root: &Path, what: &str, id: &str) -> Result<PathBuf, ApiError> {
+    let valid = !id.is_empty()
+        && id.split('/').all(|seg| {
+            !seg.is_empty()
+                && seg != "."
+                && seg != ".."
+                && seg
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.')
+        });
+    if !valid {
+        return Err(ApiError::invalid(format!(
+            "{what} id {id:?}: use letters, digits, `_`, `-` and `/`"
+        )));
+    }
+    Ok(root.join(format!("{id}.toml")))
+}
+
+/// Every `*.toml` under `root` as `(id, path)`, sorted by id.
+fn toml_files(root: &Path) -> Vec<(String, PathBuf)> {
+    let pattern = root.join("**/*.toml");
+    let mut out = Vec::new();
+    let Ok(paths) = glob::glob(&pattern.to_string_lossy()) else {
+        return out;
+    };
+    for path in paths.flatten() {
+        let Ok(rel) = path.strip_prefix(root) else {
+            continue;
+        };
+        let id = rel
+            .with_extension("")
+            .to_string_lossy()
+            .replace(std::path::MAIN_SEPARATOR, "/");
+        out.push((id, path));
+    }
+    out.sort_by(|a, b| a.0.cmp(&b.0));
+    out
+}
+
+fn campaign_entry(id: &str, path: &Path) -> CampaignEntry {
+    let parsed = std::fs::read_to_string(path)
+        .map_err(|e| e.to_string())
+        .and_then(|t| crate::stress::parse_campaign(&t));
+    match parsed {
+        Ok(file) => CampaignEntry {
+            id: id.to_owned(),
+            file: path.display().to_string(),
+            name: Some(file.campaign.campaign.name),
+            description: file.campaign.campaign.description,
+            skip: file.campaign.campaign.skip,
+            ok: true,
+            error: None,
+            has_stack: !file.stack.is_empty(),
+        },
+        Err(error) => CampaignEntry {
+            id: id.to_owned(),
+            file: path.display().to_string(),
+            name: None,
+            description: String::new(),
+            skip: false,
+            ok: false,
+            error: Some(error),
+            has_stack: false,
+        },
+    }
+}
+
 fn entry(id: &str, path: &Path) -> ScenarioEntry {
     let parsed = std::fs::read_to_string(path)
         .map_err(|e| e.to_string())
@@ -898,6 +1257,37 @@ fn entry(id: &str, path: &Path) -> ScenarioEntry {
             error: Some(error),
         },
     }
+}
+
+/// Forward a stress campaign's events to the run feed and keep samples and
+/// timeline events. Findings reach the store when the run ends, shrunk.
+async fn collect_stress(
+    active: Arc<ActiveRun>,
+    mut rx: mpsc::UnboundedReceiver<crate::stress::RunEvent>,
+) -> (Vec<LoadSnapshot>, Vec<EventOutcome>) {
+    let mut samples = Vec::new();
+    let mut events = Vec::new();
+    while let Some(event) = rx.recv().await {
+        let id = active.id.clone();
+        let item = match event {
+            crate::stress::RunEvent::Phase { name } => RunFeed::Phase { id, name },
+            crate::stress::RunEvent::Load { snapshot } => {
+                samples.push(snapshot.clone());
+                RunFeed::Load { id, snapshot }
+            }
+            crate::stress::RunEvent::Timeline { event } => {
+                events.push(event.clone());
+                RunFeed::Timeline { id, event }
+            }
+            crate::stress::RunEvent::Stress { snapshot } => RunFeed::Stress { id, snapshot },
+            crate::stress::RunEvent::Finding { mut finding } => {
+                finding.run_id = Some(id.clone());
+                RunFeed::Finding { id, finding }
+            }
+        };
+        active.publish(item).await;
+    }
+    (samples, events)
 }
 
 /// Forward scenario events to the run feed and keep samples and events.

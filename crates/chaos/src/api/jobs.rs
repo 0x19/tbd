@@ -23,13 +23,14 @@ use super::{
     error::ApiError,
     notify::NotifyMode,
     runs::RunKind,
-    state::{LoadRequest, ValidateRequest},
+    state::{LoadRequest, ReplayRequest, StressRequest, ValidateRequest},
 };
 
 /// One unit of work, as carried by `POST /queue` and by a schedule.
 ///
 /// JSON: `{"scenario": "<id>"}`, `"all_scenarios"`, `{"load": {…LoadRequest}}`,
-/// `{"validate": {…ValidateRequest}}`.
+/// `{"validate": {…ValidateRequest}}`, `{"stress": {…StressRequest}}`,
+/// `{"replay": {…ReplayRequest}}`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Job {
@@ -42,6 +43,10 @@ pub enum Job {
     Load(LoadRequest),
     /// A validate run.
     Validate(ValidateRequest),
+    /// A stress campaign by id.
+    Stress(StressRequest),
+    /// A finding's replay.
+    Replay(ReplayRequest),
 }
 
 impl Job {
@@ -51,6 +56,7 @@ impl Job {
             Self::Scenario(_) | Self::AllScenarios => RunKind::Scenario,
             Self::Load(_) => RunKind::Load,
             Self::Validate(_) => RunKind::Validate,
+            Self::Stress(_) | Self::Replay(_) => RunKind::Stress,
         }
     }
 
@@ -61,6 +67,8 @@ impl Job {
             Self::AllScenarios => "all scenarios".to_owned(),
             Self::Load(req) => req.name.clone().unwrap_or_else(|| "load".to_owned()),
             Self::Validate(_) => "validate".to_owned(),
+            Self::Stress(req) => req.name.clone().unwrap_or_else(|| req.campaign.clone()),
+            Self::Replay(req) => format!("replay {}", req.finding),
         }
     }
 

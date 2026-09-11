@@ -5,7 +5,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { api, ApiError, feeds } from "./client";
-import type { GlobalEvent, InstanceInfo, LoadSnapshot, RunFeed, RunRecord } from "./schema";
+import type {
+  FindingSummary,
+  GlobalEvent,
+  InstanceInfo,
+  LoadSnapshot,
+  RunFeed,
+  RunRecord,
+  StressSnapshot,
+} from "./schema";
 
 export type Loadable<T> = {
   data: T | null;
@@ -99,6 +107,10 @@ export type RunLive = {
   phase: string | null;
   samples: LoadSnapshot[];
   events: { at_s: number; action: string; error: string | null }[];
+  /** The latest `stress` frame of a campaign run. */
+  stress: StressSnapshot | null;
+  /** Findings as they arrive, oldest first; the record's list replaces them at the end. */
+  findings: FindingSummary[];
   finished: boolean;
   error: string | null;
 };
@@ -108,6 +120,8 @@ const EMPTY: RunLive = {
   phase: null,
   samples: [],
   events: [],
+  stress: null,
+  findings: [],
   finished: false,
   error: null,
 };
@@ -144,6 +158,7 @@ export function useRunFeed(id: string | null): RunLive {
                 record,
                 samples: record.samples,
                 events: record.events,
+                findings: record.stress?.findings ?? s.findings,
               },
         ),
       )
@@ -164,12 +179,19 @@ export function useRunFeed(id: string | null): RunLive {
               };
             case "timeline":
               return { ...s, events: [...s.events, f.event] };
+            case "stress":
+              return { ...s, stress: f.snapshot };
+            case "finding":
+              return s.findings.some((x) => x.id === f.finding.id)
+                ? s
+                : { ...s, findings: [...s.findings, f.finding] };
             case "finished":
               return {
                 ...s,
                 record: f.run,
                 samples: f.run.samples.length ? f.run.samples : s.samples,
                 events: f.run.events.length ? f.run.events : s.events,
+                findings: f.run.stress?.findings ?? s.findings,
                 finished: true,
                 phase: null,
                 error: null,

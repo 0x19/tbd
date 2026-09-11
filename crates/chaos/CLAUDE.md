@@ -51,7 +51,12 @@ Where things are:
   overrides field by field; add a flag there when a key needs an env var.
 - `api/` is `chaos serve`. `state.rs` owns the long-lived stack (a `Mutex<Option<Stack>>`)
   and spawns run jobs; `runs.rs` is the record store (one JSON per run under
-  `[paths] results`) and the live feed; `routes.rs` only translates HTTP. Runs reuse
+  `[paths] results`) and the live feed; `findings.rs` is the finding store (one JSON per
+  finding under `[paths] findings`, grouped by signature across runs; a stress run puts
+  its findings there, shrunk, when it ends); `routes.rs` only translates HTTP.
+  Campaign files under `[paths] campaigns` are served like scenarios (`/stress`), and
+  `spawn_stress`/`spawn_replay` run them through `stress::run_campaign_with` and
+  `stress::replay_finding` with the same `Hooks`. Runs reuse
   `scenario::run_file_with` / `load::run_with` with `Hooks` (event channel +
   `CancellationToken`); do not add a second executor for the API. `jobs.rs` is the
   queue (in memory, FIFO into the single slot; `AppState::pump` starts the next item

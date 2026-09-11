@@ -116,6 +116,9 @@ services:
       CHAOS_SLACK_WEBHOOK: "{{ chaos_slack_webhook | default('') }}"
       CHAOS_SCENARIOS_DIR: /data/scenarios
       CHAOS_SCENARIOS_SEED: /app/scenarios
+      CHAOS_CAMPAIGNS_DIR: /data/stress
+      CHAOS_CAMPAIGNS_SEED: /app/stress
+      CHAOS_FINDINGS_DIR: /data/findings
       CHAOS_UI_DIR: /app/ui
       CHAOS_PUBLIC_DOMAIN: "{{ base_domain | default('') }}"
       # Tokens for validate/load through Envoy; the identity stack itself is not part of

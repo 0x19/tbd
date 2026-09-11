@@ -78,6 +78,12 @@ spec:
               value: /data/scenarios
             - name: CHAOS_SCENARIOS_SEED
               value: /app/scenarios
+            - name: CHAOS_CAMPAIGNS_DIR
+              value: /data/stress
+            - name: CHAOS_CAMPAIGNS_SEED
+              value: /app/stress
+            - name: CHAOS_FINDINGS_DIR
+              value: /data/findings
             - name: CHAOS_UI_DIR
               value: /app/ui
             - name: OTEL_SERVICE_NAME

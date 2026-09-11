@@ -142,6 +142,7 @@ impl Notifier {
             RunKind::Scenario => "Scenario",
             RunKind::Load => "Load run",
             RunKind::Validate => "Validate",
+            RunKind::Stress => "Stress campaign",
         };
         let summary = r.summary();
         let headline = format!("{icon} {kind} *{}* {verb} on *{}*", r.name, self.env);

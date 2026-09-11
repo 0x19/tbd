@@ -50,6 +50,9 @@ or `500`. Every body is JSON; `PUT`/`POST` bodies reject unknown fields.
   "recent_runs": [ "…RunSummary, newest first, at most 10" ],
   "last_validate": "…RunSummary or null",
   "scenarios": 4,
+  "campaigns": 3,
+  "findings": 2,
+  "finding_signatures": 1,
   "runs": 17,
   "schedules": 2,
   "schedules_enabled": 1,
@@ -67,7 +70,7 @@ UI links to, derived from `[links] domain` behind the public edge. `stack` is
 
 | `type` | `data` | When |
 |---|---|---|
-| `run_started` | `{"type", "run": RunSummary}` | a scenario, load or validate run begins |
+| `run_started` | `{"type", "run": RunSummary}` | a scenario, load, validate or stress run begins |
 | `run_finished` | `{"type", "run": RunSummary}` | it ends |
 | `stack_changed` | `{"type", "instances": [InstanceInfo]}` | after every stack call below |
 | `queue_changed` | `{"type", "queue": [QueuedRun]}` | something was queued, started or removed |
@@ -143,6 +146,47 @@ image appears after the next rollout and one deleted in the UI returns until it 
 deleted from the repo. Copy the TOML out of the UI to bring a scenario back into the
 repo.
 
+## Stress campaigns
+
+Campaign ids are the path under `[paths] campaigns` (default `stress/`) without
+`.toml`, with the same rules as scenario ids. The file format is
+[stress.md](stress.md); the same seeding as scenarios applies (`[paths] campaigns_seed`).
+
+| Method and path | Body | Returns |
+|---|---|---|
+| `GET /stress` | | `[CampaignEntry]`, sorted by id |
+| `GET /stress/{id}` | | `CampaignEntry` + `text` (the TOML), `parsed` (the campaign as JSON, `null` if it does not parse), `last_run` (`RunSummary` or `null`) |
+| `PUT /stress/{id}` | `{"text": "<toml>"}` | `CampaignEntry`; written only if it checks, else `422` with the reason |
+| `DELETE /stress/{id}` | | `204` |
+| `POST /stress/check` | `{"text": "<toml>"}` | `{"ok", "name", "error", "parsed"}`; never writes |
+
+`CampaignEntry`: `id`, `file`, `name`, `description`, `skip`, `ok`, `error`, `has_stack`
+(the file carries a `[stack]`; one without runs against the serve stack's ledgers unless
+targets are given).
+
+## Findings
+
+Findings are what campaigns produce ([stress.md](stress.md#findings-shrinking-and-replay)):
+one JSON file each under `[paths] findings` (default `.chaos/findings/`), indexed on
+start, kept across runs so the same bug found twice is one signature with two findings.
+
+| Method and path | Body | Returns |
+|---|---|---|
+| `GET /findings?limit=50&run=&invariant=&campaign=` | | `[FindingSummary]`, newest first; every filter optional (`campaign` is the campaign's name) |
+| `GET /findings?grouped=true&run=&invariant=&campaign=` | | `[FindingGroup]`: one per signature, newest last-seen first |
+| `GET /findings/{id}` | | `Finding`, with its `trace` |
+| `DELETE /findings/{id}` | | `204` |
+| `POST /findings/{id}/replay` | `{"targets": [Target], "attempts": 1}`, both optional | `202` + `RunSummary` (kind `stress`, name `replay <invariant>`); the same as `POST /runs {"replay": …}` |
+
+`FindingSummary`: `id`, `invariant`, `signature`, `message`, `subject`, `worker`
+(`owner`, `contention`, `fuzz`), `campaign`, `run_id`, `target`, `found_at`,
+`trace_len`, `shrunk`. `Finding` adds `expected`, `actual`, `store`, `trace` (`[Step]`:
+`index`, `request` (tagged by `op`, symbolic subjects and instants), `response`,
+`error`, `at_ms`, `tolerated`), `original_len`, `shrink_note`, `replays`
+(`[{"at","target","reproduced","message","steps_run"}]`). `FindingGroup`: `invariant`,
+`signature`, `count`, `first`, `last`, `runs`, `campaigns`, `sample` (the newest
+`FindingSummary`).
+
 ## Runs
 
 One run at a time. A second `POST /runs` while one is active answers `409`.
@@ -151,7 +195,9 @@ One run at a time. A second `POST /runs` while one is active answers `409`.
 |---|---|---|
 | `POST /runs` | `{"scenario": "<id>"}` | `202` + `RunSummary` (status `running`) |
 | `POST /runs` | `{"name": "adhoc", "targets": [{"name","http_url","kind"?}], "load": {…}}` (`kind` defaults to `protocol`; every operation in `load` needs a target of its kind, else `422`) | `202` + `RunSummary` |
-| `GET /runs?limit=50` | | `[RunSummary]`, newest first |
+| `POST /runs` | `{"stress": {"campaign": "<id>", "targets": [Target]?, "name"?}}`: a campaign; without `targets` its own `[stack]` is booted and the timeline played, or, when the file has none, the serve stack's ledgers are used and the timeline is skipped; with `targets` (`kind` `ledger`, `grpc_url` through Envoy) the same with explicit ledgers; `404` for an unknown campaign, `422` when it does not check or no ledger is available | `202` + `RunSummary` (kind `stress`) |
+| `POST /runs` | `{"replay": {"finding": "<id>", "targets": [Target]?, "attempts": 1}}`: a finding's trace replayed against ledgers (the serve stack's without `targets`); the record's `replay` says whether it reproduced and the outcome is appended to the finding | `202` + `RunSummary` (kind `stress`) |
+| `GET /runs?limit=50&kind=&service=` | | `[RunSummary]`, newest first; `kind` is a run kind, `service` a service kind |
 | `GET /runs/{id}` | | `RunRecord` |
 | `GET /runs/{id}/events` | | SSE: history so far, then live, ending at `finished` |
 | `POST /runs/{id}/cancel` | | `202`; `409` if not active |
@@ -195,6 +241,8 @@ A `Job` is one of:
 | `"all_scenarios"` | every scenario that checks and is not skipped, in id order, expanded into one item each; `422` when there is none |
 | `{"load": {…}}` | an ad-hoc load run, the same body as `POST /runs`; checked before queuing |
 | `{"validate": {…}}` | a validate run, the same body as `POST /validate`; validate does not take the slot, so it runs alongside whatever is active |
+| `{"stress": {…}}` | a campaign, the same body as `POST /runs`; `404` before anything is queued when it does not exist |
+| `{"replay": {…}}` | a finding's replay, the same body as `POST /runs`; `404` when the finding does not exist |
 
 `QueuedRun`: `id`, `job`, `kind`, `name`, `scenario_id`, `schedule_id` (set when a
 schedule queued it), `queued_at`. A queued job that cannot start when its turn comes
@@ -232,9 +280,11 @@ schedule's history.
 | `type` | `data` | |
 |---|---|---|
 | `started` | `{"run": RunSummary}` | first frame |
-| `phase` | `{"id", "name"}` | `setup`, `load`, `assert`, `teardown` (scenario runs) |
+| `phase` | `{"id", "name"}` | `setup`, `load`, `assert`, `teardown` (scenario runs); `setup`, `warmup`, `run`, `shrink`, `done`, `teardown` (stress runs) |
 | `load` | `{"id", "snapshot": LoadSnapshot}` | once per second while load runs, plus one at the end of each phase |
 | `timeline` | `{"id", "event": {"at_s", "action", "error"}}` | a timeline action fired |
+| `stress` | `{"id", "snapshot": StressSnapshot}` | once per second during a campaign: `elapsed_s`, `phase`, `ops_total`, `ops_failed`, `tolerated`, `redriven`, `checks` (invariant to `{passed, violated}`), `findings`, `subjects`, `workers` (class to count) |
+| `finding` | `{"id", "finding": FindingSummary}` | a campaign broke an invariant; the finding is stored, shrunk, when the run ends |
 | `finished` | `{"run": RunRecord}` | last frame; the stream ends |
 
 A client that connects late gets everything from `started` on, then live frames. A
@@ -256,6 +306,9 @@ finished run answers with its `finished` frame only.
   "scenario": { "…the chaos run --json object for this scenario" },
   "load": null,
   "validate": null,
+  "stress": null,
+  "campaign_id": null,
+  "replay": null,
   "samples": [ "…LoadSnapshot per second" ],
   "events": [ { "at_s": 1.0, "action": "set_behavior engine-1 Error { .. }", "error": null } ],
   "request": null,
@@ -266,12 +319,15 @@ finished run answers with its `finished` frame only.
 | Field | Meaning |
 |---|---|
 | `id` | UUID v7, so ids sort by time |
-| `kind` | `scenario`, `load`, `validate` |
+| `kind` | `scenario`, `load`, `validate`, `stress` (a campaign or a finding's replay) |
 | `status` | `running`, `passed`, `failed`, `error` (setup or a timeline action failed), `cancelled`, `completed` (load runs: nothing to pass or fail) |
 | `schedule_id` | the schedule that queued it, or `null` for runs started by hand or by `POST /queue` |
 | `scenario` | the [`chaos run --json`](commands.md#chaos-run) object, for scenario runs |
 | `load` | the final `LoadSnapshot`, for load runs |
 | `validate` | the [`chaos validate --json`](commands.md#chaos-validate) report |
+| `stress` | a campaign's result: `name`, `passed`, `skipped`, `store`, `targets`, `load` (the measured phase's `LoadSnapshot`), `checks` (invariant to `{passed, violated}`), `tolerated`, `redriven`, `findings` (`[FindingSummary]`), `stopped_early`, `error` |
+| `campaign_id` | the campaign the run came from, for stress runs |
+| `replay` | a replay run's outcome: `at`, `target`, `reproduced`, `message`, `steps_run` |
 | `samples` | one `LoadSnapshot` per second, for charts; the last one equals the final snapshot |
 | `events` | timeline actions as applied |
 | `request` | what started it: the load request, or validate's targets |
@@ -280,14 +336,14 @@ finished run answers with its `finished` frame only.
 `services` (the kinds the run exercised, sorted: a scenario's stack, a load's target
 kinds, the validated kinds; `GET /runs?service=<kind>` filters on it),
 `started_at`, `finished_at`, `duration_s`, `requests_total`, `error_rate`,
-`throughput_rps`, `p50_ms`, `p90_ms`, `p99_ms`, `passed` (`[passed, total]` assertions or
-checks), `error`.
+`throughput_rps`, `p50_ms`, `p90_ms`, `p99_ms`, `passed` (`[passed, total]` assertions,
+checks or invariant evaluations), `error`, `campaign_id` and `findings` (stress runs).
 
 ## Notifications
 
 Every finished run, however it started, can post to Slack: one incoming webhook per
 environment from `CHAOS_SLACK_WEBHOOK` (never a file), the channel and the outcome and
-kind filters from `[notify.slack]` in `configs/chaos/<env>.toml`
+kind filters (`scenario`, `load`, `validate`, `stress`) from `[notify.slack]` in `configs/chaos/<env>.toml`
 ([config.md](config.md#keys)), and a per-schedule override (`notify` above). The message
 names the environment, the run, the failed assertions or checks with bound and observed
 value, the error if any, and links to the run on `[links] chaos` when set. Posting is

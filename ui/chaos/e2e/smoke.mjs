@@ -154,6 +154,56 @@ await step("scenario reference page renders the bundled doc", async () => {
   await page.goto(`${BASE}/reference/`);
   await page.getByRole("heading", { name: "Behaviours" }).waitFor({ timeout: 10000 });
   await page.getByText("delayed_failure").first().waitFor();
+  // The stress tab renders the campaign reference with the invariants table.
+  await page.getByRole("tab", { name: "Stress campaigns" }).click();
+  await page.getByRole("heading", { name: "The invariants" }).waitFor({ timeout: 10000 });
+  await page.getByText("cascade_tombstones_counterparty").first().waitFor();
+});
+
+await step("campaigns list and editor check", async () => {
+  await page.goto(`${BASE}/stress/`);
+  await page.getByText("smoke", { exact: true }).first().waitFor({ timeout: 10000 });
+  await page.getByText("its own stack").first().waitFor();
+  await shot({ path: `${SHOTS}/campaigns.png`, fullPage: true });
+  await page.goto(`${BASE}/stress/view/?id=smoke`);
+  await page.getByText("checks", { exact: true }).waitFor({ timeout: 10000 });
+  await page.locator(".cm-editor .tok-string").first().waitFor({ timeout: 10000 });
+  await page.getByText("Owner workers").waitFor();
+  await shot({ path: `${SHOTS}/campaign.png`, fullPage: true });
+  await page.getByRole("button", { name: "Reference" }).click();
+  await page.getByRole("heading", { name: "The invariants" }).waitFor({ timeout: 10000 });
+  await page.getByRole("button", { name: "Operation mix" }).click();
+  await page.locator(".cm-editor").getByText("idempotent_replay").waitFor({ timeout: 5000 });
+  await page.getByText("checks", { exact: true }).waitFor({ timeout: 10000 });
+});
+
+await step("run the smoke campaign live to the end", async () => {
+  await page.goto(`${BASE}/stress/`);
+  const row = page.getByRole("row", { name: /smoke/ });
+  await row.getByRole("button", { name: /^run$/i }).click();
+  await page.waitForURL(/runs\/view\/\?id=/, { timeout: 10000 });
+  await page.getByText("Lifecycle").waitFor({ timeout: 10000 });
+  await page.getByRole("heading", { name: "Invariants" }).waitFor({ timeout: 10000 });
+  await shot({ path: `${SHOTS}/stress-live.png`, fullPage: true });
+  await page.getByText("passed", { exact: true }).first().waitFor({ timeout: 90000 });
+  await page.getByText("append_echo").waitFor();
+  await page.getByText("held").first().waitFor();
+  await shot({ path: `${SHOTS}/stress-done.png`, fullPage: true });
+  // The stress entry under Campaigns is the one current Runs link for ?kind=stress.
+  await page.goto(`${BASE}/runs/?kind=stress`);
+  await page.getByRole("row", { name: /smoke/ }).first().waitFor({ timeout: 10000 });
+  const current = page.locator('[data-sidebar="menu-sub-button"][data-active="true"]');
+  await current.waitFor();
+  if ((await current.count()) !== 1) throw new Error("more than one sidebar entry marked current");
+});
+
+await step("findings page renders, grouped and flat", async () => {
+  await page.goto(`${BASE}/findings/`);
+  await page.getByRole("heading", { name: "Findings" }).waitFor({ timeout: 10000 });
+  await page.getByRole("tab", { name: /By signature/ }).waitFor();
+  await page.getByRole("tab", { name: /Every finding/ }).click();
+  await page.getByText("Filters").waitFor();
+  await shot({ path: `${SHOTS}/findings.png`, fullPage: true });
 });
 
 await step("run a scenario live to the end", async () => {

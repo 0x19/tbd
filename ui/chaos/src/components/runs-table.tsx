@@ -21,7 +21,7 @@ export function RunsTable({
   if (!runs.length) {
     return (
       <div className="text-muted-foreground rounded-lg border border-dashed p-8 text-center text-sm">
-        No runs match. Start one from Scenarios, Load or Validate.
+        No runs match. Start one from Scenarios, Campaigns, Load or Validate.
       </div>
     );
   }
@@ -61,6 +61,15 @@ export function RunsTable({
                     title="queued by a schedule"
                   >
                     scheduled
+                  </Badge>
+                ) : null}
+                {r.kind === "stress" && r.findings ? (
+                  <Badge
+                    variant="destructive"
+                    className="ml-2 text-[10px] normal-case"
+                    title="invariants broken"
+                  >
+                    {r.findings} finding{r.findings === 1 ? "" : "s"}
                   </Badge>
                 ) : null}
               </TableCell>

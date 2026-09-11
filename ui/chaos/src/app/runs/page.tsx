@@ -32,6 +32,7 @@ function RunsFromUrl() {
   const params = useSearchParams();
   const kind = params.get("kind");
   const scenario = params.get("scenario");
+  const campaign = params.get("campaign");
   const service = params.get("service");
   return (
     <Runs
@@ -39,6 +40,7 @@ function RunsFromUrl() {
       initial={{
         ...(kind ? { Kind: [kind] } : {}),
         ...(scenario ? { Scenario: [scenario] } : {}),
+        ...(campaign ? { Campaign: [campaign] } : {}),
         ...(service ? { Service: [service] } : {}),
       }}
     />
@@ -73,6 +75,7 @@ function Runs({ initial }: { initial: Record<string, string[]> }) {
       pick("Kind", r.kind) &&
       pick("Status", r.status) &&
       pick("Scenario", r.scenario_id) &&
+      pick("Campaign", r.campaign_id ?? null) &&
       (!selected.Service?.length || selected.Service.some((s) => r.services.includes(s))) &&
       (!q || `${r.name} ${r.id} ${r.scenario_id ?? ""}`.toLowerCase().includes(q.toLowerCase()))
     );
@@ -93,7 +96,7 @@ function Runs({ initial }: { initial: Record<string, string[]> }) {
     <>
       <PageTitle
         title="Runs"
-        description="Every scenario, load and validate run this serve recorded. Records are JSON files; newest first."
+        description="Every scenario, load, validate and stress run this serve recorded. Records are JSON files; newest first."
       />
       <div className="grid gap-6 lg:grid-cols-[16rem_1fr]">
         <FilterRail
@@ -105,6 +108,7 @@ function Runs({ initial }: { initial: Record<string, string[]> }) {
               title: "Scenario",
               options: countBy((r) => r.scenario_id),
             },
+            { title: "Campaign", options: countBy((r) => r.campaign_id ?? null) },
           ]}
           selected={selected}
           onChange={(g, v) => setSelected({ ...selected, [g]: v })}
