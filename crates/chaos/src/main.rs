@@ -128,7 +128,8 @@ struct ServeArgs {
     /// Scenario directory. Default: `[paths] scenarios`.
     #[arg(long, env = "CHAOS_SCENARIOS_DIR")]
     scenarios: Option<PathBuf>,
-    /// Copied into the scenario directory when it is missing or empty.
+    /// Its `*.toml` files are copied into the scenario directory on start when
+    /// missing there; existing files are left alone.
     /// Default: `[paths] scenarios_seed`.
     #[arg(long, env = "CHAOS_SCENARIOS_SEED")]
     scenarios_seed: Option<PathBuf>,

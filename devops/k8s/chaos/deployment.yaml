@@ -72,7 +72,8 @@ spec:
                   name: chaos-notify
                   key: CHAOS_SLACK_WEBHOOK
                   optional: true
-            # The image's scenarios/ is read-only; the UI edits a seeded copy.
+            # The image's scenarios/ is read-only; the UI edits a copy on /data that
+            # every start tops up with the files the image ships and the copy lacks.
             - name: CHAOS_SCENARIOS_DIR
               value: /data/scenarios
             - name: CHAOS_SCENARIOS_SEED

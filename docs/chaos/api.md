@@ -137,8 +137,11 @@ Pushing a scenario from the UI is `POST /scenarios/check` while editing, then
 `PUT /scenarios/{id}` to save, then `POST /runs` to run it. Saved files are ordinary
 files in `scenarios/`: commit the ones worth keeping. In a container the image's
 `scenarios/` is read-only, so serve works on a copy seeded into a volume
-(`[paths] scenarios_seed`, [config.md](config.md)); copy the TOML out of the UI to
-bring a scenario back into the repo.
+(`[paths] scenarios_seed`, [config.md](config.md)): on every start the files the volume
+does not hold yet are added, edited ones are kept, so a scenario shipped by a newer
+image appears after the next rollout and one deleted in the UI returns until it is
+deleted from the repo. Copy the TOML out of the UI to bring a scenario back into the
+repo.
 
 ## Runs
 

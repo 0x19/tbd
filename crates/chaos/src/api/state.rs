@@ -818,16 +818,13 @@ impl AppState {
     }
 }
 
-/// Copy `*.toml` from `seed` into `dir` when `dir` is missing or has no TOML.
-fn seed_scenarios(dir: &Path, seed: &Path) -> anyhow::Result<()> {
+/// Copy every `*.toml` under `seed` that `dir` does not hold yet. Additive: a file
+/// the UI edited or added on the volume is never overwritten, a scenario shipped by
+/// a newer image appears after the next start, and one deleted from the volume comes
+/// back until it is deleted from the repo.
+fn seed_scenarios(dir: &Path, seed: &Path) -> anyhow::Result<usize> {
     if seed.as_os_str().is_empty() {
-        return Ok(());
-    }
-    let has_files = std::fs::read_dir(dir).is_ok_and(|mut entries| {
-        entries.any(|e| e.is_ok_and(|e| e.path().extension().is_some_and(|x| x == "toml")))
-    });
-    if has_files {
-        return Ok(());
+        return Ok(0);
     }
     let pattern = seed.join("**/*.toml");
     let mut copied = 0;
@@ -836,14 +833,19 @@ fn seed_scenarios(dir: &Path, seed: &Path) -> anyhow::Result<()> {
             continue;
         };
         let target = dir.join(rel);
+        if target.exists() {
+            continue;
+        }
         if let Some(parent) = target.parent() {
             std::fs::create_dir_all(parent)?;
         }
         std::fs::copy(&path, &target)?;
         copied += 1;
     }
-    tracing::info!(from = %seed.display(), to = %dir.display(), copied, "seeded scenarios");
-    Ok(())
+    if copied > 0 {
+        tracing::info!(from = %seed.display(), to = %dir.display(), copied, "seeded scenarios");
+    }
+    Ok(copied)
 }
 
 fn no_stack() -> ApiError {
@@ -945,4 +947,53 @@ async fn collect_load(
             .await;
     }
     samples
+}
+
+#[cfg(test)]
+mod tests {
+    use super::seed_scenarios;
+    use std::path::Path;
+
+    fn fresh(tag: &str) -> std::path::PathBuf {
+        std::env::temp_dir().join(format!("chaos-seed-{tag}-{}", uuid::Uuid::now_v7()))
+    }
+
+    fn write(path: &Path, text: &str) {
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, text).unwrap();
+    }
+
+    #[test]
+    fn seeding_adds_missing_files_and_keeps_edited_ones() {
+        let seed = fresh("seed");
+        let dir = fresh("dir");
+        write(&seed.join("baseline.toml"), "shipped");
+        write(&seed.join("ws/burst.toml"), "shipped");
+
+        // An empty volume gets everything, nested paths included.
+        assert_eq!(seed_scenarios(&dir, &seed).unwrap(), 2);
+        assert_eq!(
+            std::fs::read_to_string(dir.join("ws/burst.toml")).unwrap(),
+            "shipped"
+        );
+
+        // The UI edits one and a newer image ships another: only the new one lands.
+        write(&dir.join("baseline.toml"), "edited");
+        write(&seed.join("ledger_fuzz.toml"), "shipped");
+        assert_eq!(seed_scenarios(&dir, &seed).unwrap(), 1);
+        assert_eq!(
+            std::fs::read_to_string(dir.join("baseline.toml")).unwrap(),
+            "edited"
+        );
+        assert_eq!(
+            std::fs::read_to_string(dir.join("ledger_fuzz.toml")).unwrap(),
+            "shipped"
+        );
+
+        // Nothing to do is not an error, and an empty seed path means no seeding.
+        assert_eq!(seed_scenarios(&dir, &seed).unwrap(), 0);
+        assert_eq!(seed_scenarios(&dir, Path::new("")).unwrap(), 0);
+        std::fs::remove_dir_all(&seed).unwrap();
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 }

@@ -55,7 +55,7 @@ TBD_ENV=production chaos config    # production
 | `serve.start_stack` | `true` | `--no-stack` | run `paths.topology` in-process on start |
 | `paths.topology` | `topologies/dev.toml` | `--topology`, `CHAOS_TOPOLOGY` | stack for `up` and `serve` |
 | `paths.scenarios` | `scenarios` | `--scenarios`, `CHAOS_SCENARIOS_DIR` | scenario files the API lists and edits |
-| `paths.scenarios_seed` | `""` | `--scenarios-seed`, `CHAOS_SCENARIOS_SEED` | copied into `paths.scenarios` on `serve` start when it is missing or empty; containers set it to the image's read-only `scenarios/` and point `paths.scenarios` at a volume |
+| `paths.scenarios_seed` | `""` | `--scenarios-seed`, `CHAOS_SCENARIOS_SEED` | on every `serve` start each `*.toml` under it that `paths.scenarios` does not hold yet is copied there, existing files are never overwritten; containers set it to the image's read-only `scenarios/` and point `paths.scenarios` at a volume |
 | `paths.results` | `.chaos/results` | `--results`, `CHAOS_RESULTS_DIR` | run records |
 | `paths.stack` | `.chaos/stack.json` | `--stack-file`, `CHAOS_STACK_FILE` | instances added to the serve stack at runtime (replicas, new instances of any kind, [api.md](api.md#stack)); re-added on start in dependency order; one that no longer starts is dropped with a warning; containers put it on `/data` |
 | `paths.schedules` | `.chaos/schedules.json` | `--schedules`, `CHAOS_SCHEDULES_FILE` | the schedules file (`chaos serve` cron jobs, [api.md](api.md#schedules)); created on first write; containers put it on the `/data` volume next to the results |

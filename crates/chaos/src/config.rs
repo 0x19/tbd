@@ -147,9 +147,10 @@ pub struct Paths {
     pub topology: PathBuf,
     /// Scenario directory.
     pub scenarios: PathBuf,
-    /// Copied into `scenarios` on `serve` start when that directory is missing
-    /// or empty. Empty string: no seeding. Lets a read-only image ship its
-    /// scenarios while the UI edits a writable copy.
+    /// On every `serve` start, each `*.toml` under this directory that `scenarios`
+    /// does not hold yet is copied there; existing files are never overwritten.
+    /// Empty string: no seeding. Lets a read-only image ship its scenarios while
+    /// the UI edits a writable copy.
     #[serde(default)]
     pub scenarios_seed: PathBuf,
     /// Run records.

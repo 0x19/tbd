@@ -22,9 +22,10 @@ start_stack = true
 topology = "topologies/dev.toml"
 # Scenario files the API lists, edits and runs.
 scenarios = "scenarios"
-# Copied into `scenarios` when `serve` starts and that directory is missing or
-# empty. Used in containers: the image's scenarios/ is read-only, the copy on
-# /data is what the UI edits. Empty: no seeding.
+# Every *.toml in here that `scenarios` does not hold yet is copied there when
+# `serve` starts; files already there are never overwritten. Used in containers:
+# the image's scenarios/ is read-only, the copy on /data is what the UI edits.
+# Empty: no seeding.
 scenarios_seed = ""
 # Where run records (scenario, load, validate) are written as JSON.
 results = ".chaos/results"
