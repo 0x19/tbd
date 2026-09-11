@@ -1,0 +1,89 @@
+# Postgres 17 with pgvector for the ledger (docs/ledger/README.md), separate
+# from the identity plane's instance. The ledger runs its own migrations; no
+# init SQL. Data on the cluster's default storage class.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: ledger-postgres
+  labels:
+    app.kubernetes.io/name: ledger-postgres
+spec:
+  serviceName: ledger-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ledger-postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ledger-postgres
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        # The Debian-based pgvector image runs postgres as uid/gid 999; the
+        # entrypoint skips its chown when not root, so the group owns the claim.
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: postgres
+          image: pgvector/pgvector:0.8.6-pg17-trixie
+          env:
+            - name: POSTGRES_USER
+              value: ledger
+            - name: POSTGRES_DB
+              value: ledger
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ledger-db
+                  key: postgres-password
+            # A subdirectory: a fresh claim holds lost+found, which initdb rejects.
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - name: postgres
+              containerPort: 5432
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "ledger", "-d", "ledger"]
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "2"
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 10Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ledger-postgres
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: ledger-postgres
+  ports:
+    - name: postgres
+      port: 5432

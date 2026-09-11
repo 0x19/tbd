@@ -5,3 +5,5 @@
 # Then run playbooks with --ask-vault-pass or --vault-password-file.
 vault_registry_username: REPLACE_ME          # GitHub user with read:packages
 vault_registry_password: REPLACE_ME          # PAT or GITHUB_TOKEN with read:packages
+vault_ledger_postgres_password: REPLACE_ME   # the ledger's Postgres (openssl rand -hex 16)
+vault_ledger_clickhouse_password: REPLACE_ME # the ledger's ClickHouse user

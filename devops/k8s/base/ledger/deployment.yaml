@@ -39,6 +39,20 @@ spec:
           envFrom:
             - configMapRef:
                 name: tbd-env
+          env:
+            # The database URLs carry credentials: from the ledger-db Secret
+            # (mise run ledger:secrets), never from the ConfigMap. Not optional:
+            # a ledger without its store must not start.
+            - name: LEDGER_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: ledger-db
+                  key: database-url
+            - name: LEDGER_CLICKHOUSE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: ledger-db
+                  key: clickhouse-url
           livenessProbe:
             grpc:
               port: 50052

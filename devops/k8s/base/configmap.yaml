@@ -15,6 +15,8 @@ data:
   HUMANS_METRICS_ADDR: 0.0.0.0:9464
   LEDGER_LISTEN_ADDR: 0.0.0.0:50052
   LEDGER_METRICS_ADDR: 0.0.0.0:9464
+  # The ledger's store; its URL is in the ledger-db Secret.
+  LEDGER_STORE_KIND: postgres
   # Through Envoy, never straight to an engine.
   PROTOCOL_ENGINE_URL: http://envoy:50051
   # OTLP/gRPC collector for traces. Alloy in the observability namespace.

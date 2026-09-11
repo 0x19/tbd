@@ -4,6 +4,7 @@ kustomize only, no Helm. Three trees:
 
 ```
 base/            engine, protocol, humans, ledger, envoy (deployments, headless services, configmap, envoy config)
+ledger-db/       the ledger's Postgres (pgvector) and ClickHouse StatefulSets; applied by `mise run ledger:deploy`
 overlays/
   local/         the k3d cluster on this machine: 2 replicas each, host-facing envoy-lb
   dev/           1 replica, debug logging, images pulled

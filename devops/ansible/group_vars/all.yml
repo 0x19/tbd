@@ -6,6 +6,10 @@ engine_image: "{{ registry }}/{{ image_org }}/tbd-engine"
 protocol_image: "{{ registry }}/{{ image_org }}/tbd-protocol"
 humans_image: "{{ registry }}/{{ image_org }}/tbd-humans"
 ledger_image: "{{ registry }}/{{ image_org }}/tbd-ledger"
+# The ledger's databases; the same pins as compose.yaml and devops/k8s/ledger-db.
+ledger_postgres_image: pgvector/pgvector:0.8.6-pg17-trixie
+clickhouse_image: clickhouse/clickhouse-server:26.8.2.7
+ledger_clickhouse_enabled: true
 
 deploy_user: tbd
 app_dir: /opt/tbd

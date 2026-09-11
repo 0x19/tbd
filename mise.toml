@@ -452,6 +452,46 @@ pnpm typecheck
 description = "Build the sign-in UI image (ghcr.io/0x19/tbd-auth-ui:dev)"
 run = "docker build -f devops/docker/Dockerfile.auth-ui $(mise run -q auth:ui-build-args) -t $IMAGE_REGISTRY/tbd-auth-ui:dev ."
 
+[tasks."ledger:secrets"]
+description = "Create the ledger-db Secret in tbd once (random passwords; never on disk). Pass URLs for managed databases: mise run ledger:secrets postgres://... http://user:pw@clickhouse:8123"
+usage = '''
+arg "[postgres_url]" help="external Postgres URL; default is the in-cluster ledger-postgres"
+arg "[clickhouse_url]" help="external ClickHouse HTTP URL with credentials; default is the in-cluster clickhouse"
+'''
+run = """
+kubectl apply -f devops/k8s/base/namespace.yaml >/dev/null
+if kubectl -n tbd get secret ledger-db >/dev/null 2>&1; then echo "ledger-db exists; leaving it"; exit 0; fi
+pg=$(openssl rand -hex 16)
+ch=$(openssl rand -hex 16)
+pg_url="${usage_postgres_url:-postgres://ledger:$pg@ledger-postgres.tbd.svc:5432/ledger?sslmode=disable}"
+ch_url="${usage_clickhouse_url:-http://ledger:$ch@clickhouse.tbd.svc:8123}"
+kubectl -n tbd create secret generic ledger-db \
+  --from-literal=postgres-password="$pg" \
+  --from-literal=clickhouse-password="$ch" \
+  --from-literal=database-url="$pg_url" \
+  --from-literal=clickhouse-url="$ch_url"
+echo "ledger-db created"
+"""
+
+[tasks."ledger:deploy"]
+description = "Apply the ledger's databases (Postgres + pgvector, ClickHouse) to the tbd namespace and wait for them"
+depends = ["ledger:secrets"]
+run = """
+kubectl apply -k devops/k8s/ledger-db
+kubectl -n tbd rollout status statefulset/ledger-postgres statefulset/clickhouse --timeout=300s
+"""
+
+[tasks."ledger:psql"]
+description = "psql on the ledger's database in the cluster (trailing args go to psql, e.g. -- -c 'select count(*) from facts')"
+run = 'kubectl -n tbd exec -it ledger-postgres-0 -- psql -U ledger -d ledger "$@"'
+
+[tasks."ledger:clickhouse"]
+description = "clickhouse-client on the cluster's ClickHouse (trailing args go to the client, e.g. -- --query 'select count() from ledger.facts_events')"
+run = """
+pw=$(kubectl -n tbd get secret ledger-db -o jsonpath='{.data.clickhouse-password}' | base64 -d)
+kubectl -n tbd exec -it clickhouse-0 -- clickhouse-client --user ledger --password "$pw" "$@"
+"""
+
 [tasks."auth:secrets"]
 description = "Create the auth-secrets Secret in the cluster once (random values; never on disk)"
 run = """
@@ -595,6 +635,7 @@ kubectl apply -k devops/k8s/observability
 kubectl apply -f devops/k8s/observability/local-services.yaml
 mise run auth:deploy
 mise run auth:envoy-secrets
+mise run ledger:deploy
 kubectl apply -k devops/k8s/overlays/local
 kubectl -n observability rollout status statefulset/victoria-metrics statefulset/victoria-logs statefulset/tempo --timeout=180s
 kubectl -n observability rollout status statefulset/pyroscope deployment/otel-collector deployment/grafana --timeout=300s
@@ -608,6 +649,7 @@ depends = ["local:edge-env"]
 run = """
 mise run local:build
 kubectl apply -k devops/k8s/overlays/local
+kubectl -n tbd rollout status statefulset/ledger-postgres statefulset/clickhouse --timeout=180s
 kubectl -n tbd rollout restart deployment/engine deployment/protocol deployment/chaos deployment/ledger deployment/humans
 kubectl -n tbd rollout status deployment/engine deployment/protocol deployment/chaos deployment/humans deployment/ledger --timeout=180s
 """

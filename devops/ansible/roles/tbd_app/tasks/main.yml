@@ -33,6 +33,14 @@
     - "{{ humans_image }}"
     - "{{ ledger_image }}"
 
+# Third-party images are pinned by name:tag in group_vars (compose runs with pull: never).
+- name: Pull the ledger's database images
+  community.docker.docker_image_pull:
+    name: "{{ item }}"
+  loop:
+    - "{{ ledger_postgres_image }}"
+    - "{{ clickhouse_image }}"
+
 - name: Bring the stack up
   community.docker.docker_compose_v2:
     project_src: "{{ app_dir }}"

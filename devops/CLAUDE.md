@@ -65,6 +65,16 @@ tags. See `docs/ci.md`.
 - Scaffolded services (`tbd new service`) register their `<NAME>_LISTEN_ADDR` and
   `<NAME>_METRICS_ADDR` everywhere themselves; `CHAOS_LEDGER_URL` points chaos at the
   ledger (through Envoy's internal listener in the cluster).
+- The ledger owns two databases, `k8s/ledger-db/` (Postgres with pgvector, ClickHouse),
+  in the `tbd` namespace, applied by `mise run ledger:deploy` after `ledger:secrets`
+  created the `ledger-db` Secret (passwords and both URLs; never in a file). The ledger
+  Deployment reads `LEDGER_DATABASE_URL` and `LEDGER_CLICKHOUSE_URL` from that Secret,
+  `LEDGER_STORE_KIND` from the ConfigMap; compose and the ansible template carry the
+  same three (`LEDGER_POSTGRES_PASSWORD`/`LEDGER_CLICKHOUSE_PASSWORD` in `.env`, the
+  vault on hosts). Databases are the ledger's, not services: they are dialled directly,
+  the Envoy rule does not apply. Prod brings managed instances and passes their URLs to
+  `ledger:secrets`. The image pins live in three places, `compose.yaml`,
+  `k8s/ledger-db/` and `ansible/group_vars/all.yml`: bump all or none.
 - `edge/` is the only thing that faces the internet from a home/office deployment. Caddy
   terminates TLS and forwards to Envoy's edge on the host port (18080 for the local
   cluster). gRPC is matched on `Content-Type: application/grpc*` and gets the h2c

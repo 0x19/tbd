@@ -3,6 +3,7 @@ kind: Kustomization
 resources:
   - ../../base
   - ../../chaos
+  - ../../ledger-db
 images:
   - name: ghcr.io/0x19/tbd-engine
     newTag: dev

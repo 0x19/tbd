@@ -7,6 +7,7 @@ kind: Kustomization
 resources:
   - ../../base
   - ../../chaos
+  - ../../ledger-db
   - envoy-lb.yaml
 images:
   - name: ghcr.io/0x19/tbd-engine

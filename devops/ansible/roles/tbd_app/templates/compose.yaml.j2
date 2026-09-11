@@ -36,9 +36,51 @@ services:
       TBD_ENV: production
       LEDGER_LISTEN_ADDR: 0.0.0.0:{{ ledger_port }}
       LEDGER_METRICS_ADDR: 0.0.0.0:9464
+      LEDGER_STORE_KIND: postgres
+      LEDGER_DATABASE_URL: "postgres://ledger:{{ vault_ledger_postgres_password }}@ledger-postgres:5432/ledger?sslmode=disable"
+      LEDGER_CLICKHOUSE_URL: "{{ ('http://ledger:' ~ vault_ledger_clickhouse_password ~ '@clickhouse:8123') if ledger_clickhouse_enabled | default(true) else '' }}"
       OTEL_EXPORTER_OTLP_ENDPOINT: "{{ otlp_endpoint | default('') }}"
       PYROSCOPE_SERVER_ADDRESS: "{{ pyroscope_server | default('') }}"
+    depends_on:
+      ledger-postgres:
+        condition: service_healthy
+{% if ledger_clickhouse_enabled | default(true) %}
+      clickhouse:
+        condition: service_healthy
+{% endif %}
     restart: unless-stopped
+  # The ledger's own databases (devops/k8s/ledger-db). Postgres is required;
+  # ClickHouse (analytics) can be turned off per host with ledger_clickhouse_enabled: false.
+  ledger-postgres:
+    image: {{ ledger_postgres_image }}
+    environment:
+      POSTGRES_USER: ledger
+      POSTGRES_DB: ledger
+      POSTGRES_PASSWORD: "{{ vault_ledger_postgres_password }}"
+    volumes:
+      - ledger-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ledger -d ledger"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+{% if ledger_clickhouse_enabled | default(true) %}
+  clickhouse:
+    image: {{ clickhouse_image }}
+    environment:
+      CLICKHOUSE_USER: ledger
+      CLICKHOUSE_DB: ledger
+      CLICKHOUSE_PASSWORD: "{{ vault_ledger_clickhouse_password }}"
+    volumes:
+      - clickhouse:/var/lib/clickhouse
+    healthcheck:
+      test: ["CMD-SHELL", "clickhouse-client --user ledger --password \"$$CLICKHOUSE_PASSWORD\" --query 'SELECT 1'"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+{% endif %}
   humans:
     image: {{ humans_image }}:{{ image_tag }}
     environment:
@@ -87,6 +129,10 @@ services:
       - "{{ chaos_port | default(7700) }}:7700"
     restart: unless-stopped
 
-volumes:
-  chaos-results:
 {% endif %}
+
+# Named volumes; an unused one costs nothing.
+volumes:
+  ledger-postgres:
+  clickhouse:
+  chaos-results:
