@@ -91,8 +91,40 @@ server: a container each test starts through Docker, or the server named by
 what CI's `services:` block provides. `pg::cascade_leaves_zero_rows_except_the_erasure`
 is the proof the design asks for.
 
+## Outbox, analytics, sweeper, readiness
+
+Every write leaves an event in the outbox in the same transaction: `fact.recorded`,
+`fact.retracted` (carrying the tombstone) and, from the erasure record, `subject.erased`.
+The payload is clear columns only (`path`, `source`, `tombstone`, `confidence`,
+`counterparty_id`, `observed_at`, `recorded_at`, `expires_at`, `consent`, `stub`); a
+value or an origin never leaves the ledger this way, and a test asserts it.
+
+The **drainer** (`[analytics]`) leases a batch (`batch`, for `lease`), hands it to the
+sink, acks it, and sleeps `period` when the outbox is empty. At least once: a batch the
+sink refuses stays leased and is shipped again after the lease; consumers dedupe on
+`event_id`. Two replicas never share rows. With `LEDGER_CLICKHOUSE_URL` set the sink is
+ClickHouse: on start it creates `ledger.facts_events` (`MergeTree`, ordered by
+`(subject_id, recorded_at, event_id)`, partitioned by month), fact events are one
+batched insert, and a `subject.erased` event first runs a lightweight
+`DELETE ... WHERE subject_id = ?` (waited on) and then inserts the erased event row, so
+the deletion can be verified afterwards (`SELECT count() ... SETTINGS
+apply_deleted_mask = 0` after `OPTIMIZE ... FINAL` is what the test does). With the URL
+empty, events are counted and dropped: analytics off, nothing else changes.
+
+The **sweeper** (`[erasure]`) runs every `sweep_interval`: it executes the erasures whose
+`grace` has passed (`batch` per pass) and purges idempotency keys older than
+`[idempotency] ttl`. Safe on any number of replicas.
+
+**Readiness** (`[health]`) follows the store: one probe before the listener accepts,
+then one every `probe_interval`; a probe slower than `probe_timeout` or failing marks
+the gRPC health status NOT_SERVING (the readiness gate in Kubernetes) and
+`tbd_ledger_store_up` 0. The memory store is always up.
+
+Metrics: `tbd_ledger_store_up`, `tbd_ledger_outbox_batches_total{status}`,
+`tbd_ledger_outbox_events_total{kind}`, `tbd_ledger_erasures_executed_total`,
+`tbd_db_pool_connections{state}` ([docs/observability/metrics.md](../observability/metrics.md)).
+
 ## What comes next
 
-The outbox drainer into ClickHouse, the erasure sweeper and readiness on the store;
-then `Append`, `Current`, `History`, `Retract`, `Erase` and `Restore` over gRPC; then
-the dedicated Postgres and ClickHouse in the cluster; then the `humans` service on top.
+`Append`, `Current`, `History`, `Retract`, `Erase` and `Restore` over gRPC; then the
+dedicated Postgres and ClickHouse in the cluster; then the `humans` service on top.

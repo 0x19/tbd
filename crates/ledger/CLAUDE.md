@@ -25,8 +25,14 @@ reports as `diverged`. The contract is `docs/ledger/README.md`.
   LF by `.gitattributes` because the checksum is over the bytes). `store/sql.rs`
   translates path patterns into `= any` / `like any` with `\ % _` escaped, checked
   against `PathPattern::matches` by a property test.
+- `outbox.rs`: `Drainer` (claim → publish → ack, at least once) over a `Publisher`;
+  `RecordingPublisher` when analytics is off and in tests. `clickhouse.rs`: the
+  ClickHouse sink (`ledger.facts_events`, DDL on start, lightweight DELETE on
+  `subject.erased`). `sweeper.rs`: due erasures and idempotency purge on a timer.
+  `health.rs`: the readiness probe loop that drives the gRPC health status.
 - `lib.rs`: `serve`, `serve_on`, `serve_with` (the store comes from `[store]`),
-  `serve_store` (an explicit store). `config.rs`: `[store]`, `[analytics]`, `[erasure]`,
+  `serve_store` (an explicit store); it spawns the health, sweeper, drainer and
+  pool-gauge tasks on a `CancellationToken` tied to the shutdown future. `config.rs`: `[store]`, `[analytics]`, `[erasure]`,
   `[idempotency]`, `[health]`; `Config::in_memory(addr)` for embedders;
   `Config::validate()` after flags. The URLs (`LEDGER_DATABASE_URL`,
   `LEDGER_CLICKHOUSE_URL`) are environment only and never serialised.
@@ -52,6 +58,9 @@ through the `conformance_suite!` macro: `memory::*` in `tests/it/main.rs`, `pg::
 `tests/it/pg.rs` against a real Postgres (a `pgvector` container each test starts
 through `testcontainers`, or the admin URL in `LEDGER_TEST_DATABASE_URL`, which is what
 CI's services block sets; a database per test). Never enumerate a backend's behaviour
-outside the suite: a case added there runs on every store. `main.rs` boots the gRPC
-server on port 0 through `support.rs` with the shipped `configs/ledger` and env `local`.
-Docker-less machines: `mise run test` skips `pg::`/`clickhouse::` with a warning.
+outside the suite: a case added there runs on every store. `clickhouse::*` drives the
+sink against a real ClickHouse the same way (`LEDGER_TEST_CLICKHOUSE_URL` or a
+container; ClickHouse logs to files, so readiness is the first DDL call succeeding).
+`main.rs` boots the gRPC server on port 0 through `support.rs` with the shipped
+`configs/ledger` and env `local`. Docker-less machines: `mise run test` skips
+`pg::`/`clickhouse::` with a warning.

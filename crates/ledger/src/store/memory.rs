@@ -216,6 +216,10 @@ impl Store for MemoryStore {
         StoreKind::Memory
     }
 
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
     async fn ping(&self) -> Result<(), StoreError> {
         Ok(())
     }

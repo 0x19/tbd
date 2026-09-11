@@ -7,11 +7,17 @@
 //! and from the chaos tool with fault injection and counters attached;
 //! [`serve_store`] takes an explicit store for embedders that build their own.
 
+pub mod clickhouse;
 pub mod config;
+pub mod health;
+pub mod outbox;
 mod service;
 pub mod store;
+pub mod sweeper;
 
-use std::{net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
+
+use tokio_util::sync::CancellationToken;
 
 use tbd_proto::ledger::v1::ledger_service_server::LedgerServiceServer;
 use tokio::net::TcpListener;
@@ -127,16 +133,65 @@ pub async fn serve_store(
     })?;
 
     let (health_reporter, health_service) = tonic_health::server::health_reporter();
-    health_reporter
-        .set_serving::<LedgerServiceServer<Ledger>>()
-        .await;
+    // Readiness follows the store: one probe before accepting, then a loop.
+    let up = health::probe_once(&store, config.health.probe_timeout)
+        .await
+        .map_err(|error| {
+            tracing::warn!(%error, store = %store.kind(), "store unreachable at start; not serving until it answers");
+        })
+        .is_ok();
+    health::report(&health_reporter, up).await;
 
     let reflection = tonic_reflection::server::Builder::configure()
         .register_encoded_file_descriptor_set(tbd_proto::ledger::v1::DESCRIPTOR_SET)
         .register_encoded_file_descriptor_set(tonic_health::pb::FILE_DESCRIPTOR_SET)
         .build_v1()?;
 
-    let service = Ledger::new(config.ping.clone(), runtime, store);
+    let service = Ledger::new(config.ping.clone(), runtime, Arc::clone(&store));
+
+    // Background work stops with the server: the shutdown future cancels the
+    // token, the tasks watch it, and the server waits for them at the end.
+    let cancel = CancellationToken::new();
+    let mut tasks = tokio::task::JoinSet::new();
+    tasks.spawn(health::run(
+        Arc::clone(&store),
+        health_reporter,
+        config.health.probe_interval,
+        config.health.probe_timeout,
+        up,
+        cancel.clone(),
+    ));
+    tasks.spawn(
+        sweeper::Sweeper::new(
+            Arc::clone(&store),
+            config.erasure.grace,
+            config.erasure.batch,
+            config.idempotency.ttl,
+            config.erasure.sweep_interval,
+        )
+        .run(cancel.clone()),
+    );
+    let publisher = build_publisher(&config).await?;
+    tasks.spawn(
+        outbox::Drainer::new(
+            Arc::clone(&store),
+            publisher,
+            config.analytics.batch,
+            config.analytics.period,
+            config.analytics.lease,
+        )
+        .run(cancel.clone()),
+    );
+    if let Some(pg) = store_as_pg(&store) {
+        tasks.spawn(pool_gauges(pg, cancel.clone()));
+    }
+    let server_shutdown = {
+        let cancel = cancel.clone();
+        async move {
+            shutdown.await;
+            cancel.cancel();
+        }
+    };
 
     tracing::info!(%addr, version = tbd_common::VERSION, store = %service.store_kind(), "ledger listening");
 
@@ -150,9 +205,57 @@ pub async fn serve_store(
         .add_service(health_service)
         .add_service(reflection)
         .add_service(LedgerServiceServer::new(service))
-        .serve_with_incoming_shutdown(incoming, shutdown)
+        .serve_with_incoming_shutdown(incoming, server_shutdown)
         .await?;
 
+    cancel.cancel();
+    while tasks.join_next().await.is_some() {}
     tracing::info!("ledger stopped");
     Ok(())
+}
+
+/// The outbox sink: `ClickHouse` when `[analytics] clickhouse_url` is set,
+/// otherwise a recorder that counts and drops (analytics off).
+///
+/// # Errors
+/// The `ClickHouse` URL does not parse.
+async fn build_publisher(config: &Config) -> Result<Arc<dyn outbox::Publisher>, ServeError> {
+    if config.analytics.clickhouse_url.is_empty() {
+        tracing::info!("analytics off: outbox events are counted and dropped");
+        return Ok(Arc::new(outbox::RecordingPublisher::default()));
+    }
+    let publisher = clickhouse::ClickHousePublisher::new(&config.analytics.clickhouse_url)
+        .map_err(|e| ServeError::Store(StoreError::Internal(e.to_string())))?;
+    match publisher.ensure_schema().await {
+        Ok(()) => tracing::info!(
+            table = clickhouse::TABLE,
+            "analytics on: outbox drains into ClickHouse"
+        ),
+        Err(error) => {
+            tracing::warn!(%error, "ClickHouse unreachable at start; the drainer retries");
+        }
+    }
+    Ok(Arc::new(publisher))
+}
+
+/// The Postgres store behind the trait object, if that is what it is.
+fn store_as_pg(store: &Arc<dyn Store>) -> Option<PgStore> {
+    (store.kind() == StoreKind::Postgres)
+        .then(|| store.as_any().downcast_ref::<PgStore>().cloned())
+        .flatten()
+}
+
+/// Sample the pool every five seconds, like the process collector does.
+async fn pool_gauges(pg: PgStore, cancel: CancellationToken) {
+    loop {
+        let (idle, in_use) = pg.pool_counts();
+        metrics::gauge!(tbd_common::metrics::names::DB_POOL_CONNECTIONS, "state" => "idle")
+            .set(f64::from(idle));
+        metrics::gauge!(tbd_common::metrics::names::DB_POOL_CONNECTIONS, "state" => "in_use")
+            .set(f64::from(in_use));
+        tokio::select! {
+            () = cancel.cancelled() => break,
+            () = tokio::time::sleep(Duration::from_secs(5)) => {}
+        }
+    }
 }

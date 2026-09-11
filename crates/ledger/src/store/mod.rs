@@ -682,6 +682,10 @@ pub trait Store: Send + Sync + 'static {
     /// Which backend this is.
     fn kind(&self) -> StoreKind;
 
+    /// The concrete store, for embedders that need backend-specific handles
+    /// (the pool gauges).
+    fn as_any(&self) -> &dyn std::any::Any;
+
     /// A round trip to the backend.
     async fn ping(&self) -> Result<(), StoreError>;
 
@@ -738,6 +742,9 @@ pub trait Store: Send + Sync + 'static {
 impl<T: Store + ?Sized> Store for Arc<T> {
     fn kind(&self) -> StoreKind {
         (**self).kind()
+    }
+    fn as_any(&self) -> &dyn std::any::Any {
+        (**self).as_any()
     }
     async fn ping(&self) -> Result<(), StoreError> {
         (**self).ping().await

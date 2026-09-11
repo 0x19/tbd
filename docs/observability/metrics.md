@@ -21,6 +21,11 @@ backend is visible instead of clipped.
 | `tbd_engine_client_duration_seconds` | histogram | `route` | same moment |
 | `tbd_faults_injected_total` | counter | `kind` | the fault handle rejects a request (chaos) |
 | `tbd_build_info` | gauge | `version` | once at start, always 1; join on it to label by version |
+| `tbd_ledger_store_up` | gauge | | the ledger's readiness probe of its store: 1 while it answers within `[health] probe_timeout`; the gRPC health status follows it |
+| `tbd_ledger_outbox_batches_total` | counter | `status` (`ok`, `error`) | the outbox drainer hands a batch to the analytics sink; `error` batches stay leased and are retried |
+| `tbd_ledger_outbox_events_total` | counter | `kind` (`fact.recorded`, `fact.retracted`, `subject.erased`) | events acked after the sink took them |
+| `tbd_ledger_erasures_executed_total` | counter | | the sweeper executed an erasure cascade |
+| `tbd_db_pool_connections` | gauge | `state` (`idle`, `in_use`) | sampled every five seconds from the ledger's Postgres pool |
 | `process_cpu_seconds_total`, `process_resident_memory_bytes`, `process_virtual_memory_bytes`, `process_open_fds`, `process_max_fds`, `process_threads`, `process_start_time_seconds` | mixed | | every 5 s by `metrics-process` |
 
 `route` values: axum's matched pattern for HTTP (`/v1/evaluate`, `/v1/subjects/{subject_id}/events`),

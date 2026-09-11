@@ -504,6 +504,10 @@ impl Store for PgStore {
         StoreKind::Postgres
     }
 
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
     async fn ping(&self) -> Result<(), StoreError> {
         let mut conn = self.pool.acquire().await.map_err(map_err)?;
         sqlx::Connection::ping(&mut *conn).await.map_err(map_err)

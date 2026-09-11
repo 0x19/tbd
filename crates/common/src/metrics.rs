@@ -29,6 +29,16 @@ pub mod names {
     pub const FAULTS_INJECTED_TOTAL: &str = "tbd_faults_injected_total";
     /// Gauge, always 1. Labels `version`.
     pub const BUILD_INFO: &str = "tbd_build_info";
+    /// Gauge: 1 while the ledger's store answers its readiness probe.
+    pub const LEDGER_STORE_UP: &str = "tbd_ledger_store_up";
+    /// Counter: outbox batches handed to the sink. Label `status` (`ok`, `error`).
+    pub const LEDGER_OUTBOX_BATCHES_TOTAL: &str = "tbd_ledger_outbox_batches_total";
+    /// Counter: outbox events shipped. Label `kind`.
+    pub const LEDGER_OUTBOX_EVENTS_TOTAL: &str = "tbd_ledger_outbox_events_total";
+    /// Counter: erasures the sweeper executed.
+    pub const LEDGER_ERASURES_EXECUTED_TOTAL: &str = "tbd_ledger_erasures_executed_total";
+    /// Gauge: pooled database connections. Label `state` (`idle`, `in_use`).
+    pub const DB_POOL_CONNECTIONS: &str = "tbd_db_pool_connections";
 }
 
 /// Errors from installing the exporter.
@@ -110,6 +120,26 @@ fn describe() {
         "Faults injected through the fault handle."
     );
     describe_gauge!(names::BUILD_INFO, "Always 1; carries the version label.");
+    describe_gauge!(
+        names::LEDGER_STORE_UP,
+        "1 while the ledger's store answers its readiness probe."
+    );
+    describe_counter!(
+        names::LEDGER_OUTBOX_BATCHES_TOTAL,
+        "Outbox batches handed to the analytics sink, by status."
+    );
+    describe_counter!(
+        names::LEDGER_OUTBOX_EVENTS_TOTAL,
+        "Outbox events shipped to the analytics sink, by kind."
+    );
+    describe_counter!(
+        names::LEDGER_ERASURES_EXECUTED_TOTAL,
+        "Erasures the ledger's sweeper executed."
+    );
+    describe_gauge!(
+        names::DB_POOL_CONNECTIONS,
+        "Pooled database connections, by state."
+    );
 }
 
 /// Records one request's outcome and duration on drop, and keeps the
