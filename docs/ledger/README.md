@@ -1,35 +1,59 @@
 # ledger
 
 The append-only facts store the humans plane is built on
-([docs/design/humans/000](../design/humans/000-facts-ledger.md)). The store is built:
-a `Store` trait with a Postgres backend (the source of truth, embedded sqlx migrations)
-and an in-memory backend (tests, chaos stacks, host runs without a database), both
-proven by one conformance suite. The gRPC surface still answers only `Ping`, which says
-`stub` on the wire; the facts RPCs land next, encryption
-([005](../design/humans/005-encryption.md)) after that.
+([docs/design/humans/000](../design/humans/000-facts-ledger.md)): a `Store` trait with a
+Postgres backend (the source of truth, embedded sqlx migrations) and an in-memory
+backend (tests, chaos stacks, host runs without a database), both proven by one
+conformance suite; an outbox drained into ClickHouse; a sweeper for erasures; and a
+thin gRPC surface over it all. Nothing here is a stub any more. Encryption
+([005](../design/humans/005-encryption.md)) is the next phase; the `humans` service
+embeds this crate and owns the JSON surface and the path registry.
 
 | Piece | Where |
 |---|---|
 | Crate, scaffolded by `tbd new service ledger` | `crates/ledger` ([CLAUDE.md](../../crates/ledger/CLAUDE.md)) |
-| Contract | `proto/tbd/ledger/v1/ledger.proto`: `LedgerService.Ping` |
+| Contract | `proto/tbd/ledger/v1/ledger.proto`: `LedgerService` with `Ping`, `Append`, `Current`, `History`, `Retract`, `Erase`, `Restore` |
 | Config layers | `configs/ledger/{base,local,dev,production}.toml`; `ledger config` prints the merged result |
 | Deployment | `devops/k8s/base/ledger`, port 50052, metrics 9464; reached through Envoy's internal listener (`http://envoy:50051`, matched by service name); no edge route |
+| Databases | `devops/k8s/ledger-db`: Postgres 17 + pgvector and ClickHouse, applied by `mise run ledger:deploy` (part of `local:deploy`) after `ledger:secrets` made the `ledger-db` Secret; `ledger:psql` and `ledger:clickhouse` for a shell; compose runs the same two on host ports 15432 and 18123 |
 | Chaos | the `ledger` kind (`crates/chaos/src/kinds/ledger.rs`): `[stack.ledgers.X]` in topologies and scenarios, `chaos validate --target ledger=URL` (`CHAOS_LEDGER_URL`), the `grpc_ledger_ping` check, add and clone in the admin UI |
 
-## The contract today
+## The gRPC contract
 
-```proto
-rpc Ping(PingRequest) returns (PingResponse);
-message PingResponse { string message = 1; string version = 2; bool stub = 3; }
-```
+`proto/tbd/ledger/v1/ledger.proto`. The subject id on the wire is the ledger's opaque
+uuid (the `humans` service maps `sub` to it; nothing here knows a person). Every RPC
+runs through fault injection first, then the store; store errors map to codes as in
+the table below. `scopes` is required and non-empty on every read: the gRPC surface
+never performs an unfiltered read.
 
-`stub` is `true` and stays so until a real RPC lands. A caller may rely on that field
-the way it relies on `stub` in the engine's scores: a placeholder never looks like a
-result.
+| RPC | Request | Answer |
+|---|---|---|
+| `Ping` | `message` | echo, `version`, `store` (`postgres` / `memory`), `stub: false` |
+| `Append` | `subject_id`, `path`, `source`, `value` and `origin` (envelopes: `version` 0 = plaintext JSON bytes), `confidence?`, `counterparty_id?`, `observed_at`, `expires_at?`, `consent[]`, `stub`, `idempotency_key?` | the `Fact` as held (`id`, `recorded_at` minted by the store) and `replayed` when the key matched an earlier append |
+| `Current` | `subject_id`, `paths[]` (`traits.warmth` or `traits.*`), `sources[]`, `scopes[]`, `cursor`, `limit` (0 = 100, max 1000) | the latest valued, unexpired fact per `(path, source)`, ordered by `(recorded_at, id)`; `next` cursor when there is more |
+| `History` | the same plus `at` | everything still held, tombstones (no `value`) included; `at` cuts at that instant |
+| `Retract` | `subject_id`, `path`, `source`, `origin` | the tombstone |
+| `Erase` | `subject_id` | `requested_at`, `executes_after` (plus the grace window); idempotent within the window |
+| `Restore` | `subject_id` | empty; `NOT_FOUND` once executed |
+
+| Store outcome | gRPC code |
+|---|---|
+| not found (subject, fact, counterparty) | `NOT_FOUND` |
+| erased (pending or executed) | `FAILED_PRECONDITION` |
+| invalid (path shape, confidence, consent, envelope, cursor, limit, ids) | `INVALID_ARGUMENT` |
+| the registry refuses the source on the path | `PERMISSION_DENIED` |
+| idempotency key reused with other content, or its fact retracted since | `ABORTED` |
+| the store unreachable | `UNAVAILABLE` |
+| injected faults | `UNAVAILABLE`, `INTERNAL`, `RESOURCE_EXHAUSTED`, `DEADLINE_EXCEEDED` |
 
 ```sh
-mise run run:ledger                                    # on 127.0.0.1:50052 with configs/ledger local
+mise run run:ledger                                    # on 127.0.0.1:50052 with configs/ledger local (LEDGER_STORE_KIND=memory without a database)
 grpcurl -plaintext -d '{"message":"hi"}' localhost:50052 tbd.ledger.v1.LedgerService/Ping
+S=$(uuidgen | tr A-F a-f)
+grpcurl -plaintext -d "{\"subject_id\":\"$S\",\"path\":\"profile.name\",\"source\":\"SOURCE_DECLARED\",
+  \"value\":{\"version\":0,\"bytes\":\"$(printf '"Ada"' | base64)\"},\"origin\":{\"version\":0,\"bytes\":\"$(printf '{}' | base64)\"},
+  \"observed_at\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"consent\":[\"self\"]}" localhost:50052 tbd.ledger.v1.LedgerService/Append
+grpcurl -plaintext -d "{\"subject_id\":\"$S\",\"scopes\":[\"self\"]}" localhost:50052 tbd.ledger.v1.LedgerService/Current
 # through the cluster's internal listener (reflection there is the engine's, so pass the proto)
 grpcurl -plaintext -import-path proto -proto tbd/ledger/v1/ledger.proto \
   -d '{"message":"hi"}' localhost:15051 tbd.ledger.v1.LedgerService/Ping
@@ -124,7 +148,33 @@ Metrics: `tbd_ledger_store_up`, `tbd_ledger_outbox_batches_total{status}`,
 `tbd_ledger_outbox_events_total{kind}`, `tbd_ledger_erasures_executed_total`,
 `tbd_db_pool_connections{state}` ([docs/observability/metrics.md](../observability/metrics.md)).
 
+## Deployment
+
+In the cluster the ledger pod gets `LEDGER_STORE_KIND=postgres` from the ConfigMap and
+both URLs from the `ledger-db` Secret, which `mise run ledger:secrets` creates once with
+random passwords (pass a Postgres URL and a ClickHouse URL to use managed instances, as
+production does; the prod overlay carries no databases). `ledger:deploy` applies the
+StatefulSets and waits for them; `local:deploy` and `local:restart` include that, so a
+fresh cluster comes up with its databases before the ledger. Readiness follows the
+store: scale `ledger-postgres` to zero and the ledger pod turns NOT READY within a probe
+interval, and back. Migrations run when the ledger starts (`migrate_on_start`, on by
+default) under an advisory lock, so two replicas cannot race; production sets it off
+and runs `ledger migrate` before the rollout. Compose runs the same two databases; a
+host run without any (`mise run run:ledger`) sets `LEDGER_STORE_KIND=memory` in `.env`.
+
+Lines for `.env.example` (the file is edited by hand):
+
+```
+LEDGER_STORE_KIND=memory                     # postgres in compose and the cluster
+#LEDGER_DATABASE_URL=postgres://ledger:local-ledger@127.0.0.1:15432/ledger?sslmode=disable
+#LEDGER_CLICKHOUSE_URL=http://ledger:local-ledger@127.0.0.1:18123
+LEDGER_POSTGRES_PASSWORD=local-ledger        # compose only
+LEDGER_CLICKHOUSE_PASSWORD=local-ledger      # compose only
+#LEDGER_TEST_DATABASE_URL=                   # tests: an admin URL instead of Docker
+#LEDGER_TEST_CLICKHOUSE_URL=
+```
+
 ## What comes next
 
-`Append`, `Current`, `History`, `Retract`, `Erase` and `Restore` over gRPC; then the
-dedicated Postgres and ClickHouse in the cluster; then the `humans` service on top.
+Chaos load, lifecycle and fuzz operations against the ledger; then the `humans`
+service on top, and encryption.

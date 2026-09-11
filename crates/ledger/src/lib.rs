@@ -147,7 +147,12 @@ pub async fn serve_store(
         .register_encoded_file_descriptor_set(tonic_health::pb::FILE_DESCRIPTOR_SET)
         .build_v1()?;
 
-    let service = Ledger::new(config.ping.clone(), runtime, Arc::clone(&store));
+    let service = Ledger::new(
+        config.ping.clone(),
+        config.erasure.clone(),
+        runtime,
+        Arc::clone(&store),
+    );
 
     // Background work stops with the server: the shutdown future cancels the
     // token, the tasks watch it, and the server waits for them at the end.

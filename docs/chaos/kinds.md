@@ -26,5 +26,5 @@ declared and what derives from it: [extending.md](extending.md#add-a-service-kin
 | `ws_echo` | ws | `protocol` | `/ws` echoes a text frame as a `data` message |
 | `grpc_protocol_health` | grpc | `protocol` | the overall health check answers |
 | `grpc_protocol_ping` | grpc | `protocol` | `Ping` echoes the message |
-| `grpc_ledger_ping` | grpc | `ledger` | `Ping` echoes the message and is labelled a stub |
+| `grpc_ledger_ping` | grpc | `ledger` | `Ping` echoes the message and names the store behind it |
 | `grpc_humans_ping` | grpc | `humans` | `Ping` echoes the message and is labelled a stub |

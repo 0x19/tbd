@@ -36,7 +36,7 @@ pub static KIND: Kind = Kind {
     checks: &[Check {
         name: "grpc_ledger_ping",
         surface: "grpc",
-        doc: "`Ping` echoes the message and is labelled a stub",
+        doc: "`Ping` echoes the message and names the store behind it",
         run: |e| Box::pin(grpc_ledger_ping(e)),
     }],
 };
@@ -145,7 +145,10 @@ async fn grpc_ledger_ping(e: Ep) -> Result<String, String> {
         .map_err(|e| e.to_string())?
         .into_inner();
     if r.message == "validate" {
-        Ok(format!("version={} stub={}", r.version, r.stub))
+        Ok(format!(
+            "version={} store={} stub={}",
+            r.version, r.store, r.stub
+        ))
     } else {
         Err(format!("wrong echo {r:?}"))
     }

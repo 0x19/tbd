@@ -36,9 +36,11 @@ reports as `diverged`. The contract is `docs/ledger/README.md`.
   `[idempotency]`, `[health]`; `Config::in_memory(addr)` for embedders;
   `Config::validate()` after flags. The URLs (`LEDGER_DATABASE_URL`,
   `LEDGER_CLICKHOUSE_URL`) are environment only and never serialised.
-- `service.rs`: the `LedgerService` impl on `Ledger`. Every RPC starts with `admit()`:
-  count the request, start the `RequestTimer`, apply the fault handle, map a `Fault`
-  to a gRPC status. `main.rs`: the only file that prints (the `config` subcommand).
+- `service.rs`: the `LedgerService` impl on `Ledger`, a thin adapter: every RPC runs
+  through `call()`, which does `admit()` (count the request, start the `RequestTimer`,
+  apply the fault handle) and maps every `StoreError` to a status in one place
+  (`status_of`). Wire types are translated, nothing is decided here; `scopes` must be
+  non-empty on the wire. `main.rs`: the only file that prints (`config`, `migrate`).
 
 Invariants:
 - Retraction physically deletes the valued rows and appends a tombstone in the same
@@ -49,9 +51,9 @@ Invariants:
 - `recorded_at` is minted by the store after the subject lock and is strictly
   increasing per subject; `(recorded_at, id)` is the order and the cursor.
 - The outbox payload carries clear columns only, never a value or an origin.
-- `PingResponse.stub` stays `true` until the facts RPCs land; `TCP_NODELAY` is set on
-  `TcpIncoming`, not the builder; callers reach this service through Envoy's internal
-  listener (`http://envoy:50051`, matched by service name).
+- Nothing is a stub: `PingResponse.stub` is `false` and `store` names the backend.
+  `TCP_NODELAY` is set on `TcpIncoming`, not the builder; callers reach this service
+  through Envoy's internal listener (`http://envoy:50051`, matched by service name).
 
 Tests: `tests/it/conformance.rs` is the store contract, generic over the backend, run
 through the `conformance_suite!` macro: `memory::*` in `tests/it/main.rs`, `pg::*` in

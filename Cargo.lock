@@ -4626,6 +4626,7 @@ dependencies = [
  "humantime-serde",
  "metrics",
  "proptest",
+ "prost-types",
  "serde",
  "serde_json",
  "sha2 0.10.9",

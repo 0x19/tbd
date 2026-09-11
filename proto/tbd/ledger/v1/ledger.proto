@@ -2,12 +2,32 @@ syntax = "proto3";
 
 package tbd.ledger.v1;
 
-// The ledger service. Ping is the liveness RPC every service carries; real
-// RPCs are added beside it.
+import "google/protobuf/timestamp.proto";
+
+// The facts ledger: append-only facts about an opaque subject, with
+// provenance, tombstones and erasure (docs/ledger/README.md). The subject id
+// is the ledger's own opaque uuid, never a person identifier.
 service LedgerService {
   // Echo a message. Proves configuration, telemetry and fault injection reach
-  // an RPC.
+  // an RPC; reports which store backs the service.
   rpc Ping(PingRequest) returns (PingResponse);
+  // Append one fact. The subject is created on its first write. A matching
+  // idempotency_key replays the earlier fact (`replayed = true`); reused with
+  // different content it is ABORTED.
+  rpc Append(AppendRequest) returns (AppendResponse);
+  // The latest valued, unexpired fact per (path, source), under the given
+  // scopes. Pages by cursor.
+  rpc Current(CurrentRequest) returns (CurrentResponse);
+  // Everything the ledger still holds, tombstones included; `at` cuts history
+  // at an instant (a retracted value is absent from every cut).
+  rpc History(HistoryRequest) returns (HistoryResponse);
+  // Delete every valued fact of (path, source) and append a tombstone.
+  rpc Retract(RetractRequest) returns (RetractResponse);
+  // Request erasure: every read and write answers FAILED_PRECONDITION from
+  // now; the cascade runs after the grace window.
+  rpc Erase(EraseRequest) returns (EraseResponse);
+  // Cancel a pending erasure and reopen the subject. NOT_FOUND once executed.
+  rpc Restore(RestoreRequest) returns (RestoreResponse);
 }
 
 message PingRequest {
@@ -20,4 +40,121 @@ message PingResponse {
   string version = 2;
   // True while the service is a placeholder with nothing real behind it.
   bool stub = 3;
+  // Which store answers: `postgres` or `memory`.
+  string store = 4;
 }
+
+// Who or what produced a fact (docs/design/humans/001-sources.md).
+enum Source {
+  SOURCE_UNSPECIFIED = 0;
+  SOURCE_VERIFIED = 1;
+  SOURCE_DECLARED = 2;
+  SOURCE_INFERRED = 3;
+  SOURCE_SYMBOLIC = 4;
+  SOURCE_OBSERVED = 5;
+}
+
+// Bytes in an envelope format. Version 0 is labelled plaintext JSON; the
+// encryption phase adds versions, not fields.
+message Envelope {
+  uint32 version = 1;
+  bytes bytes = 2;
+}
+
+// A fact as the ledger holds it.
+message Fact {
+  string subject_id = 1;
+  int64 id = 2;
+  string path = 3;
+  Source source = 4;
+  // Absent on a tombstone.
+  Envelope value = 5;
+  Envelope origin = 6;
+  optional float confidence = 7;
+  optional string counterparty_id = 8;
+  google.protobuf.Timestamp observed_at = 9;
+  google.protobuf.Timestamp recorded_at = 10;
+  google.protobuf.Timestamp expires_at = 11;
+  repeated string consent = 12;
+  bool stub = 13;
+}
+
+message AppendRequest {
+  string subject_id = 1;
+  string path = 2;
+  Source source = 3;
+  Envelope value = 4;
+  Envelope origin = 5;
+  optional float confidence = 6;
+  optional string counterparty_id = 7;
+  google.protobuf.Timestamp observed_at = 8;
+  google.protobuf.Timestamp expires_at = 9;
+  repeated string consent = 10;
+  bool stub = 11;
+  string idempotency_key = 12;
+}
+
+message AppendResponse {
+  Fact fact = 1;
+  bool replayed = 2;
+}
+
+message CurrentRequest {
+  string subject_id = 1;
+  // `traits.warmth` or `traits.*`; empty means every path.
+  repeated string paths = 2;
+  repeated Source sources = 3;
+  // Consent scopes the caller reads under. Required and non-empty.
+  repeated string scopes = 4;
+  string cursor = 5;
+  uint32 limit = 6;
+}
+
+message CurrentResponse {
+  repeated Fact facts = 1;
+  // Cursor for the next page; empty when this was the last.
+  string next = 2;
+}
+
+message HistoryRequest {
+  string subject_id = 1;
+  repeated string paths = 2;
+  repeated Source sources = 3;
+  repeated string scopes = 4;
+  string cursor = 5;
+  uint32 limit = 6;
+  // Facts recorded at or before this instant.
+  google.protobuf.Timestamp at = 7;
+}
+
+message HistoryResponse {
+  repeated Fact facts = 1;
+  string next = 2;
+}
+
+message RetractRequest {
+  string subject_id = 1;
+  string path = 2;
+  Source source = 3;
+  Envelope origin = 4;
+}
+
+message RetractResponse {
+  Fact tombstone = 1;
+}
+
+message EraseRequest {
+  string subject_id = 1;
+}
+
+message EraseResponse {
+  google.protobuf.Timestamp requested_at = 1;
+  // When the cascade may run: requested_at plus the grace window.
+  google.protobuf.Timestamp executes_after = 2;
+}
+
+message RestoreRequest {
+  string subject_id = 1;
+}
+
+message RestoreResponse {}
