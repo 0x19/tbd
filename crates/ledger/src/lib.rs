@@ -209,7 +209,10 @@ pub async fn serve_store(
         .trace_fn(tbd_common::telemetry::grpc_request_span)
         .add_service(health_service)
         .add_service(reflection)
-        .add_service(LedgerServiceServer::new(service))
+        .add_service(
+            LedgerServiceServer::new(service)
+                .max_decoding_message_size(store::validate::MAX_MESSAGE_LEN),
+        )
         .serve_with_incoming_shutdown(incoming, server_shutdown)
         .await?;
 

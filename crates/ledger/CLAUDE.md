@@ -51,6 +51,9 @@ Invariants:
 - `recorded_at` is minted by the store after the subject lock and is strictly
   increasing per subject; `(recorded_at, id)` is the order and the cursor.
 - The outbox payload carries clear columns only, never a value or an origin.
+- Envelopes are capped (`validate::MAX_ENVELOPE_LEN`, 64 KiB each) and the server
+  decodes at most `MAX_MESSAGE_LEN` (256 KiB, `OutOfRange` above it): the ledger's
+  memory is bounded by its own limits, not by what a client sends.
 - Nothing is a stub: `PingResponse.stub` is `false` and `store` names the backend.
   `TCP_NODELAY` is set on `TcpIncoming`, not the builder; callers reach this service
   through Envoy's internal listener (`http://envoy:50051`, matched by service name).

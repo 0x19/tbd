@@ -76,10 +76,12 @@ grpcurl -plaintext -import-path proto -proto tbd/ledger/v1/ledger.proto \
 
 A fact is `{subject_id, id, path, source, value, origin, confidence, counterparty_id,
 observed_at, recorded_at, expires_at, consent, stub}`; `value` and `origin` are
-envelopes (`version` + bytes), version 0 being labelled plaintext JSON. Errors map to
-gRPC as: not found → `NotFound`, erased → `FailedPrecondition`, invalid →
-`InvalidArgument`, forbidden by the registry → `PermissionDenied`, conflict → `Aborted`,
-unavailable → `Unavailable`.
+envelopes (`version` + bytes), version 0 being labelled plaintext JSON, each at most
+64 KiB (a fact is a claim, not a document; the cap is what bounds a page, an outbox
+batch and the server's memory). Errors map to gRPC as: not found → `NotFound`, erased →
+`FailedPrecondition`, invalid → `InvalidArgument`, forbidden by the registry →
+`PermissionDenied`, conflict → `Aborted`, unavailable → `Unavailable`. A request over
+256 KiB is `OutOfRange` from the codec before any of it is buffered.
 
 **Backends.** `[store] kind = "postgres"` is the real one: `LEDGER_DATABASE_URL`
 (environment only, never a file, never printed), a pool of `max_connections`,

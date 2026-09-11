@@ -12,6 +12,14 @@ pub const MAX_PATH_LEN: usize = 256;
 pub const MAX_SCOPE_LEN: usize = 64;
 /// Longest idempotency key in bytes.
 pub const MAX_KEY_LEN: usize = 255;
+/// Largest envelope (`value` or `origin`) in bytes. A fact is a claim, not a
+/// document: without a cap a client can make every page and every outbox
+/// batch as large as it likes, and the ledger's memory is the first casualty.
+pub const MAX_ENVELOPE_LEN: usize = 64 * 1024;
+/// Largest request the gRPC server decodes: two full envelopes, the bounded
+/// fields, and protobuf framing. Above it tonic answers `OutOfRange` before the
+/// bytes are buffered.
+pub const MAX_MESSAGE_LEN: usize = 256 * 1024;
 /// Most consent ids on one fact.
 pub const MAX_CONSENT: usize = 64;
 
@@ -124,11 +132,18 @@ pub fn new_fact(fact: &NewFact, registry: &dyn Registry) -> Result<(), StoreErro
     Ok(())
 }
 
-/// A plaintext envelope must hold JSON; other versions are opaque.
+/// An envelope is bounded by [`MAX_ENVELOPE_LEN`]; a plaintext one must hold
+/// JSON; other versions are opaque.
 ///
 /// # Errors
 /// [`StoreError::Invalid`] naming the field.
 pub fn envelope(field: &'static str, e: &Envelope) -> Result<(), StoreError> {
+    if e.bytes.len() > MAX_ENVELOPE_LEN {
+        return Err(StoreError::invalid(
+            field,
+            format!("longer than {MAX_ENVELOPE_LEN} bytes"),
+        ));
+    }
     if e.version == Envelope::PLAINTEXT_JSON {
         serde_json::from_slice::<serde::de::IgnoredAny>(&e.bytes).map_err(|err| {
             StoreError::invalid(field, format!("plaintext envelope is not JSON: {err}"))

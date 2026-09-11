@@ -326,6 +326,19 @@ async fn bad_requests_get_the_right_codes() {
     keyed.value = Some(envelope(&serde_json::json!("b")));
     assert_eq!(code(client.append(keyed).await), tonic::Code::Aborted);
 
+    // A value over the envelope cap is refused by validation; a request over
+    // the message cap is refused by the codec before it is buffered.
+    let mut big = append(&s, "profile.bio", "x");
+    big.value = Some(envelope(&serde_json::json!(
+        "x".repeat(tbd_ledger::store::validate::MAX_ENVELOPE_LEN)
+    )));
+    assert_eq!(code(client.append(big).await), tonic::Code::InvalidArgument);
+    let mut huge = append(&s, "profile.bio", "x");
+    huge.value = Some(envelope(&serde_json::json!(
+        "x".repeat(tbd_ledger::store::validate::MAX_MESSAGE_LEN)
+    )));
+    assert_eq!(code(client.append(huge).await), tonic::Code::OutOfRange);
+
     assert_eq!(
         code(
             client

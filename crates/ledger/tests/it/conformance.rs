@@ -129,6 +129,20 @@ pub async fn append_rejects_bad_input<S: Store>(store: &S) {
     let mut f = declared("profile.name", "x");
     f.idempotency_key = Some("k".repeat(300));
     assert_eq!(field(store.append(s, f).await), "idempotency_key");
+    // Envelopes are bounded: a fact is a claim, not a document.
+    let big = serde_json::json!("x".repeat(tbd_ledger::store::validate::MAX_ENVELOPE_LEN));
+    let mut f = declared("profile.name", "x");
+    f.value = Envelope {
+        version: 0,
+        bytes: serde_json::to_vec(&big).unwrap(),
+    };
+    assert_eq!(field(store.append(s, f).await), "value");
+    let mut f = declared("profile.name", "x");
+    f.origin = Envelope {
+        version: 0,
+        bytes: serde_json::to_vec(&big).unwrap(),
+    };
+    assert_eq!(field(store.append(s, f).await), "origin");
     // Nothing was written: the subject does not exist.
     assert!(matches!(
         store.history(s, &under_self()).await,

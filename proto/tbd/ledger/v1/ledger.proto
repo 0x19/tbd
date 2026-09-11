@@ -55,7 +55,8 @@ enum Source {
 }
 
 // Bytes in an envelope format. Version 0 is labelled plaintext JSON; the
-// encryption phase adds versions, not fields.
+// encryption phase adds versions, not fields. At most 64 KiB: larger is
+// INVALID_ARGUMENT, and a request over 256 KiB is OUT_OF_RANGE before it is read.
 message Envelope {
   uint32 version = 1;
   bytes bytes = 2;
