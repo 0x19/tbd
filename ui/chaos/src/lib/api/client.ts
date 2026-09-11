@@ -156,6 +156,11 @@ export const api = {
       method: "PUT",
       json: behavior,
     }),
+  stackStoreBehavior: (name: string, behavior: Behavior) =>
+    call(InstanceInfo.array(), `/stack/${encodeURIComponent(name)}/store_behavior`, {
+      method: "PUT",
+      json: behavior,
+    }),
   scenarios: () => call(ScenarioEntry.array(), "/scenarios"),
   scenario: (id: string) => call(ScenarioDetail, `/scenarios/${id}`),
   scenarioSave: (id: string, text: string) =>

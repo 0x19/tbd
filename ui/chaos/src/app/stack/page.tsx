@@ -6,7 +6,7 @@ import { toast } from "sonner";
 
 import { useChaos } from "@/app/providers";
 import { AddInstanceDialog } from "@/components/add-instance-dialog";
-import { BehaviorDialog } from "@/components/behavior-dialog";
+import { BehaviorDialog, type Surface } from "@/components/behavior-dialog";
 import { describeBehavior } from "@/components/instances-table";
 import { DetailList, PageTitle, SectionTitle } from "@/components/kit";
 import { Dot } from "@/components/status-badge";
@@ -19,7 +19,7 @@ import { api } from "@/lib/api/client";
 import { describe, useStack } from "@/lib/api/hooks";
 import type { Behavior, InstanceInfo } from "@/lib/api/schema";
 import { ago, num } from "@/lib/format";
-import { listKinds, withCapability } from "@/lib/kinds";
+import { kindOf, listKinds, withCapability } from "@/lib/kinds";
 
 /**
  * The kit's Webhooks page: two summary cards, a filter-less list of
@@ -36,7 +36,8 @@ export default function StackPage() {
   const [adding, setAdding] = useState(false);
   const instances = stack.data ?? [];
   const up = instances.filter((i) => i.running).length;
-  const faulty = instances.filter((i) => i.behavior && i.behavior.type !== "healthy");
+  const active = (b: Behavior | null | undefined) => !!b && b.type !== "healthy";
+  const faulty = instances.filter((i) => active(i.behavior) || active(i.store_behavior));
   const served = instances.reduce((n, i) => n + (i.requests?.total ?? 0), 0);
   const failedReq = instances.reduce((n, i) => n + (i.requests?.failed ?? 0), 0);
   const current = instances.find((i) => i.name === selected) ?? null;
@@ -57,9 +58,9 @@ export default function StackPage() {
   const remove = (i: InstanceInfo) => act(i.name, () => api.stackRemove(i.name), "removed");
 
   const tone = (i: InstanceInfo) =>
-    !i.running ? "off" : i.behavior && i.behavior.type !== "healthy" ? "warn" : "good";
+    !i.running ? "off" : active(i.behavior) || active(i.store_behavior) ? "warn" : "good";
   const word = (i: InstanceInfo) =>
-    !i.running ? "Stopped" : i.behavior && i.behavior.type !== "healthy" ? "Degraded" : "Healthy";
+    !i.running ? "Stopped" : active(i.behavior) || active(i.store_behavior) ? "Degraded" : "Healthy";
 
   return (
     <>
@@ -120,13 +121,16 @@ export default function StackPage() {
                       {i.name}
                       <span
                         className={
-                          i.behavior && i.behavior.type !== "healthy"
-                            ? "text-amber-600 dark:text-amber-400"
-                            : "text-muted-foreground"
+                          active(i.behavior) ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"
                         }
                       >
                         {describeBehavior(i.behavior)}
                       </span>
+                      {active(i.store_behavior) ? (
+                        <span className="text-amber-600 dark:text-amber-400">
+                          store: {describeBehavior(i.store_behavior ?? null)}
+                        </span>
+                      ) : null}
                     </Button>
                   ))
               ) : (
@@ -208,8 +212,11 @@ export default function StackPage() {
               <div className="text-muted-foreground font-mono text-xs">{i.addr}</div>
               <div className="ml-auto flex items-center gap-4">
                 <Dot tone={tone(i)} label={word(i)} />
-                {i.behavior && i.behavior.type !== "healthy" ? (
-                  <Badge variant="outline">{describeBehavior(i.behavior)}</Badge>
+                {active(i.behavior) ? <Badge variant="outline">{describeBehavior(i.behavior)}</Badge> : null}
+                {active(i.store_behavior) ? (
+                  <Badge variant="outline" title="the store is failing">
+                    store: {describeBehavior(i.store_behavior ?? null)}
+                  </Badge>
                 ) : null}
                 {i.requests ? (
                   <span className="text-muted-foreground w-24 text-right text-xs tabular-nums">
@@ -331,6 +338,14 @@ export default function StackPage() {
                       k: "Behaviour",
                       v: current.behavior ? describeBehavior(current.behavior) : "no fault injection",
                     },
+                    ...(kindOf(kinds, current.kind).store_fault
+                      ? [
+                          {
+                            k: "Store",
+                            v: describeBehavior(current.store_behavior ?? null),
+                          },
+                        ]
+                      : []),
                     {
                       k: "Depends on",
                       v: current.depends_on.join(", ") || "–",
@@ -389,9 +404,15 @@ export default function StackPage() {
           onOpenChange={(o) => !o && setEditing(null)}
           instance={editing.name}
           current={editing.behavior}
-          onApply={async (b: Behavior) => {
-            stack.setData(await api.stackBehavior(editing.name, b));
-            toast.success(`${editing.name}: ${describeBehavior(b)}`);
+          currentStore={editing.store_behavior}
+          storeFault={kindOf(kinds, editing.kind).store_fault}
+          onApply={async (b: Behavior, surface: Surface) => {
+            stack.setData(
+              surface === "store"
+                ? await api.stackStoreBehavior(editing.name, b)
+                : await api.stackBehavior(editing.name, b),
+            );
+            toast.success(`${editing.name}${surface === "store" ? " store" : ""}: ${describeBehavior(b)}`);
           }}
         />
       ) : null}

@@ -64,7 +64,7 @@ await step("stack: fault dialog applies an error behaviour", async () => {
     .first()
     .click();
   await page.getByRole("dialog").waitFor();
-  await page.getByRole("dialog").locator("select").first().selectOption("error");
+  await page.getByRole("dialog").getByLabel("Behaviour").selectOption("error");
   await page.getByRole("button", { name: "Apply" }).click();
   await page
     .getByText(/error unavailable 50%/)
@@ -75,9 +75,33 @@ await step("stack: fault dialog applies an error behaviour", async () => {
     .getByRole("button", { name: /^fault$/i })
     .first()
     .click();
-  await page.getByRole("dialog").locator("select").first().selectOption("healthy");
+  await page.getByRole("dialog").getByLabel("Behaviour").selectOption("healthy");
   await page.getByRole("button", { name: "Apply" }).click();
   await page.waitForFunction(() => !document.body.innerText.includes("error unavailable 50%"), null, {
+    timeout: 10000,
+  });
+});
+
+await step("stack: the ledger's store can be failed and healed", async () => {
+  await page.goto(`${BASE}/stack/`);
+  const row = page.locator("li", { hasText: /ledger-1/ }).first();
+  await row.getByRole("button", { name: /^fault$/i }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.waitFor();
+  // The surface picker exists only for a kind with store faults.
+  await dialog.getByLabel("What to fault").selectOption("store");
+  await dialog.getByLabel("Behaviour").selectOption("error");
+  await page.getByRole("button", { name: "Apply" }).click();
+  await page
+    .getByText(/store: error unavailable 50%/)
+    .first()
+    .waitFor({ timeout: 10000 });
+  await shot({ path: `${SHOTS}/stack-store-fault.png`, fullPage: true });
+  await row.getByRole("button", { name: /^fault$/i }).click();
+  await dialog.getByLabel("What to fault").selectOption("store");
+  await dialog.getByLabel("Behaviour").selectOption("healthy");
+  await page.getByRole("button", { name: "Apply" }).click();
+  await page.waitForFunction(() => !document.body.innerText.includes("store: error unavailable 50%"), null, {
     timeout: 10000,
   });
 });
