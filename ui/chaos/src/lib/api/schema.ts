@@ -206,6 +206,43 @@ export type RunSummary = z.infer<typeof RunSummary>;
 export const CheckCount = z.object({ passed: z.number(), violated: z.number() });
 export type CheckCount = z.infer<typeof CheckCount>;
 
+/** An estimate and the 95% bootstrap interval around it. */
+export const Ci = z.object({ estimate: z.number(), low: z.number(), high: z.number() });
+export type Ci = z.infer<typeof Ci>;
+
+/** One measured value of a swept parameter. */
+export const PointStats = z.object({
+  value: z.number(),
+  achieved_rps: z.number(),
+  error_rate: z.number(),
+  requests: z.number(),
+  p50: Ci,
+  p99: Ci,
+  repeats: z.number(),
+  findings: z.number(),
+});
+export type PointStats = z.infer<typeof PointStats>;
+
+/** What a sweep measured (docs/chaos/stress.md). */
+export const SweepResult = z.object({
+  parameter: z.string(),
+  points: z.array(PointStats),
+  knee: z.number().nullish(),
+  knee_reason: z.string().nullish(),
+});
+export type SweepResult = z.infer<typeof SweepResult>;
+
+/** Where a running sweep is; point and repeat count from one. */
+export const SweepProgress = z.object({
+  parameter: z.string(),
+  value: z.number(),
+  point: z.number(),
+  points: z.number(),
+  repeat: z.number(),
+  repeats: z.number(),
+});
+export type SweepProgress = z.infer<typeof SweepProgress>;
+
 /** One `stress` SSE frame: the checks a second. */
 export const StressSnapshot = z.object({
   elapsed_s: z.number(),
@@ -218,6 +255,7 @@ export const StressSnapshot = z.object({
   findings: z.number(),
   subjects: z.number(),
   workers: z.record(z.string(), z.number()),
+  sweep: SweepProgress.nullish(),
 });
 export type StressSnapshot = z.infer<typeof StressSnapshot>;
 
@@ -304,6 +342,7 @@ export const StressResult = z.object({
   tolerated: z.number().default(0),
   redriven: z.number().default(0),
   findings: z.array(FindingSummary),
+  sweep: SweepResult.nullish(),
   stopped_early: z.boolean().default(false),
   error: z.string().nullish(),
 });

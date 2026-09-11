@@ -209,6 +209,7 @@ fn failed(name: &str, error: String) -> CampaignResult {
         tolerated: 0,
         redriven: 0,
         findings: Vec::new(),
+        sweep: None,
         stopped_early: false,
         error: Some(error),
     }

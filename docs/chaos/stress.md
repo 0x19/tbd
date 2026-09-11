@@ -129,6 +129,15 @@ behavior = { type = "error", kind = "unavailable", rate = 0.3 }
 [invariants]                        # every invariant is on; `name = false` switches one off
 expiry = false
 
+[sweep]                             # optional: the campaign once per value
+parameter = "owner.workers"         # owner.{workers,subjects,pace}, contention.{workers,subjects,pace}, fuzz.workers, max_in_flight
+values = [1, 2, 4, 8, 16, 32]       # a pace is in milliseconds; everything else is a count
+repeat = 3                          # measurements per value
+point_duration = "5s"               # replaces [campaign] duration
+[sweep.knee]
+p99_ms = 50                         # the first point whose p99 passes this...
+factor = 2.0                        # ...or grows by this much over the previous one
+
 [stop]
 max_findings = 0                    # stop early after this many; 0 = never
 ```
@@ -220,6 +229,25 @@ success where a refusal is due, is a `clean_refusal` finding.
 | `clean_refusal` | (fuzz) every hostile request draws one of its case's codes, never anything else |
 | `clean_errors` | never `Internal`, `Unknown` or `DataLoss`; never a dropped connection or a timeout outside `[faults] tolerate` |
 
+## Sweeps
+
+A campaign with `[sweep]` runs once per value of one parameter, `repeat` times each.
+Every repeat is an independent measurement: fresh workers, fresh subjects, its own
+warmup, its own phase. The latencies of a point's repeats pool into one sample, and the
+p50 and p99 come back as an estimate with the 95 % interval a percentile bootstrap puts
+around it (1000 resamples, seeded from `[campaign] seed`, so the same measurements give
+the same interval). **Two points whose intervals overlap did not measure differently**,
+however far apart their estimates look; that is what the interval is for.
+
+The **knee** is the first point whose p99 passes `p99_ms` or is `factor` times the
+previous point's, whichever comes first. The result names it and says which rule it
+crossed. Neither bound set means no knee is reported.
+
+Invariants are judged throughout: a point that is fast and wrong is still a finding, and
+the point that found it is named in the sweep table. The counters accumulate across
+points, so the checks line covers the whole sweep. `[campaign] duration` is ignored
+(`point_duration` replaces it) and the run's load line is the total over every point.
+
 ## Findings, shrinking and replay
 
 A finding is written as `<findings-dir>/<id>.json` (`--findings-dir`,
@@ -247,8 +275,17 @@ the requests alone, so it needs nothing but the trace.
 
 `chaos stress run` prints one block per campaign: `PASS`/`FAIL`/`SKIP`, the target and its
 store, the load line and per-operation latencies (the same shape as a scenario's), the
-tolerated and re-driven counts when faults were tolerated, one line per invariant with
-how often it was evaluated and how often it broke, and one line per finding. `--json`
+tolerated and re-driven counts when faults were tolerated, the sweep table when there was
+a sweep (a line per point with its intervals, the knee marked), one line per invariant
+with how often it was evaluated and how often it broke, and one line per finding.
+
+```
+      sweep     owner.workers   requests        rps      errors      p50 ms (95% CI)      p99 ms (95% CI)
+      point     1                    564      132.8       0.89%   1.76 [ 1.70  1.82]   4.21 [ 3.53  5.41]
+      point     4                   1749      378.9       1.20%   4.38 [ 4.19  4.53]  21.96 [18.42 23.40] <- knee
+      point     16                  7114     1613.6       1.41%   5.64 [ 5.56  5.71]  13.39 [12.96 13.61]
+      knee      p99 21.96 ms is 5.2x the previous point's 4.21 ms at owner.workers
+``` `--json`
 prints the array of results, each with `checks` (a map of invariant to `{passed,
 violated}`) and `findings` with their traces. Exit code 1 on any finding or error.
 
@@ -266,6 +303,9 @@ the model, and the trace says which.
 | `store_faults.toml` | lost acknowledgements and refused reads at the store, then refusals at the adapter: every write settles, `durability` holds | yes |
 | `fuzz_by_seed.toml` | every hostile request draws its documented refusal; seed 1 in CI, `--seed` for a nightly | yes |
 | `privacy_under_faults.toml` | erasure, restore, the cascade and durability through adapter faults, store faults and a stop/start, on Postgres (`mise run up` for the compose database) | no (`skip`) |
+| `capacity_knee.toml` | latency against owner workers, 1 to 32, three measurements each, with the knee at 50 ms or a doubled p99; about three minutes | no (`skip`) |
+| `contention.toml` | thirty-two writers over a shrinking pool of shared subjects, 64 down to 1: what sharing costs and whether it stays correct; about two minutes | no (`skip`) |
+| `soak.toml` | the smoke mix for thirty minutes, stopping at the third finding | no (`skip`) |
 
 ## Debugging a finding
 

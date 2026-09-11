@@ -11,13 +11,14 @@ import {
   ComposedChart,
   Line,
   LineChart,
+  ReferenceLine,
   XAxis,
   type XAxisTickContentProps,
   YAxis,
 } from "recharts";
 
 import { type ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
-import type { LoadSnapshot } from "@/lib/api/schema";
+import type { LoadSnapshot, SweepResult } from "@/lib/api/schema";
 
 export function ChartHeadline({ value, caption }: { value: React.ReactNode; caption: string }) {
   return (
@@ -399,5 +400,91 @@ export function PassStrip({ items }: { items: { id: string; ok: boolean; title: 
         />
       ))}
     </div>
+  );
+}
+
+const sweep = {
+  p99: { label: "p99 ms", color: "var(--chart-4)" },
+  p50: { label: "p50 ms", color: "var(--chart-2)" },
+  band: { label: "p99 95% CI", color: "var(--chart-4)" },
+  rps: { label: "req/s", color: "var(--foreground)" },
+} satisfies ChartConfig;
+
+/**
+ * A sweep: latency against the swept value, the 95% interval of the p99 as a
+ * band, throughput on the right axis, and the knee as a vertical marker. Points
+ * whose bands overlap did not measure differently, which is the whole reason
+ * the interval is drawn.
+ */
+export function SweepChart({ result, height = 280 }: { result: SweepResult; height?: number }) {
+  const data = result.points.map((p) => ({
+    value: String(p.value),
+    p50: p.p50.estimate,
+    p99: p.p99.estimate,
+    // An area needs both bounds; recharts draws the pair as a ribbon.
+    band: [p.p99.low, p.p99.high] as [number, number],
+    rps: p.achieved_rps,
+  }));
+  if (!data.length)
+    return (
+      <div className="text-muted-foreground flex h-40 items-center justify-center text-sm">
+        No points yet.
+      </div>
+    );
+  return (
+    <ChartContainer config={sweep} className="aspect-auto w-full" style={{ height }}>
+      <ComposedChart data={data} margin={{ left: 0, right: 8, top: 8, bottom: 0 }}>
+        <CartesianGrid vertical={false} strokeDasharray="3 3" />
+        <XAxis dataKey="value" tickLine={false} axisLine={false} minTickGap={8} />
+        <YAxis yAxisId="l" tickLine={false} axisLine={false} width={48} unit="ms" />
+        <YAxis yAxisId="r" orientation="right" tickLine={false} axisLine={false} width={56} />
+        <ChartTooltip
+          content={<ChartTooltipContent labelFormatter={(v) => `${result.parameter} = ${v}`} />}
+        />
+        <Area
+          yAxisId="l"
+          type="monotone"
+          dataKey="band"
+          stroke="none"
+          fill="var(--color-band)"
+          fillOpacity={0.18}
+          isAnimationActive={false}
+        />
+        <Line
+          yAxisId="l"
+          type="monotone"
+          dataKey="p99"
+          stroke="var(--color-p99)"
+          strokeWidth={2}
+          isAnimationActive={false}
+        />
+        <Line
+          yAxisId="l"
+          type="monotone"
+          dataKey="p50"
+          stroke="var(--color-p50)"
+          dot={false}
+          isAnimationActive={false}
+        />
+        <Line
+          yAxisId="r"
+          type="monotone"
+          dataKey="rps"
+          stroke="var(--color-rps)"
+          strokeDasharray="4 3"
+          dot={false}
+          isAnimationActive={false}
+        />
+        {result.knee !== null && result.knee !== undefined ? (
+          <ReferenceLine
+            yAxisId="l"
+            x={String(result.knee)}
+            stroke="var(--destructive)"
+            strokeDasharray="3 3"
+            label={{ value: "knee", position: "top", fill: "var(--destructive)", fontSize: 11 }}
+          />
+        ) : null}
+      </ComposedChart>
+    </ChartContainer>
   );
 }

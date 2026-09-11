@@ -1,0 +1,35 @@
+# Thirty minutes of the smoke mix, to catch what only shows with time: a leak in
+# the idempotency table, a sweeper that falls behind, a cursor that drifts. Stops
+# at the third finding so a broken build does not spend half an hour proving it.
+# Run it by hand (`chaos stress run stress/soak.toml`), or from the admin UI, and
+# read the findings page afterwards.
+
+[campaign]
+name = "soak"
+description = "The smoke mix for thirty minutes, stopping at the third finding."
+skip = true
+duration = "30m"
+warmup = "5s"
+seed = 13
+timeout = "10s"
+
+[stack.ledgers.ledger-1]
+grace = "5s"
+
+[workload]
+max_in_flight = 64
+
+[workload.owner]
+workers = 6
+subjects = 2
+
+[workload.contention]
+workers = 4
+subjects = 2
+
+[workload.fuzz]
+workers = 1
+subjects = 1
+
+[stop]
+max_findings = 3
