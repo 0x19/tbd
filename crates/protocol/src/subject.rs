@@ -14,7 +14,7 @@ use axum::{
 };
 use base64::Engine as _;
 
-use crate::ApiError;
+use crate::Problem;
 
 /// Header Envoy forwards the verified JWT payload in.
 pub const PAYLOAD_HEADER: &str = "x-jwt-payload";
@@ -46,7 +46,7 @@ pub fn from_headers(headers: &HeaderMap) -> Option<Subject> {
 }
 
 impl<S: Send + Sync> FromRequestParts<S> for Subject {
-    type Rejection = ApiError;
+    type Rejection = Problem;
 
     fn from_request_parts(
         parts: &mut Parts,
@@ -57,7 +57,7 @@ impl<S: Send + Sync> FromRequestParts<S> for Subject {
                 .extensions
                 .get::<Self>()
                 .cloned()
-                .ok_or(ApiError::Unauthenticated),
+                .ok_or_else(Problem::unauthenticated),
         )
     }
 }

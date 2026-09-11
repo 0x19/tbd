@@ -11,7 +11,7 @@ use axum::{
 };
 use tbd_proto::engine::v1::EvaluateRequest;
 
-use crate::AppState;
+use crate::{AppState, Problem};
 
 /// The executable schema.
 pub type AppSchema = Schema<Query, EmptyMutation, EmptySubscription>;
@@ -59,7 +59,7 @@ impl Query {
                 payload: payload.unwrap_or_default().into_bytes(),
             })
             .await
-            .map_err(|s| async_graphql::Error::new(s.message().to_owned()))?
+            .map_err(|s| Problem::from(s).into_graphql())?
             .into_inner();
         Ok(Evaluation {
             subject_id: resp.subject_id,

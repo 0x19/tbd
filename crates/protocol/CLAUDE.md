@@ -22,7 +22,7 @@ the logic belongs in the service. The contract is `docs/protocol/README.md`.
   `readiness()` probes every backend concurrently within `[health] probe_timeout`.
 - The router has an explicit `fallback`: tonic's merged router would otherwise answer
   every unknown REST path with HTTP 200 + `grpc-status: 12`. Unknown paths are a JSON
-  404 (`ApiError::NotFound`) with route label `unmatched`; unknown gRPC methods keep the
+  404 (`Problem::not_found`) with route label `unmatched`; unknown gRPC methods keep the
   gRPC answer.
 - `subject.rs`: the caller identity. Envoy verifies the JWT and forwards the claims in
   `x-jwt-payload` (base64url JSON) and strips that header from clients; `attach`
@@ -30,9 +30,21 @@ the logic belongs in the service. The contract is `docs/protocol/README.md`.
   handlers take `Subject` as an extractor (401 `unauthenticated` when absent), `/v1/me`
   returns it. The protocol never verifies tokens: services are reachable only through
   Envoy, and a second check would be a second implementation to keep in sync.
-- `error.rs`: `ApiError` maps `tonic::Code` to HTTP status. This mapping is what the
-  chaos error classes (`http 503` etc.) reflect; change it and update
-  `docs/chaos/scenarios.md`.
+- `error.rs`: `Problem { code: Code, message, details }` is the one error on every
+  surface. `Code::from_grpc` is the standard gRPC-to-HTTP table (`internal` 500,
+  `unavailable` 503, `timeout` 504, `rate_limited` 429, `failed_precondition` 400, plus
+  the HTTP-only `unsupported_media_type` 415 and `payload_too_large` 413); the slugs
+  are the frozen `code` vocabulary in `docs/protocol/README.md`. `From<tonic::Status>`
+  translates `google.rpc` details (`BadRequest`, `ErrorInfo`, `RetryInfo`, which also
+  sets `Retry-After`) and redacts `internal` messages into the log. REST answers
+  `{"code","error","details"}`, SSE sends the same JSON as the `error` event, `ws.rs`
+  as the `error` frame (`message` stays: chaos reads it), GraphQL puts `code` and
+  `details` in `extensions`. The chaos error classes (`http 503`, `http 500`, `http 429`,
+  `http 504`) reflect this table; change it and update `docs/chaos/scenarios.md` and
+  the chaos test that asserts it.
+- `json.rs`: the request-side `Json<T>` extractor. Every body is JSON in and JSON out,
+  health included; a non-JSON body is `unsupported_media_type`, a body that does not
+  parse is `bad_request` with a `field` detail named `body`.
 - `ws.rs`: bridges a WebSocket to an engine `Session` stream, one session per socket,
   JSON envelope `{type: data|heartbeat|close|error, ...}` outbound.
 - `grpc.rs`: the protocol's own gRPC (`ProtocolService/Ping`), health and reflection,

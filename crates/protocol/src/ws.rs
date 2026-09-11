@@ -18,7 +18,10 @@ use tbd_proto::engine::v1::{Close, Heartbeat, SessionRequest, session_request, s
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 
-use crate::AppState;
+use crate::{
+    AppState, Problem,
+    error::{Code, Detail},
+};
 use tbd_common::metrics::StreamGuard;
 
 pub fn routes() -> Router<AppState> {
@@ -48,11 +51,27 @@ pub enum WsFrame<'a> {
         /// Why.
         reason: &'a str,
     },
-    /// The bridge failed.
+    /// The bridge failed: the same envelope as every other surface.
     Error {
-        /// Message.
+        /// The vocabulary entry.
+        code: Code,
+        /// A sentence.
         message: String,
+        /// Typed details.
+        details: Vec<Detail>,
     },
+}
+
+impl WsFrame<'_> {
+    fn error(status: tonic::Status) -> Self {
+        let problem = Problem::from(status);
+        problem.log();
+        Self::Error {
+            code: problem.code,
+            message: problem.message,
+            details: problem.details,
+        }
+    }
 }
 
 async fn upgrade(ws: WebSocketUpgrade, State(state): State<AppState>) -> Response {
@@ -67,9 +86,7 @@ async fn bridge(socket: WebSocket, state: AppState) {
     let mut from_engine = match state.engine().session(ReceiverStream::new(from_ws)).await {
         Ok(resp) => resp.into_inner(),
         Err(status) => {
-            let msg = WsFrame::Error {
-                message: status.to_string(),
-            };
+            let msg = WsFrame::error(status);
             let _ = ws_tx.send(Message::Text(json(&msg).into())).await;
             let _ = ws_tx.close().await;
             return;
@@ -139,7 +156,7 @@ async fn bridge(socket: WebSocket, state: AppState) {
                     guard.item("out");
                 }
                 Some(Err(status)) => {
-                    let msg = WsFrame::Error { message: status.to_string() };
+                    let msg = WsFrame::error(status);
                     let _ = ws_tx.send(Message::Text(json(&msg).into())).await;
                     break;
                 }
@@ -154,6 +171,7 @@ async fn bridge(socket: WebSocket, state: AppState) {
 
 fn json(frame: &WsFrame<'_>) -> String {
     // Serialising a struct of strings and integers cannot fail.
-    serde_json::to_string(frame)
-        .unwrap_or_else(|_| r#"{"type":"error","message":"serialize"}"#.to_owned())
+    serde_json::to_string(frame).unwrap_or_else(|_| {
+        r#"{"type":"error","code":"internal","message":"serialize","details":[]}"#.to_owned()
+    })
 }

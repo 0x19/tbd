@@ -16,7 +16,7 @@ use futures::{Stream, StreamExt};
 use serde::{Deserialize, Serialize};
 use tbd_proto::engine::v1::{EvaluateRequest, SubscribeRequest, subscribe_response};
 
-use crate::{ApiError, AppState, subject::Subject};
+use crate::{AppState, Problem, subject::Subject};
 use tbd_common::metrics::StreamGuard;
 
 pub fn routes() -> Router<AppState> {
@@ -29,8 +29,15 @@ pub fn routes() -> Router<AppState> {
 }
 
 /// Liveness: the process is up.
-async fn healthz() -> &'static str {
-    "ok"
+async fn healthz() -> Json<Health> {
+    Json(Health { status: "ok" })
+}
+
+/// `GET /healthz` body.
+#[derive(Debug, Serialize)]
+pub struct Health {
+    /// Always `ok` when the process answers.
+    pub status: &'static str,
 }
 
 /// Who the verified caller is; 401 when Envoy forwarded no identity.
@@ -81,10 +88,10 @@ pub struct Evaluation {
 
 async fn evaluate(
     State(state): State<AppState>,
-    Json(body): Json<EvaluateBody>,
-) -> Result<Json<Evaluation>, ApiError> {
+    crate::json::Json(body): crate::json::Json<EvaluateBody>,
+) -> Result<Json<Evaluation>, Problem> {
     if body.subject_id.is_empty() {
-        return Err(ApiError::BadRequest("subject_id is required".into()));
+        return Err(Problem::field("subject_id", "is required"));
     }
     let resp = state
         .engine()
@@ -124,7 +131,7 @@ pub enum EventBody {
 async fn events(
     State(state): State<AppState>,
     Path(subject_id): Path<String>,
-) -> Result<Sse<impl Stream<Item = Result<SseEvent, Infallible>>>, ApiError> {
+) -> Result<Sse<impl Stream<Item = Result<SseEvent, Infallible>>>, Problem> {
     let stream = state
         .engine()
         .subscribe(SubscribeRequest { subject_id })
@@ -138,10 +145,17 @@ async fn events(
             let ev = match item {
                 Ok(ev) => ev,
                 Err(status) => {
-                    tracing::warn!(%status, "engine event stream error");
-                    return Some(Ok(SseEvent::default()
-                        .event("error")
-                        .data(status.message())));
+                    // The envelope as the event's JSON; the stream stays open,
+                    // the client decides.
+                    let problem = Problem::from(status);
+                    problem.log();
+                    let event = SseEvent::default().event("error");
+                    let event = event.json_data(problem.wire()).unwrap_or_else(|_| {
+                        SseEvent::default()
+                            .event("error")
+                            .data(r#"{"code":"internal","error":"serialize","details":[]}"#)
+                    });
+                    return Some(Ok(event));
                 }
             };
             let body = match ev.kind? {

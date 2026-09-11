@@ -117,8 +117,14 @@ Envoy routes, from `devops/envoy/envoy.yaml`:
   `crates/common/src/metrics.rs`, a global `service` label per process, process metrics
   included. With no exporter installed the macros are no-ops, which lets chaos run
   several services in one process.
-- **Errors**: `thiserror` enums in libraries, `anyhow` only in `main`. The protocol maps
-  `tonic::Code` to HTTP status in `crates/protocol/src/error.rs`.
+- **Errors**: `thiserror` enums in libraries, `anyhow` only in `main`. The protocol
+  answers every surface with one envelope, `Problem` in `crates/protocol/src/error.rs`:
+  a stable `code` slug mapped from `tonic::Code` by the standard gRPC-to-HTTP table, a
+  sentence, typed `details` from `google.rpc` error details; `internal` redacts the
+  downstream message and logs it.
+- **JSON in and out at the edge**: every HTTP response body, SSE payload and WebSocket
+  text frame the protocol sends is JSON, health included; every request body is JSON
+  and anything else is refused with the envelope.
 - **Tests**: one integration binary per service at `tests/it/`. The protocol's tests boot a
   real engine in-process; nothing is mocked.
 - **Faults**: `tbd_common::fault::FaultHandle`, consulted by the engine on every RPC and

@@ -86,6 +86,61 @@ the effective result.
 environment variable (2 to 24 lowercase letters or digits, starting with a letter), a
 URL that does not parse, an empty health name, or a zero duration.
 
+## JSON in and out
+
+Every body the protocol sends is JSON: REST responses (`/healthz` is
+`{"status":"ok"}`, `/readyz` the readiness report above, errors the envelope below), the
+`data:` of every SSE event, and every WebSocket text frame. Every request body is JSON
+too: another content type is refused with `415 unsupported_media_type`, a body that
+does not parse with `400 bad_request` and a `field` detail named `body`, one over the
+size limit with `413 payload_too_large`. GraphQL is JSON by definition; gRPC is gRPC.
+
+## Errors
+
+One envelope on every surface, downstream-agnostic:
+
+```json
+{"code": "bad_request", "error": "subject_id is required", "details": [{"type": "field", "field": "subject_id", "description": "is required"}]}
+```
+
+`code` is a stable slug from the table below, `error` a sentence for a person,
+`details` typed entries translated from the `google.rpc` details a backend attaches to
+its status. The field names and the slugs are frozen: an SDK is generated from them.
+
+| `code` | from gRPC | HTTP |
+|---|---|---|
+| `bad_request` | `INVALID_ARGUMENT`, `OUT_OF_RANGE`, or a body that does not parse | 400 |
+| `failed_precondition` | `FAILED_PRECONDITION` (an erased subject) | 400 |
+| `unauthenticated` | `UNAUTHENTICATED`, or a route that needs a caller and got none | 401 |
+| `forbidden` | `PERMISSION_DENIED` | 403 |
+| `not_found` | `NOT_FOUND`, or no route | 404 |
+| `already_exists` | `ALREADY_EXISTS` | 409 |
+| `conflict` | `ABORTED` | 409 |
+| `payload_too_large` | a request body over the limit | 413 |
+| `unsupported_media_type` | a request body that is not JSON | 415 |
+| `rate_limited` | `RESOURCE_EXHAUSTED` | 429 |
+| `cancelled` | `CANCELLED` | 499 |
+| `internal` | `INTERNAL`, `UNKNOWN`, `DATA_LOSS` | 500 |
+| `unimplemented` | `UNIMPLEMENTED` | 501 |
+| `unavailable` | `UNAVAILABLE` | 503 |
+| `timeout` | `DEADLINE_EXCEEDED` | 504 |
+
+Details: `{"type":"field","field","description"}` from `google.rpc.BadRequest`,
+`{"type":"info","reason","domain","metadata"}` from `google.rpc.ErrorInfo`,
+`{"type":"retry","after_seconds"}` from `google.rpc.RetryInfo`, which also sets the
+`Retry-After` header. An `internal` error never carries the backend's message: the
+sentence is `internal error` and the real text is on the error-level log line with
+the request's `trace_id`. Server-side codes (`internal`, `unavailable`, `timeout`,
+`unimplemented`) are logged at error level; the rest are the caller's problem and are
+not.
+
+Per surface: REST sends the envelope as the body with the HTTP status; SSE sends it as
+the JSON of an `event: error` and leaves the stream to the client; the WebSocket bridge
+sends `{"type":"error","code","message","details"}`; GraphQL sends the sentence as the
+error message with `code` and `details` under `extensions`. The chaos error classes
+(`http 503`, `http 500`, `http 429`, `http 504`) are this table seen from the load
+generator ([chaos/scenarios.md](../chaos/scenarios.md)).
+
 ## Metrics
 
 Client-side, per backend: `tbd_engine_client_requests_total{backend,route,status}` and
@@ -96,7 +151,6 @@ Client-side, per backend: `tbd_engine_client_requests_total{backend,route,status
 
 ## What comes next
 
-One error envelope with the standard gRPC-to-HTTP mapping and JSON on every surface,
-a `Principal` with the caller's kind and the organisation and key claims, OpenAPI
+A `Principal` with the caller's kind and the organisation and key claims, OpenAPI
 generated from the handlers, then the descriptor-driven transcoder that exposes any
 registered service over REST and a multiplexed WebSocket.

@@ -386,9 +386,9 @@ min_requests = 50
         load.error_rate
     );
     assert_eq!(
-        load.errors.get("http 502"),
+        load.errors.get("http 500"),
         Some(&load.requests_failed),
-        "INTERNAL maps to 502"
+        "INTERNAL maps to 500"
     );
     assert_eq!(result.events.len(), 1);
     assert!(result.events[0].error.is_none());

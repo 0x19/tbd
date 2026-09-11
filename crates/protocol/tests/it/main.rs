@@ -16,6 +16,8 @@ async fn healthz_and_readyz() {
 
     let live = http.get(stack.url("/healthz")).send().await.unwrap();
     assert_eq!(live.status(), 200);
+    let live: Value = live.json().await.unwrap();
+    assert_eq!(live["status"], "ok", "health is JSON like everything else");
 
     let ready = http.get(stack.url("/readyz")).send().await.unwrap();
     assert_eq!(
@@ -23,6 +25,9 @@ async fn healthz_and_readyz() {
         200,
         "engine is up, protocol must report ready"
     );
+    let ready: Value = ready.json().await.unwrap();
+    assert_eq!(ready["ready"], true);
+    assert_eq!(ready["services"]["engine"], "serving");
 }
 
 #[tokio::test]
@@ -57,6 +62,172 @@ async fn rest_evaluate_maps_engine_errors() {
         .await
         .unwrap();
     assert_eq!(resp.status(), 400);
+    let body: Value = resp.json().await.unwrap();
+    assert_eq!(body["code"], "bad_request");
+    assert_eq!(body["details"][0]["type"], "field");
+    assert_eq!(body["details"][0]["field"], "subject_id");
+}
+
+/// Every body is JSON, in and out: a non-JSON body is refused with the
+/// envelope, and a body that does not parse names the body in a detail.
+#[tokio::test]
+async fn request_bodies_must_be_json() {
+    let stack = support::start().await;
+    let http = reqwest::Client::new();
+
+    let resp = http
+        .post(stack.url("/v1/evaluate"))
+        .header("content-type", "text/plain")
+        .body("subject_id=s1")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 415);
+    let body: Value = resp.json().await.unwrap();
+    assert_eq!(body["code"], "unsupported_media_type");
+
+    let resp = http
+        .post(stack.url("/v1/evaluate"))
+        .header("content-type", "application/json")
+        .body("{not json")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 400);
+    let body: Value = resp.json().await.unwrap();
+    assert_eq!(body["code"], "bad_request");
+    assert_eq!(body["details"][0]["field"], "body");
+}
+
+/// An engine failure reaches REST as the envelope with the standard status
+/// and slug; `internal` never carries the downstream text.
+#[tokio::test]
+async fn rest_error_envelopes_follow_the_grpc_table() {
+    use tbd_common::fault::{Behavior, ErrorKind};
+    let stack = support::start().await;
+    let http = reqwest::Client::new();
+    for (kind, status, slug) in [
+        (ErrorKind::Unavailable, 503, "unavailable"),
+        (ErrorKind::Internal, 500, "internal"),
+        (ErrorKind::Overloaded, 429, "rate_limited"),
+        (ErrorKind::Timeout, 504, "timeout"),
+    ] {
+        stack.engine.fault.set(Behavior::Error {
+            kind,
+            rate: 1.0,
+            message: "injected 17:04".into(),
+        });
+        let resp = http
+            .post(stack.url("/v1/evaluate"))
+            .json(&json!({ "subject_id": "s1" }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), status, "{kind:?}");
+        let body: Value = resp.json().await.unwrap();
+        assert_eq!(body["code"], slug, "{kind:?}");
+        assert!(body["details"].is_array());
+        if slug == "internal" {
+            assert_eq!(body["error"], "internal error", "internal is redacted");
+        } else {
+            assert_eq!(body["error"], "injected 17:04");
+        }
+    }
+    stack.engine.fault.set(Behavior::Healthy);
+}
+
+/// GraphQL carries the same envelope: the sentence as the message, the slug
+/// and the details in `extensions`.
+#[tokio::test]
+async fn graphql_errors_carry_the_code_in_extensions() {
+    use tbd_common::fault::{Behavior, ErrorKind};
+    let stack = support::start().await;
+    let http = reqwest::Client::new();
+    stack.engine.fault.set(Behavior::Error {
+        kind: ErrorKind::Unavailable,
+        rate: 1.0,
+        message: "engine away".into(),
+    });
+    let resp: Value = http
+        .post(stack.url("/graphql"))
+        .json(&json!({ "query": r#"{ evaluate(subjectId: "s1") { score } }"# }))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(resp["errors"][0]["message"], "engine away");
+    assert_eq!(resp["errors"][0]["extensions"]["code"], "unavailable");
+    assert!(resp["errors"][0]["extensions"]["details"].is_array());
+}
+
+/// A failing engine stream ends up as an SSE `error` event whose data is the
+/// envelope as JSON.
+#[tokio::test]
+async fn sse_error_event_is_the_json_envelope() {
+    use tbd_common::fault::{Behavior, ErrorKind};
+    let stack = support::start().await;
+    let http = reqwest::Client::new();
+    let resp = http
+        .get(stack.url("/v1/subjects/s1/events"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    let mut body = resp.bytes_stream();
+    let mut buf = String::new();
+    // Once the stream is open, every emitted item fails under the behaviour.
+    stack.engine.fault.set(Behavior::Error {
+        kind: ErrorKind::Unavailable,
+        rate: 1.0,
+        message: "stream cut".into(),
+    });
+    while !buf.contains("event: error") {
+        let chunk = body.next().await.unwrap().unwrap();
+        buf.push_str(&String::from_utf8_lossy(&chunk));
+    }
+    let data = buf
+        .lines()
+        .skip_while(|l| *l != "event: error")
+        .find_map(|l| l.strip_prefix("data: "))
+        .unwrap();
+    let v: Value = serde_json::from_str(data).unwrap();
+    assert_eq!(v["code"], "unavailable");
+    assert_eq!(v["error"], "stream cut");
+    assert!(v["details"].is_array());
+}
+
+/// The WebSocket `error` frame is the envelope too, `message` included.
+#[tokio::test]
+async fn websocket_error_frame_carries_the_code() {
+    use tbd_common::fault::{Behavior, ErrorKind};
+    let stack = support::start().await;
+    stack.engine.fault.set(Behavior::Error {
+        kind: ErrorKind::Internal,
+        rate: 1.0,
+        message: "secret detail".into(),
+    });
+    let (mut ws, _) = tokio_tungstenite::connect_async(stack.ws_url("/ws"))
+        .await
+        .unwrap();
+    ws.send(Message::Text("ping".into())).await.unwrap();
+    let frame = loop {
+        let msg = ws.next().await.unwrap().unwrap();
+        if let Ok(text) = msg.into_text() {
+            if text.is_empty() {
+                break Value::Null;
+            }
+            let v: Value = serde_json::from_str(&text).unwrap();
+            if v["type"] == "error" {
+                break v;
+            }
+        }
+    };
+    assert_eq!(frame["type"], "error");
+    assert_eq!(frame["code"], "internal");
+    assert_eq!(frame["message"], "internal error", "internal is redacted");
+    assert!(frame["details"].is_array());
 }
 
 #[tokio::test]

@@ -10,6 +10,8 @@ use tokio::{net::TcpListener, sync::oneshot};
 pub struct Stack {
     pub engine_addr: SocketAddr,
     pub protocol_addr: SocketAddr,
+    /// The engine's runtime: `engine.fault.set(..)` injects faults.
+    pub engine: tbd_engine::Runtime,
     _stop_engine: oneshot::Sender<()>,
     _stop_protocol: oneshot::Sender<()>,
 }
@@ -18,9 +20,11 @@ pub async fn start() -> Stack {
     let engine_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let engine_addr = engine_listener.local_addr().unwrap();
     let engine_config = tbd_engine::Config::parse_from(["engine", "--heartbeat-ms", "20"]);
+    let runtime = tbd_engine::Runtime::default();
+    let engine_runtime = runtime.clone();
     let (stop_engine, engine_stopped) = oneshot::channel();
     tokio::spawn(async move {
-        tbd_engine::serve_on(engine_listener, engine_config, async {
+        tbd_engine::serve_with(engine_listener, engine_config, engine_runtime, async {
             let _ = engine_stopped.await;
         })
         .await
@@ -45,6 +49,7 @@ pub async fn start() -> Stack {
     Stack {
         engine_addr,
         protocol_addr,
+        engine: runtime,
         _stop_engine: stop_engine,
         _stop_protocol: stop_protocol,
     }

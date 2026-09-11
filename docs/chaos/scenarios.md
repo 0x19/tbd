@@ -181,7 +181,7 @@ What each `kind` becomes on the wire, and therefore which error class the report
 | `kind` | gRPC (direct to engine) | HTTP through the protocol | report class |
 |---|---|---|---|
 | `unavailable` | `UNAVAILABLE` | 503 | `http 503` |
-| `internal` | `INTERNAL` | 502 | `http 502` |
+| `internal` | `INTERNAL` | 500 | `http 500` |
 | `overloaded` | `RESOURCE_EXHAUSTED` | 429 | `http 429` |
 | `timeout` | `DEADLINE_EXCEEDED` | 504 | `http 504` |
 

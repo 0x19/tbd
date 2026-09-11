@@ -11,13 +11,16 @@
 //!
 //! The protocol holds no business logic. Every request is translated and
 //! forwarded to a registered backend (`[services]` in `configs/protocol`); every
-//! engine `stub` flag is forwarded untouched.
+//! engine `stub` flag is forwarded untouched. Every body is JSON, in and out:
+//! HTTP responses, SSE payloads, WebSocket text frames, request bodies; errors
+//! are one envelope ([`Problem`]) on every surface.
 
 mod config;
 mod error;
 mod graphql;
 mod grpc;
 mod http;
+pub mod json;
 mod observe;
 mod state;
 pub mod subject;
@@ -33,7 +36,7 @@ pub use config::{
     Config, ENGINE, Health, Metrics, Overrides, Principals, Server, ServiceConfig, Source,
     grpc_service_name, service_url_var,
 };
-pub use error::ApiError;
+pub use error::{Code, Detail, Problem, Wire};
 pub use grpc::ENGINE_SERVICE;
 pub use state::{AppState, Backend, EngineClient, Readiness, ServiceState, Transport};
 
@@ -124,9 +127,7 @@ async fn fallback(request: axum::extract::Request) -> axum::response::Response {
     if observe::is_grpc(request.headers()) {
         tonic::Status::unimplemented("unknown gRPC method").into_http()
     } else {
-        axum::response::IntoResponse::into_response(ApiError::NotFound(
-            request.uri().path().to_owned(),
-        ))
+        axum::response::IntoResponse::into_response(Problem::not_found(request.uri().path()))
     }
 }
 
