@@ -120,8 +120,9 @@ stack in `devops/k8s/auth` (Ory Hydra for OAuth2/OIDC, Ory Kratos for identities
 - **Programs** present a bearer JWT on `api.<domain>`; only `/healthz` and `/readyz`
   are open. The `tbd-chaos` client uses the client-credentials grant, the future app is
   the public PKCE client `tbd-app`.
-- **Services** never see a raw token. The protocol reads the verified subject Envoy
-  forwards (`GET /v1/me` echoes it) and does no verification of its own.
+- **Services** never see a raw token. The protocol reads the verified principal Envoy
+  forwards (`GET /v1/me` echoes the subject, its kind and its claims) and does no
+  verification of its own.
 
 ```sh
 mise run auth:token                      # a JWT for the chaos client, from the deployed Hydra

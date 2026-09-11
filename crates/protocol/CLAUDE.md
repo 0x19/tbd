@@ -24,12 +24,17 @@ the logic belongs in the service. The contract is `docs/protocol/README.md`.
   every unknown REST path with HTTP 200 + `grpc-status: 12`. Unknown paths are a JSON
   404 (`Problem::not_found`) with route label `unmatched`; unknown gRPC methods keep the
   gRPC answer.
-- `subject.rs`: the caller identity. Envoy verifies the JWT and forwards the claims in
-  `x-jwt-payload` (base64url JSON) and strips that header from clients; `attach`
-  middleware puts `Subject(sub)` in the request extensions and the span (`enduser.id`),
-  handlers take `Subject` as an extractor (401 `unauthenticated` when absent), `/v1/me`
-  returns it. The protocol never verifies tokens: services are reachable only through
-  Envoy, and a second check would be a second implementation to keep in sync.
+- `principal.rs`: the caller identity. Envoy verifies the JWT and forwards the claims
+  in `x-jwt-payload` (base64url JSON) and strips that header from clients; `attach`
+  (middleware with state) puts a `Principal { sub, kind, scopes, role, org, key }` in
+  the request extensions and the span (`enduser.id`, `enduser.kind`, `enduser.org`,
+  `enduser.key`). The kind is `Service` for a `sub` in `[principals] services`,
+  `Client` when `client_id`/`azp` equals `sub`, else `Person` (with the client id it
+  came through). Claims are read top-level or under `ext`. Handlers take `Principal`
+  (401 `unauthenticated` when absent) or `Option<Principal>`; `/v1/me` returns it. The
+  protocol never verifies tokens: services are reachable only through Envoy, and a
+  second check would be a second implementation to keep in sync. `org`, `key`,
+  `parent` are the claim contract for the id plane; nothing mints them yet.
 - `error.rs`: `Problem { code: Code, message, details }` is the one error on every
   surface. `Code::from_grpc` is the standard gRPC-to-HTTP table (`internal` 500,
   `unavailable` 503, `timeout` 504, `rate_limited` 429, `failed_precondition` 400, plus

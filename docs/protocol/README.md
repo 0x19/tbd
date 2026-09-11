@@ -141,6 +141,23 @@ error message with `code` and `details` under `extensions`. The chaos error clas
 (`http 503`, `http 500`, `http 429`, `http 504`) are this table seen from the load
 generator ([chaos/scenarios.md](../chaos/scenarios.md)).
 
+## Principals
+
+The caller on every request, read from the claims Envoy verified and forwarded in
+`x-jwt-payload` ([auth/README.md](../auth/README.md#principals)):
+
+```json
+{"subject": "tbd-chaos", "kind": "client", "client_id": "tbd-chaos", "org": null, "key": null, "scopes": ["tbd.api"], "role": null}
+```
+
+`kind` is `person` (with the `client_id` the person came through, when any), `client`
+(a client-credentials token: `client_id` equals `sub`, an organisation's machine key) or
+`service` (a `sub` listed in `[principals] services`). `org` and `key` (`{id, parent}`)
+are read now and minted by the id plane later. `GET /v1/me` returns the principal, or
+`401 unauthenticated` when Envoy forwarded none; handlers take it as an extractor, the
+streams as an optional one. Span fields `enduser.id`, `enduser.kind`, `enduser.org` and
+`enduser.key` carry it into traces and logs.
+
 ## Metrics
 
 Client-side, per backend: `tbd_engine_client_requests_total{backend,route,status}` and
@@ -151,6 +168,6 @@ Client-side, per backend: `tbd_engine_client_requests_total{backend,route,status
 
 ## What comes next
 
-A `Principal` with the caller's kind and the organisation and key claims, OpenAPI
-generated from the handlers, then the descriptor-driven transcoder that exposes any
-registered service over REST and a multiplexed WebSocket.
+OpenAPI generated from the handlers, then the descriptor-driven transcoder that exposes
+any registered service over REST and a multiplexed WebSocket, with policy (scopes,
+weighted rate limits, idempotency) declared in the proto contract.

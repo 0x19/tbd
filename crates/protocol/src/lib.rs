@@ -22,8 +22,8 @@ mod grpc;
 mod http;
 pub mod json;
 mod observe;
+pub mod principal;
 mod state;
-pub mod subject;
 mod ws;
 
 use std::net::SocketAddr;
@@ -38,6 +38,7 @@ pub use config::{
 };
 pub use error::{Code, Detail, Problem, Wire};
 pub use grpc::ENGINE_SERVICE;
+pub use principal::{CallerKind, Key, Principal};
 pub use state::{AppState, Backend, EngineClient, Readiness, ServiceState, Transport};
 
 /// Errors from starting or running the protocol.
@@ -141,7 +142,10 @@ pub fn router(state: &AppState) -> Router {
         .with_state(state.clone())
         .merge(grpc::routes(state))
         .fallback(fallback)
-        .layer(axum::middleware::from_fn(subject::attach))
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            principal::attach,
+        ))
         .layer(axum::middleware::from_fn(observe::metrics))
         .layer(TraceLayer::new_for_http().make_span_with(observe::make_span))
 }

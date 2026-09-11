@@ -181,11 +181,37 @@ the Grafana host) and the next sync has run. Anonymous access is off. The admin 
 reachable on the LAN port 3000 for break-glass; the proxy headers are only accepted from
 the pod network (`GF_AUTH_PROXY_WHITELIST`).
 
-**What the protocol does with it.** `crates/protocol/src/subject.rs` reads `sub` from
-`x-jwt-payload` into a request extension and the span (`enduser.id`). `GET /v1/me`
-returns it, or 401 when Envoy forwarded no identity. Handlers that need the caller take
-`Subject` as an extractor. The protocol never verifies a token itself: with services
-reachable only through Envoy, that would be a second implementation of the same check.
+**What the protocol does with it.** `crates/protocol/src/principal.rs` reads the
+verified claims from `x-jwt-payload` into a `Principal` on the request and the span
+(`enduser.id`, `enduser.kind`, `enduser.org`, `enduser.key`). `GET /v1/me` returns it,
+or 401 when Envoy forwarded no identity. Handlers that need the caller take `Principal`
+as an extractor (`Option<Principal>` where the caller is optional). The protocol never
+verifies a token itself: with services reachable only through Envoy, that would be a
+second implementation of the same check. Only the API host (`api.<domain>`,
+`localhost:18080`, `chaos.api.*`) forwards the whole payload; the UI hosts forward
+`x-user-*` headers, which the chaos API reads instead.
+
+## Principals
+
+The claims a verified token may carry, top-level or under `ext` (Hydra puts the claims
+the consent step adds to an access token under `ext`; `mirror_top_level_claims` is off):
+
+| Claim | Meaning | Minted by |
+|---|---|---|
+| `sub` | the caller: a person's identity id (pairwise per organisation, [design/id/000](../design/id/000-account-model.md)), a client id, or a service id | Hydra |
+| `client_id` / `azp` | the OAuth client the token was issued to | Hydra (`client_id` on client-credentials tokens) |
+| `scp` / `scope` | granted scopes, as a list or a space-separated string | Hydra |
+| `role` | `admin`, `editor` or `viewer` for a person | the consent step, from `metadata_admin.role` |
+| `org` | the organisation the caller belongs to | not yet: the claim contract for the id plane |
+| `key`, `parent` | the key the call was made with, and its parent for a sub-key | not yet: the claim contract for the id plane |
+
+From them the protocol derives the caller kind: `service` when `sub` is listed in
+`[principals] services` of `configs/protocol/base.toml`; `client` when `client_id`
+equals `sub` (a client-credentials token, an organisation's machine key: `tbd-chaos`
+today); `person` otherwise, carrying `client_id` when the person came through a client.
+Organisations, sub-keys and their limits hang off `org` and `key` once the id plane mints
+them (a Hydra token hook or client metadata); reading them now is what lets that land
+without touching the protocol.
 
 ## How `chaos` gets in
 

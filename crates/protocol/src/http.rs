@@ -16,7 +16,7 @@ use futures::{Stream, StreamExt};
 use serde::{Deserialize, Serialize};
 use tbd_proto::engine::v1::{EvaluateRequest, SubscribeRequest, subscribe_response};
 
-use crate::{AppState, Problem, subject::Subject};
+use crate::{AppState, Principal, Problem, principal::Key};
 use tbd_common::metrics::StreamGuard;
 
 pub fn routes() -> Router<AppState> {
@@ -41,13 +41,35 @@ pub struct Health {
 }
 
 /// Who the verified caller is; 401 when Envoy forwarded no identity.
-async fn me(subject: Subject) -> Json<Me> {
-    Json(Me { subject: subject.0 })
+async fn me(principal: Principal) -> Json<Me> {
+    Json(Me {
+        client_id: principal.client_id().map(str::to_owned),
+        kind: principal.kind_slug(),
+        subject: principal.sub,
+        org: principal.org,
+        key: principal.key,
+        scopes: principal.scopes,
+        role: principal.role,
+    })
 }
 
-#[derive(Serialize)]
-struct Me {
-    subject: String,
+/// `GET /v1/me` body.
+#[derive(Debug, Serialize)]
+pub struct Me {
+    /// The `sub` claim.
+    pub subject: String,
+    /// `person`, `client` or `service`.
+    pub kind: &'static str,
+    /// The OAuth client the call came through, if any.
+    pub client_id: Option<String>,
+    /// Organisation, when minted.
+    pub org: Option<String>,
+    /// Key and parent key, when minted.
+    pub key: Option<Key>,
+    /// Granted scopes.
+    pub scopes: Vec<String>,
+    /// Role, when the consent step stamped one.
+    pub role: Option<String>,
 }
 
 /// Readiness: every required backend answers `SERVING` to a live health
@@ -130,8 +152,13 @@ pub enum EventBody {
 /// `GET /v1/subjects/{subject_id}/events`: engine `Subscribe` as SSE.
 async fn events(
     State(state): State<AppState>,
+    principal: Option<Principal>,
     Path(subject_id): Path<String>,
 ) -> Result<Sse<impl Stream<Item = Result<SseEvent, Infallible>>>, Problem> {
+    tracing::debug!(
+        caller = principal.as_ref().map(Principal::kind_slug),
+        "events stream requested"
+    );
     let stream = state
         .engine()
         .subscribe(SubscribeRequest { subject_id })

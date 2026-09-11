@@ -19,7 +19,7 @@ use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 
 use crate::{
-    AppState, Problem,
+    AppState, Principal, Problem,
     error::{Code, Detail},
 };
 use tbd_common::metrics::StreamGuard;
@@ -74,7 +74,15 @@ impl WsFrame<'_> {
     }
 }
 
-async fn upgrade(ws: WebSocketUpgrade, State(state): State<AppState>) -> Response {
+async fn upgrade(
+    ws: WebSocketUpgrade,
+    principal: Option<Principal>,
+    State(state): State<AppState>,
+) -> Response {
+    tracing::debug!(
+        caller = principal.as_ref().map(Principal::kind_slug),
+        "ws upgrade requested"
+    );
     ws.on_upgrade(move |socket| bridge(socket, state))
 }
 

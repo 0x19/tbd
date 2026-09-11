@@ -63,7 +63,7 @@ earlier idea material for a product direction, not a spec; do not "fix" it.
   recorded and a `RequestTimer`; streams get a `StreamGuard`.
 - Services never address each other directly: the engine URL is Envoy's engine LB.
 - Services never verify tokens. Envoy does, and forwards the verified claims in
-  `x-jwt-payload`; handlers take `Subject` (`crates/protocol/src/subject.rs`). A new
+  `x-jwt-payload`; handlers take `Principal` (`crates/protocol/src/principal.rs`). A new
   route or host is gated in `envoy.yaml` by naming a JWT requirement; health paths stay
   open. Secrets live only in Kubernetes Secrets created by mise tasks, never in files.
 - `envoy.yaml` has exactly one placeholder, `__AUTH_PUBLIC_URL__`; anything else that

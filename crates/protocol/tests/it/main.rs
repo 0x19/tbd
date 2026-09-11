@@ -323,6 +323,62 @@ async fn me_reads_the_subject_envoy_forwarded() {
     assert_eq!(res.status(), 200);
     let body: Value = res.json().await.unwrap();
     assert_eq!(body["subject"], "person-42");
+    assert_eq!(body["kind"], "person");
+    assert_eq!(body["scopes"], json!(["tbd.api"]));
+    assert!(body["client_id"].is_null());
+}
+
+/// The caller kind follows the claims: a client-credentials token is a
+/// `client`, a listed subject is a `service`, a person through a client keeps
+/// the client id; consent-set claims under `ext` are read too.
+#[tokio::test]
+async fn me_reports_the_caller_kind_and_key_claims() {
+    use base64::Engine as _;
+    let stack = support::start().await;
+    let http = reqwest::Client::new();
+    let me = |claims: Value| {
+        let payload = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(claims.to_string());
+        http.get(stack.url("/v1/me"))
+            .header("x-jwt-payload", payload)
+    };
+
+    let client: Value =
+        me(json!({"sub": "tbd-chaos", "client_id": "tbd-chaos", "scp": ["tbd.api"]}))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+    assert_eq!(client["kind"], "client");
+    assert_eq!(client["client_id"], "tbd-chaos");
+
+    let service: Value = me(json!({"sub": "svc-ledger", "client_id": "svc-ledger"}))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(service["kind"], "service");
+
+    let person: Value = me(
+        json!({"sub": "person-7", "azp": "tbd-app", "scope": "openid tbd.api",
+        "ext": {"role": "admin", "org": "acme", "key": "k-7", "parent": "k-1"}}),
+    )
+    .send()
+    .await
+    .unwrap()
+    .json()
+    .await
+    .unwrap();
+    assert_eq!(person["kind"], "person");
+    assert_eq!(person["client_id"], "tbd-app");
+    assert_eq!(person["role"], "admin");
+    assert_eq!(person["org"], "acme");
+    assert_eq!(person["key"]["id"], "k-7");
+    assert_eq!(person["key"]["parent"], "k-1");
+    assert_eq!(person["scopes"], json!(["openid", "tbd.api"]));
 }
 
 /// Unknown paths are 404s, not tonic's "unimplemented" 200. gRPC callers of an

@@ -49,6 +49,9 @@ pub fn make_span(request: &http::Request<axum::body::Body>) -> tracing::Span {
         http.route = %route,
         trace_id = tracing::field::Empty,
         enduser.id = tracing::field::Empty,
+        enduser.kind = tracing::field::Empty,
+        enduser.org = tracing::field::Empty,
+        enduser.key = tracing::field::Empty,
     );
     if let Some(id) = propagation::adopt_parent(&span, &propagation::Headers(request.headers())) {
         span.record("trace_id", id);

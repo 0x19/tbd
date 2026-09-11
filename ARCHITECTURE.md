@@ -97,8 +97,9 @@ Envoy routes, from `devops/envoy/envoy.yaml`:
    gRPC health on the engine, `/healthz` and `/readyz` on the protocol, `/ready` on Envoy.
 9. **Envoy is the only authenticator.** Tokens are verified once, in Envoy, against
    Hydra's keys; identity reaches a service only as the `x-jwt-payload` header Envoy
-   sets after stripping whatever the client sent. Services read it (`Subject`) and never
-   verify, decode or forward tokens themselves. A new host or route is gated by naming a
+   sets after stripping whatever the client sent. Services read it (`Principal`: the
+   subject, its kind, scopes, role, organisation and key) and never verify, decode or
+   forward tokens themselves. A new host or route is gated by naming a
    JWT requirement in `envoy.yaml`, not by code in a service.
 
 ## Cross-cutting
