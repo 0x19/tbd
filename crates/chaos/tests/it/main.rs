@@ -496,3 +496,80 @@ fn scenario_set_behavior_follows_the_kind_capability() {
             .contains("load can target")
     );
 }
+
+/// A campaign runs through chaos's own glue: the stack from the file, the
+/// workers on it, the report; and findings round-trip through their files.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn stress_campaign_runs_on_the_files_stack_and_findings_round_trip() {
+    let file = tbd_chaos::stress::parse_campaign(
+        "[campaign]\nname = \"glue\"\nduration = \"1s\"\nwarmup = \"100ms\"\nseed = 5\n\n[stack.ledgers.l]\ngrace = \"0s\"\n\n[workload.owner]\nworkers = 2\nsubjects = 2\n\n[[timeline]]\nat = \"300ms\"\naction = \"log\"\nmessage = \"half way\"\n",
+    )
+    .unwrap();
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+    let hooks = tbd_chaos::stress::Hooks {
+        events: Some(tx),
+        cancel: tokio_util::sync::CancellationToken::default(),
+    };
+    let result = tbd_chaos::stress::run_campaign_with(
+        &file,
+        &tbd_chaos::stress::RunOptions::default(),
+        &hooks,
+    )
+    .await;
+    drop(hooks);
+    assert!(result.passed, "{}", tbd_stress::render(&result));
+    assert_eq!(result.store.as_deref(), Some("memory"));
+    assert_eq!(result.targets, vec!["l".to_owned()]);
+    let mut phases = Vec::new();
+    let mut timeline = 0;
+    while let Ok(e) = rx.try_recv() {
+        match e {
+            tbd_chaos::stress::RunEvent::Phase { name } => phases.push(name),
+            tbd_chaos::stress::RunEvent::Timeline { .. } => timeline += 1,
+            _ => {}
+        }
+    }
+    assert_eq!(phases, ["setup", "warmup", "run", "done", "teardown"]);
+    assert_eq!(timeline, 1, "the log action fired");
+
+    // Findings: written one file each, read back by id or path, and a replay
+    // with no ledger target is an error, not a hang.
+    let dir = std::env::temp_dir().join(format!("chaos-findings-{}", uuid::Uuid::now_v7()));
+    let mut with_finding = result.clone();
+    let violation = tbd_stress::trace::Violation {
+        invariant: "append_echo",
+        message: "made up".into(),
+        expected: serde_json::json!("x"),
+        actual: serde_json::json!("y"),
+    };
+    with_finding.findings.push(tbd_stress::Finding::new(
+        &violation,
+        vec![],
+        uuid::Uuid::now_v7(),
+        tbd_stress::WorkerClass::Owner,
+        "glue",
+        "l",
+        Some("memory"),
+    ));
+    let written = tbd_chaos::stress::write_findings(&dir, &with_finding).unwrap();
+    assert_eq!(written.len(), 1);
+    let id = &with_finding.findings[0].id;
+    let (path, f) = tbd_chaos::stress::read_finding(&dir, id).unwrap();
+    assert_eq!(path, written[0]);
+    assert_eq!(f.id, *id);
+    let (_, f2) = tbd_chaos::stress::read_finding(&dir, &written[0].display().to_string()).unwrap();
+    assert_eq!(f2.signature, f.signature);
+    let mut f = f;
+    let err = tbd_chaos::stress::replay_finding(
+        &path,
+        &mut f,
+        &[],
+        &tbd_chaos::tls::Trust::default(),
+        1,
+        Duration::from_secs(1),
+    )
+    .await
+    .unwrap_err();
+    assert!(err.contains("no ledger target"), "{err}");
+    std::fs::remove_dir_all(&dir).unwrap();
+}

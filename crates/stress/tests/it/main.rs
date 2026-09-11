@@ -5,7 +5,7 @@
 
 use std::{sync::Arc, time::Duration};
 
-use tbd_stress::{Campaign, Hooks, StressEvent, Target};
+use tbd_stress::{Campaign, GrpcLedger, Hooks, LedgerClient, StressEvent, Target};
 use tokio::sync::mpsc;
 
 /// An in-process ledger with a zero grace window and a one-second sweeper.
@@ -160,4 +160,124 @@ async fn an_unreachable_target_is_an_error_not_a_hang() {
             .contains("unreachable"),
         "{result:?}"
     );
+}
+
+/// A client that drops the last fact of every history page: the kind of
+/// bug the harness exists for, wrapped around the honest gRPC client so the
+/// ledger itself stays real.
+struct Lying(GrpcLedger);
+
+#[async_trait::async_trait]
+impl LedgerClient for Lying {
+    async fn ping(
+        &self,
+        req: tbd_proto::ledger::v1::PingRequest,
+    ) -> Result<tbd_proto::ledger::v1::PingResponse, tbd_stress::CallError> {
+        self.0.ping(req).await
+    }
+    async fn append(
+        &self,
+        req: tbd_proto::ledger::v1::AppendRequest,
+    ) -> Result<tbd_proto::ledger::v1::AppendResponse, tbd_stress::CallError> {
+        self.0.append(req).await
+    }
+    async fn current(
+        &self,
+        req: tbd_proto::ledger::v1::CurrentRequest,
+    ) -> Result<tbd_proto::ledger::v1::CurrentResponse, tbd_stress::CallError> {
+        self.0.current(req).await
+    }
+    async fn history(
+        &self,
+        req: tbd_proto::ledger::v1::HistoryRequest,
+    ) -> Result<tbd_proto::ledger::v1::HistoryResponse, tbd_stress::CallError> {
+        let mut r = self.0.history(req).await?;
+        if r.next.is_empty() {
+            r.facts.pop();
+        }
+        Ok(r)
+    }
+    async fn retract(
+        &self,
+        req: tbd_proto::ledger::v1::RetractRequest,
+    ) -> Result<tbd_proto::ledger::v1::RetractResponse, tbd_stress::CallError> {
+        self.0.retract(req).await
+    }
+    async fn erase(
+        &self,
+        req: tbd_proto::ledger::v1::EraseRequest,
+    ) -> Result<tbd_proto::ledger::v1::EraseResponse, tbd_stress::CallError> {
+        self.0.erase(req).await
+    }
+    async fn restore(
+        &self,
+        req: tbd_proto::ledger::v1::RestoreRequest,
+    ) -> Result<tbd_proto::ledger::v1::RestoreResponse, tbd_stress::CallError> {
+        self.0.restore(req).await
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_lying_client_produces_a_shrunk_finding_that_replays() {
+    let ledger = Ledger::start().await;
+    let c = campaign(
+        "1500ms",
+        "[workload.owner.mix]\nappend = 4\nhistory = 4\n\n[stop]\nmax_findings = 3\nshrink_attempts = 300\nshrink_timeout = \"30s\"\n",
+    );
+    let lying: Arc<dyn LedgerClient> = Arc::new(Lying(GrpcLedger::new(
+        &ledger.target(),
+        Duration::from_secs(5),
+    )));
+    let result = tbd_stress::run_with_clients(
+        &c,
+        vec!["ledger-it".into()],
+        vec![lying.clone()],
+        &Hooks::default(),
+    )
+    .await;
+    let text = tbd_stress::render(&result);
+    assert!(!result.passed, "{text}");
+    assert!(result.stopped_early, "{text}");
+    assert!(!result.findings.is_empty(), "{text}");
+    for f in &result.findings {
+        assert_eq!(f.invariant, "history_is_everything", "{text}");
+        assert!(
+            f.shrunk,
+            "{}: {text}",
+            f.shrink_note.as_deref().unwrap_or("")
+        );
+        // One append and one history read are all it takes.
+        assert!(f.trace.len() <= 3, "{} steps: {text}", f.trace.len());
+    }
+    assert!(
+        result
+            .findings
+            .iter()
+            .any(|f| f.trace.len() < f.original_len),
+        "no trace got shorter: {text}"
+    );
+    // The shrunk trace reproduces through the lying client and not through the honest one.
+    let f = &result.findings[0];
+    let honest: Arc<dyn LedgerClient> =
+        Arc::new(GrpcLedger::new(&ledger.target(), Duration::from_secs(5)));
+    let through_liar =
+        tbd_stress::replay(&f.trace, lying.as_ref(), Duration::from_millis(500), &[]).await;
+    assert!(
+        through_liar.reproduces(&f.invariant, &f.signature),
+        "{:?}",
+        through_liar.violations
+    );
+    let through_honest =
+        tbd_stress::replay(&f.trace, honest.as_ref(), Duration::from_millis(500), &[]).await;
+    assert!(
+        !through_honest.reproduces(&f.invariant, &f.signature),
+        "{:?}",
+        through_honest.violations
+    );
+    assert!(
+        through_honest.violations.is_empty(),
+        "{:?}",
+        through_honest.violations
+    );
+    ledger.stop().await;
 }

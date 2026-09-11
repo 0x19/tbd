@@ -286,12 +286,36 @@ enum StressCmd {
         /// Extra PEM root to trust for an https target. Default: `[validate] ca_cert`.
         #[arg(long, env = "CHAOS_CA_CERT")]
         ca_cert: Option<PathBuf>,
+        /// Where findings are written, one JSON file per finding.
+        #[arg(long, env = "CHAOS_FINDINGS_DIR", default_value = ".chaos/findings")]
+        findings_dir: PathBuf,
     },
     /// Parse and check campaign files without running them.
     Check {
         /// Campaign files.
         #[arg(required = true)]
         files: Vec<PathBuf>,
+    },
+    /// Replay a finding's trace against a ledger and say whether it reproduces.
+    Replay {
+        /// A finding id under the findings directory, or a path to its JSON file.
+        finding: String,
+        /// Replays to try before giving up (a race needs more than one).
+        #[arg(long, default_value_t = 1)]
+        attempts: u32,
+        /// Emit JSON instead of text.
+        #[arg(long)]
+        json: bool,
+        #[command(flatten)]
+        targets: TargetArgs,
+        #[command(flatten)]
+        auth: AuthArgs,
+        /// Extra PEM root to trust for an https target. Default: `[validate] ca_cert`.
+        #[arg(long, env = "CHAOS_CA_CERT")]
+        ca_cert: Option<PathBuf>,
+        /// Where findings live.
+        #[arg(long, env = "CHAOS_FINDINGS_DIR", default_value = ".chaos/findings")]
+        findings_dir: PathBuf,
     },
 }
 
@@ -417,6 +441,23 @@ async fn stress(command: StressCmd, mut config: ChaosConfig) -> anyhow::Result<(
             }
             if ok { Ok(()) } else { std::process::exit(1) }
         }
+        StressCmd::Replay {
+            finding,
+            attempts,
+            json,
+            targets,
+            auth,
+            ca_cert,
+            findings_dir,
+        } => {
+            targets.apply(&mut config);
+            auth.apply(&mut config);
+            if let Some(v) = ca_cert {
+                config.validate.ca_cert = v;
+            }
+            config.check()?;
+            stress_replay(&config, &findings_dir, &finding, attempts, json).await
+        }
         StressCmd::Run {
             files,
             dir,
@@ -425,6 +466,7 @@ async fn stress(command: StressCmd, mut config: ChaosConfig) -> anyhow::Result<(
             targets,
             auth,
             ca_cert,
+            findings_dir,
         } => {
             // Explicit targets mean "no stack": the ledger URL from the flags
             // (or CHAOS_LEDGER_URL), never the config's default.
@@ -462,8 +504,13 @@ async fn stress(command: StressCmd, mut config: ChaosConfig) -> anyhow::Result<(
             let mut results = Vec::with_capacity(paths.len());
             for path in &paths {
                 let result = tbd_chaos::stress::run_file_with(path, &options, &hooks).await;
+                let written = tbd_chaos::stress::write_findings(&findings_dir, &result)
+                    .map_err(|e| anyhow::anyhow!(e))?;
                 if !json {
                     print!("{}", tbd_stress::render(&result));
+                    for w in &written {
+                        println!("      written   {}", w.display());
+                    }
                 }
                 results.push(result);
             }
@@ -627,4 +674,61 @@ async fn run(files: Vec<String>, dir: Option<PathBuf>, json: bool) -> anyhow::Re
     } else {
         std::process::exit(1)
     }
+}
+
+async fn stress_replay(
+    config: &ChaosConfig,
+    findings_dir: &std::path::Path,
+    finding: &str,
+    attempts: u32,
+    json: bool,
+) -> anyhow::Result<()> {
+    let (path, mut f) =
+        tbd_chaos::stress::read_finding(findings_dir, finding).map_err(|e| anyhow::anyhow!(e))?;
+    let ledger = config
+        .targets
+        .url("ledger")
+        .map(|url| tbd_chaos::load::Target {
+            name: "ledger".into(),
+            http_url: url,
+            kind: "ledger".into(),
+        })
+        .into_iter()
+        .collect::<Vec<_>>();
+    let outcome = tbd_chaos::stress::replay_finding(
+        &path,
+        &mut f,
+        &ledger,
+        &config.trust()?,
+        attempts,
+        Duration::from_secs(5),
+    )
+    .await
+    .map_err(|e| anyhow::anyhow!(e))?;
+    if json {
+        println!("{}", serde_json::to_string_pretty(&outcome)?);
+    } else {
+        println!(
+            "{}  {}  {}  ({} steps, {} attempt(s)){}",
+            if outcome.reproduced {
+                "REPRODUCED"
+            } else {
+                "not reproduced"
+            },
+            f.invariant,
+            f.message,
+            outcome.steps_run,
+            attempts,
+            outcome
+                .message
+                .as_deref()
+                .filter(|_| outcome.reproduced)
+                .map(|m| format!("\n      {m}"))
+                .unwrap_or_default()
+        );
+    }
+    if outcome.reproduced {
+        std::process::exit(1)
+    }
+    Ok(())
 }

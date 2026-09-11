@@ -34,9 +34,17 @@ same stack and timeline it uses for scenarios.
   under `SAFE_WINDOW` (2 s) may close during the denial checks, so restore is allowed to
   find the subject gone and the cycle continues into the cascade; a real window never
   awaits the cascade.
-- `executor.rs`: `run`: ping the targets (a stub ledger is an error), spawn workers over
+- `replay.rs`: `Interpreter` judges a trace step by step from the request alone, with
+  the same model and checkers the worker used, so `replay` reproduces a finding on any
+  target; `shrink.rs` is ddmin over the steps with dependencies pinned back in, bounded
+  by `[stop]`. Owner workers know *what* to send; the interpreter knows what an answer
+  must have been. When a rule is added or changed, both must agree, and the lying-client
+  test in `tests/it` is where a disagreement shows.
+- `executor.rs`: `run` connects and hands over to `run_with_clients` (what a test with
+  a lying client calls): ping the targets (a stub ledger is an error), spawn workers over
   the targets round robin, warmup, the measured phase with a snapshot a second, join,
-  collect. `[stop] max_findings` cancels the workers early.
+  collect, then shrink every finding while the workers are quiet. `[stop] max_findings`
+  cancels the workers early.
 - `metrics.rs` is chaos's load metrics type, moved here so load runs and stress runs
   report the same `LoadSnapshot`; chaos re-exports it at `load::metrics`.
 
@@ -44,7 +52,9 @@ Tests: unit tests next to the code (every invariant with hand-built pages, the m
 transitions, the campaign checks, the signature normalisation); `tests/it/main.rs` boots
 `tbd_ledger::serve_store` on the memory store with a zero grace window and runs short
 campaigns: every enabled invariant is evaluated and holds, cancel ends the run, an
-unreachable target is an error. The shipped campaigns under `stress/` run in
+unreachable target is an error, and a client that drops the last fact of every history
+page produces `history_is_everything` findings that shrink to a few steps and replay
+through the liar but not through the honest client. The shipped campaigns under `stress/` run in
 `mise run ci`.
 
 When a campaign finds something, the trace decides whether the ledger or the model is

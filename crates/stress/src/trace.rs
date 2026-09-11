@@ -15,7 +15,7 @@ use uuid::Uuid;
 use crate::client::CallError;
 
 /// Which subject a request names: the worker's own, or one of its peers.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SubjectRef {
     /// The subject the trace belongs to.

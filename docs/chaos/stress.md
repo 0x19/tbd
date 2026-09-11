@@ -137,6 +137,29 @@ the cascade is not awaited.
 | `cascade_tombstones_counterparty` | after a peer's cascade the subject holds one tombstone per relation that named the peer, with the cause as origin and the newest value's consent, and everything else as before |
 | `clean_errors` | never `Internal`, `Unknown` or `DataLoss`; never a dropped connection or a timeout outside `[faults] tolerate` |
 
+## Findings, shrinking and replay
+
+A finding is written as `<findings-dir>/<id>.json` (`--findings-dir`,
+`CHAOS_FINDINGS_DIR`, default `.chaos/findings`) with everything above and its trace.
+After the workers stop, every finding is **shrunk**: the trace is replayed on fresh
+subjects and cut down by delta debugging (ddmin) to the shortest sequence that still
+breaks the same rule with the same signature; steps a kept step depends on (a cursor, a
+`recorded_at`) are pinned back in. `[stop] shrink = false` skips it;
+`shrink_attempts` and `shrink_timeout` bound it per finding. The finding records
+`original_len`, whether it is `shrunk`, and a `shrink_note` saying what happened (`3 of
+41 steps after 27 replays`, `every step is needed`, or `not reproduced on a fresh
+replay` for a race that did not recur).
+
+`chaos stress replay <id|path> [--target ledger=URL] [--attempts N]` runs a finding's
+trace against a ledger, `attempts` times for a race, and says `REPRODUCED` (exit 1) or
+`not reproduced`; the outcome is appended to the finding's `replays`. Without a target the
+ledger from the config or `CHAOS_LEDGER_URL` is used: a bug found on the memory store can
+be checked against Postgres, or against the deployed ledger through Envoy, from the same
+file.
+
+A replay judges answers with the same model and the same checkers the worker used, from
+the requests alone, so it needs nothing but the trace.
+
 ## Output
 
 `chaos stress run` prints one block per campaign: `PASS`/`FAIL`/`SKIP`, the target and its

@@ -184,8 +184,9 @@ Stress campaigns ([stress.md](stress.md)): model-checking workers against the le
 findings with the trace that led there.
 
 ```
-chaos stress run   [FILES...] [--dir DIR] [--json] [--seed N] [--target ledger=URL] [auth flags] [--ca-cert PEM]
-chaos stress check FILES...
+chaos stress run    [FILES...] [--dir DIR] [--json] [--seed N] [--target ledger=URL] [auth flags] [--ca-cert PEM] [--findings-dir DIR]
+chaos stress check  FILES...
+chaos stress replay <ID|PATH> [--attempts N] [--json] [--target ledger=URL] [auth flags] [--ca-cert PEM] [--findings-dir DIR]
 ```
 
 | Argument | Meaning |
@@ -195,6 +196,7 @@ chaos stress check FILES...
 | `--json` | one JSON array of results at the end instead of text per campaign |
 | `--seed` | overrides `[campaign] seed` in every file (a nightly run over seeds) |
 | `--target ledger=URL`, `--ledger`, `CHAOS_LEDGER_URL` | run against that ledger instead of the campaign's `[stack]`; the timeline is ignored; the bearer flags are `validate`'s |
+| `--findings-dir`, `CHAOS_FINDINGS_DIR` | where findings are written, one `<id>.json` each; default `.chaos/findings` |
 
 Files are de-duplicated and run in sorted path order, each with a fresh stack when it
 has one. A file that fails to parse or cross-check is a failed campaign with the error.
@@ -225,8 +227,18 @@ campaign:
 }
 ```
 
+Every finding is shrunk after the run (`[stop] shrink`) and written under the findings
+directory; the text output names each file. The JSON carries `shrunk`, `original_len`
+and `shrink_note` per finding.
+
 `chaos stress check` prints `ok <file> (<name>)` or `error <file>: <message>` per file
 and exits 1 if any failed.
+
+`chaos stress replay` reads a finding by id under the findings directory or by path,
+replays its trace against the ledger the flags or the config name, `--attempts` times,
+and prints `REPRODUCED <invariant> <message>` (exit 1) or `not reproduced`. The outcome is
+appended to the finding's `replays`. `--json` prints the `ReplayOutcome`: `at`, `target`,
+`reproduced`, `message`, `steps_run`.
 
 ## `chaos serve`
 

@@ -359,6 +359,84 @@ fn build_targets(
         .collect()
 }
 
+/// Write every finding of `result` as `<dir>/<id>.json`; returns the paths.
+///
+/// # Errors
+/// The directory cannot be created or a file cannot be written.
+pub fn write_findings(
+    dir: &Path,
+    result: &CampaignResult,
+) -> Result<Vec<std::path::PathBuf>, String> {
+    if result.findings.is_empty() {
+        return Ok(Vec::new());
+    }
+    std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    let mut paths = Vec::with_capacity(result.findings.len());
+    for f in &result.findings {
+        let path = dir.join(format!("{}.json", f.id));
+        let text = serde_json::to_string_pretty(f).map_err(|e| e.to_string())?;
+        std::fs::write(&path, text).map_err(|e| format!("{}: {e}", path.display()))?;
+        paths.push(path);
+    }
+    Ok(paths)
+}
+
+/// Read a finding by path, or by id under `dir`.
+///
+/// # Errors
+/// Not found or not a finding.
+pub fn read_finding(
+    dir: &Path,
+    id_or_path: &str,
+) -> Result<(std::path::PathBuf, tbd_stress::Finding), String> {
+    let candidate = Path::new(id_or_path);
+    let path = if candidate.is_file() {
+        candidate.to_path_buf()
+    } else {
+        dir.join(format!("{}.json", id_or_path.trim_end_matches(".json")))
+    };
+    let text = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let finding = serde_json::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
+    Ok((path, finding))
+}
+
+/// Replay a finding against ledger targets `attempts` times, record the
+/// outcome on the finding and rewrite its file.
+///
+/// # Errors
+/// No ledger target, or the file cannot be rewritten.
+pub async fn replay_finding(
+    path: &Path,
+    finding: &mut tbd_stress::Finding,
+    targets: &[Target],
+    trust: &Trust,
+    attempts: u32,
+    timeout: Duration,
+) -> Result<tbd_stress::ReplayOutcome, String> {
+    let ledgers: Vec<&Target> = targets.iter().filter(|t| t.kind == "ledger").collect();
+    let Some(first) = ledgers.first() else {
+        return Err("no ledger target: give `--target ledger=URL`".into());
+    };
+    let built = build_targets(&[first], trust, timeout)?;
+    let client: Arc<dyn tbd_stress::LedgerClient> =
+        Arc::new(tbd_stress::GrpcLedger::new(&built[0], timeout));
+    let outcome = tbd_stress::replay_finding(
+        &finding.trace,
+        &finding.invariant,
+        &finding.signature,
+        client,
+        &first.name,
+        attempts,
+        Duration::from_millis(500),
+        &[],
+    )
+    .await;
+    finding.replays.push(outcome.clone());
+    let text = serde_json::to_string_pretty(&finding).map_err(|e| e.to_string())?;
+    std::fs::write(path, text).map_err(|e| format!("{}: {e}", path.display()))?;
+    Ok(outcome)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

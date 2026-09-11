@@ -177,9 +177,9 @@ impl Finding {
 }
 
 /// The dedup key: SHA-256 over the invariant and the message with UUIDs,
-/// RFC 3339 stamps and numbers of four digits or more replaced by `#`, first
-/// twelve hex characters. Two runs that break the same rule the same way share
-/// it; the ids they happened on do not matter.
+/// RFC 3339 stamps and numbers replaced by `#`, first twelve hex characters.
+/// Two runs that break the same rule the same way share it; the ids they
+/// happened on do not matter.
 #[must_use]
 pub fn signature(invariant: &str, message: &str) -> String {
     let mut h = Sha256::new();
@@ -195,7 +195,8 @@ fn normalise(message: &str) -> String {
     let mut digits = 0usize;
     let mut buf = String::new();
     let flush = |out: &mut String, buf: &mut String, digits: usize| {
-        if digits >= 4 || looks_like_id(buf) {
+        if (digits > 0 && buf.chars().all(|c| c.is_ascii_digit() || c == '.')) || looks_like_id(buf)
+        {
             out.push('#');
         } else {
             out.push_str(buf);

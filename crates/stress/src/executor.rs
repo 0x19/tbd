@@ -29,30 +29,51 @@ pub const PROGRESS_INTERVAL: Duration = Duration::from_secs(1);
 /// Run `campaign` against `targets` until its duration passes, it is
 /// cancelled, or `[stop] max_findings` is reached.
 pub async fn run(campaign: &Campaign, targets: Vec<Target>, hooks: &Hooks) -> CampaignResult {
-    let started = Instant::now();
-    let mut result = empty_result(campaign, &targets);
     if campaign.campaign.skip {
+        let mut result = empty_result(campaign, &[]);
         result.passed = true;
         return result;
     }
+    let timeout = campaign.campaign.timeout;
+    let clients: Vec<Arc<dyn LedgerClient>> = targets
+        .iter()
+        .map(|t| Arc::new(GrpcLedger::new(t, timeout)) as Arc<dyn LedgerClient>)
+        .collect();
+    let names: Vec<String> = targets.iter().map(|t| t.name.clone()).collect();
+    run_with_clients(campaign, names, clients, hooks).await
+}
+
+/// Run against clients the caller built: what [`run`] does after it has
+/// connected, and what a test does with a client that lies.
+pub async fn run_with_clients(
+    campaign: &Campaign,
+    names: Vec<String>,
+    clients: Vec<Arc<dyn LedgerClient>>,
+    hooks: &Hooks,
+) -> CampaignResult {
+    let started = Instant::now();
+    let targets: Vec<Named> = names
+        .into_iter()
+        .zip(clients)
+        .map(|(name, client)| Named { name, client })
+        .collect();
+    let mut result = empty_result(
+        campaign,
+        &targets.iter().map(|t| t.name.clone()).collect::<Vec<_>>(),
+    );
     if targets.is_empty() {
         result.error = Some("no targets: give a ledger to run against".into());
         result.duration_s = started.elapsed().as_secs_f64();
         return result;
     }
-
-    let timeout = campaign.campaign.timeout;
-    let clients = match ping_all(&targets, timeout).await {
-        Ok((clients, store)) => {
-            result.store = store;
-            clients
-        }
+    match ping_all(&targets).await {
+        Ok(store) => result.store = store,
         Err(e) => {
             result.error = Some(e);
             result.duration_s = started.elapsed().as_secs_f64();
             return result;
         }
-    };
+    }
 
     let campaign = Arc::new(campaign.clone());
     let metrics = Arc::new(Metrics::new());
@@ -66,7 +87,6 @@ pub async fn run(campaign: &Campaign, targets: Vec<Target>, hooks: &Hooks) -> Ca
     let (mut workers, subjects_total) = spawn_owners(
         &campaign,
         &targets,
-        &clients,
         result.store.as_deref(),
         &Shared {
             metrics: Arc::clone(&metrics),
@@ -85,15 +105,7 @@ pub async fn run(campaign: &Campaign, targets: Vec<Target>, hooks: &Hooks) -> Ca
         cancel.clone(),
         hooks.clone(),
     );
-    let progress = Progress {
-        metrics: Arc::clone(&metrics),
-        checks: Arc::clone(&checks),
-        found: Arc::clone(&collected.found),
-        subjects: subjects_total,
-        workers: [("owner".to_owned(), campaign.workload.owner.workers)]
-            .into_iter()
-            .collect(),
-    };
+    let progress = Progress::new(&campaign, &metrics, &checks, &collected, subjects_total);
     let snapshot = |phase: &str, elapsed: Duration| progress.snapshot(phase, elapsed);
 
     warmup(&campaign, hooks, &metrics, &checks, &cancel).await;
@@ -117,7 +129,14 @@ pub async fn run(campaign: &Campaign, targets: Vec<Target>, hooks: &Hooks) -> Ca
             result.error = Some(format!("a worker panicked: {e}"));
         }
     }
-    let (findings, stopped_early) = collected.finish().await;
+    let (mut findings, stopped_early) = collected.finish().await;
+
+    if campaign.stop.shrink && !findings.is_empty() && !hooks.cancel.is_cancelled() {
+        findings = shrink_all(&campaign, &targets, findings, hooks, |phase| {
+            snapshot(phase, measured_start.elapsed())
+        })
+        .await;
+    }
 
     result.load = Some(metrics.snapshot());
     result.checks = checks.snapshot();
@@ -134,15 +153,11 @@ pub async fn run(campaign: &Campaign, targets: Vec<Target>, hooks: &Hooks) -> Ca
 }
 
 /// Ping every target; the first store name wins.
-async fn ping_all(
-    targets: &[Target],
-    timeout: Duration,
-) -> Result<(Vec<Arc<dyn LedgerClient>>, Option<String>), String> {
-    let mut clients: Vec<Arc<dyn LedgerClient>> = Vec::with_capacity(targets.len());
+async fn ping_all(targets: &[Named]) -> Result<Option<String>, String> {
     let mut store = None;
     for t in targets {
-        let client = GrpcLedger::new(t, timeout);
-        let p = client
+        let p = t
+            .client
             .ping(PingRequest {
                 message: "stress".into(),
             })
@@ -154,9 +169,8 @@ async fn ping_all(
         if store.is_none() {
             store = Some(p.store);
         }
-        clients.push(Arc::new(client));
     }
-    Ok((clients, store))
+    Ok(store)
 }
 
 /// The findings of a run, collected as they come; the cap stops the run early.
@@ -220,8 +234,7 @@ struct Shared {
 /// Spawn the owner workers over the targets, round robin.
 fn spawn_owners(
     campaign: &Arc<Campaign>,
-    targets: &[Target],
-    clients: &[Arc<dyn LedgerClient>],
+    targets: &[Named],
     store: Option<&str>,
     shared: &Shared,
 ) -> (tokio::task::JoinSet<()>, u64) {
@@ -232,7 +245,7 @@ fn spawn_owners(
         let ti = usize::try_from(w).unwrap_or(0) % targets.len();
         let ctx = Arc::new(Context {
             campaign: Arc::clone(campaign),
-            client: Arc::clone(&clients[ti]),
+            client: Arc::clone(&targets[ti].client),
             target: targets[ti].name.clone(),
             store: store.map(str::to_owned),
             metrics: Arc::clone(&shared.metrics),
@@ -278,8 +291,17 @@ async fn measure(
     }
 }
 
+/// A client with the target's name.
+#[derive(Clone)]
+pub struct Named {
+    /// The target's name, for metrics and findings.
+    pub name: String,
+    /// The ledger.
+    pub client: Arc<dyn LedgerClient>,
+}
+
 /// The result before anything ran.
-fn empty_result(campaign: &Campaign, targets: &[Target]) -> CampaignResult {
+fn empty_result(campaign: &Campaign, targets: &[String]) -> CampaignResult {
     CampaignResult {
         name: campaign.campaign.name.clone(),
         file: None,
@@ -287,7 +309,7 @@ fn empty_result(campaign: &Campaign, targets: &[Target]) -> CampaignResult {
         skipped: campaign.campaign.skip,
         duration_s: 0.0,
         store: None,
-        targets: targets.iter().map(|t| t.name.clone()).collect(),
+        targets: targets.to_vec(),
         load: None,
         checks: BTreeMap::new(),
         tolerated: 0,
@@ -344,6 +366,24 @@ struct Progress {
 }
 
 impl Progress {
+    fn new(
+        campaign: &Campaign,
+        metrics: &Arc<Metrics>,
+        checks: &Arc<Checks>,
+        collected: &Collected,
+        subjects: u64,
+    ) -> Self {
+        Self {
+            metrics: Arc::clone(metrics),
+            checks: Arc::clone(checks),
+            found: Arc::clone(&collected.found),
+            subjects,
+            workers: [("owner".to_owned(), campaign.workload.owner.workers)]
+                .into_iter()
+                .collect(),
+        }
+    }
+
     fn snapshot(&self, phase: &str, elapsed: Duration) -> StressSnapshot {
         let (tolerated, redriven) = self.checks.faults();
         let load = self.metrics.snapshot();
@@ -360,4 +400,46 @@ impl Progress {
             workers: self.workers.clone(),
         }
     }
+}
+
+/// Shrink: every finding replayed down to the steps that matter, once the
+/// workers are quiet so nothing competes with the replays.
+async fn shrink_all(
+    campaign: &Campaign,
+    targets: &[Named],
+    findings: Vec<Finding>,
+    hooks: &Hooks,
+    snapshot: impl Fn(&str) -> StressSnapshot,
+) -> Vec<Finding> {
+    hooks.emit(StressEvent::Phase {
+        name: "shrink".into(),
+    });
+    let budget = crate::shrink::Budget {
+        attempts: campaign.stop.shrink_attempts,
+        timeout: campaign.stop.shrink_timeout,
+    };
+    let mut shrunk = Vec::with_capacity(findings.len());
+    for f in findings {
+        let client = targets
+            .iter()
+            .find(|t| t.name == f.target)
+            .map(|t| Arc::clone(&t.client));
+        shrunk.push(match client {
+            Some(client) if !hooks.cancel.is_cancelled() => {
+                crate::shrink::shrink(
+                    f,
+                    client,
+                    budget,
+                    campaign.faults.clock_skew,
+                    &campaign.faults.tolerate,
+                )
+                .await
+            }
+            _ => f,
+        });
+        hooks.emit(StressEvent::Stress {
+            snapshot: snapshot("shrink"),
+        });
+    }
+    shrunk
 }
