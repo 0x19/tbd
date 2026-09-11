@@ -124,6 +124,23 @@ impl Trust {
         Ok(InterceptedService::new(ep.connect_lazy(), bearer))
     }
 
+    /// A lazily connected channel with this trust and an optional timeout; the
+    /// stress crate adds its own bearer from [`Trust::authorization`].
+    ///
+    /// # Errors
+    /// The URL does not parse or the TLS config cannot be built.
+    pub fn channel(
+        &self,
+        url: &str,
+        timeout: Option<std::time::Duration>,
+    ) -> Result<Channel, tonic::transport::Error> {
+        let mut ep = self.endpoint(url)?;
+        if let Some(t) = timeout {
+            ep = ep.timeout(t);
+        }
+        Ok(ep.connect_lazy())
+    }
+
     /// A gRPC endpoint for `url`; TLS only when the scheme is `https`.
     ///
     /// # Errors

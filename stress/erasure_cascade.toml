@@ -1,0 +1,24 @@
+# The privacy rules under repetition: erasure denies every call, restore reopens,
+# and past the (zero) window the subject is gone and every peer that named it holds
+# one tombstone per relation with the cause. Owner pairs, the erasure cycle weighted
+# high, five seconds on the memory store.
+
+[campaign]
+name = "erasure_cascade"
+description = "Erase, deny, restore, cascade, and the counterparty tombstones, over and over."
+duration = "5s"
+warmup = "200ms"
+seed = 2
+
+[stack.ledgers.ledger-1]
+grace = "0s"
+
+[workload.owner]
+workers = 4
+subjects = 3
+[workload.owner.mix]
+append = 4
+pair_relation = 4
+current = 2
+history = 2
+erase_cycle = 3

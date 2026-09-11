@@ -161,41 +161,20 @@ pub async fn run_scenario_with(file: &ScenarioFile, hooks: &Hooks) -> ScenarioRe
     let targets: Vec<Target> = crate::kinds::load_targets(&*stack.lock().await);
 
     // Timeline runs alongside load, from the moment load starts.
-    let mut events = file.timeline.clone();
-    events.sort_by_key(super::timeline::TimelineEvent::at);
-    let timeline_stack = Arc::clone(&stack);
-    let timeline_hooks = hooks.clone();
     let load_start = Instant::now();
     hooks.emit(RunEvent::Phase {
         name: "load".into(),
     });
-    let timeline = tokio::spawn(async move {
-        let mut outcomes = Vec::new();
-        for event in events {
-            tokio::select! {
-                () = tokio::time::sleep_until((load_start + event.at()).into()) => {}
-                () = timeline_hooks.cancel.cancelled() => break,
-            }
-            tracing::info!(at = ?event.at(), action = %event.describe(), "timeline");
-            let outcome = {
-                let mut s = timeline_stack.lock().await;
-                event.apply(&mut s).await
-            };
-            if let Err(error) = &outcome {
-                tracing::error!(%error, action = %event.describe(), "timeline action failed");
-            }
-            let applied = EventOutcome {
-                at_s: load_start.elapsed().as_secs_f64(),
-                action: event.describe(),
-                error: outcome.err(),
-            };
-            timeline_hooks.emit(RunEvent::Timeline {
-                event: applied.clone(),
-            });
-            outcomes.push(applied);
-        }
-        outcomes
-    });
+    let timeline = {
+        let hooks = hooks.clone();
+        spawn_timeline(
+            file.timeline.clone(),
+            Arc::clone(&stack),
+            load_start,
+            hooks.cancel.clone(),
+            move |event| hooks.emit(RunEvent::Timeline { event }),
+        )
+    };
 
     if let Some(load_config) = &file.load {
         let metrics = Arc::new(Metrics::new());
@@ -271,4 +250,42 @@ pub async fn run_scenario_with(file: &ScenarioFile, hooks: &Hooks) -> ScenarioRe
         result.error.is_none() && events_ok && result.assertions.iter().all(|a| a.passed);
     result.duration_s = started.elapsed().as_secs_f64();
     result
+}
+
+/// Play `events` against `stack` from `load_start`, in order, until cancelled;
+/// every applied action goes through `emit` and comes back in the result. The
+/// one timeline runner: scenarios and stress campaigns both use it.
+pub(crate) fn spawn_timeline(
+    mut events: Vec<super::timeline::TimelineEvent>,
+    stack: Arc<Mutex<crate::stack::Stack>>,
+    load_start: Instant,
+    cancel: CancellationToken,
+    emit: impl Fn(EventOutcome) + Send + 'static,
+) -> tokio::task::JoinHandle<Vec<EventOutcome>> {
+    events.sort_by_key(super::timeline::TimelineEvent::at);
+    tokio::spawn(async move {
+        let mut outcomes = Vec::new();
+        for event in events {
+            tokio::select! {
+                () = tokio::time::sleep_until((load_start + event.at()).into()) => {}
+                () = cancel.cancelled() => break,
+            }
+            tracing::info!(at = ?event.at(), action = %event.describe(), "timeline");
+            let outcome = {
+                let mut s = stack.lock().await;
+                event.apply(&mut s).await
+            };
+            if let Err(error) = &outcome {
+                tracing::error!(%error, action = %event.describe(), "timeline action failed");
+            }
+            let applied = EventOutcome {
+                at_s: load_start.elapsed().as_secs_f64(),
+                action: event.describe(),
+                error: outcome.err(),
+            };
+            emit(applied.clone());
+            outcomes.push(applied);
+        }
+        outcomes
+    })
 }

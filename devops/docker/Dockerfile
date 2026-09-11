@@ -6,7 +6,7 @@
 #   docker build -f devops/docker/Dockerfile --build-arg BIN=protocol -t ghcr.io/0x19/tbd-protocol .
 #   docker build -f devops/docker/Dockerfile --build-arg BIN=chaos --build-arg PORT=7700 -t ghcr.io/0x19/tbd-chaos .
 #
-# The runtime working directory is /app and holds configs/, scenarios/ and topologies/,
+# The runtime working directory is /app and holds configs/, scenarios/, stress/ and topologies/,
 # so chaos finds its layered config and scenario files at their default relative paths.
 # If ui/chaos/out exists in the build context it is copied to /app/ui (the admin UI).
 #
@@ -63,6 +63,7 @@ WORKDIR /app
 COPY --from=builder /usr/local/bin/app /usr/local/bin/app
 COPY configs ./configs
 COPY scenarios ./scenarios
+COPY stress ./stress
 COPY topologies ./topologies
 # Optional: the built admin UI. The glob on the first segment keeps the COPY valid when absent.
 COPY u[i]/chaos/out ./ui

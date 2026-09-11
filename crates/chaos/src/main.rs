@@ -243,6 +243,11 @@ enum Command {
     Serve(ServeArgs),
     /// Print the effective configuration for the environment as TOML.
     Config,
+    /// Stress campaigns against the ledger: model-checking workers, findings.
+    Stress {
+        #[command(subcommand)]
+        command: StressCmd,
+    },
     /// List the service kinds and the validate checks.
     Kinds {
         /// Emit JSON: `{"kinds": [...], "checks": [...]}`.
@@ -251,6 +256,42 @@ enum Command {
         /// Emit Markdown tables (`docs/chaos/kinds.md`).
         #[arg(long)]
         md: bool,
+    },
+}
+
+/// `chaos stress ...`.
+#[derive(Subcommand)]
+// `Run` carries the target and auth flags; `Check` a list of paths. Built once.
+#[allow(clippy::large_enum_variant)]
+enum StressCmd {
+    /// Run campaign files: boot the stack (or use `--target ledger=URL`), drive
+    /// the workers, play the timeline, report the findings.
+    Run {
+        /// Campaign files or glob patterns.
+        #[arg(required_unless_present = "dir")]
+        files: Vec<String>,
+        /// Run every `*.toml` under a directory, recursively.
+        #[arg(long, short)]
+        dir: Option<PathBuf>,
+        /// Emit JSON instead of text.
+        #[arg(long)]
+        json: bool,
+        /// Override `[campaign] seed` (a nightly run over seeds).
+        #[arg(long)]
+        seed: Option<u64>,
+        #[command(flatten)]
+        targets: TargetArgs,
+        #[command(flatten)]
+        auth: AuthArgs,
+        /// Extra PEM root to trust for an https target. Default: `[validate] ca_cert`.
+        #[arg(long, env = "CHAOS_CA_CERT")]
+        ca_cert: Option<PathBuf>,
+    },
+    /// Parse and check campaign files without running them.
+    Check {
+        /// Campaign files.
+        #[arg(required = true)]
+        files: Vec<PathBuf>,
     },
 }
 
@@ -333,7 +374,110 @@ async fn main() -> anyhow::Result<()> {
             print!("{}", toml::to_string_pretty(&config)?);
             Ok(())
         }
+        Command::Stress { command } => stress(command, config).await,
         Command::Kinds { .. } => Ok(()),
+    }
+}
+
+/// Expand files and globs, plus a directory, into sorted unique paths.
+fn expand_paths(files: Vec<String>, dir: Option<PathBuf>) -> anyhow::Result<Vec<PathBuf>> {
+    let mut paths: Vec<PathBuf> = Vec::new();
+    if let Some(dir) = dir {
+        let pattern = dir.join("**/*.toml");
+        for entry in glob::glob(&pattern.to_string_lossy())? {
+            paths.push(entry?);
+        }
+    }
+    for f in files {
+        if f.contains('*') || f.contains('?') {
+            for entry in glob::glob(&f)? {
+                paths.push(entry?);
+            }
+        } else {
+            paths.push(PathBuf::from(f));
+        }
+    }
+    paths.sort();
+    paths.dedup();
+    Ok(paths)
+}
+
+async fn stress(command: StressCmd, mut config: ChaosConfig) -> anyhow::Result<()> {
+    match command {
+        StressCmd::Check { files } => {
+            let mut ok = true;
+            for f in files {
+                match tbd_chaos::stress::load_campaign(&f) {
+                    Ok(c) => println!("ok     {} ({})", f.display(), c.campaign.campaign.name),
+                    Err(e) => {
+                        ok = false;
+                        println!("error  {}: {e}", f.display());
+                    }
+                }
+            }
+            if ok { Ok(()) } else { std::process::exit(1) }
+        }
+        StressCmd::Run {
+            files,
+            dir,
+            json,
+            seed,
+            targets,
+            auth,
+            ca_cert,
+        } => {
+            // Explicit targets mean "no stack": the ledger URL from the flags
+            // (or CHAOS_LEDGER_URL), never the config's default.
+            let explicit = !targets.targets.is_empty()
+                || targets.ledger.is_some()
+                || kinds::by_name("ledger").is_some_and(|k| {
+                    std::env::var(k.env_var()).is_ok_and(|v| !v.trim().is_empty())
+                });
+            targets.apply(&mut config);
+            auth.apply(&mut config);
+            if let Some(v) = ca_cert {
+                config.validate.ca_cert = v;
+            }
+            config.check()?;
+            let options = tbd_chaos::stress::RunOptions {
+                targets: explicit.then(|| {
+                    config
+                        .targets
+                        .url("ledger")
+                        .map(|url| {
+                            vec![tbd_chaos::load::Target {
+                                name: "ledger".into(),
+                                http_url: url,
+                                kind: "ledger".into(),
+                            }]
+                        })
+                        .unwrap_or_default()
+                }),
+                seed,
+                trust: config.trust()?,
+            };
+            let paths = expand_paths(files, dir)?;
+            anyhow::ensure!(!paths.is_empty(), "no campaign files found");
+            let hooks = tbd_chaos::stress::Hooks::default();
+            let mut results = Vec::with_capacity(paths.len());
+            for path in &paths {
+                let result = tbd_chaos::stress::run_file_with(path, &options, &hooks).await;
+                if !json {
+                    print!("{}", tbd_stress::render(&result));
+                }
+                results.push(result);
+            }
+            if json {
+                println!("{}", serde_json::to_string_pretty(&results)?);
+            } else {
+                println!("{}", tbd_stress::summary(&results));
+            }
+            if results.iter().all(|r| r.passed) {
+                Ok(())
+            } else {
+                std::process::exit(1)
+            }
+        }
     }
 }
 
@@ -462,24 +606,7 @@ async fn up(file: PathBuf) -> anyhow::Result<()> {
 }
 
 async fn run(files: Vec<String>, dir: Option<PathBuf>, json: bool) -> anyhow::Result<()> {
-    let mut paths: Vec<PathBuf> = Vec::new();
-    if let Some(dir) = dir {
-        let pattern = dir.join("**/*.toml");
-        for entry in glob::glob(&pattern.to_string_lossy())? {
-            paths.push(entry?);
-        }
-    }
-    for f in files {
-        if f.contains('*') || f.contains('?') {
-            for entry in glob::glob(&f)? {
-                paths.push(entry?);
-            }
-        } else {
-            paths.push(PathBuf::from(f));
-        }
-    }
-    paths.sort();
-    paths.dedup();
+    let paths = expand_paths(files, dir)?;
     anyhow::ensure!(!paths.is_empty(), "no scenario files found");
 
     let mut results = Vec::with_capacity(paths.len());

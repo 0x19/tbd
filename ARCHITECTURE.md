@@ -43,7 +43,8 @@ hop; the same observability stack runs locally and in production.
 | `tbd-ledger` | the facts ledger: `store::Store` (Postgres via sqlx, or in memory), outbox drained into ClickHouse, erasure sweeper, and the thin `tbd.ledger.v1.LedgerService` over it; readiness follows the store | common, proto |
 | `tbd-protocol` | axum router: REST, SSE, WebSocket bridge, GraphQL, protocol gRPC; a registry of traced, measured gRPC backends from `[services]` in `configs/protocol` | common, proto |
 | `tbd-cli` | the `tbd` binary: scaffolds services from embedded templates and registers them in every shared file; owns no runtime code | clap, toml |
-| `tbd-chaos` | `chaos` binary: runs the services in-process, validates, loads, injects faults; `chaos serve` exposes all of it as an HTTP API and serves the admin UI from `ui/chaos` | everything above |
+| `tbd-stress` | stress campaigns against the ledger: closed-loop workers with a client-side model per subject, the contract as invariant checkers, findings with the trace that led there; the load metrics type chaos reports | proto, tonic |
+| `tbd-chaos` | `chaos` binary: runs the services in-process, validates, loads, injects faults, runs stress campaigns around its stack and timeline; `chaos serve` exposes all of it as an HTTP API and serves the admin UI from `ui/chaos` | everything above |
 
 Each service crate is `lib.rs` + thin `main.rs`. `serve_on(listener, config, shutdown)`
 is the seam: `main` binds the configured address, tests bind port 0, and the engine's

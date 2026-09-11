@@ -3,7 +3,9 @@
 
 pub mod generator;
 pub mod ledger_ops;
-pub mod metrics;
+/// The metrics type is the stress crate's, so stress runs and load runs report
+/// the same shape.
+pub use tbd_stress::metrics;
 pub mod ops;
 
 use std::time::Duration;

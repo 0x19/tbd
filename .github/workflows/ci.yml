@@ -234,3 +234,7 @@ jobs:
       - run: cargo run --locked -p tbd-chaos -- run --dir scenarios
         env:
           RUST_LOG: warn,tbd_chaos=info,tbd_protocol::error=off,tower_http=off
+      - run: cargo run --locked -p tbd-chaos -- stress check stress/*.toml
+      - run: cargo run --locked -p tbd-chaos -- stress run --dir stress
+        env:
+          RUST_LOG: warn,tbd_chaos=info,tbd_stress=info,tbd_protocol::error=off,tower_http=off

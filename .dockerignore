@@ -1,5 +1,5 @@
 # Build context for devops/docker/Dockerfile: Cargo manifests, .cargo/, crates/, proto/,
-# plus what the chaos image ships at runtime (configs/, scenarios/, topologies/, the built UI).
+# plus what the chaos image ships at runtime (configs/, scenarios/, stress/, topologies/, the built UI).
 *
 !Cargo.toml
 !Cargo.lock
@@ -8,6 +8,7 @@
 !proto/
 !configs/
 !scenarios/
+!stress/
 !topologies/
 !ui/chaos/out/
 # never ship build output or secrets even if the allowlist above matches a subpath

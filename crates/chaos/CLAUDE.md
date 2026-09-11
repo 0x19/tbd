@@ -1,6 +1,6 @@
 # crates/chaos
 
-The `chaos` binary: validate, up, run, check, serve, config, kinds. A framework with two
+The `chaos` binary: validate, up, run, check, stress, serve, config, kinds. A framework with two
 extension points, `service::Service` and `load::ops::Operation`; this project's
 specifics live in `kinds/` (one module per service kind, each with its spec, handle,
 validate checks and a `static KIND` registered in `kinds::ALL`), `load/ops.rs` (the
@@ -15,7 +15,7 @@ its kind, and `Target` carries `kind` (default `protocol` for API compatibility)
 Everything else is generic and meant to move to the next project as-is.
 
 Docs are the contract: `docs/chaos/README.md` (usage), `commands.md` (flags, output
-schemas, exit codes), `scenarios.md` (file reference), `api.md` (`chaos serve` routes,
+schemas, exit codes), `scenarios.md` (file reference), `stress.md` (campaigns), `api.md` (`chaos serve` routes,
 bodies, SSE frames, run record), `config.md` (`configs/chaos/` keys and precedence),
 `architecture.md`, `extending.md`. **Any change to a flag, output field, TOML key, API
 route, behaviour, error class or check must update the matching page in the same
@@ -35,7 +35,13 @@ Where things are:
   drift-checked in `ci`.
 - `stack/mod.rs` never knows what a service is; keep it that way.
 - `scenario/executor.rs` is the one executor. There is no second path for Rust-defined
-  scenarios; add hooks there rather than a parallel executor.
+  scenarios; add hooks there rather than a parallel executor. Its `spawn_timeline` is the
+  one timeline runner; `stress/mod.rs` uses it too.
+- `stress/mod.rs` runs `tbd-stress` campaigns (`docs/chaos/stress.md`): it parses the
+  campaign's opaque `[stack]`/`[[timeline]]` into chaos types, boots the stack or takes
+  explicit ledger targets, builds channels through `tls::Trust::channel`, and forwards the
+  stress crate's events. The workers, model, invariants and findings are the stress
+  crate's; nothing about the ledger's contract belongs here.
 - `scenario/assertions.rs` works on an immutable `Snapshot`; assertions are sync.
 - `load/generator.rs` is open loop with an absolute-deadline pacer and a
   `max_in_flight` semaphore. Do not turn it closed loop; latency must not lower the

@@ -1,0 +1,23 @@
+# Idempotency: the same key with the same content replays the earlier fact and
+# writes nothing; other content or a retracted fact answers Aborted; history is
+# unchanged by any of it. Replays weighted high, three seconds on the memory store.
+
+[campaign]
+name = "idempotency_storm"
+description = "Replays, conflicts and keys after retractions never write or leak."
+duration = "3s"
+warmup = "200ms"
+seed = 3
+
+[stack.ledgers.ledger-1]
+grace = "0s"
+
+[workload.owner]
+workers = 6
+subjects = 2
+[workload.owner.mix]
+append = 4
+idempotent_replay = 6
+retract = 2
+history = 3
+current = 1

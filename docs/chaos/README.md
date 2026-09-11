@@ -11,7 +11,10 @@ against the protocol; append, current, history, retract, a lifecycle, an erasure
 and a fuzzer against the ledger, [scenarios.md](scenarios.md#load)). A
 new service brings one kind module and one registry line, both written by
 `tbd new service`; a future project plugs in its own and reuses the runner, the load
-generator, the timeline, the assertions and the reports unchanged.
+generator, the timeline, the assertions and the reports unchanged. Stress campaigns
+([stress.md](stress.md), `chaos stress`) put model-checking workers on the ledger around
+the same stack and timeline and turn every contract violation into a finding with the
+trace that led there.
 
 | Command | Use it to | Page |
 |---|---|---|

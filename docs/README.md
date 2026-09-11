@@ -6,6 +6,7 @@
 | You want to run, load-test or fault-test the stack | [chaos/README.md](chaos/README.md) |
 | You need every `chaos` flag, output field and exit code | [chaos/commands.md](chaos/commands.md) |
 | You are writing or debugging a scenario | [chaos/scenarios.md](chaos/scenarios.md) |
+| You are writing a stress campaign or reading a finding | [chaos/stress.md](chaos/stress.md) |
 | You are building or scripting against the admin UI (`chaos serve`) | [chaos/api.md](chaos/api.md) |
 | You are using or changing the admin UI itself (`ui/chaos`) | [chaos/ui.md](chaos/ui.md) |
 | You want to change what chaos does per environment (`configs/chaos/`) | [chaos/config.md](chaos/config.md) |

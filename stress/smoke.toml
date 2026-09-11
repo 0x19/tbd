@@ -1,0 +1,20 @@
+# Owner workers on a memory ledger for three seconds: every invariant holds under a
+# plain mix of appends, reads at every page size, cuts, retractions, idempotent
+# replays, relations, erasure cycles and expiring facts. Runs on every `mise run ci`.
+
+[campaign]
+name = "smoke"
+description = "Every owner invariant on the memory store, three seconds, in CI."
+duration = "3s"
+warmup = "300ms"
+seed = 1
+
+[stack.ledgers.ledger-1]
+grace = "0s"
+
+[workload]
+max_in_flight = 32
+
+[workload.owner]
+workers = 6
+subjects = 2

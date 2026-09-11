@@ -178,6 +178,56 @@ chaos check FILES...
 
 Prints `ok <file> (<name>)` or `error <message>` per file and exits 1 if any failed.
 
+## `chaos stress`
+
+Stress campaigns ([stress.md](stress.md)): model-checking workers against the ledger,
+findings with the trace that led there.
+
+```
+chaos stress run   [FILES...] [--dir DIR] [--json] [--seed N] [--target ledger=URL] [auth flags] [--ca-cert PEM]
+chaos stress check FILES...
+```
+
+| Argument | Meaning |
+|---|---|
+| `FILES` | campaign files or glob patterns |
+| `--dir`, `-d` | every `*.toml` under the directory, recursively |
+| `--json` | one JSON array of results at the end instead of text per campaign |
+| `--seed` | overrides `[campaign] seed` in every file (a nightly run over seeds) |
+| `--target ledger=URL`, `--ledger`, `CHAOS_LEDGER_URL` | run against that ledger instead of the campaign's `[stack]`; the timeline is ignored; the bearer flags are `validate`'s |
+
+Files are de-duplicated and run in sorted path order, each with a fresh stack when it
+has one. A file that fails to parse or cross-check is a failed campaign with the error.
+`skip = true` is reported as `SKIP` and counts as passed. Exit code 1 on any finding or
+error.
+
+Text output is one block per campaign (status, target and store, the load line and
+per-operation latencies as `chaos run` prints them, tolerated and re-driven counts, one
+line per invariant with passed and violated counts, one line per finding), then a
+summary `3 passed, 0 failed, 0 skipped, 0 findings`. JSON output, one element per
+campaign:
+
+```json
+{
+  "name": "smoke", "file": "stress/smoke.toml", "passed": true, "skipped": false,
+  "duration_s": 3.5, "store": "memory", "targets": ["ledger-1"],
+  "load": { "requests_total": 1490, "error_rate": 0.04, "latency": { "p99_ms": 6.1 }, "per_op": {}, "errors": {} },
+  "checks": { "append_echo": { "passed": 210, "violated": 0 }, "current_is_latest": { "passed": 58, "violated": 0 } },
+  "tolerated": 0, "redriven": 0,
+  "findings": [
+    { "id": "…", "invariant": "history_cut", "signature": "3f9c…", "message": "…",
+      "expected": {}, "actual": {}, "subject": "…", "worker": "owner", "campaign": "smoke",
+      "target": "ledger-1", "store": "memory", "found_at": "…",
+      "trace": [ { "index": 0, "request": { "op": "append", "subject": "own", "path": "profile.name" }, "response": {}, "at_ms": 12.3 } ],
+      "original_len": 18, "shrunk": false }
+  ],
+  "stopped_early": false, "error": null
+}
+```
+
+`chaos stress check` prints `ok <file> (<name>)` or `error <file>: <message>` per file
+and exits 1 if any failed.
+
 ## `chaos serve`
 
 Run the tool as an HTTP API for the admin UI and for scripts, with the topology stack

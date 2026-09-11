@@ -181,9 +181,11 @@ crates/
   ledger/     the ledger service (lib + bin + tests/it)
   protocol/   the protocol service (lib + bin + tests/it)
   chaos/      the chaos tool (lib + bin + tests/it)
+  stress/     stress campaigns against the ledger: model-checking workers, findings (lib + tests/it)
   cli/        the tbd scaffolding CLI (bin `tbd`, templates/)
 proto/        .proto sources, buf STANDARD naming
 scenarios/    chaos scenarios: load + timeline + assertions
+stress/       stress campaigns: model-checking workers on the ledger, findings
 topologies/   stacks for `chaos up` and `chaos serve`
 configs/      layered TOML config per binary: chaos/{base,local,dev,production}.toml
 ui/           web UIs: chaos/ is the chaos admin UI (Next.js, served by chaos serve)

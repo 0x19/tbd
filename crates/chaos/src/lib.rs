@@ -10,7 +10,8 @@
 //!   target. This project supplies REST, GraphQL, WebSocket and gRPC ping.
 //!
 //! Everything else is generic: the [`stack`] runner, validation, load
-//! generation, timelines, assertions and reports.
+//! generation, timelines, assertions and reports. [`stress`] runs the
+//! `tbd-stress` campaigns around the same stack and timeline.
 
 pub mod api;
 pub mod auth;
@@ -20,6 +21,7 @@ pub mod load;
 pub mod scenario;
 pub mod service;
 pub mod stack;
+pub mod stress;
 pub mod tls;
 pub mod topology;
 pub mod validate;

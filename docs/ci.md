@@ -16,6 +16,7 @@ name. If you add a check, add it in both places; this page lists the mapping.
 | `doc` | `doc` | any rustdoc warning, broken intra-doc links included |
 | `chaos:docs:check` | `scenarios` | `docs/chaos/kinds.md` differs from `chaos kinds --md` (run `mise run chaos:docs` and commit) |
 | `chaos:run` | `scenarios` | any scenario under `scenarios/` failing an assertion or timeline action |
+| `stress:run` | `scenarios` | any campaign under `stress/` with a finding or an error (`chaos stress check stress/*.toml` runs first) |
 | `ui:check` | `ui` | `ui/chaos`: prettier drift, an eslint finding (React Compiler rules included), a type error; CI also runs `pnpm build` |
 | not in the gate | `docker` | any image failing to build; on `main` also failing to push. The chaos image build runs `pnpm build` first so it carries the UI |
 

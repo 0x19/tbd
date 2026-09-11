@@ -27,8 +27,9 @@ crates/chaos/src
 │   ├── config.rs      ScenarioFile and cross-checks
 │   ├── timeline.rs    TimelineEvent and apply()
 │   ├── assertions.rs  Assertions over an immutable Snapshot
-│   ├── executor.rs    the one executor
+│   ├── executor.rs    the one executor (and the one timeline runner)
 │   └── report.rs      text rendering
+├── stress/mod.rs      stress campaigns: the stack and the timeline around tbd_stress::run
 └── validate.rs        Endpoint, Check, Targets by kind and the concurrent runner
 ```
 
@@ -110,6 +111,19 @@ successful requests only.
 `passed` requires no top-level error, every timeline event applied cleanly, and every
 assertion true. Assertions are synchronous functions over an immutable snapshot; there
 is nothing to await or lock inside them.
+
+## Stress
+
+A campaign file ([stress.md](stress.md)) is the `tbd-stress` crate's schema with a
+scenario's `[stack]` and `[[timeline]]` carried through as opaque tables. `stress/mod.rs`
+parses those into `StackConfig` and `TimelineEvent`s, boots the stack, spawns the same
+timeline runner the scenario executor uses (`scenario::executor::spawn_timeline`), and
+hands the ledgers to `tbd_stress::run` as targets (a lazily connected channel each, from
+`tls::Trust`). With explicit targets there is no stack and the timeline is ignored. The
+workers, the model, the invariants and the findings live in the stress crate, which never
+depends on the ledger; chaos only decides where they run and how they are reported. The
+load metrics type (`LoadSnapshot`) is the stress crate's, re-exported at
+`load::metrics`, so a stress run's per-second numbers have the shape a load run's have.
 
 ## Validate
 
