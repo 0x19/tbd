@@ -33,8 +33,8 @@ starts with `chaos.` to the server does the same. `curl` needs `-H 'Host: chaos.
 | Campaign | Ecommerce order detail | The campaign editor: name and status chips, a stage strip (setup / warmup / run / shrink / teardown), the CodeMirror TOML editor checked as you type through `POST /stress/check`, a reference sheet with the campaign file reference, a right rail with workload, faults, invariants and the last run, and a run dialog that chooses between the campaign's own stack, the serve stack's ledgers and the deployed ledger through Envoy (`[targets]`) or a URL. `?id=new` starts from a template. |
 | Findings | Developers events & logs | Every finding across runs, grouped by signature (the same rule broken the same way) or flat; filter rail by invariant and campaign; each row links to the finding and to the run that found it. |
 | Finding | Payments delivery simulator | One finding: invariant, message, expected against actual, where it was found (campaign, run, target, store), the shrink note, the replays so far, the trace step by step (operation, symbolic subject and instants, response or error, tolerated), and "Replay" against the serve stack or explicit ledgers, which starts a stress run whose record says whether it reproduced. |
-| Reference | Docs page | [scenarios.md](scenarios.md) and the generated [kinds.md](kinds.md) on one tab, [stress.md](stress.md) on the other, rendered in the app with a table of contents; bundled at build time by `scripts/gen-docs.mjs`, so the UI and the repo never disagree. The editor's Stack snippets are generated from the kinds. |
-| Runbook | Original settings | Vertical section nav with observability links, titled entries with "look at" and "then" columns. |
+| Knowledge base | Settings shell + team-list cards | The repository's documentation in the app: every page under `docs/`, the root README and ARCHITECTURE, the devops READMEs and the crate notes, bundled at build time by `scripts/gen-docs.mjs` so the UI and the repo never disagree. A search over every page and section (every word must match; title and heading hits rank first, the matched words are highlighted in a snippet), the categories as cards (Start here, Chaos, Observability, Services, Deployment, Crate notes, Design notes), `?category=` for one category's list, a "Start here" card and this environment's observability links. |
+| Article | Inbox article + customer editor's scroll-spy | One document: the category nav on the left with the current page marked (design notes folded), the article column with a chip row (source path, reading time, last commit, `generated` and `idea material` badges), the lead paragraph, a callout for generated and advisory pages, the body with anchored headings, copyable fences and highlighted TOML, then "links to", "linked from" and previous/next in the category. A table of contents on the right marks the section in view; on narrow screens it folds above the body. Relative markdown links resolve to other articles (with their anchor); links to files the knowledge base does not carry are shown as text. `/runbook/` and `/reference/` redirect here. |
 
 The shell is the kit's: a workspace block and grouped, collapsible navigation in the
 sidebar with an environment block at the bottom; an app bar with ⌘K search,
@@ -72,7 +72,8 @@ same plus a build.
 dialog, an engine stops and starts, the add-instance dialog lists every addable kind the
 API registers, a scenario run streams to the end, an ad-hoc load run cancels, validate
 shows one target per kind and passes, the campaigns page lists the shipped campaigns and
-the findings page renders, dark mode toggles, and no console error occurs. It targets
+the findings page renders, the knowledge base searches a runbook symptom into its article
+and follows a relative link with its anchor, dark mode toggles, and no console error occurs. It targets
 `http://chaos.localhost:18080` (the local cluster) unless `UI_BASE` says otherwise, and
 leaves screenshots under `ui/chaos/e2e/shots/`. It is not in CI because it needs a
 running cluster.
@@ -86,6 +87,7 @@ ui/chaos/src
 │   ├── page.tsx               overview
 │   ├── stack/  scenarios/  scenarios/view/  runs/  runs/view/  load/  validate/  runbook/
 │   ├── stress/  stress/view/  findings/  findings/view/     the Stress group
+│   ├── kb/  kb/view/                                        the knowledge base (runbook/ and reference/ redirect into it)
 ├── components/
 │   ├── ui/                    shadcn/ui primitives (generated; regenerate, do not hand-edit)
 │   ├── shell/                 app-sidebar, site-header, command-menu (⌘K), providers (overview, live feed, activity), nav
@@ -93,11 +95,13 @@ ui/chaos/src
 │   ├── charts.tsx             monochrome recharts: CompareChart, RunChart, LatencyBars, ChartHeadline, Legend
 │   ├── behavior-dialog.tsx    the behaviour form; emits the same JSON a timeline uses
 │   ├── runs-table.tsx, status-badge.tsx, instances-table.tsx (describeBehavior)
+│   ├── markdown.tsx           the renderer (anchored headings, copyable fences, TOML, resolved links); kb-bits.tsx the article chips
 └── lib/
     ├── api/schema.ts          Zod schemas, one per type in api.md
     ├── api/client.ts          fetch wrapper (parses through Zod) and SSE subscribe
     ├── api/hooks.ts           useFetch (poll), useGlobalFeed, useStack, useRunFeed
     ├── runs.ts                windows, deltas, latest run per scenario
+    ├── kb.ts                  the knowledge base: category order, link resolution, related pages, section search
     └── format.ts              ms, pct, ago, ...
 ```
 

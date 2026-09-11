@@ -4,6 +4,7 @@
 |---|---|
 | You are new to the repo | [README.md](../README.md), then [ARCHITECTURE.md](../ARCHITECTURE.md) |
 | You want to run, load-test or fault-test the stack | [chaos/README.md](chaos/README.md) |
+| A validate check, a scenario, a campaign or the admin UI failed and you want to know what it means | [chaos/runbook.md](chaos/runbook.md) |
 | You need every `chaos` flag, output field and exit code | [chaos/commands.md](chaos/commands.md) |
 | You are writing or debugging a scenario | [chaos/scenarios.md](chaos/scenarios.md) |
 | You are writing a stress campaign or reading a finding | [chaos/stress.md](chaos/stress.md) |
@@ -29,3 +30,7 @@
 Every crate and the `devops/` and `scenarios/` directories also carry a `CLAUDE.md` with
 the non-obvious facts about that directory: boundaries, invariants, gotchas. They are
 written for AI assistants but they are the shortest accurate orientation for humans too.
+
+Every page listed here, plus the root `README.md` and `ARCHITECTURE.md`, the devops READMEs
+and the crate notes, is also served by the chaos admin UI under **Knowledge base**, bundled
+at build time ([chaos/ui.md](chaos/ui.md)); relative links between pages keep working there.

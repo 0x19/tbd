@@ -6,6 +6,7 @@ import { useChaos } from "@/app/providers";
 import { Markdown, outline } from "@/components/markdown";
 import { Button } from "@/components/ui/button";
 import { kindsDoc, scenariosDoc } from "@/generated/docs";
+import { byId, resolveLink } from "@/lib/kb";
 import { stackSnippets } from "@/lib/kinds";
 
 /** Blocks the editor can insert; each is a complete, checking piece of a scenario. The
@@ -206,8 +207,8 @@ export function ScenarioReference({ onInsert }: { onInsert?: (toml: string) => v
         </ul>
       </nav>
 
-      <Markdown text={scenariosDoc} />
-      <Markdown text={kindsDoc} />
+      <Markdown text={scenariosDoc} resolve={(href) => resolveLink(byId("docs/chaos/scenarios")!, href)} />
+      <Markdown text={kindsDoc} resolve={(href) => resolveLink(byId("docs/chaos/kinds")!, href)} />
     </div>
   );
 }

@@ -12,8 +12,8 @@ a typo fails at `chaos check` instead of silently doing nothing.
 ```
 
 The shipped files under `scenarios/` are the reference. Copy the closest one. This page
-is also bundled into the admin UI (the Scenario reference page and the editor's
-"Reference" sheet), so keep it self-contained: no relative links to other pages.
+is also bundled into the admin UI (the knowledge base and the editor's "Reference"
+sheet); relative links to other pages under `docs/` resolve there too.
 
 ## `[scenario]`
 

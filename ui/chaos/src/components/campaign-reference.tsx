@@ -5,6 +5,7 @@ import { Plus } from "lucide-react";
 import { Markdown, outline } from "@/components/markdown";
 import { Button } from "@/components/ui/button";
 import { stressDoc } from "@/generated/docs";
+import { byId, resolveLink } from "@/lib/kb";
 
 /** Blocks the campaign editor can insert; each is a complete, checking table. */
 export const CAMPAIGN_SNIPPETS: { group: string; items: { title: string; toml: string }[] }[] = [
@@ -133,7 +134,7 @@ export function CampaignReference({ onInsert }: { onInsert?: (toml: string) => v
         </ul>
       </nav>
 
-      <Markdown text={stressDoc} />
+      <Markdown text={stressDoc} resolve={(href) => resolveLink(byId("docs/chaos/stress")!, href)} />
     </div>
   );
 }

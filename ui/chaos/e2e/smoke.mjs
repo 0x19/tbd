@@ -142,7 +142,7 @@ await step("scenarios list and editor check", async () => {
   await page.locator(".cm-editor .tok-string").first().waitFor({ timeout: 10000 });
   await shot({ path: `${SHOTS}/scenario.png`, fullPage: true });
   // The reference sheet inserts a block at the cursor and the file still checks.
-  await page.getByRole("button", { name: "Reference" }).click();
+  await page.getByRole("button", { name: "Reference", exact: true }).click();
   await page.getByRole("heading", { name: "Writing scenarios" }).waitFor({ timeout: 10000 });
   await shot({ path: `${SHOTS}/reference-sheet.png` });
   await page.getByRole("button", { name: "Log marker" }).click();
@@ -150,14 +150,41 @@ await step("scenarios list and editor check", async () => {
   await page.getByText("checks", { exact: true }).waitFor({ timeout: 10000 });
 });
 
-await step("scenario reference page renders the bundled doc", async () => {
-  await page.goto(`${BASE}/reference/`);
-  await page.getByRole("heading", { name: "Behaviours" }).waitFor({ timeout: 10000 });
-  await page.getByText("delayed_failure").first().waitFor();
-  // The stress tab renders the campaign reference with the invariants table.
-  await page.getByRole("tab", { name: "Stress campaigns" }).click();
+await step("knowledge base: categories, search, and an article with its contents", async () => {
+  await page.goto(`${BASE}/kb/`);
+  await page.getByRole("heading", { name: "Knowledge base" }).waitFor({ timeout: 10000 });
+  await page.getByText("Start here").first().waitFor();
+  await page.getByText("Observability").first().waitFor();
+  await shot({ path: `${SHOTS}/kb.png`, fullPage: true });
+  // A symptom from the runbook is found by its section.
+  await page.getByLabel("Search the knowledge base").fill("TCP_NODELAY");
+  const results = page.getByTestId("kb-results");
+  await results.waitFor({ timeout: 5000 });
+  await results.getByText("Runbook").first().waitFor();
+  await shot({ path: `${SHOTS}/kb-search.png` });
+  await results
+    .getByRole("link", { name: /Runbook/ })
+    .first()
+    .click();
+  await page.waitForURL(/kb\/view\/\?doc=docs%2Fchaos%2Frunbook/, { timeout: 10000 });
+  await page.getByRole("heading", { name: "Runbook", level: 1 }).waitFor({ timeout: 10000 });
+  await page.getByText("http_readyz").first().waitFor();
+  await page.getByText("On this page").first().waitFor();
+  await page.getByRole("link", { name: "Validate", exact: true }).first().waitFor();
+  await shot({ path: `${SHOTS}/kb-article.png`, fullPage: true });
+});
+
+await step("knowledge base: the stress reference renders and in-app links resolve", async () => {
+  await page.goto(`${BASE}/kb/view/?doc=docs%2Fchaos%2Fstress`);
   await page.getByRole("heading", { name: "The invariants" }).waitFor({ timeout: 10000 });
   await page.getByText("cascade_tombstones_counterparty").first().waitFor();
+  // A relative markdown link to another page is an in-app route, with its anchor.
+  await page.getByRole("link", { name: "commands.md" }).first().click();
+  await page.waitForURL(/doc=docs%2Fchaos%2Fcommands#chaos-stress/, { timeout: 10000 });
+  await page.getByRole("heading", { name: "chaos commands", level: 1 }).waitFor({ timeout: 10000 });
+  // The old routes land in the knowledge base.
+  await page.goto(`${BASE}/runbook/`);
+  await page.waitForURL(/doc=docs%2Fchaos%2Frunbook/, { timeout: 10000 });
 });
 
 await step("campaigns list and editor check", async () => {
@@ -170,7 +197,7 @@ await step("campaigns list and editor check", async () => {
   await page.locator(".cm-editor .tok-string").first().waitFor({ timeout: 10000 });
   await page.getByText("Owner workers").first().waitFor();
   await shot({ path: `${SHOTS}/campaign.png`, fullPage: true });
-  await page.getByRole("button", { name: "Reference" }).click();
+  await page.getByRole("button", { name: "Reference", exact: true }).click();
   await page.getByRole("heading", { name: "The invariants" }).waitFor({ timeout: 10000 });
   await page.getByRole("button", { name: "Operation mix" }).click();
   await page.locator(".cm-editor").getByText("idempotent_replay").waitFor({ timeout: 5000 });
@@ -347,17 +374,17 @@ await step("validate runs against the deployed stack", async () => {
   await shot({ path: `${SHOTS}/validate.png`, fullPage: true });
 });
 
-await step("runbook renders with links", async () => {
-  await page.goto(`${BASE}/runbook/`);
-  await page.getByText("http_readyz fails").waitFor();
-  await page.getByText("Dashboards").first().waitFor({ timeout: 10000 });
-});
-
 await step("command palette opens with ctrl+k and lists scenarios", async () => {
   await page.keyboard.press("Control+k");
   await page.getByPlaceholder("Type a command or search...").waitFor({ timeout: 5000 });
   await page.getByText("Run a scenario").waitFor();
   await shot({ path: `${SHOTS}/command.png` });
+  // Knowledge base pages are in the palette too.
+  await page.getByPlaceholder("Type a command or search...").fill("runbook");
+  await page
+    .getByRole("option", { name: /Runbook/ })
+    .first()
+    .waitFor({ timeout: 5000 });
   await page.keyboard.press("Escape");
 });
 

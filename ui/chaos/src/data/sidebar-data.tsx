@@ -8,6 +8,7 @@ import {
   IconFlask,
   IconGauge,
   IconLayoutDashboard,
+  IconLifebuoy,
   IconServer,
   IconTestPipe,
 } from "@tabler/icons-react";
@@ -66,10 +67,21 @@ export const navGroups: NavGroup[] = [
     ],
   },
   {
-    title: "Operate",
+    title: "Knowledge base",
     items: [
-      { title: "Runbook", url: "/runbook/", icon: IconBook2 },
-      { title: "Reference", url: "/reference/", icon: IconFileText },
+      { title: "Browse", url: "/kb/", icon: IconBook2 },
+      { title: "Runbook", url: "/kb/view/?doc=docs%2Fchaos%2Frunbook", icon: IconLifebuoy },
+      {
+        title: "References",
+        icon: IconFileText,
+        items: [
+          { title: "Scenario files", url: "/kb/view/?doc=docs%2Fchaos%2Fscenarios" },
+          { title: "Stress campaigns", url: "/kb/view/?doc=docs%2Fchaos%2Fstress" },
+          { title: "Commands", url: "/kb/view/?doc=docs%2Fchaos%2Fcommands" },
+          { title: "HTTP API", url: "/kb/view/?doc=docs%2Fchaos%2Fapi" },
+          { title: "Configuration", url: "/kb/view/?doc=docs%2Fchaos%2Fconfig" },
+        ],
+      },
     ],
   },
 ];
@@ -101,6 +113,7 @@ const clean = (p: string) => (p.split("?")[0] ?? "").replace(/\/$/, "") || "/";
 /** Breadcrumb trail for a pathname: [group, page]. */
 export function crumbs(pathname: string): string[] {
   const c = clean(pathname);
+  if (c === "/kb/view") return ["Knowledge base", "Article"];
   for (const group of navGroups) {
     for (const item of group.items) {
       const urls = item.items ? item.items.map((i) => i.url) : [item.url];

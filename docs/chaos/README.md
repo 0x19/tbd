@@ -109,6 +109,9 @@ Each of these has a documented seam in [extending.md](extending.md).
 
 ## Frequently hit
 
+The longer list, one row per symptom with what it means and what to do, is
+[runbook.md](runbook.md).
+
 **A scenario passes locally and fails in CI on latency.** CI runners are slower and
 noisier. Loopback p99 here is about 3 ms; `baseline.toml` allows 50. Set bounds from what
 the scenario proves, not from the fastest machine.

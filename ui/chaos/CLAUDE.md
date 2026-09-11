@@ -15,7 +15,8 @@ first; `docs/chaos/api.md` is the contract the pages consume.
   files from the kit or `pnpm dlx shadcn@latest add`, do not hand-edit.
 - What is ours: pages under `src/app/`, `src/components/{kit,charts,status-badge,
 runs-table,behavior-dialog,instances-table,field,queue-panel,schedule-dialog,load-shape,
-toml-editor,markdown,scenario-reference}.tsx`, `src/lib/{api,format,runs,jobs,load,toml-highlight}`,
+toml-editor,markdown,scenario-reference,campaign-reference,kb-bits,stress-target}.tsx`,
+  `src/lib/{api,format,runs,jobs,load,kb,toml-highlight}`,
   `src/app/editor.css` (TOML token colours and the `.doc` styles; globals.css stays the
   kit's),
   `src/data/{site,sidebar-data}`, `src/app/providers.tsx` (chaos overview context +
@@ -36,9 +37,15 @@ toml-editor,markdown,scenario-reference}.tsx`, `src/lib/{api,format,runs,jobs,lo
 - Detail pages are `/x/view/?id=` with `useSearchParams` under `Suspense`; a dynamic
   segment cannot be exported.
 - `pnpm dev` is on 3001 because Grafana owns 3000 locally.
-- `src/generated/docs.ts` is written by `scripts/gen-docs.mjs` from `docs/chaos/scenarios.md`
-  before dev, build, lint and typecheck (`pnpm gen`); it is gitignored. Edit the markdown,
-  never the generated file. The editor is CodeMirror 6 (`toml-editor.tsx`, the legacy
+- `src/generated/docs.ts` is written by `scripts/gen-docs.mjs` before dev, build, lint and
+  typecheck (`pnpm gen`); it is gitignored. It carries the knowledge base (`kbDocs`,
+  `kbCategories`: every page under `docs/`, the root README and ARCHITECTURE, the devops
+  READMEs, the crate `CLAUDE.md`s, with title, summary, headings, links and the last
+  commit) and the three named exports the editors insert from. Categories are the table
+  at the top of the script; a new docs directory needs a row there or it is not bundled.
+  Edit the markdown, never the generated file. `src/lib/kb.ts` orders categories, resolves
+  relative links to `/kb/view/?doc=<path>` and searches sections; heading ids are
+  deduplicated identically in the script and in `markdown.tsx`. The editor is CodeMirror 6 (`toml-editor.tsx`, the legacy
   TOML mode, tokens styled by class); `markdown.tsx` renders the doc with the same
   highlighter for `toml` fences.
 - Checks: `mise run ui:check` (prettier, eslint, tsc) is part of `mise run ci`; `mise run

@@ -2,6 +2,7 @@
 
 import {
   IconArrowRightDashed,
+  IconBook2,
   IconDeviceLaptop,
   IconMoon,
   IconPlayerPlay,
@@ -25,6 +26,7 @@ import {
 import { navGroupsFor } from "@/data/sidebar-data";
 import { api } from "@/lib/api/client";
 import { describe, useFetch } from "@/lib/api/hooks";
+import { categories, docHref, ordered } from "@/lib/kb";
 
 import { useSearch } from "./search-provider";
 import { ScrollArea } from "./ui/scroll-area";
@@ -107,6 +109,20 @@ export function CommandMenu() {
                   <span className="text-muted-foreground ml-auto truncate text-xs">{s.description}</span>
                 </CommandItem>
               ))}
+          </CommandGroup>
+          <CommandSeparator />
+          <CommandGroup heading="Knowledge base">
+            {ordered.map((d) => (
+              <CommandItem
+                key={d.id}
+                value={`kb ${d.title} ${d.path} ${categories.find((c) => c.id === d.category)?.title ?? ""}`}
+                onSelect={() => runCommand(() => router.push(docHref(d.id)))}
+              >
+                <IconBook2 className="text-muted-foreground/80 mr-2 size-4" />
+                <span>{d.title}</span>
+                <span className="text-muted-foreground ml-auto truncate font-mono text-xs">{d.path}</span>
+              </CommandItem>
+            ))}
           </CommandGroup>
           <CommandSeparator />
           <CommandGroup heading="Theme">
