@@ -56,7 +56,12 @@ because the engine returns it for injected or real outages and the calls are ide
 today. Do not add `retriable-status-codes` or `5xx` to the REST route; a `POST` that
 timed out mid-flight must not be replayed by the proxy.
 
-The engine LB listener has one route: everything to `engine`, no timeout, gRPC retries.
+The internal listener (`:50051`) is what every protocol backend URL points at. It routes
+by gRPC service name: `/tbd.ledger.v1.LedgerService/*` to `ledger`, `/tbd.humans.v1.HumansService/*`
+to `humans`, and everything else to `engine`, the catch-all. The shared health path
+`/grpc.health.v1.Health/*` is routed on the `x-tbd-backend` header the protocol's probes
+carry (one route per service next to its RPC route; `tbd new service` writes both), so a
+ledger probe reaches the ledger and not the catch-all. No timeout, gRPC retries.
 
 ## Upstreams
 
@@ -64,6 +69,8 @@ The engine LB listener has one route: everything to `engine`, no timeout, gRPC r
 |---|---|---|---|---|
 | `protocol` | `protocol:8080` | follows the client: h2 for gRPC, HTTP/1.1 otherwise | `GET /readyz` every 5 s | 5 consecutive 5xx, 30 s, at most 50 % of hosts |
 | `engine` | `engine:50051` | HTTP/2 | gRPC health, service `tbd.engine.v1.EngineService` | 5 consecutive gateway failures, 30 s, at most 50 % |
+| `humans` | `humans:50053` | HTTP/2 | gRPC health, service `tbd.humans.v1.HumansService` | same |
+| `ledger` | `ledger:50052` | HTTP/2 | gRPC health, service `tbd.ledger.v1.LedgerService` | same |
 | `otel-collector` | `otel-collector:4317` | HTTP/2 | none | none |
 
 All are `STRICT_DNS` with a 5 s refresh and least-request balancing. Kubernetes provides
@@ -72,9 +79,11 @@ Envoy balances across pods with its own health checks. `otel-collector` in the `
 namespace is an ExternalName Service pointing at the observability namespace. Compose
 provides all three as service names.
 
-Because the protocol's readiness depends on the engine, and Envoy's health check uses
-`/readyz`, an engine outage ejects protocol instances from the edge as well. That is
-intended: no point routing to a protocol that cannot answer.
+Because the protocol's readiness depends on its `required` backends (the engine today;
+humans and ledger are reported in the `/readyz` body but never fail it), and Envoy's
+health check uses `/readyz`, an engine outage ejects protocol instances from the edge as
+well. That is intended: no point routing to a protocol that cannot answer. Making another
+backend `required` in `configs/protocol` turns its outage into an edge outage too.
 
 ## Observability
 

@@ -12,7 +12,7 @@ project as-is.
 | **engine** | gRPC streaming compute service: unary `Evaluate`, server-streaming `Subscribe`, bidirectional `Session`. Health and reflection built in. Port 50051. |
 | **humans** | gRPC service scaffolded by `tbd new service`: health, reflection, metrics, one labelled-stub `Ping` until its real RPCs land. Port 50053. |
 | **ledger** | gRPC service scaffolded by `tbd new service`: health, reflection, metrics, one labelled-stub `Ping` until its real RPCs land. Port 50052. |
-| **protocol** | One port, four surfaces: REST and SSE under `/v1`, WebSocket at `/ws`, GraphQL at `/graphql`, gRPC over h2c. Forwards to the engine, owns no logic. Port 8080. |
+| **protocol** | The edge gateway. One port, four surfaces: REST and SSE under `/v1`, WebSocket at `/ws`, GraphQL at `/graphql`, gRPC over h2c; `/openapi.json` for REST. Forwards to the backends registered in `configs/protocol` (engine, humans, ledger) over gRPC through Envoy, owns no logic, JSON in and out, one error envelope. Port 8080. [docs/protocol/README.md](docs/protocol/README.md). |
 | **envoy** | The load balancer in front of everything: edge on 8080 for REST, SSE, GraphQL, WebSocket and gRPC; engine load balancer on 50051. One config for compose, Ansible and Kubernetes. |
 | **tbd** | The scaffolding CLI: `tbd new service <name>` renders a complete gRPC service and registers it in every shared file, idempotently; `tbd service check` proves it. |
 | **chaos** | Runs both services in one process, validates every surface, generates load, injects faults on a timeline and asserts. Used for development and in CI. |

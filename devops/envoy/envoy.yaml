@@ -3,8 +3,9 @@
 # Listeners
 #   :8080  edge       HTTP/1.1 + h2c. gRPC by service name, WebSocket upgrade,
 #                     REST, SSE, GraphQL. Streams get no timeout.
-#   :50051 engine-lb  gRPC only. Protocol instances point their engine URL here,
-#                     so engine replicas are a pure scale-out.
+#   :50051 engine-lb  gRPC only. Every protocol backend URL points here: routed by
+#                     service name (engine is the catch-all), health probes by the
+#                     x-tbd-backend header, so service replicas are a pure scale-out.
 #   :9901  admin      /ready, /stats/prometheus, /clusters, /config_dump.
 #
 # Clusters resolve by DNS name: `engine`, `protocol`, `humans`, `ledger`, `chaos`, `otel-collector`,

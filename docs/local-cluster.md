@@ -28,7 +28,7 @@ steps idempotently and is the template for provisioning a real box the same way.
 | Namespace | Workload | Replicas | Purpose |
 |---|---|---|---|
 | `tbd` | `envoy` | 2 | edge and engine load balancer |
-| `tbd` | `protocol` | 2 | REST, SSE, GraphQL, WebSocket, gRPC |
+| `tbd` | `protocol` | 2 | the edge gateway: REST, SSE, GraphQL, WebSocket, gRPC over the backends registered in `configs/protocol` (engine, humans, ledger), reached through Envoy's internal listener; `/readyz` reports each |
 | `tbd` | `engine` | 2 | gRPC compute |
 | `tbd` | `humans` | 1 | gRPC `humans` service, scaffolded by `tbd new service`; a stub until its RPCs land |
 | `tbd` | `ledger` | 1 | the facts ledger (`docs/ledger/README.md`): Postgres store, outbox into ClickHouse, gRPC facts API |
