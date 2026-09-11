@@ -17,6 +17,16 @@ pub struct Item {
     pub status: Status,
 }
 
+impl Item {
+    /// A generated file that exists with other content: the service evolved
+    /// past its template. Informational; `check` never rewrites files.
+    #[must_use]
+    pub fn is_diverged(&self) -> bool {
+        matches!(self.registration.edit, Edit::Create { .. })
+            && matches!(self.status, Status::Conflict(_))
+    }
+}
+
 /// The resolved plan.
 #[derive(Debug, Clone, Default)]
 pub struct Plan {
@@ -106,11 +116,16 @@ impl Plan {
         self.items.iter().all(|i| i.status == Status::Present)
     }
 
-    /// Present, missing, conflict and unresolvable counts.
+    /// Present, missing, conflict and unresolvable counts. A diverged
+    /// generated file counts as present: it is registered, just not verbatim.
     #[must_use]
     pub fn counts(&self) -> (usize, usize, usize, usize) {
         let mut c = (0, 0, 0, 0);
         for i in &self.items {
+            if i.is_diverged() {
+                c.0 += 1;
+                continue;
+            }
             match i.status {
                 Status::Present => c.0 += 1,
                 Status::Missing => c.1 += 1,

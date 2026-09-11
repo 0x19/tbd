@@ -57,7 +57,7 @@ when the file exists with different content, unless `--force`.
 
 | Id | File | Where | Needle |
 |---|---|---|---|
-| `create:*` | the files above | | identical content |
+| `create:*` | the files above | | identical content; a file that exists with other content is reported as `diverged` (the service evolved past its template: expected, exit 0) |
 | `cargo:default-members` | `Cargo.toml` | `default-members = [` … before `]` | `"crates/<name>"` |
 | `cargo:dependency` | `Cargo.toml` | after the last `tbd-` line | `tbd-<name> ` |
 | `proto:module` | `crates/proto/src/lib.rs` | end of file | `pub mod <name> ` |

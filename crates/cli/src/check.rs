@@ -19,6 +19,8 @@ pub struct Line {
     pub path: String,
     /// Status.
     pub status: Status,
+    /// A generated file that exists with other content (see `Item::is_diverged`).
+    pub diverged: bool,
 }
 
 /// The report for one service.
@@ -29,9 +31,17 @@ pub struct Report {
 }
 
 impl Report {
-    /// Lines that are not present.
+    /// Lines that are not present. A diverged generated file is not a
+    /// problem: the service has evolved past its template, which is expected.
     pub fn problems(&self) -> impl Iterator<Item = &Line> {
-        self.lines.iter().filter(|l| l.status != Status::Present)
+        self.lines
+            .iter()
+            .filter(|l| !l.diverged && l.status != Status::Present)
+    }
+
+    /// Generated files that exist with other content.
+    pub fn diverged(&self) -> impl Iterator<Item = &Line> {
+        self.lines.iter().filter(|l| l.diverged)
     }
 }
 
@@ -61,6 +71,7 @@ pub fn check(ws: &mut Workspace, service: &Service) -> Result<Report, scaffold::
             .items
             .into_iter()
             .map(|i| Line {
+                diverged: i.is_diverged(),
                 id: i.registration.id,
                 path: i.registration.path.display().to_string(),
                 status: i.status,

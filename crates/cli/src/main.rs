@@ -290,6 +290,14 @@ fn service_check(ws: &mut Workspace, name: &str, fix: bool) -> anyhow::Result<Ex
         }
     }
     let report = check::check(ws, &service)?;
+    for line in report.diverged() {
+        println!(
+            "{}{}  {}  evolved past its template; fine",
+            label("diverged", yellow),
+            line.id,
+            line.path
+        );
+    }
     let mut problems = 0;
     for line in report.problems() {
         problems += 1;
