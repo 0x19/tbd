@@ -101,8 +101,8 @@ Operations and what they exercise:
 | `ledger_history` | `LedgerService/History` with a random cut and page size | same |
 | `ledger_retract` | `LedgerService/Retract` of a pooled path | an answer, or `NotFound` when nothing was valued |
 | `ledger_lifecycle` | append, current, retract, history cut on a fresh subject | current showed the fact, the cut does not show the value: the retraction rule per request |
-| `ledger_erase_cycle` | append, erase, restore, erase, wait, on a fresh subject | reads denied while erased, back after restore, the subject gone after the window (`[stack.ledgers.X] grace = "0s"`) |
-| `ledger_fuzz` | seeded hostile requests (`[load] seed`) | a clean refusal (`InvalidArgument`, `NotFound`, `FailedPrecondition`, `ResourceExhausted`, `Aborted`) or a clean answer; `Internal`, `Unknown` or a dropped connection is a `contract` failure |
+| `ledger_erase_cycle` | append, erase, restore, erase, on a fresh subject; then, when the grace the ledger announces is shorter than 1.5 s (`[stack.ledgers.X] grace = "0s"`), wait past it | reads denied while erased, back after restore, and the subject gone after the window when it was awaited; against a ledger with the real grace the request passes after the denial |
+| `ledger_fuzz` | seeded hostile requests (`[load] seed`) | a clean refusal (`InvalidArgument`, `NotFound`, `FailedPrecondition`, `ResourceExhausted`, `OutOfRange`, `Aborted`) or a clean answer; `Internal`, `Unknown` or a dropped connection is a `contract` failure |
 
 Every operation targets one kind: the four above the ledger rows run against
 protocols, the `ledger_*` ones against ledgers. A mix spreads each operation over its

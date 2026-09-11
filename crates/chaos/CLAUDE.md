@@ -5,9 +5,11 @@ extension points, `service::Service` and `load::ops::Operation`; this project's
 specifics live in `kinds/` (one module per service kind, each with its spec, handle,
 validate checks and a `static KIND` registered in `kinds::ALL`), `load/ops.rs` (the
 protocol operations) and `load/ledger_ops.rs` (the ledger ones: a per-run `Pool` of
-subjects that remembers what was written, so reads and retractions hit real facts and a
-`NotFound` is a real failure; `ledger_lifecycle` and `ledger_erase_cycle` assert the
-privacy rules per request; `ledger_fuzz` is a seeded hostile generator). Every
+subjects that remembers what was written, so reads hit real facts and a `NotFound` on a
+read is a real failure, while a retraction that finds nothing valued is the contract
+answering an overlapping retraction; `ledger_lifecycle` and `ledger_erase_cycle` assert
+the privacy rules per request, the latter waiting for the cascade only when the grace
+the ledger announces fits its budget; `ledger_fuzz` is a seeded hostile generator). Every
 `OpKind` has a `target_kind()`; the generator pairs each operation with the targets of
 its kind, and `Target` carries `kind` (default `protocol` for API compatibility).
 Everything else is generic and meant to move to the next project as-is.

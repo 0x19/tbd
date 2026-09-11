@@ -13,8 +13,8 @@ use std::{
 use async_trait::async_trait;
 use rand::{Rng, SeedableRng, rngs::StdRng};
 use tbd_proto::ledger::v1::{
-    AppendRequest, CurrentRequest, Envelope, EraseRequest, HistoryRequest, RestoreRequest,
-    RetractRequest, Source, ledger_service_client::LedgerServiceClient,
+    AppendRequest, CurrentRequest, Envelope, EraseRequest, EraseResponse, HistoryRequest,
+    RestoreRequest, RetractRequest, Source, ledger_service_client::LedgerServiceClient,
 };
 use tonic::Code;
 
@@ -274,7 +274,14 @@ impl Operation for Retract {
             source: Source::Declared as i32,
             origin: Some(json(&serde_json::json!({ "by": "chaos" }))),
         };
-        c.retract(req).await.map(|_| ()).map_err(|s| classify(&s))
+        match c.retract(req).await {
+            Ok(_) => Ok(()),
+            // Another operation retracted the pair between the pool's bookkeeping
+            // and this call (an append and a retract overlapping on the same
+            // path): nothing valued is the contract's answer, not a failure.
+            Err(s) if s.code() == Code::NotFound => Ok(()),
+            Err(s) => Err(classify(&s)),
+        }
     }
 }
 
@@ -350,12 +357,31 @@ impl Operation for Lifecycle {
     }
 }
 
-/// Append → erase → reads denied → restore → reads back → erase again → wait
-/// past the window → the subject is gone. Needs a ledger with a short grace
-/// (`[stack.ledgers.X] grace = "0s"`) and its sweeper running.
+/// Append → erase → reads denied → restore → reads back → erase again, and,
+/// when the ledger's grace window fits in `settle`, wait past it → the subject
+/// is gone. Against a ledger with the real grace (days) the cascade cannot be
+/// observed in one request, so the operation stops after the denial and counts
+/// the request as passed; the shipped scenario sets `[stack.ledgers.X]
+/// grace = "0s"` to exercise the whole cycle.
 pub struct EraseCycle {
     /// How long to wait for the sweeper after the second erasure.
     pub settle: Duration,
+}
+
+/// The window the ledger announced (`executes_after - requested_at`), if both
+/// stamps are present and ordered.
+fn erasure_window(e: &EraseResponse) -> Option<Duration> {
+    let requested = e.requested_at.as_ref()?;
+    let executes = e.executes_after.as_ref()?;
+    let secs = executes.seconds.checked_sub(requested.seconds)?;
+    let nanos = i64::from(executes.nanos) - i64::from(requested.nanos);
+    let total = secs.checked_mul(1_000_000_000)?.checked_add(nanos)?;
+    u64::try_from(total).ok().map(Duration::from_nanos)
+}
+
+/// Whether waiting `settle` can observe the cascade of a window that long.
+fn cascade_observable(window: Option<Duration>, settle: Duration) -> bool {
+    window.is_some_and(|w| w < settle)
 }
 
 #[async_trait]
@@ -394,7 +420,14 @@ impl Operation for EraseCycle {
                 "restore did not reopen the subject".into(),
             ));
         }
-        c.erase(erase()).await.map_err(|s| classify(&s))?;
+        let erasure = c
+            .erase(erase())
+            .await
+            .map_err(|s| classify(&s))?
+            .into_inner();
+        if !cascade_observable(erasure_window(&erasure), self.settle) {
+            return Ok(());
+        }
         tokio::time::sleep(self.settle).await;
         match c.current(current_request(subject)).await {
             Err(s) if s.code() == Code::FailedPrecondition => {}
@@ -417,9 +450,9 @@ impl Operation for EraseCycle {
 }
 
 /// Hostile requests from a seeded generator. Success is a clean refusal
-/// (`InvalidArgument`, `NotFound`, `FailedPrecondition`, `ResourceExhausted`)
-/// or a clean answer; `Internal`, `Unknown` or a dropped connection is a
-/// contract failure.
+/// (`InvalidArgument`, `NotFound`, `FailedPrecondition`, `ResourceExhausted`,
+/// `OutOfRange` for a request over the message cap) or a clean answer;
+/// `Internal`, `Unknown` or a dropped connection is a contract failure.
 pub struct Fuzz(pub Arc<Pool>);
 
 impl Fuzz {
@@ -530,6 +563,7 @@ impl Operation for Fuzz {
                         | Code::NotFound
                         | Code::FailedPrecondition
                         | Code::ResourceExhausted
+                        | Code::OutOfRange
                         | Code::Aborted
                 ) =>
             {
@@ -537,5 +571,46 @@ impl Operation for Fuzz {
             }
             Err(s) => Err(classify(&s)),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{EraseResponse, cascade_observable, erasure_window};
+    use std::time::Duration;
+
+    fn response(requested: i64, executes: i64) -> EraseResponse {
+        let stamp = |seconds| Some(prost_types::Timestamp { seconds, nanos: 0 });
+        EraseResponse {
+            requested_at: stamp(requested),
+            executes_after: stamp(executes),
+        }
+    }
+
+    #[test]
+    fn the_cascade_is_only_awaited_when_the_window_fits() {
+        let settle = Duration::from_millis(1500);
+        assert!(cascade_observable(
+            erasure_window(&response(100, 100)),
+            settle
+        ));
+        assert!(cascade_observable(
+            erasure_window(&response(100, 101)),
+            settle
+        ));
+        assert!(!cascade_observable(
+            erasure_window(&response(100, 102)),
+            settle
+        ));
+        assert!(!cascade_observable(
+            erasure_window(&response(100, 100 + 7 * 86_400)),
+            settle
+        ));
+        // Missing or inverted stamps: never wait on a guess.
+        assert!(!cascade_observable(
+            erasure_window(&response(100, 99)),
+            settle
+        ));
+        assert!(!cascade_observable(None, settle));
     }
 }
