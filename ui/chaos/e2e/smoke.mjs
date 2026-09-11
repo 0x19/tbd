@@ -84,7 +84,7 @@ await step("stack: fault dialog applies an error behaviour", async () => {
 
 await step("stack: the ledger's store can be failed and healed", async () => {
   await page.goto(`${BASE}/stack/`);
-  const row = page.locator("li", { hasText: /ledger-1/ }).first();
+  const row = page.getByTestId("instance-ledger-1");
   await row.getByRole("button", { name: /^fault$/i }).click();
   const dialog = page.getByRole("dialog");
   await dialog.waitFor();
