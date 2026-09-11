@@ -33,15 +33,23 @@ import { delta, failed, inWindow, latestPerScenario } from "@/lib/runs";
 export default function OverviewPage() {
   const { overview, error, reload, lastEvent, activity } = useChaos();
   const [allActivity, setAllActivity] = useState(false);
-  // Consecutive queue changes collapse into the newest one: a sweep of ten
-  // scenarios would otherwise fill the card with "queue changed".
-  const feed = useMemo(
-    () =>
-      activity.filter(
-        (a, i) => !(a.event.type === "queue_changed" && activity[i - 1]?.event.type === "queue_changed"),
-      ),
-    [activity],
-  );
+  // One row per thing that happened: a run's "started" folds into its
+  // "finished" once that arrives, and consecutive queue changes collapse into
+  // the newest one, so a sweep of ten scenarios is ten rows, not forty.
+  const feed = useMemo(() => {
+    const finished = new Set(
+      activity
+        .filter((a) => a.event.type === "run_finished")
+        .map((a) => (a.event as { run: { id: string } }).run.id),
+    );
+    const keep: typeof activity = [];
+    for (const a of activity) {
+      if (a.event.type === "run_started" && finished.has(a.event.run.id)) continue;
+      if (a.event.type === "queue_changed" && keep.at(-1)?.event.type === "queue_changed") continue;
+      keep.push(a);
+    }
+    return keep;
+  }, [activity]);
   const visibleActivity = useMemo(() => {
     if (allActivity) return feed;
     const cutoff = Date.now() - ACTIVITY_WINDOW_MS;
@@ -366,7 +374,7 @@ export default function OverviewPage() {
             {feed.length ? (
               <ul className="divide-y">
                 {visibleActivity.map((a) => (
-                  <li key={a.at} className="flex items-start gap-3 py-2.5 text-sm">
+                  <li key={a.id} className="flex items-start gap-3 py-2.5 text-sm">
                     {a.event.type === "stack_changed" ? (
                       <>
                         <Server className="text-muted-foreground mt-0.5 size-4" />

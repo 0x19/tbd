@@ -128,6 +128,8 @@ await step("stack: a protocol replica comes up on a fresh port and can be remove
   await page.getByTestId("instance-protocol-3").waitFor({ timeout: 15000 });
   await page.getByRole("button", { name: "Remove protocol-3" }).click();
   await page.getByTestId("instance-protocol-3").waitFor({ state: "hidden", timeout: 15000 });
+  // The success toasts sit over the last rows on a tall stack; let them go.
+  await page.getByText(/removed protocol-3/).waitFor({ state: "hidden", timeout: 10000 });
   await p2.getByRole("button", { name: "Remove protocol-2" }).click();
   await p2.waitFor({ state: "hidden", timeout: 15000 });
 });

@@ -9,7 +9,8 @@ import { useFetch, useGlobalFeed } from "@/lib/api/hooks";
 import type { GlobalEvent, KindDescriptor, Overview, QueuedRun } from "@/lib/api/schema";
 import { kindOf } from "@/lib/kinds";
 
-export type ActivityItem = { at: number; event: GlobalEvent };
+/** `id` is unique per item: events published in the same millisecond share `at`. */
+export type ActivityItem = { id: number; at: number; event: GlobalEvent };
 
 type ChaosContext = {
   overview: Overview | null;
@@ -78,7 +79,10 @@ function ChaosProvider({ children }: Props) {
   const [liveQueue, setLiveQueue] = useState<QueuedRun[] | null>(null);
   const { connected } = useGlobalFeed((e) => {
     setLastEvent(e);
-    setActivity((a) => [{ at: Date.now(), event: e }, ...a].slice(0, 30));
+    // The id comes from the previous item inside the updater: React runs
+    // queued updaters later, so a counter read here would repeat for events
+    // that arrive within the same tick.
+    setActivity((a) => [{ id: (a[0]?.id ?? 0) + 1, at: Date.now(), event: e }, ...a].slice(0, 30));
     if (e.type === "queue_changed") setLiveQueue(e.queue);
     if (e.type === "run_started" || e.type === "run_finished" || e.type === "schedules_changed")
       overview.reload();

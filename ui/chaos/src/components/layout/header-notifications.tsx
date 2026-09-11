@@ -24,9 +24,9 @@ export function HeaderNotifications() {
   const { activity } = useChaos();
   const [seen, setSeen] = React.useState<Set<number>>(() => new Set());
   const finished = activity.filter((a) => a.event.type === "run_finished").slice(0, 12);
-  const unreadCount = finished.filter((a) => !seen.has(a.at)).length;
+  const unreadCount = finished.filter((a) => !seen.has(a.id)).length;
 
-  const markAllRead = () => setSeen(new Set(finished.map((a) => a.at)));
+  const markAllRead = () => setSeen(new Set(finished.map((a) => a.id)));
 
   return (
     <DropdownMenu>
@@ -71,13 +71,13 @@ export function HeaderNotifications() {
               finished.map((a) =>
                 a.event.type === "run_finished" ? (
                   <DropdownMenuItem
-                    key={a.at}
+                    key={a.id}
                     asChild
                     className={cn(
                       "focus:bg-accent cursor-pointer items-start rounded-none px-3 py-2.5",
-                      !seen.has(a.at) && "bg-accent/40",
+                      !seen.has(a.id) && "bg-accent/40",
                     )}
-                    onSelect={() => setSeen((s) => new Set(s).add(a.at))}
+                    onSelect={() => setSeen((s) => new Set(s).add(a.id))}
                   >
                     <Link href={`/runs/view/?id=${a.event.run.id}`}>
                       <div className="min-w-0 flex-1 space-y-1">
@@ -85,7 +85,7 @@ export function HeaderNotifications() {
                           <p
                             className={cn(
                               "truncate text-sm leading-tight",
-                              !seen.has(a.at) && "font-semibold",
+                              !seen.has(a.id) && "font-semibold",
                             )}
                           >
                             {a.event.run.name}
