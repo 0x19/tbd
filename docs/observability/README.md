@@ -64,19 +64,6 @@ Or through Ansible, same result: `mise run ansible:local`.
 4. In VictoriaLogs directly: `trace_id:="<id>"` returns every line from every service and
    Envoy for that request. `service.name:engine level:ERROR _time:1h` is a typical hunt.
 
-## Following one request
-
-1. Every request gets a `trace_id`. Envoy starts the trace and propagates W3C
-   `traceparent`; the protocol adopts it and forwards it to the engine; a client can also
-   supply its own `traceparent` and it is honoured.
-2. In Grafana Explore with the Tempo datasource, search `{ resource.service.name = "protocol" }`
-   or paste a trace id. The trace shows Envoy → protocol → engine spans with the route and
-   RPC names.
-3. From any span, "Logs for this span" opens VictoriaLogs filtered by that `trace_id`.
-   From a log line, the `trace_id` field links back to the trace.
-4. In VictoriaLogs directly: `trace_id:="<id>"` returns every line from every service and
-   Envoy for that request. `service.name:engine level:ERROR _time:1h` is a typical hunt.
-
 ## Troubleshooting
 
 | Symptom | Look at |
