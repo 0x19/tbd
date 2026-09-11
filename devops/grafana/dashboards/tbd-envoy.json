@@ -50,6 +50,12 @@
       "asDropdown": false
     },
     {
+      "title": "Ledger",
+      "type": "link",
+      "url": "/d/tbd-ledger",
+      "icon": "dashboard"
+    },
+    {
       "title": "Envoy",
       "type": "link",
       "url": "/d/tbd-envoy",

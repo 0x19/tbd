@@ -13,6 +13,10 @@ use std::sync::Arc;
 use tbd_ledger::MemoryStore;
 
 conformance_suite!(memory, async { Arc::new(MemoryStore::new()) });
+// The metrics decorator is transparent: the same contract through it.
+conformance_suite!(instrumented, async {
+    Arc::new(tbd_ledger::Instrumented(MemoryStore::new()))
+});
 
 use tbd_ledger::{Behavior, FaultHandle, Runtime};
 use tbd_proto::ledger::v1::PingRequest;

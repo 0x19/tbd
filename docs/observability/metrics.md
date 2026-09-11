@@ -26,6 +26,26 @@ backend is visible instead of clipped.
 | `tbd_ledger_outbox_events_total` | counter | `kind` (`fact.recorded`, `fact.retracted`, `subject.erased`) | events acked after the sink took them |
 | `tbd_ledger_erasures_executed_total` | counter | | the sweeper executed an erasure cascade |
 | `tbd_db_pool_connections` | gauge | `state` (`idle`, `in_use`) | sampled every five seconds from the ledger's Postgres pool |
+| `tbd_db_pool_max_connections` | gauge | | the pool's configured maximum, so `in_use / max` is saturation |
+| `tbd_ledger_store_op_duration_seconds` | histogram | `op` (`append`, `current`, `history`, `retract`, `request_erasure`, `restore`, `execute_due_erasures`, `claim_events`, `ack_events`, `purge_idempotency`, `subject`, `ping`) | every store call, whoever made it (the gRPC adapter, the sweeper, the drainer); recorded by `store::Instrumented`, which `build_store` wraps every backend in |
+| `tbd_ledger_store_ops_total` | counter | `op`, `result` (`ok`, `not_found`, `erased`, `invalid`, `forbidden`, `conflict`, `unavailable`, `internal`) | same moment; `unavailable` and `internal` are the ledger failing, the rest is the contract answering |
+| `tbd_ledger_facts_appended_total` | counter | `source` | a fact was written; an idempotent replay is not a fact |
+| `tbd_ledger_appends_replayed_total` | counter | | an append matched its idempotency key and returned the earlier fact |
+| `tbd_ledger_facts_retracted_total` | counter | | a retraction wrote its tombstone and deleted the values |
+| `tbd_ledger_envelope_bytes` | histogram (64 B to 64 KiB) | `field` (`value`, `origin`) | the sizes of accepted envelopes |
+| `tbd_ledger_page_facts` | histogram (1 to 1000) | `op` (`current`, `history`) | facts per page returned |
+| `tbd_ledger_erasures_requested_total` | counter | | an erasure opened its grace window |
+| `tbd_ledger_erasures_restored_total` | counter | | a restore cancelled one inside the window |
+| `tbd_ledger_erasure_tombstones_total` | counter | | tombstones a cascade wrote on surviving subjects |
+| `tbd_ledger_erasures_pending` | gauge | `state` (`pending`, `due`) | sampled every five seconds from Postgres: inside the window, and past it waiting for the sweeper |
+| `tbd_ledger_idempotency_purged_total` | counter | | idempotency rows purged after their TTL |
+| `tbd_ledger_outbox_pending` | gauge | | unpublished outbox events, sampled every five seconds from Postgres |
+| `tbd_ledger_outbox_oldest_seconds` | gauge | | age of the oldest unpublished event, same sample; zero when empty |
+| `tbd_ledger_outbox_publish_duration_seconds` | histogram | | one batch handed to the analytics sink |
+| `tbd_ledger_outbox_lag_seconds` | histogram (10 ms to 1 h) | | at ack: the recorded-to-acked age of the oldest event in the batch |
+| `tbd_ledger_analytics_deletes_total` | counter | | an erased subject's rows were deleted from ClickHouse |
+| `tbd_ledger_table_rows` | gauge | `table` | the planner's row estimate per ledger table, sampled every five seconds |
+| `tbd_ledger_table_bytes` | gauge | `table` | on-disk size per ledger table with indexes, same sample |
 | `process_cpu_seconds_total`, `process_resident_memory_bytes`, `process_virtual_memory_bytes`, `process_open_fds`, `process_max_fds`, `process_threads`, `process_start_time_seconds` | mixed | | every 5 s by `metrics-process` |
 
 `route` values: axum's matched pattern for HTTP (`/v1/evaluate`, `/v1/subjects/{subject_id}/events`),

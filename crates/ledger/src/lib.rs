@@ -25,6 +25,7 @@ use tonic::transport::{Server, server::TcpIncoming};
 
 pub use config::{Config, Overrides, Source};
 pub use service::Ledger;
+pub use store::instrumented::Instrumented;
 pub use store::{
     Store, StoreError, StoreKind,
     memory::MemoryStore,
@@ -67,7 +68,7 @@ pub enum ServeError {
 pub async fn build_store(config: &Config) -> Result<Arc<dyn Store>, ServeError> {
     config.validate()?;
     match config.store.kind {
-        StoreKind::Memory => Ok(Arc::new(MemoryStore::new())),
+        StoreKind::Memory => Ok(Arc::new(Instrumented(MemoryStore::new()))),
         StoreKind::Postgres => {
             let store = PgStore::connect_lazy(&PgOptions {
                 url: config.store.url.clone(),
@@ -78,7 +79,7 @@ pub async fn build_store(config: &Config) -> Result<Arc<dyn Store>, ServeError> 
                 store.migrate().await?;
                 tracing::info!("migrations applied");
             }
-            Ok(Arc::new(store))
+            Ok(Arc::new(Instrumented(store)))
         }
     }
 }
@@ -188,7 +189,7 @@ pub async fn serve_store(
         .run(cancel.clone()),
     );
     if let Some(pg) = store_as_pg(&store) {
-        tasks.spawn(pool_gauges(pg, cancel.clone()));
+        tasks.spawn(store_gauges(pg, config.erasure.grace, cancel.clone()));
     }
     let server_shutdown = {
         let cancel = cancel.clone();
@@ -253,14 +254,33 @@ fn store_as_pg(store: &Arc<dyn Store>) -> Option<PgStore> {
         .flatten()
 }
 
-/// Sample the pool every five seconds, like the process collector does.
-async fn pool_gauges(pg: PgStore, cancel: CancellationToken) {
+/// Sample the pool and the database's health counters every five seconds,
+/// like the process collector does: outbox backlog and age, erasures pending
+/// and due, rows and bytes per table.
+async fn store_gauges(pg: PgStore, grace: Duration, cancel: CancellationToken) {
+    use tbd_common::metrics::names;
     loop {
         let (idle, in_use) = pg.pool_counts();
-        metrics::gauge!(tbd_common::metrics::names::DB_POOL_CONNECTIONS, "state" => "idle")
-            .set(f64::from(idle));
-        metrics::gauge!(tbd_common::metrics::names::DB_POOL_CONNECTIONS, "state" => "in_use")
-            .set(f64::from(in_use));
+        metrics::gauge!(names::DB_POOL_CONNECTIONS, "state" => "idle").set(f64::from(idle));
+        metrics::gauge!(names::DB_POOL_CONNECTIONS, "state" => "in_use").set(f64::from(in_use));
+        metrics::gauge!(names::DB_POOL_MAX_CONNECTIONS).set(f64::from(pg.max_connections()));
+        match pg.stats(grace).await {
+            Ok(stats) => {
+                use store::pg::gauge_value as g;
+                metrics::gauge!(names::LEDGER_OUTBOX_PENDING).set(g(stats.outbox_pending));
+                metrics::gauge!(names::LEDGER_OUTBOX_OLDEST_SECONDS).set(stats.outbox_oldest_secs);
+                metrics::gauge!(names::LEDGER_ERASURES_PENDING, "state" => "pending")
+                    .set(g(stats.erasures_pending));
+                metrics::gauge!(names::LEDGER_ERASURES_PENDING, "state" => "due")
+                    .set(g(stats.erasures_due));
+                for t in stats.tables {
+                    metrics::gauge!(names::LEDGER_TABLE_ROWS, "table" => t.name.clone())
+                        .set(t.rows);
+                    metrics::gauge!(names::LEDGER_TABLE_BYTES, "table" => t.name).set(g(t.bytes));
+                }
+            }
+            Err(error) => tracing::debug!(%error, "store stats unavailable"),
+        }
         tokio::select! {
             () = cancel.cancelled() => break,
             () = tokio::time::sleep(Duration::from_secs(5)) => {}

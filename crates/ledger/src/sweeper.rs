@@ -4,7 +4,6 @@
 
 use std::time::Duration;
 
-use tbd_common::metrics::names;
 use tokio_util::sync::CancellationToken;
 
 use crate::store::{Store, StoreError};
@@ -48,10 +47,8 @@ impl<S: Store> Sweeper<S> {
         for e in &executed {
             tracing::info!(subject = %e.subject_id, tombstoned = e.tombstoned, "erasure executed");
         }
-        if !executed.is_empty() {
-            metrics::counter!(names::LEDGER_ERASURES_EXECUTED_TOTAL)
-                .increment(executed.len() as u64);
-        }
+        // Counters live in `store::Instrumented`, which wraps every store
+        // `build_store` makes, so a cascade run by any caller is counted once.
         let purged = self.store.purge_idempotency(self.idempotency_ttl).await?;
         Ok((executed.len(), purged))
     }

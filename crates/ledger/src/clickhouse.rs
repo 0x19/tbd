@@ -198,7 +198,9 @@ impl ClickHousePublisher {
             .with_setting("lightweight_deletes_sync", "2")
             .execute()
             .await
-            .map_err(|e| PublishError::Sink(format!("delete: {e}")))
+            .map_err(|e| PublishError::Sink(format!("delete: {e}")))?;
+        metrics::counter!(tbd_common::metrics::names::LEDGER_ANALYTICS_DELETES_TOTAL).increment(1);
+        Ok(())
     }
 }
 

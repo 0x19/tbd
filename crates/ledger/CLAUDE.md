@@ -30,6 +30,13 @@ reports as `diverged`. The contract is `docs/ledger/README.md`.
   ClickHouse sink (`ledger.facts_events`, DDL on start, lightweight DELETE on
   `subject.erased`). `sweeper.rs`: due erasures and idempotency purge on a timer.
   `health.rs`: the readiness probe loop that drives the gRPC health status.
+- `store/instrumented.rs`: `Instrumented<S>`, the decorator `build_store` wraps every
+  backend in: it times and counts every store call by `op` and `result` and records the
+  business counters (facts by source, replays, retractions, envelope and page sizes,
+  erasures, purged keys), so metrics do not depend on which caller made the call.
+  `PgStore::stats` feeds the sampled gauges (outbox backlog and age, erasures pending and
+  due, rows and bytes per table) from `lib.rs`'s `store_gauges` task. Names live in
+  `tbd_common::metrics::names`; the dashboard is `devops/grafana/dashboards/tbd-ledger.json`.
 - `lib.rs`: `serve`, `serve_on`, `serve_with` (the store comes from `[store]`),
   `serve_store` (an explicit store); it spawns the health, sweeper, drainer and
   pool-gauge tasks on a `CancellationToken` tied to the shutdown future. `config.rs`: `[store]`, `[analytics]`, `[erasure]`,

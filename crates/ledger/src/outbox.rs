@@ -113,7 +113,11 @@ impl<S: Store, P: Publisher> Drainer<S, P> {
         if events.is_empty() {
             return Ok(0);
         }
-        match self.publisher.publish(&events).await {
+        let started = std::time::Instant::now();
+        let published = self.publisher.publish(&events).await;
+        metrics::histogram!(names::LEDGER_OUTBOX_PUBLISH_DURATION)
+            .record(started.elapsed().as_secs_f64());
+        match published {
             Ok(()) => {
                 metrics::counter!(names::LEDGER_OUTBOX_BATCHES_TOTAL, "status" => "ok")
                     .increment(1);
@@ -140,6 +144,11 @@ impl<S: Store, P: Publisher> Drainer<S, P> {
             .ack_events(&ids)
             .await
             .map_err(DrainError::Store)?;
+        // The batch's lag is its oldest event's age at the moment it is acked.
+        if let Some(oldest) = events.iter().map(|e| e.recorded_at).min() {
+            let lag = (chrono::Utc::now() - oldest).to_std().unwrap_or_default();
+            metrics::histogram!(names::LEDGER_OUTBOX_LAG_SECONDS).record(lag.as_secs_f64());
+        }
         Ok(events.len())
     }
 

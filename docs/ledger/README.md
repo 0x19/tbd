@@ -146,7 +146,12 @@ then one every `probe_interval`; a probe slower than `probe_timeout` or failing 
 the gRPC health status NOT_SERVING (the readiness gate in Kubernetes) and
 `tbd_ledger_store_up` 0. The memory store is always up.
 
-Metrics: `tbd_ledger_store_up`, `tbd_ledger_outbox_batches_total{status}`,
+Metrics: the dashboard **tbd / Ledger** ([docs/observability/dashboards.md](../observability/dashboards.md))
+reads them all; every store call is timed and counted by `store::Instrumented`
+(`tbd_ledger_store_op_duration_seconds{op}`, `tbd_ledger_store_ops_total{op,result}`), facts,
+replays, retractions, envelope and page sizes, erasures and their backlog, the outbox's
+pending count, age and lag, and rows and bytes per table are recorded next to
+`tbd_ledger_store_up`, `tbd_ledger_outbox_batches_total{status}`,
 `tbd_ledger_outbox_events_total{kind}`, `tbd_ledger_erasures_executed_total`,
 `tbd_db_pool_connections{state}` ([docs/observability/metrics.md](../observability/metrics.md)).
 

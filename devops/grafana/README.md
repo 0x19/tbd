@@ -13,6 +13,7 @@ nothing is created by hand in the UI.
 | `dashboards/tbd-protocol.json` | the protocol: every surface, status codes, WS/SSE, calls to the engine, logs | same |
 | `dashboards/tbd-traces.json` | TraceQL search, service map, span metrics | same |
 | `dashboards/tbd-envoy.json` | Envoy: listeners, upstream clusters, retries, health checks, process, access logs | same |
+| `dashboards/tbd-ledger.json` | the ledger: requests, time inside the store and pool saturation, facts by source and size, erasures and windows, outbox lag into ClickHouse, table growth, process, logs | same |
 
 ## How dashboards reach the cluster
 

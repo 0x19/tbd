@@ -18,3 +18,4 @@ configMapGenerator:
       - dashboards/tbd-protocol.json
       - dashboards/tbd-traces.json
       - dashboards/tbd-envoy.json
+      - dashboards/tbd-ledger.json

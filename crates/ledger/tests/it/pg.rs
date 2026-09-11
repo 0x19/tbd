@@ -198,6 +198,28 @@ async fn migrations_run_twice_are_a_no_op() {
 /// Readiness: `ping` succeeds on a live pool and fails once the database is
 /// unreachable.
 #[tokio::test]
+async fn stats_count_the_backlog_and_the_tables() {
+    let t = store().await;
+    let s = uuid::Uuid::now_v7();
+    t.append(s, conformance::declared("profile.name", "x"))
+        .await
+        .unwrap();
+    t.request_erasure(s).await.unwrap();
+    let stats = t.stats(Duration::from_hours(168)).await.unwrap();
+    assert_eq!(stats.outbox_pending, 1, "{stats:?}");
+    assert!(stats.outbox_oldest_secs >= 0.0);
+    assert_eq!((stats.erasures_pending, stats.erasures_due), (1, 0));
+    let names: Vec<&str> = stats.tables.iter().map(|t| t.name.as_str()).collect();
+    let mut expected = tbd_ledger::store::pg::LEDGER_TABLES.to_vec();
+    expected.sort_unstable();
+    assert_eq!(names, expected);
+    assert!(stats.tables.iter().all(|t| t.bytes > 0));
+    // Past the window the same erasure is due.
+    let stats = t.stats(Duration::ZERO).await.unwrap();
+    assert_eq!((stats.erasures_pending, stats.erasures_due), (1, 1));
+}
+
+#[tokio::test]
 async fn ping_reports_the_database() {
     let t = store().await;
     t.ping().await.unwrap();

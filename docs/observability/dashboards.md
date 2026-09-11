@@ -1,6 +1,6 @@
 # Dashboards
 
-Five dashboards, provisioned from `devops/grafana/dashboards/*.json` into a "tbd" folder,
+Six dashboards, provisioned from `devops/grafana/dashboards/*.json` into a "tbd" folder,
 tagged `tbd`, read-only in the UI. http://localhost:3000/dashboards?tag=tbd locally.
 
 | Dashboard | Use it when |
@@ -9,6 +9,7 @@ tagged `tbd`, read-only in the UI. http://localhost:3000/dashboards?tag=tbd loca
 | **tbd / Engine** | the engine is suspect: per-RPC rate and errors, latency heatmap, streams by kind, items per second, faults, its logs |
 | **tbd / Protocol** | the edge is suspect: per-route rate by transport, status codes, latency, WebSocket and SSE gauges, engine-client latency and errors, its logs |
 | **tbd / Envoy** | routing or balancing is suspect: request rate and codes per listener, upstream health and ejections, retries, health-check outcomes, access logs |
+| **tbd / Ledger** | the ledger is suspect or you want to know how it is doing: store up, requests and non-ok answers by status, time inside the store per operation and its share of request time, pool saturation, appends by source, envelope and page sizes, erasures requested / restored / executed and the pending and due backlog, outbox pending, oldest age, batches, lag into ClickHouse and analytics deletes, rows and bytes per table, process, logs. Every panel carries a description saying what a bad value means |
 | **tbd / Traces** | you have a trace id or want the service graph: TraceQL search, node graph, span-metric rates |
 
 Every dashboard has a `service` or equivalent variable where it applies, refreshes every

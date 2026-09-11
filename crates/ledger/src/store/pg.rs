@@ -16,6 +16,53 @@ use chrono::{DateTime, Utc};
 use sqlx::{PgPool, Postgres, Transaction, postgres::PgPoolOptions};
 use uuid::Uuid;
 
+/// The ledger's tables, for [`PgStore::stats`].
+pub const LEDGER_TABLES: &[&str] = &[
+    "subjects",
+    "facts",
+    "facts_current",
+    "erasures",
+    "outbox",
+    "idempotency",
+];
+
+/// What [`PgStore::stats`] samples.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PgStats {
+    /// Outbox events not yet published.
+    pub outbox_pending: u64,
+    /// Age in seconds of the oldest unpublished event (0 when none).
+    pub outbox_oldest_secs: f64,
+    /// Erasures inside their grace window.
+    pub erasures_pending: u64,
+    /// Erasures past it, waiting for the sweeper.
+    pub erasures_due: u64,
+    /// Per table.
+    pub tables: Vec<TableStats>,
+}
+
+/// One table's estimate and size.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TableStats {
+    /// Table name.
+    pub name: String,
+    /// The planner's row estimate (exact after `analyze`).
+    pub rows: f64,
+    /// Bytes on disk, indexes and TOAST included.
+    pub bytes: u64,
+}
+
+/// A count as a gauge value; counts here never reach 2^53.
+#[must_use]
+#[allow(clippy::cast_precision_loss)]
+pub fn gauge_value(n: u64) -> f64 {
+    n as f64
+}
+
+fn count(n: i64) -> u64 {
+    u64::try_from(n).unwrap_or(0)
+}
+
 use super::{
     Appended, Envelope, Erasure, ErasureExecuted, EventKind, Fact, FactId, NewFact, OutboxEvent,
     Page, Query, ScopeId, Source, Store, StoreError, StoreKind, Subject, SubjectId, fingerprint,
@@ -110,6 +157,84 @@ impl PgStore {
         let size = self.pool.size();
         let idle = u32::try_from(self.pool.num_idle()).unwrap_or(u32::MAX);
         (idle, size.saturating_sub(idle))
+    }
+
+    /// The pool's configured maximum.
+    #[must_use]
+    pub fn max_connections(&self) -> u32 {
+        self.pool.options().get_max_connections()
+    }
+
+    /// The database's health counters for the gauges: outbox backlog and the
+    /// age of its oldest event, erasures inside and past `grace`, and the
+    /// planner's row estimate and on-disk size per table. Three cheap queries;
+    /// none touches a fact.
+    ///
+    /// # Errors
+    /// The database could not be reached.
+    pub async fn stats(&self, grace: Duration) -> Result<PgStats, StoreError> {
+        #[derive(sqlx::FromRow)]
+        struct Outbox {
+            pending: i64,
+            oldest: f64,
+        }
+        #[derive(sqlx::FromRow)]
+        struct Erasures {
+            pending: i64,
+            due: i64,
+        }
+        #[derive(sqlx::FromRow)]
+        struct Table {
+            name: String,
+            rows: f64,
+            bytes: i64,
+        }
+        let outbox: Outbox = sqlx::query_as(
+            "select count(*)::bigint as pending, \
+             coalesce(extract(epoch from (clock_timestamp() - min(recorded_at))), 0)::float8 as oldest \
+             from outbox where published_at is null",
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(map_err)?;
+        let erasures: Erasures = sqlx::query_as(
+            "select count(*) filter (where executed_at is null and cancelled_at is null)::bigint as pending, \
+             count(*) filter (where executed_at is null and cancelled_at is null \
+                              and requested_at + make_interval(secs => $1) <= clock_timestamp())::bigint as due \
+             from erasures",
+        )
+        .bind(grace.as_secs_f64())
+        .fetch_one(&self.pool)
+        .await
+        .map_err(map_err)?;
+        let tables: Vec<Table> = sqlx::query_as(
+            "select relname::text as name, greatest(reltuples, 0)::float8 as rows, \
+             pg_total_relation_size(oid)::bigint as bytes \
+             from pg_class where relkind = 'r' and relname = any($1) order by relname",
+        )
+        .bind(
+            LEDGER_TABLES
+                .iter()
+                .map(|s| (*s).to_owned())
+                .collect::<Vec<String>>(),
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_err)?;
+        Ok(PgStats {
+            outbox_pending: count(outbox.pending),
+            outbox_oldest_secs: outbox.oldest,
+            erasures_pending: count(erasures.pending),
+            erasures_due: count(erasures.due),
+            tables: tables
+                .into_iter()
+                .map(|t| TableStats {
+                    name: t.name,
+                    rows: t.rows,
+                    bytes: count(t.bytes),
+                })
+                .collect(),
+        })
     }
 
     async fn begin(&self) -> Result<Transaction<'static, Postgres>, StoreError> {

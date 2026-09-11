@@ -13,6 +13,7 @@
 //! gRPC-backed implementation could satisfy later without any caller changing.
 
 pub mod clock;
+pub mod instrumented;
 pub mod memory;
 pub mod pg;
 pub mod registry;

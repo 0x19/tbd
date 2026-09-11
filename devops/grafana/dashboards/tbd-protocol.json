@@ -51,6 +51,12 @@
       "icon": "dashboard"
     },
     {
+      "title": "Ledger",
+      "type": "link",
+      "url": "/d/tbd-ledger",
+      "icon": "dashboard"
+    },
+    {
       "title": "Traces",
       "type": "link",
       "url": "/d/tbd-traces",

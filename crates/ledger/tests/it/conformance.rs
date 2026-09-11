@@ -35,7 +35,7 @@ pub fn fact(path: &str, source: Source, value: &serde_json::Value) -> NewFact {
     }
 }
 
-fn declared(path: &str, value: &str) -> NewFact {
+pub fn declared(path: &str, value: &str) -> NewFact {
     fact(path, Source::Declared, &serde_json::json!(value))
 }
 
