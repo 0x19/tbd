@@ -10,6 +10,10 @@ same stack and timeline it uses for scenarios.
   the integration test only): the model must not share code with the thing it checks.
   The caller hands `run` a `client::Target` per ledger (a channel and an optional
   bearer); `client::GrpcLedger` is the one implementation of `LedgerClient`.
+- `client.rs`: one `LedgerClient` per target. `CallError::from_status` is the one place
+  a wire answer becomes a class: a synthesised `Internal`/`Unknown` carrying an h2 or
+  transport error is a broken connection (`transport`), not the ledger answering, so a
+  restart is tolerable and a real `Internal` is still unclean.
 - `campaign.rs`: the TOML schema, every table `deny_unknown_fields`. `[stack]` and
   `[[timeline]]` are opaque `toml::Table`s here; chaos parses them. A present
   `[workload.owner.mix]` lists exactly the operations that run (a missing key is 0);
@@ -17,7 +21,10 @@ same stack and timeline it uses for scenarios.
 - `model/mod.rs`: `SubjectModel`, built only from requests and responses. `learn` is
   the one place a read fills in the model: ids and stamps of tombstones the model knows
   exist (a re-driven retract answered `NotFound`) and the fate of appends whose outcome
-  was unknown. Never make the model adopt what a read says otherwise.
+  was unknown. Never make the model adopt what a read says otherwise. `apply_append`
+  treats a `replayed` answer for a key it never saw acknowledged as the first
+  acknowledgement (the earlier attempt committed and lost its answer); the store-faults
+  campaign found the model without this rule.
 - `model/invariants.rs`: the checkers, pure over data, one per rule in `ALL`; the
   campaign's `[invariants]` and the report's counters are keyed by these names. A new
   rule is a function here, a row in `docs/chaos/stress.md`, and a call from the worker
@@ -27,13 +34,24 @@ same stack and timeline it uses for scenarios.
   steps by `index`, not position, because the worker keeps a bounded ring. The instants
   actually sent are pinned into the stored request, so a replay sends the same bytes
   (idempotency fingerprints include them).
+- `workers/mod.rs`: what the classes share (`Checks`, `Context`), plus `Lane`, `send`
+  and `judge` for the non-owner classes. `workers/contention.rs`: shared subjects, an
+  order-free model (`Acked` per worker), the rules in `invariants::CONTENTION`; findings
+  are kept whole (`shrink_all` skips them). `workers/fuzz.rs` + `fuzz.rs`: the hostile
+  cases (`FuzzCase`, symbolic so a case sits in a trace and replays; `build` makes the
+  RPC and names the allowed classes), judged by `clean_refusal`. A new case is a variant,
+  a `draw` arm, a `build` arm, a row in `docs/chaos/stress.md`.
 - `workers/owner.rs`: the owner worker. `send` is the one path every call goes
-  through: permit, timing, metrics, the step, the `clean_errors` judgement.
+  through: permit, timing, metrics, the step, the `clean_errors` judgement. After a
+  tolerated failure (`saw_fault`) the next complete history walk is judged as
+  `durability` instead of `history_is_everything`.
   `append_settled` and `retract_settled` re-drive a write after a tolerated failure
   and settle its outcome through the idempotency key or `NotFound`. An erasure window
   under `SAFE_WINDOW` (2 s) may close during the denial checks, so restore is allowed to
   find the subject gone and the cycle continues into the cascade; a real window never
-  awaits the cascade. Relation appends are never replay candidates (`appends`): the
+  awaits the cascade. `abandon` drops a subject and every peer that named it whenever a
+  fault hides an erasure's outcome: the sweeper cascades regardless and a stale peer
+  model would invent findings. Relation appends are never replay candidates (`appends`): the
   ledger's counterparty check precedes the key, so an erased peer turns the same key
   into `NotFound`.
 - `replay.rs`: `Interpreter` judges a trace step by step from the request alone, with
@@ -51,12 +69,13 @@ same stack and timeline it uses for scenarios.
   report the same `LoadSnapshot`; chaos re-exports it at `load::metrics`.
 
 Tests: unit tests next to the code (every invariant with hand-built pages, the model's
-transitions, the campaign checks, the signature normalisation); `tests/it/main.rs` boots
-`tbd_ledger::serve_store` on the memory store with a zero grace window and runs short
-campaigns: every enabled invariant is evaluated and holds, cancel ends the run, an
-unreachable target is an error, and a client that drops the last fact of every history
-page produces `history_is_everything` findings that shrink to a few steps and replay
-through the liar but not through the honest client. The shipped campaigns under `stress/` run in
+transitions, the campaign checks, the signature normalisation, every fuzz case builds and
+round-trips); `tests/it/main.rs` boots `tbd_ledger::serve_store` on the memory store with
+a zero grace window and runs short campaigns: every rule of every class is evaluated and
+holds, a store fault flipped mid-run is tolerated, re-driven and judged for
+`durability`, cancel ends the run, an unreachable target is an error, and a client that
+drops the last fact of every history page produces `history_is_everything` findings that
+shrink to a few steps and replay through the liar but not through the honest client. The shipped campaigns under `stress/` run in
 `mise run ci`.
 
 When a campaign finds something, the trace decides whether the ledger or the model is

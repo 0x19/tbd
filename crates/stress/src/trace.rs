@@ -129,6 +129,11 @@ pub enum Request {
         /// Milliseconds.
         ms: u64,
     },
+    /// A hostile request on the worker's own subject ([`crate::fuzz`]).
+    Fuzz {
+        /// The case.
+        case: crate::fuzz::FuzzCase,
+    },
 }
 
 impl Request {
@@ -143,6 +148,7 @@ impl Request {
             Self::Erase { .. } => "erase",
             Self::Restore { .. } => "restore",
             Self::Sleep { .. } => "sleep",
+            Self::Fuzz { .. } => "fuzz",
         }
     }
 
@@ -156,7 +162,7 @@ impl Request {
             | Self::Retract { subject, .. }
             | Self::Erase { subject }
             | Self::Restore { subject } => Some(*subject),
-            Self::Sleep { .. } => None,
+            Self::Sleep { .. } | Self::Fuzz { .. } => None,
         }
     }
 
@@ -189,7 +195,8 @@ impl Request {
             Self::Retract { .. }
             | Self::Erase { .. }
             | Self::Restore { .. }
-            | Self::Sleep { .. } => {}
+            | Self::Sleep { .. }
+            | Self::Fuzz { .. } => {}
         }
         out
     }
@@ -273,6 +280,15 @@ pub enum Concrete {
     Restore(RestoreRequest),
     /// Wait.
     Sleep(std::time::Duration),
+    /// A hostile request: the RPC it became, and what a clean answer is.
+    Fuzz {
+        /// The case's name.
+        case: &'static str,
+        /// The concrete RPC.
+        inner: Box<Concrete>,
+        /// The classes the ledger may answer with (`ok` included).
+        expect: &'static [&'static str],
+    },
 }
 
 /// Plaintext JSON envelope (version 0).
@@ -446,6 +462,11 @@ impl Request {
                 subject_id: binding.resolve(*subject).to_string(),
             }),
             Self::Sleep { ms } => Concrete::Sleep(std::time::Duration::from_millis(*ms)),
+            Self::Fuzz { case } => Concrete::Fuzz {
+                case: case.name(),
+                inner: Box::new(case.build(binding)),
+                expect: case.expect(),
+            },
         })
     }
 }

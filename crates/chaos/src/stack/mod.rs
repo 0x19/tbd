@@ -30,6 +30,9 @@ pub struct InstanceInfo {
     pub depends_on: Vec<String>,
     /// Current fault behaviour, when the service has fault injection.
     pub behavior: Option<Behavior>,
+    /// Current store fault behaviour, when the service has a store to fail.
+    #[serde(default)]
+    pub store_behavior: Option<Behavior>,
     /// Request counters, when the service exposes them.
     pub requests: Option<RequestCounts>,
     /// Added at runtime (a replica or a new instance) rather than from the
@@ -80,6 +83,9 @@ pub enum StackError {
     /// Instance has no fault injection.
     #[error("{0:?} has no fault injection")]
     NoFaults(String),
+    /// The instance's service has no store to fail.
+    #[error("{0:?} has no store fault injection")]
+    NoStoreFaults(String),
     /// An instance with that name already exists.
     #[error("{0:?} already exists")]
     Exists(String),
@@ -318,6 +324,7 @@ impl Stack {
                     running: instance.is_some(),
                     depends_on: l.service.depends_on(),
                     behavior: instance.and_then(|i| i.fault().map(|f| f.get())),
+                    store_behavior: instance.and_then(|i| i.store_fault().map(|f| f.get())),
                     requests: instance.and_then(Instance::requests),
                     added: self.added.contains(name),
                 }
@@ -334,6 +341,20 @@ impl Stack {
         let fault = instance
             .fault()
             .ok_or_else(|| StackError::NoFaults(name.to_owned()))?;
+        fault.set(behavior);
+        Ok(())
+    }
+
+    /// Set the store fault behaviour of a running instance: reads fail before
+    /// they run, writes after they committed.
+    pub fn set_store_behavior(&self, name: &str, behavior: Behavior) -> Result<(), StackError> {
+        let instance = self
+            .instances
+            .get(name)
+            .ok_or_else(|| StackError::Unknown(name.to_owned()))?;
+        let fault = instance
+            .store_fault()
+            .ok_or_else(|| StackError::NoStoreFaults(name.to_owned()))?;
         fault.set(behavior);
         Ok(())
     }

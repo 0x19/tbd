@@ -6,12 +6,12 @@ declared and what derives from it: [extending.md](extending.md#add-a-service-kin
 
 ## Kinds and checks
 
-| Kind | Table | Surface | Fault injection | Counters | Load target | Addable | Validate target (default, env) | Fields |
-|---|---|---|---|---|---|---|---|---|
-| `engine` | `[stack.engines.<name>]` | grpc | yes | yes | no | yes | `http://127.0.0.1:50051`, `CHAOS_ENGINE_URL` | `heartbeat` (duration, default `1s`) |
-| `protocol` | `[stack.protocols.<name>]` | http/ws/graphql/grpc | no | no | yes | yes | `http://127.0.0.1:8080`, `CHAOS_PROTOCOL_URL` | `engine` (a running engine, required) |
-| `ledger` | `[stack.ledgers.<name>]` | grpc | yes | yes | yes | yes | `http://127.0.0.1:50052`, `CHAOS_LEDGER_URL` | `grace` (duration, default `7d`); `database_url` (text) |
-| `humans` | `[stack.humans.<name>]` | grpc | yes | yes | no | yes | `http://127.0.0.1:50053`, `CHAOS_HUMANS_URL` | none |
+| Kind | Table | Surface | Fault injection | Store faults | Counters | Load target | Addable | Validate target (default, env) | Fields |
+|---|---|---|---|---|---|---|---|---|---|
+| `engine` | `[stack.engines.<name>]` | grpc | yes | no | yes | no | yes | `http://127.0.0.1:50051`, `CHAOS_ENGINE_URL` | `heartbeat` (duration, default `1s`) |
+| `protocol` | `[stack.protocols.<name>]` | http/ws/graphql/grpc | no | no | no | yes | yes | `http://127.0.0.1:8080`, `CHAOS_PROTOCOL_URL` | `engine` (a running engine, required) |
+| `ledger` | `[stack.ledgers.<name>]` | grpc | yes | yes | yes | yes | yes | `http://127.0.0.1:50052`, `CHAOS_LEDGER_URL` | `grace` (duration, default `7d`); `database_url` (text) |
+| `humans` | `[stack.humans.<name>]` | grpc | yes | no | yes | no | yes | `http://127.0.0.1:50053`, `CHAOS_HUMANS_URL` | none |
 
 | Check | Surface | Kind | Passes when |
 |---|---|---|---|

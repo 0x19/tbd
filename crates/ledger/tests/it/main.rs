@@ -17,6 +17,13 @@ conformance_suite!(memory, async { Arc::new(MemoryStore::new()) });
 conformance_suite!(instrumented, async {
     Arc::new(tbd_ledger::Instrumented(MemoryStore::new()))
 });
+// The fault decorator is transparent while healthy.
+conformance_suite!(faulty_healthy, async {
+    Arc::new(tbd_ledger::Faulty::new(
+        MemoryStore::new(),
+        tbd_ledger::FaultHandle::default(),
+    ))
+});
 
 use tbd_ledger::{Behavior, FaultHandle, Runtime};
 use tbd_proto::ledger::v1::PingRequest;

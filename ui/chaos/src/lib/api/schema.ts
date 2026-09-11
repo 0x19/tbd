@@ -47,6 +47,8 @@ export const InstanceInfo = z.object({
   running: z.boolean(),
   depends_on: z.array(z.string()),
   behavior: Behavior.nullable(),
+  /** The store's fault behaviour, for kinds with `store_fault`. */
+  store_behavior: Behavior.nullish(),
   requests: RequestCounts.nullable(),
   added: z.boolean(),
 });
@@ -70,6 +72,8 @@ export const KindDescriptor = z.object({
   plural: z.string(),
   surface: z.string(),
   fault: z.boolean(),
+  /** The service has a store chaos can fail (`set_store_behavior`). */
+  store_fault: z.boolean().default(false),
   counters: z.boolean(),
   load_target: z.boolean(),
   addable: z.boolean(),

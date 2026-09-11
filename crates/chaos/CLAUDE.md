@@ -30,8 +30,10 @@ Where things are:
   renders a module like `kinds/ledger.rs`). Topology tables, launchers, cross-checks,
   validate targets and checks, `--target`, `CHAOS_<KIND>_URL`, runtime add and clone,
   `GET /overview kinds` and the UI all derive from it. **Nothing outside `kinds/` may
-  match on a kind name**; reach for `kinds::by_name`, the capability flags or
-  `Field::InstanceOf`. `docs/chaos/kinds.md` is generated (`mise run chaos:docs`) and
+  match on a kind name**; reach for `kinds::by_name`, the capability flags (`fault`,
+  `store_fault`, `counters`, `load_target`, `addable`) or `Field::InstanceOf`; a
+  service's `durable()` says whether a restart keeps its state (a campaign refuses to
+  stop one that forgets). `docs/chaos/kinds.md` is generated (`mise run chaos:docs`) and
   drift-checked in `ci`.
 - `stack/mod.rs` never knows what a service is; keep it that way.
 - `scenario/executor.rs` is the one executor. There is no second path for Rust-defined

@@ -63,9 +63,9 @@ impl From<StackError> for ApiError {
             | StackError::DependencyDown { .. }
             | StackError::InUse { .. }
             | StackError::FromTopology(_) => StatusCode::CONFLICT,
-            StackError::NoFaults(_) | StackError::Unresolvable(_) => {
-                StatusCode::UNPROCESSABLE_ENTITY
-            }
+            StackError::NoFaults(_)
+            | StackError::NoStoreFaults(_)
+            | StackError::Unresolvable(_) => StatusCode::UNPROCESSABLE_ENTITY,
             StackError::Start { .. } | StackError::NotReady { .. } => {
                 StatusCode::INTERNAL_SERVER_ERROR
             }

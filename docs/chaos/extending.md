@@ -51,6 +51,19 @@ Reference: `crates/engine/src/service.rs`, `admit` and `status_from`.
 3. For streams, call `handle.stream_error()` per emitted item.
 4. Return the handle from the chaos adapter's `InstanceHandle::fault`.
 
+## Give a service store faults
+
+Reference: `crates/ledger/src/store/faulty.rs`.
+
+A service with a store can fail like its database does, which the adapter-level fault
+cannot imitate: a read fails before it runs, a write runs, commits, and then fails, so
+the client loses an acknowledgement of something that stands. Keep a second
+`FaultHandle` (`Runtime.store_fault`), wrap the store in a decorator that applies it
+before reads and after successful writes, return the handle from
+`InstanceHandle::store_fault`, and set `store_fault: true` on the kind. `set_store_behavior`,
+`PUT /stack/{name}/store_behavior`, `InstanceInfo.store_behavior` and the campaign checks
+follow from the flag.
+
 ## Add a behaviour
 
 Add a variant to `Behavior` in `crates/common/src/fault.rs`, handle it in `apply` and,

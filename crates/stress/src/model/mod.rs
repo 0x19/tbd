@@ -275,10 +275,15 @@ impl SubjectModel {
         self.facts.iter().filter_map(|f| f.id).collect()
     }
 
-    /// Record an acknowledged append.
+    /// Record an acknowledged append. A `replayed` answer for a key the model
+    /// already holds changes nothing; for a key it never saw acknowledged it is
+    /// the first acknowledgement: the earlier attempt committed and lost its
+    /// answer (a store fault, a dropped connection), and the re-drive found it.
     pub fn apply_append(&mut self, req: &AppendRequest, resp: &AppendResponse) {
         let Some(fact) = &resp.fact else { return };
-        if resp.replayed {
+        if resp.replayed
+            && (req.idempotency_key.is_empty() || self.keys.contains_key(&req.idempotency_key))
+        {
             return;
         }
         let f = ModelFact::from_wire(fact);
@@ -533,6 +538,59 @@ mod tests {
             stub: false,
             idempotency_key: key.into(),
         }
+    }
+
+    #[test]
+    fn a_replayed_answer_for_an_unseen_key_is_the_first_acknowledgement() {
+        let mut m = SubjectModel::new(Uuid::now_v7());
+        let req = AppendRequest {
+            subject_id: m.id.to_string(),
+            path: "profile.name".into(),
+            source: 2,
+            value: Some(crate::trace::envelope(&serde_json::json!("Ada"))),
+            origin: Some(crate::trace::envelope(&serde_json::json!({}))),
+            confidence: Some(0.5),
+            counterparty_id: None,
+            observed_at: Some(crate::trace::stamp(Utc::now())),
+            expires_at: None,
+            consent: vec!["self".into()],
+            stub: false,
+            idempotency_key: "k-lost".into(),
+        };
+        let fact = Fact {
+            subject_id: req.subject_id.clone(),
+            id: 7,
+            path: req.path.clone(),
+            source: 2,
+            value: req.value.clone(),
+            origin: req.origin.clone(),
+            confidence: Some(0.5),
+            counterparty_id: None,
+            observed_at: req.observed_at,
+            recorded_at: Some(crate::trace::stamp(Utc::now())),
+            expires_at: None,
+            consent: vec!["self".into()],
+            stub: false,
+        };
+        // The first attempt committed and lost its answer; the re-drive says `replayed`.
+        m.apply_append(
+            &req,
+            &AppendResponse {
+                fact: Some(fact.clone()),
+                replayed: true,
+            },
+        );
+        assert_eq!(m.known_ids().into_iter().collect::<Vec<_>>(), vec![7]);
+        assert!(m.keys.contains_key("k-lost"));
+        // A second replay of a key the model holds changes nothing.
+        m.apply_append(
+            &req,
+            &AppendResponse {
+                fact: Some(fact),
+                replayed: true,
+            },
+        );
+        assert_eq!(m.facts.len(), 1);
     }
 
     #[test]

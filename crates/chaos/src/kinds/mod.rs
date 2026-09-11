@@ -48,6 +48,9 @@ pub struct Kind {
     pub fields: &'static [Field],
     /// `InstanceHandle::fault` is `Some`: `set_behavior` and `PUT /behavior` apply.
     pub fault: bool,
+    /// `InstanceHandle::store_fault` is `Some`: `set_store_behavior` and
+    /// `PUT /store_behavior` apply (the service has a store to fail).
+    pub store_fault: bool,
     /// `InstanceHandle::requests` is `Some`: `[assertions.services.<name>]` reads counters.
     pub counters: bool,
     /// Load runs target instances of this kind.
@@ -218,6 +221,8 @@ pub struct KindInfo {
     pub surface: &'static str,
     /// [`Kind::fault`].
     pub fault: bool,
+    /// [`Kind::store_fault`].
+    pub store_fault: bool,
     /// [`Kind::counters`].
     pub counters: bool,
     /// [`Kind::load_target`].
@@ -259,6 +264,7 @@ pub fn describe() -> Vec<KindInfo> {
             plural: k.plural,
             surface: k.surface,
             fault: k.fault,
+            store_fault: k.store_fault,
             counters: k.counters,
             load_target: k.load_target,
             addable: k.addable,
@@ -294,9 +300,9 @@ pub fn markdown() -> String {
     let mut out = String::new();
     let _ = writeln!(
         out,
-        "| Kind | Table | Surface | Fault injection | Counters | Load target | Addable | Validate target (default, env) | Fields |"
+        "| Kind | Table | Surface | Fault injection | Store faults | Counters | Load target | Addable | Validate target (default, env) | Fields |"
     );
-    let _ = writeln!(out, "|---|---|---|---|---|---|---|---|---|");
+    let _ = writeln!(out, "|---|---|---|---|---|---|---|---|---|---|");
     for k in ALL {
         let yn = |b: bool| if b { "yes" } else { "no" };
         let target = k.target.as_ref().map_or("none".to_owned(), |t| {
@@ -325,11 +331,12 @@ pub fn markdown() -> String {
         };
         let _ = writeln!(
             out,
-            "| `{}` | `[stack.{}.<name>]` | {} | {} | {} | {} | {} | {} | {} |",
+            "| `{}` | `[stack.{}.<name>]` | {} | {} | {} | {} | {} | {} | {} | {} |",
             k.name,
             k.plural,
             k.surface,
             yn(k.fault),
+            yn(k.store_fault),
             yn(k.counters),
             yn(k.load_target),
             yn(k.addable),

@@ -48,6 +48,10 @@ pub fn router() -> Router<Shared> {
         .route("/stack/{name}/start", post(stack_start))
         .route("/stack/{name}/stop", post(stack_stop))
         .route("/stack/{name}/behavior", axum::routing::put(stack_behavior))
+        .route(
+            "/stack/{name}/store_behavior",
+            axum::routing::put(stack_store_behavior),
+        )
         .route("/scenarios", get(scenarios))
         .route("/scenarios/check", post(scenario_check))
         .route(
@@ -350,6 +354,20 @@ async fn stack_behavior(
     state
         .with_stack(async |s| {
             s.set_behavior(&name, behavior)?;
+            Ok(s.describe())
+        })
+        .await
+        .map(Json)
+}
+
+async fn stack_store_behavior(
+    State(state): State<Shared>,
+    Path(name): Path<String>,
+    Json(behavior): Json<Behavior>,
+) -> Result<Json<Vec<InstanceInfo>>> {
+    state
+        .with_stack(async |s| {
+            s.set_store_behavior(&name, behavior)?;
             Ok(s.describe())
         })
         .await

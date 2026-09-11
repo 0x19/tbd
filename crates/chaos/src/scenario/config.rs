@@ -88,6 +88,12 @@ impl ScenarioFile {
             {
                 return Err("set_behavior targets an instance without fault injection".into());
             }
+            if matches!(event, TimelineEvent::SetStoreBehavior { service, .. } if !self.stack.get(service).is_some_and(|i| i.kind.store_fault))
+            {
+                return Err(
+                    "set_store_behavior targets an instance without store fault injection".into(),
+                );
+            }
         }
         for name in self.assertions.services.keys() {
             if self.stack.get(name).is_none() {

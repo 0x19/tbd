@@ -1,10 +1,12 @@
-# Owner workers on a memory ledger for three seconds: every invariant holds under a
-# plain mix of appends, reads at every page size, cuts, retractions, idempotent
-# replays, relations, erasure cycles and expiring facts. Runs on every `mise run ci`.
+# Every worker class on a memory ledger for three seconds: owners run the balanced
+# mix of appends, reads at every page size, cuts, retractions, idempotent replays,
+# relations, erasure cycles and expiring facts; contention workers hammer two shared
+# subjects; a fuzz worker sends hostile requests. Every invariant holds. Runs on
+# every `mise run ci`.
 
 [campaign]
 name = "smoke"
-description = "Every owner invariant on the memory store, three seconds, in CI."
+description = "Every invariant of every worker class on the memory store, three seconds, in CI."
 duration = "3s"
 warmup = "300ms"
 seed = 1
@@ -18,3 +20,11 @@ max_in_flight = 32
 [workload.owner]
 workers = 6
 subjects = 2
+
+[workload.contention]
+workers = 4
+subjects = 2
+
+[workload.fuzz]
+workers = 1
+subjects = 1

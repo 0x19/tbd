@@ -16,7 +16,7 @@ embeds this crate and owns the JSON surface and the path registry.
 | Config layers | `configs/ledger/{base,local,dev,production}.toml`; `ledger config` prints the merged result |
 | Deployment | `devops/k8s/base/ledger`, port 50052, metrics 9464; reached through Envoy's internal listener (`http://envoy:50051`, matched by service name); on the edge as the REST routes below, transcoded by the protocol |
 | Databases | `devops/k8s/ledger-db`: Postgres 17 + pgvector and ClickHouse, applied by `mise run ledger:deploy` (part of `local:deploy`) after `ledger:secrets` made the `ledger-db` Secret; `ledger:psql` and `ledger:clickhouse` for a shell; compose runs the same two on host ports 15432 and 18123 |
-| Chaos | the `ledger` kind (`crates/chaos/src/kinds/ledger.rs`): `[stack.ledgers.X]` in topologies and scenarios (`grace`, `database_url`), `chaos validate --target ledger=URL` (`CHAOS_LEDGER_URL`), the `grpc_ledger_ping` and `grpc_ledger_facts` checks, the `ledger_*` load operations and the five `scenarios/ledger_*.toml` (baseline, lifecycle, fault, erasure, fuzz; [docs/chaos/scenarios.md](../chaos/scenarios.md)), add and clone in the admin UI |
+| Chaos | the `ledger` kind (`crates/chaos/src/kinds/ledger.rs`): `[stack.ledgers.X]` in topologies and scenarios (`grace`, `database_url`), `chaos validate --target ledger=URL` (`CHAOS_LEDGER_URL`), the `grpc_ledger_ping` and `grpc_ledger_facts` checks, the `ledger_*` load operations and the five `scenarios/ledger_*.toml` (baseline, lifecycle, fault, erasure, fuzz; [docs/chaos/scenarios.md](../chaos/scenarios.md)), add and clone in the admin UI; `set_store_behavior` fails the store itself (below); stress campaigns ([docs/chaos/stress.md](../chaos/stress.md)) model-check the contract |
 
 ## The gRPC contract
 
@@ -45,6 +45,14 @@ never performs an unfiltered read.
 | idempotency key reused with other content, or its fact retracted since | `ABORTED` |
 | the store unreachable | `UNAVAILABLE` |
 | injected faults | `UNAVAILABLE`, `INTERNAL`, `RESOURCE_EXHAUSTED`, `DEADLINE_EXCEEDED` |
+
+Two fault handles ride on the embedder's `Runtime`. `fault` is the adapter's: a faulted
+request is refused before anything runs. `store_fault` is the store's: `serve_store`
+wraps whatever store it is given in `Faulty`, which fails a read before it runs and a
+write after it committed, so the caller loses the acknowledgement of something that
+stands (`tbd_ledger_store_faults_injected_total{kind}` counts them). Background work (the
+sweeper, the drainer) is never faulted. Production never sets either handle; chaos flips
+them (`set_behavior`, `set_store_behavior`).
 
 ```sh
 mise run run:ledger                                    # on 127.0.0.1:50052 with configs/ledger local (LEDGER_STORE_KIND=memory without a database)

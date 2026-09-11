@@ -1,0 +1,62 @@
+# The store fails under the workers: for two seconds, four in ten store calls fail
+# after the write committed (the acknowledgement is lost) or before the read runs,
+# then the adapter refuses three in ten requests outright. Every such failure is
+# tolerated and every write re-driven through its key (erase and restore included), so
+# the model never guesses; the next history walk after a fault episode judges
+# durability. Memory store, in CI.
+
+[campaign]
+name = "store_faults"
+description = "Lost acknowledgements and refused reads at the store, then at the adapter: every write settles, every acknowledged fact survives."
+duration = "5s"
+warmup = "300ms"
+seed = 4
+
+[stack.ledgers.ledger-1]
+grace = "0s"
+
+[workload]
+max_in_flight = 32
+
+[workload.owner]
+workers = 4
+subjects = 2
+[workload.owner.mix]
+append = 6
+history = 4
+current = 3
+retract = 1
+idempotent_replay = 1
+pair_relation = 1
+erase_cycle = 0.3
+
+[workload.contention]
+workers = 3
+subjects = 2
+
+[faults]
+tolerate = ["unavailable", "resource_exhausted", "deadline_exceeded"]
+
+[[timeline]]
+at = "300ms"
+action = "set_store_behavior"
+service = "ledger-1"
+behavior = { type = "error", kind = "unavailable", rate = 0.4 }
+
+[[timeline]]
+at = "2300ms"
+action = "set_store_behavior"
+service = "ledger-1"
+behavior = { type = "healthy" }
+
+[[timeline]]
+at = "2500ms"
+action = "set_behavior"
+service = "ledger-1"
+behavior = { type = "error", kind = "unavailable", rate = 0.3 }
+
+[[timeline]]
+at = "3800ms"
+action = "set_behavior"
+service = "ledger-1"
+behavior = { type = "healthy" }

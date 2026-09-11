@@ -1,4 +1,5 @@
-//! The ledger kind: an in-process `tbd-ledger` with fault injection.
+//! The ledger kind: an in-process `tbd-ledger` with fault injection at the
+//! adapter (`set_behavior`) and at the store (`set_store_behavior`).
 //! Rendered by `tbd new service`; edit freely, the CLI never rewrites it.
 
 use std::net::SocketAddr;
@@ -47,6 +48,7 @@ pub static KIND: Kind = Kind {
         },
     ],
     fault: true,
+    store_fault: true,
     counters: true,
     load_target: true,
     addable: true,
@@ -123,6 +125,10 @@ impl InstanceHandle for LedgerHandle {
         Some(self.runtime.fault.clone())
     }
 
+    fn store_fault(&self) -> Option<tbd_common::fault::FaultHandle> {
+        Some(self.runtime.store_fault.clone())
+    }
+
     fn requests(&self) -> Option<RequestCounts> {
         let s = self.runtime.stats.snapshot();
         Some(RequestCounts {
@@ -136,6 +142,11 @@ impl InstanceHandle for LedgerHandle {
 impl Service for Ledger {
     fn kind(&self) -> &'static str {
         KIND.name
+    }
+
+    /// The memory store forgets on restart; Postgres does not.
+    fn durable(&self) -> bool {
+        !self.database_url.is_empty()
     }
 
     async fn start(

@@ -30,6 +30,11 @@ reports as `diverged`. The contract is `docs/ledger/README.md`.
   ClickHouse sink (`ledger.facts_events`, DDL on start, lightweight DELETE on
   `subject.erased`). `sweeper.rs`: due erasures and idempotency purge on a timer.
   `health.rs`: the readiness probe loop that drives the gRPC health status.
+- `store/faulty.rs`: `Faulty<S>`, the decorator `serve_store` wraps every store in on
+  `Runtime.store_fault`: reads fail before they run, writes after they committed (the
+  lost-acknowledgement case an adapter fault cannot produce), background ops pass
+  through. Healthy it is transparent (the conformance suite runs through it). Production
+  never sets the handle; chaos's `set_store_behavior` does.
 - `store/instrumented.rs`: `Instrumented<S>`, the decorator `build_store` wraps every
   backend in: it times and counts every store call by `op` and `result` and records the
   business counters (facts by source, replays, retractions, envelope and page sizes,

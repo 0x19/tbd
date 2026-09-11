@@ -78,6 +78,10 @@ pub struct Workload {
     pub scopes: Vec<String>,
     /// `[workload.owner]`.
     pub owner: Owner,
+    /// `[workload.contention]`.
+    pub contention: Contention,
+    /// `[workload.fuzz]`.
+    pub fuzz: Fuzz,
 }
 
 impl Default for Workload {
@@ -104,6 +108,8 @@ impl Default for Workload {
                 .map(str::to_owned)
                 .collect(),
             owner: Owner::default(),
+            contention: Contention::default(),
+            fuzz: Fuzz::default(),
         }
     }
 }
@@ -267,6 +273,129 @@ impl OwnerOp {
     }
 }
 
+/// `[workload.contention]`: workers that share subjects. No worker knows the
+/// whole truth about a shared subject, so the model is order-free: what I was
+/// acknowledged must be visible, and what `Current` shows must be the newest
+/// row the snapshot holds or newer than the snapshot. Off unless `workers` is
+/// set; every contention worker runs against the first target.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct Contention {
+    /// Concurrent workers; 0 switches the class off.
+    pub workers: u32,
+    /// Shared subjects, the same set for every contention worker.
+    pub subjects: u32,
+    /// Think time between operations.
+    #[serde(with = "humantime_serde")]
+    pub pace: Duration,
+    /// Page size for reads; 0 draws one per read.
+    pub limit: u32,
+    /// `[workload.contention.mix]`.
+    pub mix: ContentionMix,
+}
+
+impl Default for Contention {
+    fn default() -> Self {
+        Self {
+            workers: 0,
+            subjects: 4,
+            pace: Duration::ZERO,
+            limit: 0,
+            mix: ContentionMix::default(),
+        }
+    }
+}
+
+/// Relative weights of the contention operations; a missing key is 0 when the
+/// table is present.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ContentionMix {
+    /// One fact, keyed.
+    #[serde(default)]
+    pub append: f64,
+    /// `History` then `Current`, judged for consistency.
+    #[serde(default)]
+    pub current: f64,
+    /// `History`, judged for the worker's own acknowledged facts.
+    #[serde(default)]
+    pub history: f64,
+    /// A retraction of a shared key.
+    #[serde(default)]
+    pub retract: f64,
+}
+
+impl Default for ContentionMix {
+    fn default() -> Self {
+        Self {
+            append: 5.0,
+            current: 2.0,
+            history: 2.0,
+            retract: 1.0,
+        }
+    }
+}
+
+impl ContentionMix {
+    /// `(operation, weight)` for every weight above zero.
+    #[must_use]
+    pub fn weighted(&self) -> Vec<(ContentionOp, f64)> {
+        [
+            (ContentionOp::Append, self.append),
+            (ContentionOp::Current, self.current),
+            (ContentionOp::History, self.history),
+            (ContentionOp::Retract, self.retract),
+        ]
+        .into_iter()
+        .filter(|(_, w)| *w > 0.0)
+        .collect()
+    }
+
+    fn any_negative(&self) -> bool {
+        [self.append, self.current, self.history, self.retract]
+            .iter()
+            .any(|w| *w < 0.0 || w.is_nan())
+    }
+}
+
+/// The contention operations.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ContentionOp {
+    /// One fact.
+    Append,
+    /// `History` then `Current`.
+    Current,
+    /// `History`.
+    History,
+    /// A retraction.
+    Retract,
+}
+
+/// `[workload.fuzz]`: workers that send hostile requests on subjects of their
+/// own and expect a clean refusal every time. Off unless `workers` is set.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct Fuzz {
+    /// Concurrent workers; 0 switches the class off.
+    pub workers: u32,
+    /// Subjects per worker, each seeded with one valid fact.
+    pub subjects: u32,
+    /// Think time between requests.
+    #[serde(with = "humantime_serde")]
+    pub pace: Duration,
+}
+
+impl Default for Fuzz {
+    fn default() -> Self {
+        Self {
+            workers: 0,
+            subjects: 2,
+            pace: Duration::ZERO,
+        }
+    }
+}
+
 /// `[faults]`: what the workload tolerates while faults are injected.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, default)]
@@ -386,26 +515,49 @@ impl Campaign {
                 return Err(format!("workload scope {s:?}: [a-z0-9_.@-], 1 to 64 bytes"));
             }
         }
-        if w.owner.workers == 0 {
-            return Err("workload.owner.workers must be above zero".into());
+        if w.owner.workers == 0 && w.contention.workers == 0 && w.fuzz.workers == 0 {
+            return Err("workload: give owner, contention or fuzz some workers".into());
         }
-        if w.owner.subjects == 0 {
-            return Err("workload.owner.subjects must be above zero".into());
+        if w.owner.workers > 0 {
+            if w.owner.subjects == 0 {
+                return Err("workload.owner.subjects must be above zero".into());
+            }
+            if w.owner.limit > 1000 {
+                return Err("workload.owner.limit: at most 1000 (the ledger's page cap)".into());
+            }
+            if w.owner.mix.any_negative() {
+                return Err("workload.owner.mix: weights are zero or above".into());
+            }
+            if w.owner.mix.weighted().is_empty() {
+                return Err("workload.owner.mix: give at least one operation a weight".into());
+            }
+            if w.owner.mix.pair_relation > 0.0 && w.owner.subjects < 2 {
+                return Err("workload.owner.mix.pair_relation needs owner.subjects >= 2".into());
+            }
+            if w.owner.mix.pair_relation > 0.0 && w.relation_paths.is_empty() {
+                return Err(
+                    "workload.owner.mix.pair_relation needs workload.relation_paths".into(),
+                );
+            }
         }
-        if w.owner.limit > 1000 {
-            return Err("workload.owner.limit: at most 1000 (the ledger's page cap)".into());
+        if w.contention.workers > 0 {
+            if w.contention.subjects == 0 {
+                return Err("workload.contention.subjects must be above zero".into());
+            }
+            if w.contention.limit > 1000 {
+                return Err(
+                    "workload.contention.limit: at most 1000 (the ledger's page cap)".into(),
+                );
+            }
+            if w.contention.mix.any_negative() {
+                return Err("workload.contention.mix: weights are zero or above".into());
+            }
+            if w.contention.mix.weighted().is_empty() {
+                return Err("workload.contention.mix: give at least one operation a weight".into());
+            }
         }
-        if w.owner.mix.any_negative() {
-            return Err("workload.owner.mix: weights are zero or above".into());
-        }
-        if w.owner.mix.weighted().is_empty() {
-            return Err("workload.owner.mix: give at least one operation a weight".into());
-        }
-        if w.owner.mix.pair_relation > 0.0 && w.owner.subjects < 2 {
-            return Err("workload.owner.mix.pair_relation needs owner.subjects >= 2".into());
-        }
-        if w.owner.mix.pair_relation > 0.0 && w.relation_paths.is_empty() {
-            return Err("workload.owner.mix.pair_relation needs workload.relation_paths".into());
+        if w.fuzz.workers > 0 && w.fuzz.subjects == 0 {
+            return Err("workload.fuzz.subjects must be above zero".into());
         }
         for name in self.invariants.keys() {
             if !invariants::ALL.contains(&name.as_str()) {
@@ -503,6 +655,26 @@ mod tests {
         assert!(e.to_string().contains("owner.subjects >= 2"), "{e}");
         let e = Campaign::parse(&format!("{MINIMAL}[workload]\npaths = [\"Bad\"]\n")).unwrap_err();
         assert!(e.to_string().contains("path"), "{e}");
+    }
+
+    #[test]
+    fn classes_are_off_until_given_workers_and_one_must_run() {
+        let c = Campaign::parse(MINIMAL).unwrap();
+        assert_eq!(c.workload.contention.workers, 0);
+        assert_eq!(c.workload.fuzz.workers, 0);
+        let e = Campaign::parse(&format!("{MINIMAL}[workload.owner]\nworkers = 0\n")).unwrap_err();
+        assert!(e.to_string().contains("some workers"), "{e}");
+        // A fuzz-only campaign needs no owner mix to hold together.
+        let c = Campaign::parse(&format!(
+            "{MINIMAL}[workload.owner]\nworkers = 0\n[workload.fuzz]\nworkers = 2\n"
+        ))
+        .unwrap();
+        assert_eq!(c.workload.fuzz.workers, 2);
+        let e = Campaign::parse(&format!(
+            "{MINIMAL}[workload.contention]\nworkers = 2\nsubjects = 0\n"
+        ))
+        .unwrap_err();
+        assert!(e.to_string().contains("contention.subjects"), "{e}");
     }
 
     #[test]

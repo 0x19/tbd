@@ -10,12 +10,23 @@ boots the stack, plays the timeline and reports.
 
 ## How it works
 
-Each **owner worker** holds a few subjects nobody else writes to and a client-side model
-of every one: the facts it was acknowledged, the tombstones, the erasure state, the
-idempotency keys it used. The model is built only from requests and their responses,
-never from reading the ledger back, so a read that disagrees with it is a finding and not
-a self-fulfilling prophecy. Requests in the trace are symbolic (`own`, `peer 1`, "the
-`recorded_at` of step 3"), so a trace replays on a fresh subject.
+Three worker classes, each with the model it can honestly hold:
+
+- An **owner worker** holds a few subjects nobody else writes to and a client-side model
+  of every one: the facts it was acknowledged, the tombstones, the erasure state, the
+  idempotency keys it used. The model is built only from requests and their responses,
+  never from reading the ledger back, so a read that disagrees with it is a finding and
+  not a self-fulfilling prophecy. Requests in the trace are symbolic (`own`, `peer 1`,
+  "the `recorded_at` of step 3"), so a trace replays on a fresh subject.
+- A **contention worker** shares its subjects with every other contention worker, so no
+  one knows the whole truth. Its model is order-free: what it was acknowledged must be
+  visible or retracted later by someone, `Current` must agree with a `History` snapshot
+  taken just before it or be newer than the snapshot, pages must be ordered and paginate.
+  Its findings carry its own steps and are kept whole, not shrunk: a race rarely
+  reproduces alone, and the trace says what this worker saw.
+- A **fuzz worker** sends hostile requests on subjects of its own, each seeded with one
+  valid fact, and expects the documented refusal every time; a valid read afterwards must
+  still work. The cases are drawn from the seed, so `--seed` walks a different sequence.
 
 A **finding** is one broken invariant: the subject, the message, what the model expected,
 what the ledger answered, and the trace of steps on that subject up to the violation.
@@ -28,7 +39,20 @@ operation knows what to expect and anything else is a finding. `Internal`, `Unkn
 `DataLoss` are never valid. Connection failures and timeouts are findings unless the
 campaign tolerates them (`[faults] tolerate`), which is how a campaign runs through a
 fault timeline: a write that drew a tolerated failure is re-driven through its
-idempotency key until the outcome is known, so the model never guesses.
+idempotency key until the outcome is known, so the model never guesses. A re-drive
+answered `replayed` for a key the model never saw acknowledged is the first
+acknowledgement: the earlier attempt committed and lost its answer.
+
+A connection that breaks mid-call reaches the client as a synthesised `Internal` or
+`Unknown` status carrying an h2 error, not as something the ledger said: those class as
+`transport`, so tolerating `transport` tolerates a restart, while an `Internal` the
+ledger really answered stays a `clean_errors` finding.
+
+Two fault surfaces exist. `set_behavior` is the request adapter refusing calls before
+anything runs. `set_store_behavior` is the ledger's store failing like a database does:
+a read fails before it runs, a write runs, commits, and then fails, so the caller loses
+the acknowledgement of something that stands. That lost-ack case is what idempotency
+keys exist for, and the re-drive rule above is how the model stays exact through it.
 
 ## The file
 
@@ -69,6 +93,22 @@ pair_relation = 1
 erase_cycle = 0.2
 expiring = 0.5
 
+[workload.contention]               # off until workers is set; every contention worker runs on the first target
+workers = 0
+subjects = 4                        # shared by every contention worker
+pace = "0ms"
+limit = 0
+[workload.contention.mix]           # without this table: the mix below; with it, a missing key is 0
+append = 5
+current = 2
+history = 2
+retract = 1
+
+[workload.fuzz]                     # off until workers is set
+workers = 0
+subjects = 2                        # per worker, each seeded with one valid fact
+pace = "0ms"
+
 [faults]
 tolerate = []                       # error classes a request may draw: unavailable, deadline_exceeded, transport, timeout, ...
 settle = "1500ms"                   # added to the announced window before the cascade is checked
@@ -76,7 +116,13 @@ clock_skew = "500ms"                # an expiry within this of now is not compar
 
 [[timeline]]                        # a scenario's timeline; ignored against explicit targets
 at = "1s"
-action = "set_behavior"
+action = "set_behavior"             # the adapter refuses requests before they run
+service = "ledger-1"
+behavior = { type = "error", kind = "unavailable", rate = 0.3 }
+
+[[timeline]]
+at = "2s"
+action = "set_store_behavior"       # the store fails: reads before they run, writes after they committed
 service = "ledger-1"
 behavior = { type = "error", kind = "unavailable", rate = 0.3 }
 
@@ -87,7 +133,10 @@ expiry = false
 max_findings = 0                    # stop early after this many; 0 = never
 ```
 
-Every table is `deny_unknown_fields`; `chaos stress check` names the first problem.
+Every table is `deny_unknown_fields`; `chaos stress check` names the first problem. At
+least one class needs workers. A campaign may `stop` an instance only when its store
+survives a restart (a ledger with a `database_url`): a stopped memory store forgets every
+fact, the model would be right, the ledger honest, and the campaign would still fail.
 
 ### Where it runs
 
@@ -112,10 +161,40 @@ Every table is `deny_unknown_fields`; `chaos stress check` names the first probl
 | `erase_cycle` | erase, reads and writes denied, a relation from a peer denied, restore, reads equal the model; with a short window: erase again, wait, the subject is gone and every peer that named it carries a tombstone | `erasure_denies`, `erasure_executes`, `cascade_tombstones_counterparty` |
 | `expiring` | a fact that expired long ago, two seconds ago, or expires in three seconds or a minute | `append_echo`, then `expiry` on reads |
 
+When a fault hides the outcome of an erase, a restore, or the cascade read that follows
+one, the worker abandons that subject and every peer that named it in a relation: the
+sweeper will execute the erasure and tombstone those relations whatever the worker
+believes, and a stale model would report a finding the ledger never earned. Fresh
+subjects cost nothing.
+
 An erasure window shorter than two seconds may close while the denials are checked (the
 sweeper runs on its own clock), so a restore that finds the subject gone is then the
 cascade, not a finding. A window of two seconds or more is real: restore must work, and
 the cascade is not awaited.
+
+### The contention operations
+
+| Operation | What it does | What it judges |
+|---|---|---|
+| `append` | one keyed fact on a shared subject; the acknowledged id and stamp are remembered | `append_echo` (against the request alone), `recorded_at_monotonic` |
+| `current` | `History` walked through every page, then `Current` walked through every page | `pagination`, `recorded_at_monotonic`, `current_consistent` |
+| `history` | `History` walked through every page | `pagination`, `recorded_at_monotonic`, `acked_visible` |
+| `retract` | a key this worker wrote (70 %) or any key | `retract_semantics` (a tombstone for the key, or `NotFound`) |
+
+### The fuzz cases
+
+Each case is one hostile request built from a valid fact with one thing wrong, or a call
+on something that does not exist. The expected answer is the documented one
+([ledger/README.md](../ledger/README.md#the-grpc-contract)); anything else, including
+success where a refusal is due, is a `clean_refusal` finding.
+
+| Case | Sent | Expected |
+|---|---|---|
+| `bad_subject_id`, `bad_path`, `unknown_source`, `confidence_out_of_range`, `confidence_on_verified`, `empty_consent`, `huge_value`, `bad_envelope_version`, `non_json_value`, `long_idempotency_key`, `expires_before_observed`, `bad_counterparty` | an append with that field wrong | `invalid_argument` |
+| `empty_scopes`, `limit_over_cap`, `bad_cursor` | a read with that field wrong | `invalid_argument` |
+| `unknown_subject_current`, `unknown_subject_retract`, `unknown_subject_restore`, `unknown_subject_erase`, `retract_unknown_key` | a call on a subject or key that never existed | `not_found` |
+| `missing_confidence` | a declared fact without a confidence (the field is optional) | `ok` |
+| `valid_read` | `Current` on the fuzz subject | `ok` |
 
 ### The invariants
 
@@ -135,6 +214,10 @@ the cascade is not awaited.
 | `erasure_denies` | inside the window every call on the subject answers `FailedPrecondition`, a relation naming it from another subject too, a second erase is the same one, and after restore `Current` equals the model |
 | `erasure_executes` | past the window reads answer `FailedPrecondition`, restore `NotFound`, and an append `FailedPrecondition`: the id is never reusable |
 | `cascade_tombstones_counterparty` | after a peer's cascade the subject holds one tombstone per relation that named the peer, with the cause as origin and the newest value's consent, and everything else as before |
+| `durability` | after a tolerated failure (a fault, a restart), the next complete `History` holds every fact acknowledged before it: `history_is_everything` judged across the fault episode. Never evaluated in a run without faults |
+| `acked_visible` | (contention) every fact this worker was acknowledged is in the full history, or a tombstone for its key with a later stamp is |
+| `current_consistent` | (contention) with `History` read first, every `Current` item is the newest valued row of its key in that snapshot or newer than the whole snapshot; never a tombstone |
+| `clean_refusal` | (fuzz) every hostile request draws one of its case's codes, never anything else |
 | `clean_errors` | never `Internal`, `Unknown` or `DataLoss`; never a dropped connection or a timeout outside `[faults] tolerate` |
 
 ## Findings, shrinking and replay
@@ -177,9 +260,12 @@ the model, and the trace says which.
 
 | File | Proves | In CI |
 |---|---|---|
-| `smoke.toml` | every owner invariant on the memory store under the balanced mix, three seconds | yes |
+| `smoke.toml` | every invariant of every class on the memory store: owners under the balanced mix, contention on two shared subjects, one fuzz worker, three seconds | yes |
 | `erasure_cascade.toml` | the privacy rules under repetition: denial, restore, the cascade and the counterparty tombstones | yes |
 | `idempotency_storm.toml` | replays, conflicts and keys after retractions never write or leak | yes |
+| `store_faults.toml` | lost acknowledgements and refused reads at the store, then refusals at the adapter: every write settles, `durability` holds | yes |
+| `fuzz_by_seed.toml` | every hostile request draws its documented refusal; seed 1 in CI, `--seed` for a nightly | yes |
+| `privacy_under_faults.toml` | erasure, restore, the cascade and durability through adapter faults, store faults and a stop/start, on Postgres (`mise run up` for the compose database) | no (`skip`) |
 
 ## Debugging a finding
 
@@ -187,7 +273,9 @@ Run the campaign with `--json` and read the finding: `message`, `expected`, `act
 `trace`, whose steps carry the symbolic request and the response as JSON. The last step
 is the one that broke the rule; the earlier ones are how the subject got there. Findings
 found so far in building the harness were all in the model; the ledger's answer and the
-model's expectation disagreed on which row's consent a cascade tombstone carries (the
+model's expectation disagreed on whether a re-driven append answered `replayed` is a new
+fact (it is, when the key was never acknowledged: the first attempt committed and lost
+its answer under a store fault), on which row's consent a cascade tombstone carries (the
 newest, as retract does), on whether a relation's replay is judged by the counterparty
 check first (it is: once the peer is erased, the same key answers `NotFound`, so
 relations are never replay candidates; found by the smoke campaign in the local

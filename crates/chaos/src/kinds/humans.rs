@@ -32,6 +32,7 @@ pub static KIND: Kind = Kind {
     }),
     fields: &[],
     fault: true,
+    store_fault: false,
     counters: true,
     load_target: false,
     addable: true,

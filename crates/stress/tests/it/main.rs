@@ -5,7 +5,10 @@
 
 use std::{sync::Arc, time::Duration};
 
-use tbd_stress::{Campaign, GrpcLedger, Hooks, LedgerClient, StressEvent, Target};
+use tbd_stress::{
+    Campaign, GrpcLedger, Hooks, LedgerClient, StressEvent, Target,
+    model::invariants::{CONTENTION, FUZZ, OWNER},
+};
 use tokio::sync::mpsc;
 
 /// An in-process ledger with a zero grace window and a one-second sweeper.
@@ -17,6 +20,10 @@ struct Ledger {
 
 impl Ledger {
     async fn start() -> Self {
+        Self::start_with(tbd_ledger::Runtime::default()).await
+    }
+
+    async fn start_with(runtime: tbd_ledger::Runtime) -> Self {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         let mut config = tbd_ledger::Config::in_memory(addr);
@@ -26,15 +33,9 @@ impl Ledger {
             Arc::new(tbd_ledger::Instrumented(tbd_ledger::MemoryStore::new()));
         let (stop, stopped) = tokio::sync::oneshot::channel::<()>();
         let task = tokio::spawn(async move {
-            tbd_ledger::serve_store(
-                listener,
-                config,
-                tbd_ledger::Runtime::default(),
-                store,
-                async {
-                    let _ = stopped.await;
-                },
-            )
+            tbd_ledger::serve_store(listener, config, runtime, store, async {
+                let _ = stopped.await;
+            })
             .await
             .unwrap();
         });
@@ -70,6 +71,9 @@ fn campaign(duration: &str, extra: &str) -> Campaign {
     .unwrap()
 }
 
+/// The three worker classes together.
+const ALL_CLASSES: &str = "[workload.contention]\nworkers = 3\nsubjects = 2\n[workload.fuzz]\nworkers = 1\nsubjects = 1\n";
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_short_campaign_passes_and_evaluates_every_invariant() {
     let ledger = Ledger::start().await;
@@ -81,7 +85,9 @@ async fn a_short_campaign_passes_and_evaluates_every_invariant() {
     // Relations and erasure cycles weighted up, so the cascade runs inside two seconds.
     let c = campaign(
         "2s",
-        "[workload.owner.mix]\nappend = 4\ncurrent = 3\nhistory = 3\nhistory_cut = 2\nretract = 1\nidempotent_replay = 1\npair_relation = 3\nerase_cycle = 2\nexpiring = 1\n",
+        &format!(
+            "{ALL_CLASSES}[workload.owner.mix]\nappend = 4\ncurrent = 3\nhistory = 3\nhistory_cut = 2\nretract = 1\nidempotent_replay = 1\npair_relation = 3\nerase_cycle = 2\nexpiring = 1\n"
+        ),
     );
     let result = tbd_stress::run(&c, vec![ledger.target()], &hooks).await;
     drop(hooks);
@@ -108,10 +114,15 @@ async fn a_short_campaign_passes_and_evaluates_every_invariant() {
     let load = result.load.as_ref().unwrap();
     assert!(load.requests_total > 100, "{text}");
     assert_eq!(load.requests_failed, load.errors.values().sum::<u64>());
-    // Every enabled invariant was evaluated at least once in two seconds.
-    for name in tbd_stress::model::invariants::ALL {
+    // Every rule of every class was evaluated at least once in two seconds;
+    // `durability` needs a fault and is covered below.
+    for name in OWNER.iter().chain(CONTENTION).chain(FUZZ) {
         let c = result.checks.get(*name).copied().unwrap_or_default();
         assert!(c.passed > 0, "{name} never evaluated:\n{text}");
+        assert_eq!(c.violated, 0, "{name} violated:\n{text}");
+    }
+    for name in tbd_stress::model::invariants::ALL {
+        let c = result.checks.get(*name).copied().unwrap_or_default();
         assert_eq!(c.violated, 0, "{name} violated:\n{text}");
     }
     // The erasure cycle ran the cascade: a fresh ledger has no other executed erasures.
@@ -279,5 +290,48 @@ async fn a_lying_client_produces_a_shrunk_finding_that_replays() {
         "{:?}",
         through_honest.violations
     );
+    ledger.stop().await;
+}
+
+/// A store that fails on command under the workers: writes lose their
+/// acknowledgement and reads fail. With the class tolerated, every write is
+/// re-driven to a known outcome, `durability` is judged on the next history
+/// walk, and nothing is a finding.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn store_faults_are_tolerated_redriven_and_durable() {
+    let store_fault = tbd_ledger::FaultHandle::default();
+    let ledger = Ledger::start_with(tbd_ledger::Runtime {
+        store_fault: store_fault.clone(),
+        ..Default::default()
+    })
+    .await;
+    let c = campaign(
+        "3s",
+        &format!(
+            "{ALL_CLASSES}[faults]\ntolerate = [\"unavailable\"]\n[workload.owner.mix]\nappend = 6\nhistory = 4\ncurrent = 2\nretract = 1\nidempotent_replay = 1\n"
+        ),
+    );
+    let flipper = {
+        let handle = store_fault.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(600)).await;
+            let outage: tbd_ledger::Behavior = serde_json::from_value(serde_json::json!({
+                "type": "error", "kind": "unavailable", "rate": 0.4, "message": "db down"
+            }))
+            .unwrap();
+            handle.set(outage);
+            tokio::time::sleep(Duration::from_millis(900)).await;
+            handle.set(tbd_ledger::Behavior::Healthy);
+        })
+    };
+    let result = tbd_stress::run(&c, vec![ledger.target()], &Hooks::default()).await;
+    let _ = flipper.await;
+    let text = tbd_stress::render(&result);
+    assert!(result.passed, "{text}");
+    assert!(result.tolerated > 0, "no fault was drawn:\n{text}");
+    assert!(result.redriven > 0, "no write was re-driven:\n{text}");
+    let durability = result.checks.get("durability").copied().unwrap_or_default();
+    assert!(durability.passed > 0, "durability never judged:\n{text}");
+    assert_eq!(durability.violated, 0, "{text}");
     ledger.stop().await;
 }

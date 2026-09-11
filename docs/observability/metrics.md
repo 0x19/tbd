@@ -29,6 +29,7 @@ backend is visible instead of clipped.
 | `tbd_db_pool_max_connections` | gauge | | the pool's configured maximum, so `in_use / max` is saturation |
 | `tbd_ledger_store_op_duration_seconds` | histogram | `op` (`append`, `current`, `history`, `retract`, `request_erasure`, `restore`, `execute_due_erasures`, `claim_events`, `ack_events`, `purge_idempotency`, `subject`, `ping`) | every store call, whoever made it (the gRPC adapter, the sweeper, the drainer); recorded by `store::Instrumented`, which `build_store` wraps every backend in |
 | `tbd_ledger_store_ops_total` | counter | `op`, `result` (`ok`, `not_found`, `erased`, `invalid`, `forbidden`, `conflict`, `unavailable`, `internal`) | same moment; `unavailable` and `internal` are the ledger failing, the rest is the contract answering |
+| `tbd_ledger_store_faults_injected_total` | counter | `kind` | the `Faulty` store decorator failed a call on chaos's `set_store_behavior` (a read before it ran, a write after it committed); never in production. Outside `Instrumented`, so not in `tbd_ledger_store_ops_total` |
 | `tbd_ledger_facts_appended_total` | counter | `source` | a fact was written; an idempotent replay is not a fact |
 | `tbd_ledger_appends_replayed_total` | counter | | an append matched its idempotency key and returned the earlier fact |
 | `tbd_ledger_facts_retracted_total` | counter | | a retraction wrote its tombstone and deleted the values |

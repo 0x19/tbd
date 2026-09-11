@@ -32,8 +32,46 @@ pub const ALL: &[&str] = &[
     "erasure_denies",
     "erasure_executes",
     "cascade_tombstones_counterparty",
+    "durability",
+    "acked_visible",
+    "current_consistent",
+    "clean_refusal",
     "clean_errors",
 ];
+
+/// The rules an owner worker evaluates on every run (every one but the
+/// contention and fuzz rules and `durability`, which needs a fault to check).
+pub const OWNER: &[&str] = &[
+    "append_echo",
+    "recorded_at_monotonic",
+    "current_is_latest",
+    "history_is_everything",
+    "history_cut",
+    "retract_semantics",
+    "consent_filter",
+    "path_source_filter",
+    "pagination",
+    "idempotency",
+    "expiry",
+    "erasure_denies",
+    "erasure_executes",
+    "cascade_tombstones_counterparty",
+    "clean_errors",
+];
+
+/// The rules a contention worker evaluates.
+pub const CONTENTION: &[&str] = &[
+    "append_echo",
+    "recorded_at_monotonic",
+    "pagination",
+    "retract_semantics",
+    "acked_visible",
+    "current_consistent",
+    "clean_errors",
+];
+
+/// The rules a fuzz worker evaluates.
+pub const FUZZ: &[&str] = &["clean_refusal", "clean_errors"];
 
 /// One broken rule, with what was expected and what came back.
 pub type Violation = crate::trace::Violation;
@@ -913,6 +951,223 @@ pub fn clean_errors(e: &CallError, tolerate: &[String]) -> Option<Violation> {
         ));
     }
     None
+}
+
+/// The stamp of a wire fact, when it carries one.
+#[must_use]
+pub fn wire_stamp(f: &Fact) -> Option<(DateTime<Utc>, i64)> {
+    stamp(f)
+}
+
+/// An append acknowledged by a shared subject: an echo of the request is all a
+/// contention worker can hold, so `append_echo` here compares the wire fact
+/// with the request alone.
+#[must_use]
+pub fn append_echo_shared(req: &AppendRequest, resp: &AppendResponse) -> Vec<Violation> {
+    let Some(fact) = &resp.fact else {
+        return vec![violation(
+            "append_echo",
+            "append answered without a fact",
+            serde_json::json!("a fact"),
+            serde_json::Value::Null,
+        )];
+    };
+    let mut out = Vec::new();
+    if fact.id <= 0 || fact.recorded_at.is_none() {
+        out.push(violation(
+            "append_echo",
+            "appended fact has no positive id or no recorded_at",
+            serde_json::json!({"id": "> 0", "recorded_at": "set"}),
+            fact_json(fact),
+        ));
+    }
+    if let Some(why) = mismatch(&generate::model_fact_of(req), fact) {
+        out.push(violation(
+            "append_echo",
+            format!("appended fact does not echo the request: {why}"),
+            serde_json::to_value(generate::model_fact_of(req)).unwrap_or_default(),
+            fact_json(fact),
+        ));
+    }
+    out
+}
+
+/// One acknowledged write a contention worker remembers.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Acked {
+    /// The fact's id.
+    pub id: i64,
+    /// Its stamp.
+    pub stamp: (DateTime<Utc>, i64),
+    /// `(path, source)`.
+    pub key: (String, i32),
+}
+
+/// `acked_visible`: every fact this worker was acknowledged is in the full
+/// history, or a tombstone for its key with a later stamp is (someone
+/// retracted it). Nothing else about a shared subject is knowable.
+#[must_use]
+pub fn acked_visible(acked: &[Acked], history: &[Fact]) -> Vec<Violation> {
+    let present: BTreeSet<i64> = ids(history).into_iter().collect();
+    let mut out = Vec::new();
+    for a in acked {
+        if present.contains(&a.id) {
+            continue;
+        }
+        let retracted_later = history.iter().any(|f| {
+            f.value.is_none()
+                && (f.path.as_str(), f.source) == (a.key.0.as_str(), a.key.1)
+                && stamp(f).is_some_and(|s| s > a.stamp)
+        });
+        if !retracted_later {
+            out.push(violation(
+                "acked_visible",
+                format!(
+                    "acknowledged fact {} on {}/{} is missing from history and no later tombstone covers it",
+                    a.id,
+                    a.key.0,
+                    generate::source_name(a.key.1)
+                ),
+                serde_json::json!({"id": a.id, "path": a.key.0, "source": a.key.1}),
+                serde_json::json!(ids(history)),
+            ));
+        }
+    }
+    out
+}
+
+/// `current_consistent`: with `History` read first and `Current` after, every
+/// current item is either the newest valued row of its key in the snapshot, or
+/// newer than everything in the snapshot (written in between); never a
+/// tombstone; never a key that the snapshot shows retracted after its stamp.
+#[must_use]
+pub fn current_consistent(snapshot: &[Fact], current: &[Fact]) -> Vec<Violation> {
+    let max_stamp = snapshot.iter().filter_map(stamp).max();
+    let mut out = Vec::new();
+    for c in current {
+        if c.value.is_none() {
+            out.push(violation(
+                "current_consistent",
+                format!("current shows a tombstone (id {})", c.id),
+                serde_json::json!("valued facts only"),
+                fact_json(c),
+            ));
+            continue;
+        }
+        let Some(cs) = stamp(c) else {
+            out.push(violation(
+                "current_consistent",
+                format!("current item {} has no recorded_at", c.id),
+                serde_json::json!("a stamp"),
+                fact_json(c),
+            ));
+            continue;
+        };
+        if max_stamp.is_some_and(|m| cs > m) {
+            continue; // newer than the snapshot: written between the two reads
+        }
+        let key = (c.path.as_str(), c.source);
+        let newest_of_key = snapshot
+            .iter()
+            .filter(|f| (f.path.as_str(), f.source) == key)
+            .filter_map(|f| stamp(f).map(|s| (s, f)))
+            .max_by_key(|(s, _)| *s);
+        match newest_of_key {
+            Some((_, f)) if f.id == c.id => {}
+            Some((_, f)) => out.push(violation(
+                "current_consistent",
+                format!(
+                    "current shows id {} for {}/{} but the history snapshot's newest row for the key is id {} ({})",
+                    c.id,
+                    c.path,
+                    generate::source_name(c.source),
+                    f.id,
+                    if f.value.is_none() { "a tombstone" } else { "valued" }
+                ),
+                fact_json(f),
+                fact_json(c),
+            )),
+            None => out.push(violation(
+                "current_consistent",
+                format!(
+                    "current shows id {} for {}/{}, not newer than the snapshot yet absent from it",
+                    c.id,
+                    c.path,
+                    generate::source_name(c.source)
+                ),
+                serde_json::json!("present in the snapshot"),
+                fact_json(c),
+            )),
+        }
+    }
+    out
+}
+
+/// `retract_semantics` on a shared subject: a retraction answers a tombstone
+/// for the key, or `NotFound` when nothing was valued; the content it is judged
+/// against is the key alone.
+#[must_use]
+pub fn tombstone_shape(
+    path: &str,
+    source: i32,
+    result: Result<&RetractResponse, &CallError>,
+) -> Vec<Violation> {
+    match result {
+        Ok(resp) => {
+            let Some(t) = &resp.tombstone else {
+                return vec![violation(
+                    "retract_semantics",
+                    "retract answered without a tombstone",
+                    serde_json::json!("a tombstone"),
+                    serde_json::Value::Null,
+                )];
+            };
+            let mut out = Vec::new();
+            if t.value.is_some()
+                || t.path != path
+                || t.source != source
+                || t.counterparty_id.is_some()
+            {
+                out.push(violation(
+                    "retract_semantics",
+                    "the tombstone does not name the retracted key without a value",
+                    serde_json::json!({"path": path, "source": source, "value": null}),
+                    fact_json(t),
+                ));
+            }
+            out
+        }
+        Err(e) if e.code() == Some(Code::NotFound) => Vec::new(),
+        Err(e) => vec![violation(
+            "retract_semantics",
+            format!("retract failed with {}", e.class()),
+            serde_json::json!("a tombstone or NotFound"),
+            serde_json::to_value(e).unwrap_or_default(),
+        )],
+    }
+}
+
+/// `clean_refusal`: a hostile request drew one of the codes its case allows
+/// (`ok` for a request that must succeed), never anything else.
+#[must_use]
+pub fn clean_refusal(
+    case: &str,
+    expect: &[&str],
+    outcome: Result<(), &CallError>,
+) -> Vec<Violation> {
+    let class = outcome.map_or_else(CallError::class, |()| "ok".to_owned());
+    if expect.contains(&class.as_str()) {
+        return Vec::new();
+    }
+    vec![violation(
+        "clean_refusal",
+        format!(
+            "fuzz case {case} was answered with {class} instead of {}",
+            expect.join(" or ")
+        ),
+        serde_json::json!(expect),
+        serde_json::json!(class),
+    )]
 }
 
 #[cfg(test)]

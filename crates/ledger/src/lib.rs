@@ -25,6 +25,7 @@ use tonic::transport::{Server, server::TcpIncoming};
 
 pub use config::{Config, Overrides, Source};
 pub use service::Ledger;
+pub use store::faulty::Faulty;
 pub use store::instrumented::Instrumented;
 pub use store::{
     Store, StoreError, StoreKind,
@@ -120,7 +121,9 @@ pub async fn serve_with(
     serve_store(listener, config, runtime, store, shutdown).await
 }
 
-/// Serve on an already-bound listener with an explicit store.
+/// Serve on an already-bound listener with an explicit store. The store is
+/// wrapped in [`Faulty`] on `runtime.store_fault`, so an embedder (chaos) can
+/// make it fail like a database outage; production never sets the handle.
 pub async fn serve_store(
     listener: TcpListener,
     config: Config,
@@ -132,6 +135,7 @@ pub async fn serve_store(
         addr: config.server.listen,
         source,
     })?;
+    let store = store::faulty::wrap(store, runtime.store_fault.clone());
 
     let (health_reporter, health_service) = tonic_health::server::health_reporter();
     // Readiness follows the store: one probe before accepting, then a loop.

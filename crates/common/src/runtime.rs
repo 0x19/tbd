@@ -17,8 +17,12 @@ use crate::fault::FaultHandle;
 /// Handles an embedder keeps to observe and perturb a running service.
 #[derive(Debug, Clone, Default)]
 pub struct Runtime {
-    /// Fault injection. Healthy unless something sets it.
+    /// Fault injection at the request adapter. Healthy unless something sets it.
     pub fault: FaultHandle,
+    /// Fault injection at the store, for services that have one: a read fails
+    /// before it runs, a write fails after it committed (the acknowledgement is
+    /// lost, the commit stands). Ignored by services without a store.
+    pub store_fault: FaultHandle,
     /// Request counters.
     pub stats: StatsHandle,
 }

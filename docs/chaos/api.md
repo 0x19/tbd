@@ -39,7 +39,7 @@ or `500`. Every body is JSON; `PUT`/`POST` bodies reject unknown fields.
                "running": true, "depends_on": [], "behavior": {"type": "healthy"},
                "requests": {"total": 12, "failed": 0} } ],
   "kinds": [ { "name": "protocol", "label": "Protocol", "plural": "protocols",
-               "surface": "http/ws/graphql/grpc", "fault": false, "counters": false,
+               "surface": "http/ws/graphql/grpc", "fault": false, "store_fault": false, "counters": false,
                "load_target": true, "addable": true, "target": true,
                "dependency_kind": "engine",
                "fields": [ { "name": "engine", "label": "Engine", "kind": "instance_of",
@@ -87,6 +87,7 @@ are the `[[timeline]]` actions, by hand.
 | `POST /stack/{name}/stop` | | `[InstanceInfo]` |
 | `POST /stack/{name}/start` | | `[InstanceInfo]`; same port as before |
 | `PUT /stack/{name}/behavior` | a behaviour, e.g. `{"type":"error","kind":"unavailable","rate":0.5,"message":"x"}` | `[InstanceInfo]` |
+| `PUT /stack/{name}/store_behavior` | the same body: the instance's store fails (reads before they run, writes after they committed); `422` for a kind without `store_fault` | `[InstanceInfo]` |
 | `POST /stack/{name}/clone` | `{"count": 1}`, optional, at most 16 | `201` + `[InstanceInfo]`: `count` replicas of `name`, the same service on fresh ports, named `<base>-<n>` for the next free `n` (`protocol-1` gives `protocol-2`); a protocol replica forwards to the same engine |
 | `POST /stack` | `{"kind", "name"?, …the kind's fields}`: `kind` is a registered, addable kind (`overview.kinds`), the rest the same keys as its `[stack.<plural>.X]` table (`engine` for a protocol, `heartbeat` and `behavior` for an engine, `behavior` for a ledger); empty strings count as absent | `201` + `[InstanceInfo]`: a new instance, started now on a free port; `name` defaults to the next free `<kind>-<n>`; `422` for an unknown kind (the message lists them), an unknown or missing field; `409` when the name exists or the dependency is not running |
 | `DELETE /stack/{name}` | | `[InstanceInfo]`: stop and forget an instance added at runtime; `409` for a topology instance (stop it instead) or one another instance forwards to |
@@ -98,12 +99,13 @@ protocol answers `422`.
 
 `InstanceInfo`: `name`, `kind` (a registered kind, [kinds.md](kinds.md)), `addr`,
 `running`, `depends_on`, `behavior` (`null` when stopped or without fault injection),
+`store_behavior` (`null` when stopped or without store faults),
 `requests` (`{"total","failed"}`, the service's own counters, reset on restart; kinds
 with `counters`), `added` (created at runtime by `clone` or `POST /stack`; only these
 can be deleted).
 
 `overview.kinds` describes every registered kind: `name`, `label`, `plural` (its
-topology table), `surface`, the capabilities `fault`, `counters`, `load_target`,
+topology table), `surface`, the capabilities `fault`, `store_fault`, `counters`, `load_target`,
 `addable`, `target` (has a validate target), `dependency_kind` (the kind its
 `instance_of` field names, or `null`) and `fields` (`name`, `label`, `kind` `text` /
 `duration` / `instance_of`, `of_kind`, `required`, `default`). The UI builds the

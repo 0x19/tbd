@@ -81,6 +81,22 @@ pub fn parse_campaign(text: &str) -> Result<CampaignFile, String> {
                 event.service().unwrap_or("?")
             ));
         }
+        if matches!(event, TimelineEvent::SetStoreBehavior { service, .. } if !stack.get(service).is_some_and(|i| i.kind.store_fault))
+        {
+            return Err(format!(
+                "timeline: set_store_behavior on {}, whose kind has no store to fail",
+                event.service().unwrap_or("?")
+            ));
+        }
+        // A stopped memory store forgets every fact: the model would be right and
+        // the ledger honest, and the campaign would still fail. Give it a database.
+        if matches!(event, TimelineEvent::Stop { service, .. } if stack.get(service).is_some_and(|i| !i.service.durable()))
+        {
+            return Err(format!(
+                "timeline: stop {}: its store forgets on restart; give it a database_url",
+                event.service().unwrap_or("?")
+            ));
+        }
     }
     timeline.sort_by_key(TimelineEvent::at);
     Ok(CampaignFile {

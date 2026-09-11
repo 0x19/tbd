@@ -12,6 +12,7 @@ export function fallbackKind(name: string): KindDescriptor {
     plural: `${name}s`,
     surface: "",
     fault: false,
+    store_fault: false,
     counters: false,
     load_target: false,
     addable: false,

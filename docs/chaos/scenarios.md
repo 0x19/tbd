@@ -132,6 +132,12 @@ kind = "unavailable"
 rate = 0.5
 
 [[timeline]]
+at = "1500ms"
+action = "set_store_behavior"   # kinds with store faults (kinds.md): the store fails, not the adapter
+service = "ledger-1"
+behavior = { type = "error", kind = "unavailable", rate = 0.3 }
+
+[[timeline]]
 at = "2s"
 action = "stop"                 # any instance; its port stays reserved
 service = "engine-1"
@@ -149,6 +155,13 @@ message = "engine has been back for one second"
 
 A timeline action that fails, for example `start` on something already running, fails
 the scenario and is shown on the `event` line.
+
+`set_behavior` is the request adapter: a faulted request is refused before anything
+runs. `set_store_behavior` is the service's store failing the way a database does: a
+read fails before it runs, a write runs, commits, and then fails, so the client loses
+the acknowledgement of something that stands. Only kinds with store faults
+([kinds.md](kinds.md)) take it; `chaos check` refuses it on others. The same behaviours
+apply to both.
 
 ### Behaviours
 

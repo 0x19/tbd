@@ -1,0 +1,75 @@
+# The privacy rules while the ledger is being hurt: adapter errors, then store
+# errors with lost acknowledgements, then a stop and a restart, on a real Postgres
+# so a restart keeps every fact. Every failure is tolerated and re-driven; erasure,
+# restore, the cascade and durability are judged throughout. Needs the compose
+# database (`mise run up`, host port 15432); skipped in CI.
+
+[campaign]
+name = "privacy_under_faults"
+description = "Erasure, restore, the cascade and durability through adapter faults, store faults and a restart, on Postgres."
+skip = true
+duration = "8s"
+warmup = "500ms"
+seed = 5
+timeout = "5s"
+
+[stack.ledgers.ledger-1]
+grace = "0s"
+database_url = "postgres://ledger:local-ledger@127.0.0.1:15432/ledger?sslmode=disable"
+
+[workload]
+max_in_flight = 32
+
+[workload.owner]
+workers = 4
+subjects = 3
+[workload.owner.mix]
+append = 4
+pair_relation = 3
+current = 2
+history = 3
+erase_cycle = 2
+retract = 1
+idempotent_replay = 1
+
+[workload.contention]
+workers = 2
+subjects = 2
+
+[faults]
+tolerate = ["unavailable", "transport", "timeout", "deadline_exceeded", "cancelled"]
+settle = "2500ms"
+
+[[timeline]]
+at = "1s"
+action = "set_behavior"
+service = "ledger-1"
+behavior = { type = "error", kind = "unavailable", rate = 0.3 }
+
+[[timeline]]
+at = "2s"
+action = "set_behavior"
+service = "ledger-1"
+behavior = { type = "healthy" }
+
+[[timeline]]
+at = "2500ms"
+action = "set_store_behavior"
+service = "ledger-1"
+behavior = { type = "error", kind = "unavailable", rate = 0.3 }
+
+[[timeline]]
+at = "3500ms"
+action = "set_store_behavior"
+service = "ledger-1"
+behavior = { type = "healthy" }
+
+[[timeline]]
+at = "4s"
+action = "stop"
+service = "ledger-1"
+
+[[timeline]]
+at = "5s"
+action = "start"
+service = "ledger-1"

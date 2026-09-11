@@ -63,8 +63,17 @@ pub const KNOWN_CLASSES: &[&str] = &[
 
 impl CallError {
     /// From a status the ledger answered with.
+    ///
+    /// A connection that breaks mid-call reaches the client as a *synthesised*
+    /// `Internal` or `Unknown` status carrying an h2 or transport error, not as
+    /// something the ledger said. Those class as `transport`, so a campaign that
+    /// tolerates transport failures tolerates a restart, and `clean_errors` still
+    /// catches an `Internal` the ledger really answered.
     #[must_use]
     pub fn from_status(s: &Status) -> Self {
+        if matches!(s.code(), Code::Internal | Code::Unknown) && is_transport(s) {
+            return Self::Transport(s.message().to_owned());
+        }
         Self::Status {
             code: format!("{:?}", s.code()),
             message: s.message().to_owned(),
@@ -100,6 +109,20 @@ impl CallError {
             Some(Code::Internal | Code::Unknown | Code::DataLoss)
         )
     }
+}
+
+/// Whether a status was made from a transport failure rather than sent by the
+/// service: tonic wraps the underlying error as the status's source and names
+/// it in the message.
+fn is_transport(s: &Status) -> bool {
+    let m = s.message();
+    std::error::Error::source(s).is_some()
+        || m.contains("h2 protocol error")
+        || m.contains("http2 error")
+        || m.contains("transport error")
+        || m.contains("connection closed")
+        || m.contains("connection reset")
+        || m.contains("broken pipe")
 }
 
 fn snake(camel: &str) -> String {
@@ -263,6 +286,25 @@ impl LedgerClient for GrpcLedger {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_broken_connection_is_transport_and_a_real_internal_is_not() {
+        // What the ledger answers when its store fails: internal, and a finding.
+        let answered = CallError::from_status(&Status::internal("store error"));
+        assert_eq!(answered.class(), "internal");
+        assert!(answered.is_unclean());
+        // What a restart mid-call looks like: tonic synthesises a status.
+        let broken = CallError::from_status(&Status::internal("h2 protocol error: http2 error"));
+        assert_eq!(broken.class(), "transport");
+        assert!(!broken.is_unclean());
+        let unknown = CallError::from_status(&Status::unknown("transport error"));
+        assert_eq!(unknown.class(), "transport");
+        // Every other code is passed through untouched.
+        assert_eq!(
+            CallError::from_status(&Status::not_found("no subject")).class(),
+            "not_found"
+        );
+    }
 
     #[test]
     fn classes_are_snake_case_codes() {

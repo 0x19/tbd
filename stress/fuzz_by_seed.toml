@@ -1,0 +1,24 @@
+# Hostile requests only: bad ids, empty scopes, oversized envelopes, unknown
+# sources, cursors from nowhere, and a valid read after each. Every answer must be
+# the documented refusal and never Internal. Seed 1 runs in CI; a nightly passes
+# `--seed` to walk other sequences.
+
+[campaign]
+name = "fuzz_by_seed"
+description = "Every hostile request draws its documented refusal; a valid read still works afterwards."
+duration = "4s"
+warmup = "200ms"
+seed = 1
+
+[stack.ledgers.ledger-1]
+grace = "0s"
+
+[workload]
+max_in_flight = 16
+
+[workload.owner]
+workers = 0
+
+[workload.fuzz]
+workers = 3
+subjects = 2

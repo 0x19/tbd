@@ -46,6 +46,9 @@ pub mod names {
     pub const LEDGER_STORE_OP_DURATION: &str = "tbd_ledger_store_op_duration_seconds";
     /// Counter of store operations by `op` and `result` (`ok` or the error kind).
     pub const LEDGER_STORE_OPS_TOTAL: &str = "tbd_ledger_store_ops_total";
+    /// Counter: store faults the ledger's `Faulty` decorator injected, by `kind`
+    /// (chaos only; production never sets a store fault).
+    pub const LEDGER_STORE_FAULTS_INJECTED_TOTAL: &str = "tbd_ledger_store_faults_injected_total";
     /// Counter of facts written, by `source`; replays are not facts.
     pub const LEDGER_FACTS_APPENDED_TOTAL: &str = "tbd_ledger_facts_appended_total";
     /// Counter of appends answered from the idempotency table.
@@ -209,6 +212,10 @@ fn describe_ledger() {
     describe_counter!(
         names::LEDGER_ERASURES_EXECUTED_TOTAL,
         "Erasures the ledger's sweeper executed."
+    );
+    describe_counter!(
+        names::LEDGER_STORE_FAULTS_INJECTED_TOTAL,
+        "Store faults injected by the ledger's Faulty decorator, by kind (chaos only)."
     );
     describe_gauge!(
         names::DB_POOL_CONNECTIONS,

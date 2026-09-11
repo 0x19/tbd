@@ -80,6 +80,9 @@ pub struct Owner {
     scopes: Vec<String>,
     tolerate: Vec<String>,
     skew: chrono::Duration,
+    /// A tolerated failure happened since the last complete history walk: the
+    /// next one judges `durability` (every acknowledged fact survived).
+    saw_fault: bool,
 }
 
 impl Owner {
@@ -97,6 +100,7 @@ impl Owner {
             scopes,
             tolerate,
             skew,
+            saw_fault: false,
         }
     }
 
@@ -262,6 +266,7 @@ impl Owner {
             .is_some_and(|e| self.tolerate.iter().any(|t| *t == e.class()));
         if tolerated {
             self.ctx.checks.tolerated();
+            self.saw_fault = true;
         }
         let (response, error) = match &result {
             Ok(v) => (Some(json(v)), None),
@@ -494,6 +499,89 @@ impl Owner {
                 Err(e) if failed_before && had_value && e.code() == Some(Code::NotFound) => {
                     // The lost acknowledgement was for a retract that ran.
                     return Some((Settled::Unknown, true));
+                }
+                r => return Some((Settled::Answer(r), failed_before)),
+            }
+        }
+    }
+
+    /// Give up on a subject whose erasure outcome nobody knows, and on every
+    /// peer that named it in a relation: if the erasure did execute, the
+    /// ledger tombstones those relations in the cascade and the peers' models
+    /// would be stale. Fresh subjects cost nothing; a wrong model costs a
+    /// false finding.
+    fn abandon(&mut self, si: usize) {
+        let erased = self.subjects[si].model.id;
+        for pj in 0..self.subjects.len() {
+            if pj != si
+                && self.subjects[pj]
+                    .model
+                    .facts
+                    .iter()
+                    .any(|f| !f.is_tombstone() && f.counterparty == Some(erased))
+            {
+                self.subjects[pj] = Subject::new();
+            }
+        }
+        self.subjects[si] = Subject::new();
+    }
+
+    /// Whether a result is a failure the campaign tolerates: never judged,
+    /// because a fault was being injected.
+    fn is_tolerated<T>(&self, r: &Result<T, CallError>) -> bool {
+        r.as_ref()
+            .err()
+            .is_some_and(|e| self.tolerate.iter().any(|t| *t == e.class()))
+    }
+
+    /// Send an erase; on a tolerated failure re-send it (idempotent inside the
+    /// window). `FailedPrecondition` after a failure means the first attempt
+    /// erased and the window has already closed: the subject is gone.
+    async fn erase_settled(
+        &mut self,
+        si: usize,
+        request: Request,
+    ) -> Option<(Settled<EraseResponse>, bool)> {
+        let mut attempts = 0;
+        let mut failed_before = false;
+        loop {
+            let result = self.erase(si, request.clone()).await?;
+            match result {
+                Err(e) if self.is_tolerated(&Err::<(), _>(e.clone())) => {
+                    if attempts < REDRIVES {
+                        attempts += 1;
+                        failed_before = true;
+                        self.ctx.checks.redriven();
+                    } else {
+                        return Some((Settled::Unknown, failed_before));
+                    }
+                }
+                r => return Some((Settled::Answer(r), failed_before)),
+            }
+        }
+    }
+
+    /// Send a restore; on a tolerated failure re-send it (restore with nothing
+    /// pending is fine). `NotFound` after a failure means the erasure executed
+    /// meanwhile.
+    async fn restore_settled(
+        &mut self,
+        si: usize,
+        request: Request,
+    ) -> Option<(Settled<RestoreResponse>, bool)> {
+        let mut attempts = 0;
+        let mut failed_before = false;
+        loop {
+            let result = self.restore(si, request.clone()).await?;
+            match result {
+                Err(e) if self.is_tolerated(&Err::<(), _>(e.clone())) => {
+                    if attempts < REDRIVES {
+                        attempts += 1;
+                        failed_before = true;
+                        self.ctx.checks.redriven();
+                    } else {
+                        return Some((Settled::Unknown, failed_before));
+                    }
                 }
                 r => return Some((Settled::Answer(r), failed_before)),
             }
@@ -827,8 +915,20 @@ impl Owner {
             return;
         };
         let facts: Vec<Fact> = pages.into_iter().flatten().collect();
-        let v = invariants::history_is_everything(&self.subjects[si].model, &facts);
-        self.judge(si, &["history_is_everything", "recorded_at_monotonic"], v);
+        let mut v = invariants::history_is_everything(&self.subjects[si].model, &facts);
+        // After a fault episode the same rule is durability: what was
+        // acknowledged before the failure must still be there.
+        if self.saw_fault {
+            for x in &mut v {
+                if x.invariant == "history_is_everything" {
+                    x.invariant = "durability";
+                }
+            }
+            self.judge(si, &["durability", "recorded_at_monotonic"], v);
+            self.saw_fault = false;
+        } else {
+            self.judge(si, &["history_is_everything", "recorded_at_monotonic"], v);
+        }
         let m = &mut self.subjects[si].model;
         if m.has_unknown_stamps() || !m.pending.is_empty() {
             m.learn(&facts);
@@ -1023,13 +1123,26 @@ impl Owner {
         let own = Request::Erase {
             subject: SubjectRef::Own,
         };
-        let Some(first) = self.erase(si, own.clone()).await else {
+        let Some((first, failed_before)) = self.erase_settled(si, own.clone()).await else {
             return;
         };
         let first = match first {
-            Ok(r) => r,
-            Err(e) => {
-                if !self.tolerate.iter().any(|t| *t == e.class()) && !e.is_unclean() {
+            Settled::Answer(Ok(r)) => r,
+            // The first attempt erased and lost its answer, and the window has
+            // closed since: the subject is gone. Nothing to judge; move on.
+            Settled::Answer(Err(e))
+                if failed_before && e.code() == Some(Code::FailedPrecondition) =>
+            {
+                self.abandon(si);
+                return;
+            }
+            // Erased or not, nobody knows: the subject is abandoned, not judged.
+            Settled::Unknown => {
+                self.abandon(si);
+                return;
+            }
+            Settled::Answer(Err(e)) => {
+                if !e.is_unclean() {
                     self.judge(
                         si,
                         &[],
@@ -1053,11 +1166,34 @@ impl Owner {
         let real_window = window.is_none_or(|w| w >= SAFE_WINDOW);
         self.erase_denials(si, &first, real_window).await;
 
+        self.after_denials(si, own, &first, window, real_window)
+            .await;
+    }
+
+    /// Restore, judge the reopened subject, and with a short window erase again
+    /// and follow the cascade.
+    async fn after_denials(
+        &mut self,
+        si: usize,
+        own: Request,
+        first: &EraseResponse,
+        window: Option<Duration>,
+        real_window: bool,
+    ) {
         let restore = Request::Restore {
             subject: SubjectRef::Own,
         };
-        match self.restore(si, restore).await {
-            Some(Ok(_)) => {
+        let restored = match self.restore_settled(si, restore).await {
+            Some((Settled::Answer(r), failed_before)) => Some((r, failed_before)),
+            // Restored or not, nobody knows: abandon the subject.
+            Some((Settled::Unknown, _)) => {
+                self.abandon(si);
+                return;
+            }
+            None => None,
+        };
+        match restored {
+            Some((Ok(_), _)) => {
                 self.subjects[si].model.apply_restore();
                 let limit = self.page_limit();
                 if let Some(pages) = self
@@ -1079,17 +1215,29 @@ impl Owner {
                 if real_window {
                     return;
                 }
-                let Some(Ok(again)) = self.erase(si, own).await else {
-                    return;
-                };
-                self.subjects[si].model.apply_erase(&again);
-                self.cascade(si, window.unwrap_or_default()).await;
+                match self.erase_settled(si, own).await {
+                    Some((Settled::Answer(Ok(again)), _)) => {
+                        self.subjects[si].model.apply_erase(&again);
+                        self.cascade(si, window.unwrap_or_default()).await;
+                    }
+                    // Erased and already executed while the answer was lost.
+                    Some((Settled::Answer(Err(e)), true))
+                        if e.code() == Some(Code::FailedPrecondition) =>
+                    {
+                        self.subjects[si].model.apply_erase(first);
+                        self.cascade(si, window.unwrap_or_default()).await;
+                    }
+                    // Erased, unfollowed, or refused: the sweeper will execute it
+                    // and tombstone the peers' relations, and no model here would
+                    // know. Abandon them rather than judge from a stale model.
+                    _ => self.abandon(si),
+                }
             }
-            Some(Err(e)) if !real_window && e.code() == Some(Code::NotFound) => {
+            Some((Err(e), _)) if !real_window && e.code() == Some(Code::NotFound) => {
                 // The sweeper executed the erasure before the restore arrived.
                 self.cascade(si, window.unwrap_or_default()).await;
             }
-            Some(Err(e)) if !self.tolerate.iter().any(|t| *t == e.class()) && !e.is_unclean() => {
+            Some((Err(e), _)) if !e.is_unclean() => {
                 self.judge(
                     si,
                     &[],
@@ -1100,8 +1248,9 @@ impl Owner {
                         actual: serde_json::to_value(&e).unwrap_or_default(),
                     }],
                 );
+                self.abandon(si);
             }
-            Some(Err(_)) | None => {}
+            Some((Err(_), _)) | None => self.abandon(si),
         }
     }
 
@@ -1124,18 +1273,26 @@ impl Owner {
             .await;
         let write_req = self.fresh_append(si, false);
         let write = self.append(si, write_req).await;
+        // A call that drew a tolerated failure was not answered by the contract;
+        // it is neither a pass nor a finding.
         let mut v = Vec::new();
-        if let Some(r) = &read {
+        if let Some(r) = &read
+            && !self.is_tolerated(r)
+        {
             v.extend(invariants::denied("current", r.as_ref()));
         }
-        if let Some(w) = &write {
+        if let Some(w) = &write
+            && !self.is_tolerated(w)
+        {
             v.extend(invariants::denied("append", w.as_ref()));
         }
         if real_window {
             let own = Request::Erase {
                 subject: SubjectRef::Own,
             };
-            if let Some(s) = self.erase(si, own).await {
+            if let Some(s) = self.erase(si, own).await
+                && !self.is_tolerated(&s)
+            {
                 v.extend(invariants::erase_idempotent(first, s.as_ref()));
             }
         }
@@ -1164,7 +1321,9 @@ impl Owner {
                     stub: false,
                     idempotency_key: None,
                 };
-                if let Some(r) = self.append(pj, rel).await {
+                if let Some(r) = self.append(pj, rel).await
+                    && !self.is_tolerated(&r)
+                {
                     v.extend(invariants::denied(
                         "a relation naming the erased subject",
                         r.as_ref(),
@@ -1208,7 +1367,11 @@ impl Owner {
             .await;
         let write_req = self.fresh_append(si, false);
         let write = self.append(si, write_req).await;
-        if let (Some(read), Some(restore), Some(write)) = (read, restore, write) {
+        if let (Some(read), Some(restore), Some(write)) = (read, restore, write)
+            && !self.is_tolerated(&read)
+            && !self.is_tolerated(&restore)
+            && !self.is_tolerated(&write)
+        {
             let v = invariants::executed(read.as_ref(), restore.as_ref(), write.as_ref());
             self.judge(si, &["erasure_executes"], v);
         }
@@ -1229,6 +1392,9 @@ impl Owner {
             }
             let limit = self.page_limit();
             let Some(pages) = self.walk_history(pj, None, limit).await else {
+                // The read drew a fault: the cascade cannot be judged and the
+                // peer's model cannot be brought up to date, so it is abandoned.
+                self.subjects[pj] = Subject::new();
                 continue;
             };
             let facts: Vec<Fact> = pages.into_iter().flatten().collect();

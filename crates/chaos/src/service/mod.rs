@@ -15,6 +15,13 @@ pub trait Service: Send + Sync {
     /// Short kind name, e.g. `engine`.
     fn kind(&self) -> &'static str;
 
+    /// Whether a stopped and restarted instance still holds what it held: a
+    /// service on a real database says yes, one on an in-memory store says no.
+    /// A campaign refuses to stop an instance that forgets.
+    fn durable(&self) -> bool {
+        true
+    }
+
     /// Names of instances that must be running before this one starts.
     fn depends_on(&self) -> Vec<String> {
         Vec::new()
@@ -59,6 +66,12 @@ pub trait InstanceHandle: Send + Sync {
 
     /// Fault injection, when the service supports it.
     fn fault(&self) -> Option<FaultHandle> {
+        None
+    }
+
+    /// Fault injection at the service's store, when it has one: reads fail
+    /// before they run, writes after they committed (`set_store_behavior`).
+    fn store_fault(&self) -> Option<FaultHandle> {
         None
     }
 
@@ -127,6 +140,11 @@ impl Instance {
     /// See [`InstanceHandle::fault`].
     pub fn fault(&self) -> Option<FaultHandle> {
         self.handle.fault()
+    }
+
+    /// Store fault injection, when the service has a store.
+    pub fn store_fault(&self) -> Option<FaultHandle> {
+        self.handle.store_fault()
     }
 
     /// See [`InstanceHandle::requests`].

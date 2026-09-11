@@ -106,6 +106,15 @@ impl Interpreter {
         {
             out.push(v);
         }
+        // A hostile request touches no model: it is judged by its case alone.
+        if let Concrete::Fuzz { case, expect, .. } = concrete {
+            let result = match outcome {
+                Outcome::Err(e) => Err(e),
+                _ => Ok(()),
+            };
+            out.extend(invariants::clean_refusal(case, expect, result));
+            return out;
+        }
         let Some(subject) = request.subject() else {
             return out;
         };
@@ -420,7 +429,9 @@ pub enum Outcome {
 }
 
 impl Outcome {
-    fn json(&self) -> Option<serde_json::Value> {
+    /// The response as JSON, the shape a step records.
+    #[must_use]
+    pub fn json(&self) -> Option<serde_json::Value> {
         Some(match self {
             Self::Append(r) => trace::append_json(r),
             Self::Current(r) => trace::current_json(r),
@@ -464,6 +475,7 @@ pub async fn call(client: &dyn LedgerClient, c: Concrete) -> Outcome {
             tokio::time::sleep(d).await;
             Outcome::Slept
         }
+        Concrete::Fuzz { inner, .. } => Box::pin(call(client, *inner)).await,
     }
 }
 

@@ -573,3 +573,122 @@ async fn stress_campaign_runs_on_the_files_stack_and_findings_round_trip() {
     assert!(err.contains("no ledger target"), "{err}");
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+/// A campaign may fault the store of a kind that has one and of no other, and
+/// may not stop an instance whose store forgets on restart.
+#[test]
+fn campaign_timelines_follow_the_store_fault_capability() {
+    let with_store = kinds::ALL
+        .iter()
+        .find(|k| k.store_fault)
+        .expect("a kind with store faults");
+    let without = kinds::ALL
+        .iter()
+        .find(|k| !k.store_fault)
+        .expect("a kind without store faults");
+    let campaign = |plural: &str, name: &str, action: &str| {
+        format!(
+            "[campaign]\nname = \"t\"\n[stack.{plural}.{name}]\n[[timeline]]\nat = \"1s\"\naction = \"{action}\"\nservice = \"{name}\"\nbehavior = {{ type = \"healthy\" }}\n"
+        )
+    };
+    let ok = campaign(with_store.plural, "s-1", "set_store_behavior");
+    let ok = if with_store.name == "ledger" {
+        ok
+    } else {
+        // Another kind may need a dependency; only the ledger is asserted to parse.
+        campaign("ledgers", "s-1", "set_store_behavior")
+    };
+    tbd_chaos::stress::parse_campaign(&ok).unwrap();
+    if without.fields.is_empty() {
+        let e = tbd_chaos::stress::parse_campaign(&campaign(
+            without.plural,
+            "w-1",
+            "set_store_behavior",
+        ))
+        .unwrap_err();
+        assert!(e.contains("no store to fail"), "{e}");
+    }
+    let e = tbd_chaos::stress::parse_campaign(
+        "[campaign]\nname = \"t\"\n[stack.ledgers.l]\n[[timeline]]\nat = \"1s\"\naction = \"stop\"\nservice = \"l\"\n",
+    )
+    .unwrap_err();
+    assert!(e.contains("forgets on restart"), "{e}");
+}
+
+/// A store fault behaves like a database outage: the write commits and loses
+/// its acknowledgement, the read fails, and healthy again the fact is there.
+#[tokio::test]
+async fn store_faults_lose_acknowledgements_but_keep_commits() {
+    let stack = topology("[stack.ledgers.l]\ngrace = \"0s\"\n")
+        .start()
+        .await
+        .unwrap();
+    let addr = stack.get("l").unwrap().addr;
+    let mut client = tbd_proto::ledger::v1::ledger_service_client::LedgerServiceClient::connect(
+        format!("http://{addr}"),
+    )
+    .await
+    .unwrap();
+    let subject = uuid::Uuid::now_v7().to_string();
+    let envelope = |v: serde_json::Value| {
+        Some(tbd_proto::ledger::v1::Envelope {
+            version: 0,
+            bytes: serde_json::to_vec(&v).unwrap(),
+        })
+    };
+    let append = tbd_proto::ledger::v1::AppendRequest {
+        subject_id: subject.clone(),
+        path: "profile.name".into(),
+        source: 2,
+        value: envelope(serde_json::json!("Ada")),
+        origin: envelope(serde_json::json!({})),
+        confidence: Some(1.0),
+        counterparty_id: None,
+        observed_at: Some(prost_types::Timestamp::from(std::time::SystemTime::now())),
+        expires_at: None,
+        consent: vec!["self".into()],
+        stub: false,
+        idempotency_key: "k-lost".into(),
+    };
+    let outage = Behavior::Error {
+        kind: ErrorKind::Unavailable,
+        rate: 1.0,
+        message: "db down".into(),
+    };
+    stack.set_store_behavior("l", outage).unwrap();
+    assert_eq!(
+        stack.describe()[0]
+            .store_behavior
+            .as_ref()
+            .map(|b| matches!(b, Behavior::Error { .. })),
+        Some(true)
+    );
+    let lost = client.append(append.clone()).await.unwrap_err();
+    assert_eq!(lost.code(), tonic::Code::Unavailable, "{lost}");
+    let read = tbd_proto::ledger::v1::HistoryRequest {
+        subject_id: subject.clone(),
+        paths: vec![],
+        sources: vec![],
+        scopes: vec!["self".into()],
+        cursor: String::new(),
+        limit: 0,
+        at: None,
+    };
+    assert_eq!(
+        client.history(read.clone()).await.unwrap_err().code(),
+        tonic::Code::Unavailable
+    );
+    stack.set_store_behavior("l", Behavior::Healthy).unwrap();
+    // The commit stood: the key replays it and history holds exactly one row.
+    let again = client.append(append).await.unwrap().into_inner();
+    assert!(again.replayed);
+    assert_eq!(
+        client.history(read).await.unwrap().into_inner().facts.len(),
+        1
+    );
+    assert!(matches!(
+        stack.set_store_behavior("nope", Behavior::Healthy),
+        Err(tbd_chaos::stack::StackError::Unknown(_))
+    ));
+    stack.shutdown().await;
+}

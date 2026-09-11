@@ -21,6 +21,17 @@ pub enum TimelineEvent {
         /// New behaviour.
         behavior: Behavior,
     },
+    /// Change a service's store fault behaviour: reads fail before they run,
+    /// writes after they committed (the acknowledgement is lost).
+    SetStoreBehavior {
+        /// Offset from load start.
+        #[serde(with = "humantime_serde")]
+        at: Duration,
+        /// Instance name; its kind must have store faults.
+        service: String,
+        /// New behaviour.
+        behavior: Behavior,
+    },
     /// Stop an instance. Its port stays reserved.
     Stop {
         /// Offset from load start.
@@ -52,6 +63,7 @@ impl TimelineEvent {
     pub fn at(&self) -> Duration {
         match self {
             Self::SetBehavior { at, .. }
+            | Self::SetStoreBehavior { at, .. }
             | Self::Stop { at, .. }
             | Self::Start { at, .. }
             | Self::Log { at, .. } => *at,
@@ -62,6 +74,7 @@ impl TimelineEvent {
     pub fn service(&self) -> Option<&str> {
         match self {
             Self::SetBehavior { service, .. }
+            | Self::SetStoreBehavior { service, .. }
             | Self::Stop { service, .. }
             | Self::Start { service, .. } => Some(service),
             Self::Log { .. } => None,
@@ -74,6 +87,9 @@ impl TimelineEvent {
             Self::SetBehavior {
                 service, behavior, ..
             } => format!("set_behavior {service} {behavior:?}"),
+            Self::SetStoreBehavior {
+                service, behavior, ..
+            } => format!("set_store_behavior {service} {behavior:?}"),
             Self::Stop { service, .. } => format!("stop {service}"),
             Self::Start { service, .. } => format!("start {service}"),
             Self::Log { message, .. } => format!("log {message}"),
@@ -87,6 +103,11 @@ impl TimelineEvent {
                 service, behavior, ..
             } => stack
                 .set_behavior(service, behavior.clone())
+                .map_err(|e| e.to_string()),
+            Self::SetStoreBehavior {
+                service, behavior, ..
+            } => stack
+                .set_store_behavior(service, behavior.clone())
                 .map_err(|e| e.to_string()),
             Self::Stop { service, .. } => stack
                 .stop_instance(service)

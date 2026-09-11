@@ -20,7 +20,7 @@ use crate::{
     hooks::{Hooks, StressEvent},
     metrics::Metrics,
     report::{CampaignResult, StressSnapshot},
-    workers::{Checks, Context, owner::Owner},
+    workers::{Checks, Context, contention::Contention, fuzz::Fuzz, owner::Owner},
 };
 
 /// How often progress is emitted.
@@ -83,20 +83,27 @@ pub async fn run_with_clients(
     let (ftx, frx) = mpsc::unbounded_channel::<Finding>();
     let run_start = Instant::now();
 
-    // Workers, spread over the targets.
-    let (mut workers, subjects_total) = spawn_owners(
+    // Workers: owners spread over the targets, contention on the first, fuzz spread.
+    let shared = Shared {
+        metrics: Arc::clone(&metrics),
+        checks: Arc::clone(&checks),
+        findings: ftx.clone(),
+        semaphore: Arc::clone(&semaphore),
+        cancel: cancel.clone(),
+        started: run_start,
+    };
+    let (mut workers, mut subjects_total) =
+        spawn_owners(&campaign, &targets, result.store.as_deref(), &shared);
+    subjects_total += spawn_others(
+        &mut workers,
         &campaign,
         &targets,
         result.store.as_deref(),
-        &Shared {
-            metrics: Arc::clone(&metrics),
-            checks: Arc::clone(&checks),
-            findings: ftx.clone(),
-            semaphore: Arc::clone(&semaphore),
-            cancel: cancel.clone(),
-            started: run_start,
-        },
+        &shared,
     );
+    // Every sender of the findings channel must go: `Collected` ends when the
+    // last worker drops its clone.
+    drop(shared);
     drop(ftx);
 
     let collected = Collected::spawn(
@@ -243,18 +250,7 @@ fn spawn_owners(
     let mut subjects_total = 0u64;
     for w in 0..owner_cfg.workers {
         let ti = usize::try_from(w).unwrap_or(0) % targets.len();
-        let ctx = Arc::new(Context {
-            campaign: Arc::clone(campaign),
-            client: Arc::clone(&targets[ti].client),
-            target: targets[ti].name.clone(),
-            store: store.map(str::to_owned),
-            metrics: Arc::clone(&shared.metrics),
-            checks: Arc::clone(&shared.checks),
-            findings: shared.findings.clone(),
-            semaphore: Arc::clone(&shared.semaphore),
-            cancel: shared.cancel.clone(),
-            started: shared.started,
-        });
+        let ctx = context(campaign, targets, ti, store, shared);
         let seed = campaign
             .campaign
             .seed
@@ -265,6 +261,71 @@ fn spawn_owners(
         workers.spawn(owner.run());
     }
     (workers, subjects_total)
+}
+
+/// The context of one worker on target `ti`.
+fn context(
+    campaign: &Arc<Campaign>,
+    targets: &[Named],
+    ti: usize,
+    store: Option<&str>,
+    shared: &Shared,
+) -> Arc<Context> {
+    Arc::new(Context {
+        campaign: Arc::clone(campaign),
+        client: Arc::clone(&targets[ti].client),
+        target: targets[ti].name.clone(),
+        store: store.map(str::to_owned),
+        metrics: Arc::clone(&shared.metrics),
+        checks: Arc::clone(&shared.checks),
+        findings: shared.findings.clone(),
+        semaphore: Arc::clone(&shared.semaphore),
+        cancel: shared.cancel.clone(),
+        started: shared.started,
+    })
+}
+
+/// Spawn the contention workers (all on the first target, sharing one set of
+/// subjects) and the fuzz workers (spread over the targets). Returns how many
+/// subjects they own.
+fn spawn_others(
+    workers: &mut tokio::task::JoinSet<()>,
+    campaign: &Arc<Campaign>,
+    targets: &[Named],
+    store: Option<&str>,
+    shared: &Shared,
+) -> u64 {
+    let mut subjects = 0u64;
+    let seed = campaign.campaign.seed;
+    let contention = &campaign.workload.contention;
+    if contention.workers > 0 {
+        let shared_subjects: Vec<uuid::Uuid> = (0..contention.subjects)
+            .map(|_| uuid::Uuid::now_v7())
+            .collect();
+        subjects += u64::from(contention.subjects);
+        for w in 0..contention.workers {
+            let ctx = context(campaign, targets, 0, store, shared);
+            let worker = Contention::new(
+                ctx,
+                seed.wrapping_mul(7_919).wrapping_add(u64::from(w)),
+                &shared_subjects,
+            );
+            workers.spawn(worker.run());
+        }
+    }
+    let fuzz = &campaign.workload.fuzz;
+    for w in 0..fuzz.workers {
+        let ti = usize::try_from(w).unwrap_or(0) % targets.len();
+        let ctx = context(campaign, targets, ti, store, shared);
+        let worker = Fuzz::new(
+            ctx,
+            seed.wrapping_mul(104_729).wrapping_add(u64::from(w)),
+            fuzz.subjects,
+        );
+        subjects += worker.subject_count() as u64;
+        workers.spawn(worker.run());
+    }
+    subjects
 }
 
 /// Emit progress once a second until the duration passes or the run is cancelled.
@@ -378,9 +439,15 @@ impl Progress {
             checks: Arc::clone(checks),
             found: Arc::clone(&collected.found),
             subjects,
-            workers: [("owner".to_owned(), campaign.workload.owner.workers)]
-                .into_iter()
-                .collect(),
+            workers: [
+                ("owner", campaign.workload.owner.workers),
+                ("contention", campaign.workload.contention.workers),
+                ("fuzz", campaign.workload.fuzz.workers),
+            ]
+            .into_iter()
+            .filter(|(_, n)| *n > 0)
+            .map(|(k, n)| (k.to_owned(), n))
+            .collect(),
         }
     }
 
@@ -425,6 +492,8 @@ async fn shrink_all(
             .find(|t| t.name == f.target)
             .map(|t| Arc::clone(&t.client));
         shrunk.push(match client {
+            // A contention trace is one worker's view of a race: kept whole.
+            _ if f.worker == crate::finding::WorkerClass::Contention => f,
             Some(client) if !hooks.cancel.is_cancelled() => {
                 crate::shrink::shrink(
                     f,
