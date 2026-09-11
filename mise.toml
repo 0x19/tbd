@@ -211,15 +211,6 @@ description = "Run every scenario under scenarios/ (CHAOS_ARGS for extra flags, 
 env = { RUST_LOG = "warn,tbd_chaos=info,tbd_protocol::error=off,tower_http=off" }
 run = "cargo run -q -p tbd-chaos -- run --dir scenarios $CHAOS_ARGS"
 
-[tasks."stress:check"]
-description = "Parse and check every stress campaign without running it"
-run = "cargo run -q -p tbd-chaos -- stress check stress/*.toml"
-
-[tasks."stress:run"]
-description = "Run every stress campaign under stress/ against in-process ledgers (STRESS_ARGS for extra flags, e.g. --json or --target ledger=URL)"
-env = { RUST_LOG = "warn,tbd_chaos=info,tbd_stress=info,tbd_protocol::error=off,tower_http=off" }
-run = "cargo run -q -p tbd-chaos -- stress run --dir stress $STRESS_ARGS"
-
 [tasks.doc]
 run = "cargo doc --workspace --all-features --no-deps"
 
@@ -253,7 +244,6 @@ run = [
   "mise run doc",
   "mise run chaos:docs:check",
   "mise run chaos:run",
-  "mise run stress:run",
   "mise run ui:check",
   "mise run ui:auth:check",
 ]
