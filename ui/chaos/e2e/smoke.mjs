@@ -252,7 +252,20 @@ await step("runs list filters by kind from the sidebar link", async () => {
     .first()
     .waitFor({ timeout: 10000 });
   await page.getByText("Filters").waitFor();
+  // Exactly one Runs entry is current, the one whose query matches.
+  const current = page.locator('[data-sidebar="menu-sub-button"][data-active="true"]');
+  await current.waitFor();
+  console.log("  current sidebar entry:", (await current.allInnerTexts()).join(" | "));
+  if ((await current.count()) !== 1) throw new Error("more than one Runs entry marked current");
   await shot({ path: `${SHOTS}/runs.png`, fullPage: true });
+  // One "<Kind> runs" entry per registered kind; the ledger one lists the ledger scenarios.
+  for (const k of overview.kinds) await page.getByRole("link", { name: `${k.label} runs` }).waitFor();
+  await page.getByRole("link", { name: "Ledger runs" }).click();
+  await page.waitForURL(/service=ledger/);
+  await page
+    .getByRole("row", { name: /ledger_/ })
+    .first()
+    .waitFor({ timeout: 10000 });
 });
 
 await step("load page starts and cancels a run", async () => {

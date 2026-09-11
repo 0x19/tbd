@@ -2,7 +2,7 @@
 
 import { ChevronRight } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { ReactNode } from "react";
 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -24,6 +24,8 @@ import { type NavGroup, NavItem } from "./types";
 export function NavGroup({ title, items }: NavGroup) {
   const { setOpenMobile } = useSidebar();
   const pathname = usePathname();
+  const search = useSearchParams();
+  const current = search.size ? `${pathname}?${search.toString()}` : pathname;
   return (
     <SidebarGroup>
       <SidebarGroupLabel>{title}</SidebarGroupLabel>
@@ -32,11 +34,7 @@ export function NavGroup({ title, items }: NavGroup) {
           if (!item.items) {
             return (
               <SidebarMenuItem key={item.title}>
-                <SidebarMenuButton
-                  asChild
-                  isActive={checkIsActive(pathname, item, true)}
-                  tooltip={item.title}
-                >
+                <SidebarMenuButton asChild isActive={checkIsActive(current, item, true)} tooltip={item.title}>
                   <Link href={item.url} onClick={() => setOpenMobile(false)}>
                     {item.icon && <item.icon />}
                     <span>{item.title}</span>
@@ -50,7 +48,7 @@ export function NavGroup({ title, items }: NavGroup) {
             <Collapsible
               key={item.title}
               asChild
-              defaultOpen={checkIsActive(pathname, item, true)}
+              defaultOpen={checkIsActive(current, item, true)}
               className="group/collapsible"
             >
               <SidebarMenuItem>
@@ -90,22 +88,37 @@ const NavBadge = ({ children }: { children: ReactNode }) => (
   <Badge className="rounded-full px-1 py-0 text-xs">{children}</Badge>
 );
 
+/**
+ * Whether `item` is the current page. A sub-item with a query string
+ * (`/runs/?kind=load`) is current only when the location carries those same
+ * parameters; a plain one (`/runs/`) only when the location carries none, so
+ * one Runs entry lights up at a time. A main item is also current for any
+ * path below it.
+ */
 function checkIsActive(href: string, item: NavItem, mainNav = false): boolean {
-  const currentPath = normalizePath(href);
-
   if (item.items) {
-    return item.items.some((subItem) => checkIsActive(currentPath, subItem));
+    return item.items.some((subItem) => checkIsActive(href, subItem));
   }
-
-  const itemPath = normalizePath(item.url);
+  const [currentPath, currentQuery = ""] = splitUrl(href);
+  const [itemPath, itemQuery = ""] = splitUrl(item.url);
   if (currentPath === itemPath) {
-    return true;
+    return sameQuery(currentQuery, itemQuery);
   }
-
   return mainNav && itemPath !== "/" && currentPath.startsWith(`${itemPath}/`);
 }
 
+function splitUrl(url: string): [string, string?] {
+  const [path = "", query] = url.split("?");
+  return [normalizePath(path), query];
+}
+
+function sameQuery(a: string, b: string): boolean {
+  const pa = new URLSearchParams(a);
+  const pb = new URLSearchParams(b);
+  if ([...pa.keys()].length !== [...pb.keys()].length) return false;
+  return [...pb.entries()].every(([k, v]) => pa.get(k) === v);
+}
+
 function normalizePath(url: string): string {
-  const [path] = url.split("?");
-  return path.replace(/\/$/, "") || "/";
+  return url.replace(/\/$/, "") || "/";
 }

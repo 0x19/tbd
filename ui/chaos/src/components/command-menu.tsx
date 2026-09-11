@@ -12,6 +12,7 @@ import { useTheme } from "next-themes";
 import * as React from "react";
 import { toast } from "sonner";
 
+import { useChaos } from "@/app/providers";
 import {
   CommandDialog,
   CommandEmpty,
@@ -21,7 +22,7 @@ import {
   CommandList,
   CommandSeparator,
 } from "@/components/ui/command";
-import { navGroups } from "@/data/sidebar-data";
+import { navGroupsFor } from "@/data/sidebar-data";
 import { api } from "@/lib/api/client";
 import { describe, useFetch } from "@/lib/api/hooks";
 
@@ -31,6 +32,7 @@ import { ScrollArea } from "./ui/scroll-area";
 /** The kit's ⌘K menu with the chaos pages, one entry per runnable scenario, and theme. */
 export function CommandMenu() {
   const router = useRouter();
+  const { kinds } = useChaos();
   const { setTheme } = useTheme();
   const { open, setOpen } = useSearch();
   const scenarios = useFetch(() => api.scenarios(), 0, [open]);
@@ -58,7 +60,7 @@ export function CommandMenu() {
       <CommandList>
         <ScrollArea type="hover" className="h-80 pr-1">
           <CommandEmpty>No results found.</CommandEmpty>
-          {navGroups.map((group) => (
+          {navGroupsFor(kinds).map((group) => (
             <CommandGroup key={group.title} heading={group.title}>
               {group.items.map((navItem, i) => {
                 if (navItem.url)

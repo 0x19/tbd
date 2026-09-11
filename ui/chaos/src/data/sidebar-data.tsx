@@ -10,7 +10,8 @@ import {
   IconServer,
 } from "@tabler/icons-react";
 
-import { type NavGroup } from "@/components/layout/types";
+import { type NavGroup, type NavItem } from "@/components/layout/types";
+import type { KindDescriptor } from "@/lib/api/schema";
 
 /** Navigation groups, the shape the kit's NavGroup and CommandMenu consume. */
 export const navGroups: NavGroup[] = [
@@ -55,6 +56,28 @@ export const navGroups: NavGroup[] = [
     ],
   },
 ];
+
+/**
+ * The groups with one "<Kind> runs" entry per registered service kind under
+ * Runs (`/runs/?service=<kind>`), registry order. A kind scaffolded by
+ * `tbd new service` shows up here without a UI change.
+ */
+export function navGroupsFor(kinds: KindDescriptor[]): NavGroup[] {
+  if (!kinds.length) return navGroups;
+  return navGroups.map((group) => ({
+    ...group,
+    items: group.items.map((item): NavItem => {
+      if (item.title !== "Runs" || !item.items) return item;
+      return {
+        ...item,
+        items: [
+          ...item.items,
+          ...kinds.map((k) => ({ title: `${k.label} runs`, url: `/runs/?service=${k.name}` })),
+        ],
+      };
+    }),
+  }));
+}
 
 const clean = (p: string) => (p.split("?")[0] ?? "").replace(/\/$/, "") || "/";
 

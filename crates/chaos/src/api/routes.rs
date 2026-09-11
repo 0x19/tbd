@@ -421,6 +421,9 @@ async fn scenario_check(Json(body): Json<ScenarioText>) -> Json<CheckReply> {
 struct RunsQuery {
     #[serde(default = "default_limit")]
     limit: usize,
+    /// Only runs that exercised this service kind.
+    #[serde(default)]
+    service: Option<String>,
 }
 
 fn default_limit() -> usize {
@@ -428,7 +431,14 @@ fn default_limit() -> usize {
 }
 
 async fn runs(State(state): State<Shared>, Query(q): Query<RunsQuery>) -> Json<Vec<RunSummary>> {
-    Json(state.runs.list(q.limit).await)
+    let runs = state.runs.list(q.limit).await;
+    Json(match q.service {
+        Some(kind) => runs
+            .into_iter()
+            .filter(|r| r.services.contains(&kind))
+            .collect(),
+        None => runs,
+    })
 }
 
 /// Body of `POST /runs`: a scenario by id, or an ad-hoc load run.

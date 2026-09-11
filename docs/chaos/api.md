@@ -277,6 +277,8 @@ finished run answers with its `finished` frame only.
 | `request` | what started it: the load request, or validate's targets |
 
 `RunSummary` is the list view: `id`, `kind`, `name`, `scenario_id`, `schedule_id`, `status`,
+`services` (the kinds the run exercised, sorted: a scenario's stack, a load's target
+kinds, the validated kinds; `GET /runs?service=<kind>` filters on it),
 `started_at`, `finished_at`, `duration_s`, `requests_total`, `error_rate`,
 `throughput_rps`, `p50_ms`, `p90_ms`, `p99_ms`, `passed` (`[passed, total]` assertions or
 checks), `error`.

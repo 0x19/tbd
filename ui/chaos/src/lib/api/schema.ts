@@ -188,6 +188,8 @@ export const RunSummary = z.object({
   p99_ms: z.number().nullable(),
   passed: z.tuple([z.number(), z.number()]).nullable(),
   error: z.string().nullable(),
+  /** The service kinds the run exercised (stack, load targets or validated kinds). */
+  services: z.array(z.string()).default([]),
 });
 export type RunSummary = z.infer<typeof RunSummary>;
 

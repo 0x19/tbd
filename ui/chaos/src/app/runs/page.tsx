@@ -32,12 +32,14 @@ function RunsFromUrl() {
   const params = useSearchParams();
   const kind = params.get("kind");
   const scenario = params.get("scenario");
+  const service = params.get("service");
   return (
     <Runs
       key={params.toString()}
       initial={{
         ...(kind ? { Kind: [kind] } : {}),
         ...(scenario ? { Scenario: [scenario] } : {}),
+        ...(service ? { Service: [service] } : {}),
       }}
     />
   );
@@ -51,11 +53,11 @@ function Runs({ initial }: { initial: Record<string, string[]> }) {
   const [selected, setSelected] = useState<Record<string, string[]>>(initial);
 
   const all = runs.data ?? [];
-  const countBy = (f: (r: RunSummary) => string | null) => {
+  const countBy = (f: (r: RunSummary) => string | string[] | null) => {
     const m = new Map<string, number>();
     for (const r of all) {
       const k = f(r);
-      if (k) m.set(k, (m.get(k) ?? 0) + 1);
+      for (const v of Array.isArray(k) ? k : k ? [k] : []) m.set(v, (m.get(v) ?? 0) + 1);
     }
     return [...m.entries()].map(([value, count]) => ({
       value,
@@ -71,6 +73,7 @@ function Runs({ initial }: { initial: Record<string, string[]> }) {
       pick("Kind", r.kind) &&
       pick("Status", r.status) &&
       pick("Scenario", r.scenario_id) &&
+      (!selected.Service?.length || selected.Service.some((s) => r.services.includes(s))) &&
       (!q || `${r.name} ${r.id} ${r.scenario_id ?? ""}`.toLowerCase().includes(q.toLowerCase()))
     );
   });
@@ -96,6 +99,7 @@ function Runs({ initial }: { initial: Record<string, string[]> }) {
         <FilterRail
           groups={[
             { title: "Kind", options: countBy((r) => r.kind) },
+            { title: "Service", options: countBy((r) => r.services) },
             { title: "Status", options: countBy((r) => r.status) },
             {
               title: "Scenario",

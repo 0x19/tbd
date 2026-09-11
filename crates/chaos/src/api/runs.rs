@@ -95,6 +95,11 @@ pub struct RunRecord {
     /// Failure outside assertions.
     #[serde(default)]
     pub error: Option<String>,
+    /// The service kinds this run exercised, sorted: the scenario's stack, the
+    /// load's target kinds, or the validated kinds. Records written before the
+    /// field existed derive it from `request` where they can.
+    #[serde(default)]
+    pub services: Vec<String>,
 }
 
 /// The list view: a record without its bulky parts.
@@ -135,6 +140,9 @@ pub struct RunSummary {
     pub passed: Option<(usize, usize)>,
     /// Error.
     pub error: Option<String>,
+    /// The service kinds this run exercised, sorted.
+    #[serde(default)]
+    pub services: Vec<String>,
 }
 
 impl RunRecord {
@@ -157,7 +165,57 @@ impl RunRecord {
             events: Vec::new(),
             request: None,
             error: None,
+            services: Vec::new(),
         }
+    }
+
+    /// Record the kinds a run exercises, deduplicated and sorted.
+    pub fn set_services<I, S>(&mut self, kinds: I)
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        let mut v: Vec<String> = kinds.into_iter().map(Into::into).collect();
+        v.sort();
+        v.dedup();
+        self.services = v;
+    }
+
+    /// The kinds of a record, deriving them from `request` for records written
+    /// before `services` existed: a load's targets (`kind`, default
+    /// `protocol`), validate's per-kind URL map.
+    fn services(&self) -> Vec<String> {
+        if !self.services.is_empty() {
+            return self.services.clone();
+        }
+        let Some(request) = &self.request else {
+            return Vec::new();
+        };
+        let mut v: Vec<String> = match self.kind {
+            RunKind::Load => request
+                .get("targets")
+                .and_then(serde_json::Value::as_array)
+                .map(|targets| {
+                    targets
+                        .iter()
+                        .map(|t| {
+                            t.get("kind")
+                                .and_then(serde_json::Value::as_str)
+                                .unwrap_or("protocol")
+                                .to_owned()
+                        })
+                        .collect()
+                })
+                .unwrap_or_default(),
+            RunKind::Validate => request
+                .as_object()
+                .map(|m| m.keys().filter(|k| *k != "timeout").cloned().collect())
+                .unwrap_or_default(),
+            RunKind::Scenario => Vec::new(),
+        };
+        v.sort();
+        v.dedup();
+        v
     }
 
     /// Mark finished now.
@@ -202,6 +260,7 @@ impl RunRecord {
             p99_ms: load.map(|l| l.latency.p99_ms),
             passed,
             error: self.error.clone(),
+            services: self.services(),
         }
     }
 }

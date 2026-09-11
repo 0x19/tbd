@@ -502,6 +502,7 @@ impl AppState {
         let file = parse_scenario(&text).map_err(ApiError::invalid)?;
 
         let mut record = RunRecord::start(RunKind::Scenario, &file.scenario.name);
+        record.set_services(file.stack.instances.values().map(|i| i.kind.name));
         record.scenario_id = Some(id.to_owned());
         record.schedule_id = schedule_id;
         let active = self.begin(&record).await?;
@@ -568,6 +569,7 @@ impl AppState {
         }
 
         let mut record = RunRecord::start(RunKind::Load, req.name.as_deref().unwrap_or("load"));
+        record.set_services(targets.iter().map(|t| t.kind.clone()));
         record.request = serde_json::to_value(&req).ok();
         record.schedule_id = schedule_id;
         let active = self.begin(&record).await?;
@@ -612,6 +614,7 @@ impl AppState {
         let targets = validate::Targets::from_config(&self.config, &req.targets, req.timeout)
             .map_err(|e| ApiError::invalid(e.to_string()))?;
         let mut record = RunRecord::start(RunKind::Validate, "validate");
+        record.set_services(targets.urls.keys().cloned());
         record.request = Some(targets_json(&targets));
         record.schedule_id = schedule_id;
         self.publish(GlobalEvent::RunStarted {

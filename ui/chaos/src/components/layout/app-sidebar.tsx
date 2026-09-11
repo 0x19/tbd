@@ -1,6 +1,7 @@
 "use client";
 
 import { ChevronsUpDown, ExternalLink, Globe } from "lucide-react";
+import { Suspense } from "react";
 import * as React from "react";
 
 import { NavGroup } from "@/components/layout/nav-group";
@@ -25,7 +26,7 @@ import {
   SidebarRail,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { navGroups } from "@/data/sidebar-data";
+import { navGroupsFor } from "@/data/sidebar-data";
 import { site } from "@/data/site";
 import { cn } from "@/lib/utils";
 
@@ -39,7 +40,7 @@ import { useChaos } from "../../app/providers";
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const [isMounted, setIsMounted] = React.useState(false);
   const { state } = useSidebar();
-  const { overview } = useChaos();
+  const { overview, kinds } = useChaos();
 
   React.useEffect(() => {
     setIsMounted(true);
@@ -81,9 +82,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           />
         </SidebarHeader>
         <SidebarContent>
-          {navGroups.map((group) => (
-            <NavGroup key={group.title} {...group} />
-          ))}
+          <Suspense fallback={null}>
+            {navGroupsFor(kinds).map((group) => (
+              <NavGroup key={group.title} {...group} />
+            ))}
+          </Suspense>
           {external.length ? (
             <NavGroup
               title="Observability"

@@ -320,6 +320,13 @@ async fn adhoc_load_can_be_cancelled() {
     let (_, record) = s.get(&format!("/runs/{id}")).await;
     assert_eq!(record["status"], "cancelled");
     assert!(record["load"]["requests_total"].as_u64().unwrap() > 0);
+    // A run is tagged with the kinds it exercised: the default mix goes to the
+    // serve stack's protocols, and the list filters on it.
+    assert_eq!(record["services"], json!(["protocol"]));
+    let (_, list) = s.get("/runs?service=protocol").await;
+    assert!(list.as_array().unwrap().iter().any(|r| r["id"] == id));
+    let (_, list) = s.get("/runs?service=nope").await;
+    assert!(list.as_array().unwrap().is_empty());
     assert!(
         record["duration_s"].as_f64().unwrap() < 10.0,
         "cancel must not wait for the duration"
