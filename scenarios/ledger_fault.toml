@@ -1,0 +1,46 @@
+# Faults on the ledger surface as gRPC errors, never as contract breaks,
+# and the ledger heals. Half the requests fail for one second in the middle.
+
+[scenario]
+name = "ledger_fault"
+description = "Ledger fails 50% of requests for one second; errors are clean, then it recovers"
+
+[stack.ledgers.ledger-1]
+
+[load]
+rate = 200
+duration = "3s"
+warmup = "300ms"
+
+[[load.operations]]
+op = "ledger_append"
+weight = 1
+
+[[load.operations]]
+op = "ledger_current"
+weight = 1
+
+[[timeline]]
+at = "1s"
+action = "set_behavior"
+service = "ledger-1"
+[timeline.behavior]
+type = "error"
+kind = "unavailable"
+rate = 0.5
+
+[[timeline]]
+at = "2s"
+action = "set_behavior"
+service = "ledger-1"
+[timeline.behavior]
+type = "healthy"
+
+[assertions]
+# One third of the run at 50% failure: about 17%, allow 30%.
+max_error_rate = 0.30
+min_requests = 400
+
+[assertions.services.ledger-1]
+min_requests = 400
+max_failed = 200

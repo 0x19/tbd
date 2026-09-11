@@ -6,7 +6,9 @@ injects faults into them at runtime, and asserts on what happened. No mocks, no
 containers, no ports to free up afterwards.
 
 It is also a framework. This project plugs in three service kinds (engine, protocol,
-ledger; [kinds.md](kinds.md)) and four operations (REST, GraphQL, WebSocket, gRPC). A
+ledger; [kinds.md](kinds.md)) and eleven operations (REST, GraphQL, WebSocket and gRPC
+against the protocol; append, current, history, retract, a lifecycle, an erasure cycle
+and a fuzzer against the ledger, [scenarios.md](scenarios.md#load)). A
 new service brings one kind module and one registry line, both written by
 `tbd new service`; a future project plugs in its own and reuses the runner, the load
 generator, the timeline, the assertions and the reports unchanged.
@@ -70,6 +72,10 @@ timeline did and when, and each assertion with its bound and the observed value.
   dependency order, and wait for each to be ready.
 - Generate open-loop load at a constant or ramping rate over a weighted mix of REST,
   GraphQL, WebSocket and gRPC operations, spread round-robin across protocol instances.
+- Load the ledger with a mixed read/write workload on a subject pool, assert the
+  retraction and erasure rules once per request (`ledger_lifecycle`,
+  `ledger_erase_cycle`), and fuzz it with seeded hostile requests that must never draw
+  an internal error (`ledger_fuzz`); every operation runs against its own kind.
 - Make an engine or a ledger slow, failing at a rate, hung, or healthy-then-failing, at
   any second of the run.
 - Stop and restart any instance mid-run on the same port.

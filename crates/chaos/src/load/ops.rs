@@ -15,7 +15,7 @@ use tbd_proto::protocol::v1::{PingRequest, protocol_service_client::ProtocolServ
 use tokio::sync::Mutex;
 use tokio_tungstenite::tungstenite::Message;
 
-/// Where load goes: one protocol instance.
+/// Where load goes: one instance of a kind that takes load.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Target {
@@ -23,6 +23,13 @@ pub struct Target {
     pub name: String,
     /// `http://host:port`.
     pub http_url: String,
+    /// The kind of the instance; operations run against their own kind.
+    #[serde(default = "default_target_kind")]
+    pub kind: String,
+}
+
+fn default_target_kind() -> String {
+    "protocol".to_owned()
 }
 
 impl Target {
@@ -109,7 +116,8 @@ impl Clients {
             .push(ws);
     }
 
-    async fn grpc(&self, target: &Target) -> Result<Grpc, OpError> {
+    /// A gRPC channel to the target, one per target for the run.
+    pub async fn grpc(&self, target: &Target) -> Result<Grpc, OpError> {
         let mut map = self.grpc.lock().await;
         if let Some(ch) = map.get(&target.name) {
             return Ok(ch.clone());
@@ -144,16 +152,66 @@ pub enum OpKind {
     WsEcho,
     /// `Protocol/Ping` over gRPC on the protocol port.
     GrpcPing,
+    /// `LedgerService/Append` on a pooled subject.
+    LedgerAppend,
+    /// `LedgerService/Current` on a pooled subject.
+    LedgerCurrent,
+    /// `LedgerService/History` with a random cut and page size.
+    LedgerHistory,
+    /// `LedgerService/Retract` of a pooled path; nothing to retract is fine.
+    LedgerRetract,
+    /// Append, current, retract, history cut: the retraction rule per request.
+    LedgerLifecycle,
+    /// Append, erase, restore, erase, wait, gone: the erasure rule per request.
+    LedgerEraseCycle,
+    /// Hostile ledger requests that must draw a clean refusal, never an internal error.
+    LedgerFuzz,
+}
+
+/// What every operation of a run shares: the ledger subject pool and the seed.
+#[derive(Debug, Clone)]
+pub struct OpContext {
+    /// Subjects the ledger operations spread over.
+    pub subjects: u32,
+    /// Seed for generated data.
+    pub seed: u64,
 }
 
 impl OpKind {
-    /// Instantiate.
-    pub fn build(self) -> Arc<dyn Operation> {
+    /// The kind of instance this operation targets.
+    #[must_use]
+    pub fn target_kind(self) -> &'static str {
+        match self {
+            Self::RestEvaluate | Self::GraphqlEvaluate | Self::WsEcho | Self::GrpcPing => {
+                "protocol"
+            }
+            Self::LedgerAppend
+            | Self::LedgerCurrent
+            | Self::LedgerHistory
+            | Self::LedgerRetract
+            | Self::LedgerLifecycle
+            | Self::LedgerEraseCycle
+            | Self::LedgerFuzz => "ledger",
+        }
+    }
+
+    /// Instantiate for one run; the ledger operations share one subject pool.
+    pub fn build(self, ctx: &OpContext, pool: &Arc<super::ledger_ops::Pool>) -> Arc<dyn Operation> {
+        let _ = ctx;
         match self {
             Self::RestEvaluate => Arc::new(RestEvaluate),
             Self::GraphqlEvaluate => Arc::new(GraphqlEvaluate),
             Self::WsEcho => Arc::new(WsEcho),
             Self::GrpcPing => Arc::new(GrpcPing),
+            Self::LedgerAppend => Arc::new(super::ledger_ops::Append(Arc::clone(pool))),
+            Self::LedgerCurrent => Arc::new(super::ledger_ops::Current(Arc::clone(pool))),
+            Self::LedgerHistory => Arc::new(super::ledger_ops::History(Arc::clone(pool))),
+            Self::LedgerRetract => Arc::new(super::ledger_ops::Retract(Arc::clone(pool))),
+            Self::LedgerLifecycle => Arc::new(super::ledger_ops::Lifecycle),
+            Self::LedgerEraseCycle => Arc::new(super::ledger_ops::EraseCycle {
+                settle: Duration::from_millis(1500),
+            }),
+            Self::LedgerFuzz => Arc::new(super::ledger_ops::Fuzz(Arc::clone(pool))),
         }
     }
 }

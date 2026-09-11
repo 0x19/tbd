@@ -3,7 +3,13 @@
 The `chaos` binary: validate, up, run, check, serve, config, kinds. A framework with two
 extension points, `service::Service` and `load::ops::Operation`; this project's
 specifics live in `kinds/` (one module per service kind, each with its spec, handle,
-validate checks and a `static KIND` registered in `kinds::ALL`) and `load/ops.rs`.
+validate checks and a `static KIND` registered in `kinds::ALL`), `load/ops.rs` (the
+protocol operations) and `load/ledger_ops.rs` (the ledger ones: a per-run `Pool` of
+subjects that remembers what was written, so reads and retractions hit real facts and a
+`NotFound` is a real failure; `ledger_lifecycle` and `ledger_erase_cycle` assert the
+privacy rules per request; `ledger_fuzz` is a seeded hostile generator). Every
+`OpKind` has a `target_kind()`; the generator pairs each operation with the targets of
+its kind, and `Target` carries `kind` (default `protocol` for API compatibility).
 Everything else is generic and meant to move to the next project as-is.
 
 Docs are the contract: `docs/chaos/README.md` (usage), `commands.md` (flags, output

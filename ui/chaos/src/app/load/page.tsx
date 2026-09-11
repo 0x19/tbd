@@ -17,7 +17,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { api } from "@/lib/api/client";
 import { describe, useFetch } from "@/lib/api/hooks";
-import { type LoadRequest, OpKind, type RunRecord } from "@/lib/api/schema";
+import { type LoadRequest, OpKind, opTargetKind, type RunRecord } from "@/lib/api/schema";
 import { ago, ms, num, pct } from "@/lib/format";
 import { listKinds, withCapability } from "@/lib/kinds";
 
@@ -49,6 +49,13 @@ export default function LoadPage() {
     graphql_evaluate: "2",
     ws_echo: "2",
     grpc_ping: "1",
+    ledger_append: "0",
+    ledger_current: "0",
+    ledger_history: "0",
+    ledger_retract: "0",
+    ledger_lifecycle: "0",
+    ledger_erase_cycle: "0",
+    ledger_fuzz: "0",
   });
   const [targetMode, setTargetMode] = useState<"stack" | "url">("stack");
   const [targetUrl, setTargetUrl] = useState("");
@@ -70,7 +77,22 @@ export default function LoadPage() {
 
   const request = (): LoadRequest => ({
     name: name || undefined,
-    targets: targetMode === "url" && targetUrl ? [{ name: "url", http_url: targetUrl }] : [],
+    // An explicit URL is one instance of the kind the weighted operations target
+    // (protocol unless only ledger operations carry weight).
+    targets:
+      targetMode === "url" && targetUrl
+        ? [
+            {
+              name: "url",
+              http_url: targetUrl,
+              kind: OPS.filter((op) => (Number(weights[op]) || 0) > 0).every(
+                (op) => opTargetKind(op) === "ledger",
+              )
+                ? "ledger"
+                : "protocol",
+            },
+          ]
+        : [],
     load: {
       rate: r,
       duration,

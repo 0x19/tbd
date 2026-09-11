@@ -1,0 +1,21 @@
+# The retraction rule under concurrency: every request appends a fact, sees
+# it in current, retracts it, and finds no trace of the value in a history
+# cut at the earlier instant. One request is one assertion of the privacy
+# claim; a single failure fails the run.
+
+[scenario]
+name = "ledger_lifecycle"
+description = "Append, current, retract, history cut: the retraction rule holds under load"
+
+[stack.ledgers.ledger-1]
+
+[load]
+rate = 100
+duration = "2s"
+
+[[load.operations]]
+op = "ledger_lifecycle"
+
+[assertions]
+max_error_rate = 0.0
+min_requests = 150

@@ -16,7 +16,7 @@ embeds this crate and owns the JSON surface and the path registry.
 | Config layers | `configs/ledger/{base,local,dev,production}.toml`; `ledger config` prints the merged result |
 | Deployment | `devops/k8s/base/ledger`, port 50052, metrics 9464; reached through Envoy's internal listener (`http://envoy:50051`, matched by service name); no edge route |
 | Databases | `devops/k8s/ledger-db`: Postgres 17 + pgvector and ClickHouse, applied by `mise run ledger:deploy` (part of `local:deploy`) after `ledger:secrets` made the `ledger-db` Secret; `ledger:psql` and `ledger:clickhouse` for a shell; compose runs the same two on host ports 15432 and 18123 |
-| Chaos | the `ledger` kind (`crates/chaos/src/kinds/ledger.rs`): `[stack.ledgers.X]` in topologies and scenarios, `chaos validate --target ledger=URL` (`CHAOS_LEDGER_URL`), the `grpc_ledger_ping` check, add and clone in the admin UI |
+| Chaos | the `ledger` kind (`crates/chaos/src/kinds/ledger.rs`): `[stack.ledgers.X]` in topologies and scenarios (`grace`, `database_url`), `chaos validate --target ledger=URL` (`CHAOS_LEDGER_URL`), the `grpc_ledger_ping` and `grpc_ledger_facts` checks, the `ledger_*` load operations and the five `scenarios/ledger_*.toml` (baseline, lifecycle, fault, erasure, fuzz; [docs/chaos/scenarios.md](../chaos/scenarios.md)), add and clone in the admin UI |
 
 ## The gRPC contract
 
@@ -176,5 +176,5 @@ LEDGER_CLICKHOUSE_PASSWORD=local-ledger      # compose only
 
 ## What comes next
 
-Chaos load, lifecycle and fuzz operations against the ledger; then the `humans`
-service on top, and encryption.
+The `humans` service on top (the path registry, `sub` resolution, the JSON surface,
+the Redis projection), then encryption ([005](../design/humans/005-encryption.md)).

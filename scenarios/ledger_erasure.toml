@@ -1,0 +1,22 @@
+# The erasure rule end to end: a request erases a subject, reads are denied,
+# a restore reopens it, a second erasure executes after a zero grace window
+# (the in-process ledger sweeps every second) and the subject is gone.
+
+[scenario]
+name = "ledger_erasure"
+description = "Erase, restore, erase again, wait past the window: the subject is gone"
+
+[stack.ledgers.ledger-1]
+grace = "0s"
+
+[load]
+rate = 4
+duration = "4s"
+timeout = "10s"
+
+[[load.operations]]
+op = "ledger_erase_cycle"
+
+[assertions]
+max_error_rate = 0.0
+min_requests = 8

@@ -43,6 +43,8 @@ engine = "engine-1"             # required; the engine this protocol forwards to
 
 [stack.ledgers.ledger-1]
 listen = "127.0.0.1:50052"      # optional; `behavior` as for engines; no dependencies
+grace = "7d"                    # optional; the erasure window (0s to watch erasures execute)
+database_url = ""               # optional; a Postgres URL for the real store, else in memory
 ```
 
 Instances start in dependency order (engines before the protocols that name them; a
@@ -74,6 +76,9 @@ type = "ramp"                   # linear from start_rate to end_rate over durati
 start_rate = 10
 end_rate = 200
 
+subjects = 100                  # optional; the subject pool of the ledger operations
+seed = 0                        # optional; seeds ledger_fuzz and the pool
+
 [[load.operations]]             # weighted mix; default is rest_evaluate only
 op = "rest_evaluate"
 weight = 3
@@ -91,9 +96,21 @@ Operations and what they exercise:
 | `graphql_evaluate` | `POST /graphql` | 2xx and no `errors` |
 | `ws_echo` | `/ws` | the sent frame comes back as `data`; connections are pooled per target |
 | `grpc_ping` | `ProtocolService/Ping` over h2c on the protocol port | the message echoes |
+| `ledger_append` | `LedgerService/Append` on a pooled subject | a fact with an id comes back |
+| `ledger_current` | `LedgerService/Current` on a pooled subject | an answer, or `NotFound` before the subject's first write |
+| `ledger_history` | `LedgerService/History` with a random cut and page size | same |
+| `ledger_retract` | `LedgerService/Retract` of a pooled path | an answer, or `NotFound` when nothing was valued |
+| `ledger_lifecycle` | append, current, retract, history cut on a fresh subject | current showed the fact, the cut does not show the value: the retraction rule per request |
+| `ledger_erase_cycle` | append, erase, restore, erase, wait, on a fresh subject | reads denied while erased, back after restore, the subject gone after the window (`[stack.ledgers.X] grace = "0s"`) |
+| `ledger_fuzz` | seeded hostile requests (`[load] seed`) | a clean refusal (`InvalidArgument`, `NotFound`, `FailedPrecondition`, `ResourceExhausted`, `Aborted`) or a clean answer; `Internal`, `Unknown` or a dropped connection is a `contract` failure |
 
-`grpc_ping` never reaches the engine. Mixing it in shows whether a problem is in the
-protocol or behind it.
+Every operation targets one kind: the four above the ledger rows run against
+protocols, the `ledger_*` ones against ledgers. A mix spreads each operation over its
+own kind's instances, and `chaos check` refuses a scenario whose stack lacks a kind an
+operation needs. `grpc_ping` never reaches the engine. Mixing it in shows whether a
+problem is in the protocol or behind it. The ledger operations share a pool of
+`[load] subjects` (default 100) and a `[load] seed` (default 0) so a run is
+reproducible.
 
 Load is open loop: requests are scheduled on an absolute clock at the configured rate
 regardless of how long earlier ones take. A slow backend shows up as latency, not as a
@@ -212,6 +229,11 @@ originally found.
 | `error_injection.toml` | `unavailable` at 50 % for one second | faults surface as real 503s bounded by the injected rate, then heal |
 | `latency.toml` | 50 ms ± 20 ms after one second | the median and p99 move with the injection, with no errors |
 | `engine_restart.toml` | `stop`, then `start` a second later | the protocol fails fast instead of hanging and recovers on its own |
+| `ledger_baseline.toml` | nothing | a mixed append/read/retract load on the ledger runs clean under 50 ms p99 |
+| `ledger_lifecycle.toml` | nothing | the retraction rule holds for every request under concurrency |
+| `ledger_fault.toml` | `unavailable` at 50 % for one second | ledger faults surface as clean gRPC errors, bounded, then heal |
+| `ledger_erasure.toml` | a zero grace window | erase, restore, erase again: the subject is gone after the window |
+| `ledger_fuzz.toml` | seeded hostile requests | the ledger refuses cleanly and never answers `Internal` |
 
 ## Debugging a failing scenario
 

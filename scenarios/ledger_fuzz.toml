@@ -1,0 +1,33 @@
+# Hostile requests against the ledger from a seeded generator: malformed
+# paths, unknown sources, bad envelopes, huge values, NaN confidence,
+# thousands of scopes, garbage cursors. Every one must draw a clean
+# refusal or a clean answer; an internal error or a dropped connection is a
+# contract failure. Reads keep working meanwhile.
+
+[scenario]
+name = "ledger_fuzz"
+description = "Seeded hostile requests never draw an internal error from the ledger"
+
+[stack.ledgers.ledger-1]
+
+[load]
+rate = 200
+duration = "3s"
+seed = 1
+subjects = 20
+
+[[load.operations]]
+op = "ledger_fuzz"
+weight = 4
+
+[[load.operations]]
+op = "ledger_append"
+weight = 1
+
+[[load.operations]]
+op = "ledger_current"
+weight = 1
+
+[assertions]
+max_error_rate = 0.0
+min_requests = 500

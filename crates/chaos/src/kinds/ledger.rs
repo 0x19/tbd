@@ -7,11 +7,14 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use tbd_common::fault::Behavior;
 use tbd_ledger::{Config, Runtime};
-use tbd_proto::ledger::v1::{PingRequest, ledger_service_client::LedgerServiceClient};
+use tbd_proto::ledger::v1::{
+    AppendRequest, CurrentRequest, Envelope, EraseRequest, HistoryRequest, PingRequest,
+    RestoreRequest, RetractRequest, Source, ledger_service_client::LedgerServiceClient,
+};
 use tonic::transport::Endpoint;
 use tonic_health::pb::{HealthCheckRequest, health_client::HealthClient};
 
-use super::{Kind, Target};
+use super::{Field, FieldKind, Kind, Target};
 use crate::{
     service::{Instance, InstanceHandle, Peers, RequestCounts, Service, TaskHandle},
     validate::{Check, Endpoint as Ep},
@@ -27,26 +30,67 @@ pub static KIND: Kind = Kind {
         help: "Ledger gRPC URL (through Envoy: the engine LB, matched by service name)",
         default_url: "http://127.0.0.1:50052",
     }),
-    fields: &[],
+    fields: &[
+        Field {
+            name: "grace",
+            label: "Erasure grace",
+            kind: FieldKind::Duration,
+            required: false,
+            default: Some("7d"),
+        },
+        Field {
+            name: "database_url",
+            label: "Postgres URL (empty: in memory)",
+            kind: FieldKind::Text,
+            required: false,
+            default: None,
+        },
+    ],
     fault: true,
     counters: true,
-    load_target: false,
+    load_target: true,
     addable: true,
     parse: super::parse::<Ledger>,
-    checks: &[Check {
-        name: "grpc_ledger_ping",
-        surface: "grpc",
-        doc: "`Ping` echoes the message and names the store behind it",
-        run: |e| Box::pin(grpc_ledger_ping(e)),
-    }],
+    checks: &[
+        Check {
+            name: "grpc_ledger_ping",
+            surface: "grpc",
+            doc: "`Ping` echoes the message and names the store behind it",
+            run: |e| Box::pin(grpc_ledger_ping(e)),
+        },
+        Check {
+            name: "grpc_ledger_facts",
+            surface: "grpc",
+            doc: "append, current, history, retract, a history cut without the value, erase, restore, on a throwaway subject",
+            run: |e| Box::pin(grpc_ledger_facts(e)),
+        },
+    ],
 };
 
-/// `[stack.ledgers.<name>]` minus `listen`: a ledger with an initial behaviour.
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+/// `[stack.ledgers.<name>]` minus `listen`: a ledger with an initial
+/// behaviour, an erasure grace window, and its store (in memory unless a
+/// Postgres URL is given; the sweeper runs every second either way so a
+/// scenario can watch an erasure execute).
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct Ledger {
     /// Initial fault behaviour.
     pub behavior: Behavior,
+    /// The erasure grace window.
+    #[serde(with = "humantime_serde")]
+    pub grace: std::time::Duration,
+    /// A Postgres URL for the real store; empty means in memory.
+    pub database_url: String,
+}
+
+impl Default for Ledger {
+    fn default() -> Self {
+        Self {
+            behavior: Behavior::Healthy,
+            grace: std::time::Duration::from_hours(7 * 24),
+            database_url: String::new(),
+        }
+    }
 }
 
 struct LedgerHandle {
@@ -102,7 +146,13 @@ impl Service for Ledger {
     ) -> anyhow::Result<Instance> {
         let listener = tokio::net::TcpListener::bind(listen).await?;
         let addr = listener.local_addr()?;
-        let config = Config::in_memory(addr);
+        let mut config = Config::in_memory(addr);
+        config.erasure.grace = self.grace;
+        config.erasure.sweep_interval = std::time::Duration::from_secs(1);
+        if !self.database_url.is_empty() {
+            config.store.kind = tbd_ledger::StoreKind::Postgres;
+            config.store.url.clone_from(&self.database_url);
+        }
         let runtime = Runtime {
             fault: tbd_common::fault::FaultHandle::new(self.behavior.clone()),
             ..Default::default()
@@ -152,4 +202,101 @@ async fn grpc_ledger_ping(e: Ep) -> Result<String, String> {
     } else {
         Err(format!("wrong echo {r:?}"))
     }
+}
+
+/// The facts contract end to end on a throwaway subject: append, current
+/// shows it, history holds it, retract, a history cut at the earlier instant
+/// does not show the value, erase denies reads, restore reopens.
+async fn grpc_ledger_facts(e: Ep) -> Result<String, String> {
+    let mut c = LedgerServiceClient::new(e.grpc()?);
+    let subject = uuid::Uuid::now_v7().to_string();
+    let envelope = |v: serde_json::Value| {
+        Some(Envelope {
+            version: 0,
+            bytes: serde_json::to_vec(&v).unwrap_or_default(),
+        })
+    };
+    let appended = c
+        .append(AppendRequest {
+            subject_id: subject.clone(),
+            path: "profile.name".into(),
+            source: Source::Declared as i32,
+            value: envelope(serde_json::json!("validate")),
+            origin: envelope(serde_json::json!({ "by": "validate" })),
+            confidence: Some(1.0),
+            counterparty_id: None,
+            observed_at: Some(prost_types::Timestamp::from(std::time::SystemTime::now())),
+            expires_at: None,
+            consent: vec!["self".into()],
+            stub: false,
+            idempotency_key: String::new(),
+        })
+        .await
+        .map_err(|s| format!("append: {s}"))?
+        .into_inner();
+    let fact = appended.fact.ok_or("append: no fact")?;
+    let current = |subject: String| CurrentRequest {
+        subject_id: subject,
+        paths: vec![],
+        sources: vec![],
+        scopes: vec!["self".into()],
+        cursor: String::new(),
+        limit: 0,
+    };
+    let page = c
+        .current(current(subject.clone()))
+        .await
+        .map_err(|s| format!("current: {s}"))?
+        .into_inner();
+    if page.facts.len() != 1 || page.facts[0].id != fact.id {
+        return Err("current does not show the appended fact".into());
+    }
+    c.retract(RetractRequest {
+        subject_id: subject.clone(),
+        path: "profile.name".into(),
+        source: Source::Declared as i32,
+        origin: envelope(serde_json::json!({ "by": "validate" })),
+    })
+    .await
+    .map_err(|s| format!("retract: {s}"))?;
+    let cut = c
+        .history(HistoryRequest {
+            subject_id: subject.clone(),
+            paths: vec![],
+            sources: vec![],
+            scopes: vec!["self".into()],
+            cursor: String::new(),
+            limit: 0,
+            at: fact.recorded_at,
+        })
+        .await
+        .map_err(|s| format!("history: {s}"))?
+        .into_inner();
+    if !cut.facts.is_empty() {
+        return Err("a retracted value is visible in a history cut".into());
+    }
+    c.erase(EraseRequest {
+        subject_id: subject.clone(),
+    })
+    .await
+    .map_err(|s| format!("erase: {s}"))?;
+    match c.current(current(subject.clone())).await {
+        Err(s) if s.code() == tonic::Code::FailedPrecondition => {}
+        Ok(_) => return Err("reads allowed while erased".into()),
+        Err(s) => return Err(format!("current while erased: {s}")),
+    }
+    c.restore(RestoreRequest {
+        subject_id: subject.clone(),
+    })
+    .await
+    .map_err(|s| format!("restore: {s}"))?;
+    let page = c
+        .current(current(subject))
+        .await
+        .map_err(|s| format!("current after restore: {s}"))?
+        .into_inner();
+    if !page.facts.is_empty() {
+        return Err("restore resurrected a retracted value".into());
+    }
+    Ok("append, current, retract, cut, erase, restore ok".into())
 }

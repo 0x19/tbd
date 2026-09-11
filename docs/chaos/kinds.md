@@ -10,7 +10,7 @@ declared and what derives from it: [extending.md](extending.md#add-a-service-kin
 |---|---|---|---|---|---|---|---|---|
 | `engine` | `[stack.engines.<name>]` | grpc | yes | yes | no | yes | `http://127.0.0.1:50051`, `CHAOS_ENGINE_URL` | `heartbeat` (duration, default `1s`) |
 | `protocol` | `[stack.protocols.<name>]` | http/ws/graphql/grpc | no | no | yes | yes | `http://127.0.0.1:8080`, `CHAOS_PROTOCOL_URL` | `engine` (a running engine, required) |
-| `ledger` | `[stack.ledgers.<name>]` | grpc | yes | yes | no | yes | `http://127.0.0.1:50052`, `CHAOS_LEDGER_URL` | none |
+| `ledger` | `[stack.ledgers.<name>]` | grpc | yes | yes | yes | yes | `http://127.0.0.1:50052`, `CHAOS_LEDGER_URL` | `grace` (duration, default `7d`); `database_url` (text) |
 | `humans` | `[stack.humans.<name>]` | grpc | yes | yes | no | yes | `http://127.0.0.1:50053`, `CHAOS_HUMANS_URL` | none |
 
 | Check | Surface | Kind | Passes when |
@@ -27,4 +27,5 @@ declared and what derives from it: [extending.md](extending.md#add-a-service-kin
 | `grpc_protocol_health` | grpc | `protocol` | the overall health check answers |
 | `grpc_protocol_ping` | grpc | `protocol` | `Ping` echoes the message |
 | `grpc_ledger_ping` | grpc | `ledger` | `Ping` echoes the message and names the store behind it |
+| `grpc_ledger_facts` | grpc | `ledger` | append, current, history, retract, a history cut without the value, erase, restore, on a throwaway subject |
 | `grpc_humans_ping` | grpc | `humans` | `Ping` echoes the message and is labelled a stub |

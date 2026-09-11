@@ -199,6 +199,7 @@ pub fn load_targets(stack: &Stack) -> Vec<load::Target> {
         .map(|(name, i)| load::Target {
             name: name.to_owned(),
             http_url: i.http_url(),
+            kind: i.kind.to_owned(),
         })
         .collect()
 }

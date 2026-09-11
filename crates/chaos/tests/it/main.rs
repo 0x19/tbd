@@ -435,7 +435,10 @@ async fn ledger_fault_surfaces_in_its_own_check() {
         .filter(|c| !c.passed)
         .map(|c| c.name.as_str())
         .collect();
-    assert_eq!(failed, ["grpc_ledger_ping"]);
+    let ledger_checks: Vec<&str> = kinds::by_name("ledger")
+        .map(|k| k.checks.iter().map(|c| c.name).collect())
+        .unwrap_or_default();
+    assert_eq!(failed, ledger_checks, "every ledger check and nothing else");
     stack.shutdown().await;
 }
 
@@ -458,7 +461,8 @@ async fn missing_target_url_is_a_failed_check() {
         "{}",
         ledger.detail
     );
-    assert_eq!(report.failed, 1, "{}", report.render());
+    let ledger_checks = kinds::by_name("ledger").map_or(0, |k| k.checks.len());
+    assert_eq!(report.failed, ledger_checks, "{}", report.render());
     stack.shutdown().await;
 }
 

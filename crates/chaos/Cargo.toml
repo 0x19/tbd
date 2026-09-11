@@ -16,6 +16,7 @@ path = "src/main.rs"
 tbd-common.workspace = true
 tbd-engine.workspace = true
 tbd-proto.workspace = true
+prost-types.workspace = true
 tbd-protocol.workspace = true
 tbd-humans.workspace = true
 tbd-ledger.workspace = true

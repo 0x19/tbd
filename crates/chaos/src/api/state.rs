@@ -559,6 +559,13 @@ impl AppState {
             url::Url::parse(&t.http_url)
                 .map_err(|e| ApiError::invalid(format!("target {}: {e}", t.name)))?;
         }
+        for kind in req.load.target_kinds() {
+            if !targets.iter().any(|t| t.kind == kind) {
+                return Err(ApiError::invalid(format!(
+                    "the load has {kind} operations but no {kind} target"
+                )));
+            }
+        }
 
         let mut record = RunRecord::start(RunKind::Load, req.name.as_deref().unwrap_or("load"));
         record.request = serde_json::to_value(&req).ok();

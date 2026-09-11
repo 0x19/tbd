@@ -1,0 +1,39 @@
+# The ledger under a mixed read/write load: appends, current, history and
+# retractions on a pool of subjects. Nothing fails, and latency stays low.
+
+[scenario]
+name = "ledger_baseline"
+description = "Mixed ledger load on a subject pool: no errors, p99 under 50 ms"
+
+[stack.ledgers.ledger-1]
+
+[load]
+rate = 300
+duration = "3s"
+warmup = "300ms"
+subjects = 100
+
+[[load.operations]]
+op = "ledger_append"
+weight = 3
+
+[[load.operations]]
+op = "ledger_current"
+weight = 4
+
+[[load.operations]]
+op = "ledger_history"
+weight = 2
+
+[[load.operations]]
+op = "ledger_retract"
+weight = 1
+
+[assertions]
+max_error_rate = 0.0
+max_p99_ms = 50
+min_requests = 700
+
+[assertions.services.ledger-1]
+min_requests = 700
+max_failed = 0

@@ -378,7 +378,21 @@ export const CheckReply = z.object({
 });
 export type CheckReply = z.infer<typeof CheckReply>;
 
-export const OpKind = z.enum(["rest_evaluate", "graphql_evaluate", "ws_echo", "grpc_ping"]);
+export const OpKind = z.enum([
+  "rest_evaluate",
+  "graphql_evaluate",
+  "ws_echo",
+  "grpc_ping",
+  "ledger_append",
+  "ledger_current",
+  "ledger_history",
+  "ledger_retract",
+  "ledger_lifecycle",
+  "ledger_erase_cycle",
+  "ledger_fuzz",
+]);
+/** The kind of instance an operation targets (mirrors `OpKind::target_kind`). */
+export const opTargetKind = (op: OpKind): string => (op.startsWith("ledger_") ? "ledger" : "protocol");
 export type OpKind = z.infer<typeof OpKind>;
 
 /** The `[load]` table of a scenario, as JSON. */
@@ -390,10 +404,12 @@ export type LoadConfig = {
   max_in_flight?: number;
   pattern?: { type: "constant" } | { type: "ramp"; start_rate: number; end_rate: number };
   operations: { op: OpKind; weight: number }[];
+  seed?: number;
+  subjects?: number;
 };
 
 export type LoadRequest = {
   name?: string;
-  targets?: { name: string; http_url: string }[];
+  targets?: { name: string; http_url: string; kind?: string }[];
   load: LoadConfig;
 };

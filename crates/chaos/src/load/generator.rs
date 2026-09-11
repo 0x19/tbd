@@ -62,11 +62,26 @@ pub async fn run_with(
         }
     };
     let clients = Arc::new(Clients::with_trust(config.timeout, trust));
-    let ops: Vec<(Arc<dyn Operation>, u32)> = config
+    let ctx = super::ops::OpContext {
+        subjects: config.subjects,
+        seed: config.seed,
+    };
+    let pool = super::ledger_ops::Pool::new(config.subjects as usize, config.seed);
+    // Each operation runs against the targets of its own kind; a run that
+    // mixes kinds spreads every operation over its kind's instances.
+    let ops: Vec<(Arc<dyn Operation>, u32, Vec<Target>)> = config
         .operations
         .iter()
         .filter(|o| o.weight > 0)
-        .map(|o| (o.op.build(), o.weight))
+        .map(|o| {
+            let mine: Vec<Target> = targets
+                .iter()
+                .filter(|t| t.kind == o.op.target_kind())
+                .cloned()
+                .collect();
+            (o.op.build(&ctx, &pool), o.weight, mine)
+        })
+        .filter(|(_, _, mine)| !mine.is_empty())
         .collect();
 
     if let Some(warmup) = config.warmup
@@ -114,7 +129,7 @@ fn progress_ticker(
 async fn phase(
     config: &LoadConfig,
     targets: &[Target],
-    ops: &[(Arc<dyn Operation>, u32)],
+    ops: &[(Arc<dyn Operation>, u32, Vec<Target>)],
     clients: &Arc<Clients>,
     metrics: &Arc<Metrics>,
     duration: Duration,
@@ -124,7 +139,7 @@ async fn phase(
         return;
     }
     let ticker = progress_ticker(metrics, hooks.progress.as_ref());
-    let total_weight: u32 = ops.iter().map(|(_, w)| w).sum();
+    let total_weight: u32 = ops.iter().map(|(_, w, _)| w).sum();
     let permits = Arc::new(Semaphore::new(config.max_in_flight));
     let mut tasks = JoinSet::new();
     let start = Instant::now();
@@ -153,9 +168,9 @@ async fn phase(
             break;
         };
 
-        let target = targets[rr % targets.len()].clone();
+        let (op, mine) = pick(ops, total_weight);
+        let target = mine[rr % mine.len()].clone();
         rr = rr.wrapping_add(1);
-        let op = pick(ops, total_weight);
         let clients = Arc::clone(clients);
         let metrics = Arc::clone(metrics);
         let timeout = config.timeout;
@@ -189,13 +204,17 @@ async fn phase(
     }
 }
 
-fn pick(ops: &[(Arc<dyn Operation>, u32)], total_weight: u32) -> Arc<dyn Operation> {
+fn pick(
+    ops: &[(Arc<dyn Operation>, u32, Vec<Target>)],
+    total_weight: u32,
+) -> (Arc<dyn Operation>, &[Target]) {
     let mut roll = rand::random_range(0..total_weight);
-    for (op, weight) in ops {
+    for (op, weight, mine) in ops {
         if roll < *weight {
-            return Arc::clone(op);
+            return (Arc::clone(op), mine);
         }
         roll -= weight;
     }
-    Arc::clone(&ops[ops.len() - 1].0)
+    let last = &ops[ops.len() - 1];
+    (Arc::clone(&last.0), &last.2)
 }

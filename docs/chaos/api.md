@@ -147,7 +147,7 @@ One run at a time. A second `POST /runs` while one is active answers `409`.
 | Method and path | Body | Returns |
 |---|---|---|
 | `POST /runs` | `{"scenario": "<id>"}` | `202` + `RunSummary` (status `running`) |
-| `POST /runs` | `{"name": "adhoc", "targets": [{"name","http_url"}], "load": {…}}` | `202` + `RunSummary` |
+| `POST /runs` | `{"name": "adhoc", "targets": [{"name","http_url","kind"?}], "load": {…}}` (`kind` defaults to `protocol`; every operation in `load` needs a target of its kind, else `422`) | `202` + `RunSummary` |
 | `GET /runs?limit=50` | | `[RunSummary]`, newest first |
 | `GET /runs/{id}` | | `RunRecord` |
 | `GET /runs/{id}/events` | | SSE: history so far, then live, ending at `finished` |

@@ -70,6 +70,13 @@ impl ScenarioFile {
                         .join(", ")
                 ));
             }
+            for kind in load.target_kinds() {
+                if !self.stack.instances.values().any(|i| i.kind.name == kind) {
+                    return Err(format!(
+                        "load has operations for the {kind} kind but the stack has no {kind}"
+                    ));
+                }
+            }
         }
         for event in &self.timeline {
             if let Some(service) = event.service()

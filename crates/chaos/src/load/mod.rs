@@ -2,6 +2,7 @@
 //! of operations across targets and records everything into [`Metrics`].
 
 pub mod generator;
+pub mod ledger_ops;
 pub mod metrics;
 pub mod ops;
 
@@ -39,6 +40,17 @@ pub struct LoadConfig {
     /// Weighted mix of operations. Defaults to REST evaluate only.
     #[serde(default = "default_operations")]
     pub operations: Vec<OperationWeight>,
+    /// Seed for the operations that generate data (`ledger_fuzz`, the
+    /// ledger subject pool), so a run is reproducible.
+    #[serde(default)]
+    pub seed: u64,
+    /// Subjects the ledger operations spread over.
+    #[serde(default = "default_subjects")]
+    pub subjects: u32,
+}
+
+fn default_subjects() -> u32 {
+    100
 }
 
 fn default_rate() -> f64 {
@@ -112,6 +124,20 @@ impl Pattern {
 }
 
 impl LoadConfig {
+    /// The target kinds the configured operations need, deduplicated.
+    #[must_use]
+    pub fn target_kinds(&self) -> Vec<&'static str> {
+        let mut kinds: Vec<&'static str> = self
+            .operations
+            .iter()
+            .filter(|o| o.weight > 0)
+            .map(|o| o.op.target_kind())
+            .collect();
+        kinds.sort_unstable();
+        kinds.dedup();
+        kinds
+    }
+
     /// Structural checks that do not need a running stack.
     pub fn check(&self) -> Result<(), String> {
         if self.duration.is_zero() {
