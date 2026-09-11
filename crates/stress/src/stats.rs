@@ -74,12 +74,17 @@ pub fn bootstrap_ci(samples: &[f64], q: f64, iterations: usize, seed: u64) -> Ci
     let mut rng = StdRng::seed_from_u64(seed);
     let mut draws: Vec<f64> = Vec::with_capacity(iterations);
     let mut resample: Vec<f64> = vec![0.0; s.len()];
+    let rank = ((q.clamp(0.0, 1.0) * (s.len() - 1) as f64).round() as usize).min(s.len() - 1);
     for _ in 0..iterations {
         for slot in &mut resample {
             *slot = s[rng.random_range(0..s.len())];
         }
-        resample.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-        draws.push(quantile(&resample, q));
+        // The rank alone is wanted, and selecting it is linear where sorting a
+        // resample of tens of thousands a thousand times over is not.
+        let (_, at, _) = resample.select_nth_unstable_by(rank, |a, b| {
+            a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)
+        });
+        draws.push(*at);
     }
     draws.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
     Ci {
@@ -141,6 +146,28 @@ mod tests {
         assert!(p99.low <= 990.0 && p99.high >= 990.0, "{p99:?}");
         // The same seed and samples give the same interval.
         assert_eq!(p99, bootstrap_ci(&samples, 0.99, BOOTSTRAP_ITERATIONS, 1));
+    }
+
+    #[test]
+    fn selecting_the_rank_gives_what_sorting_would() {
+        // The same resamples, taken the slow way, must agree exactly.
+        let samples: Vec<f64> = (0..500).map(|i| f64::from(i % 37)).collect();
+        for q in [0.0, 0.5, 0.9, 0.99, 1.0] {
+            let fast = bootstrap_ci(&samples, q, 200, 5);
+            let s = sorted(&samples);
+            let mut rng = StdRng::seed_from_u64(5);
+            let mut draws = Vec::new();
+            for _ in 0..200 {
+                let mut resample: Vec<f64> = (0..s.len())
+                    .map(|_| s[rng.random_range(0..s.len())])
+                    .collect();
+                resample.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+                draws.push(quantile(&resample, q));
+            }
+            draws.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+            assert_eq!(fast.low, quantile(&draws, 0.025), "q={q}");
+            assert_eq!(fast.high, quantile(&draws, 0.975), "q={q}");
+        }
     }
 
     #[test]
