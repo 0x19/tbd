@@ -24,6 +24,7 @@ declared and what derives from it: [extending.md](extending.md#add-a-service-kin
 | `sse_events` | sse | `protocol` | `GET /v1/subjects/{id}/events` delivers two events |
 | `graphql_evaluate` | graphql | `protocol` | `version`, `engineReady` and `evaluate` resolve without errors |
 | `ws_echo` | ws | `protocol` | `/ws` echoes a text frame as a `data` message |
+| `ws_mux` | ws | `protocol` | `/v1/ws` calls a public RPC by name and ends it on cancel |
 | `grpc_protocol_health` | grpc | `protocol` | the overall health check answers |
 | `grpc_protocol_ping` | grpc | `protocol` | `Ping` echoes the message |
 | `grpc_ledger_ping` | grpc | `ledger` | `Ping` echoes the message and names the store behind it |

@@ -78,6 +78,12 @@ pub static KIND: Kind = Kind {
             run: |e| Box::pin(ws_echo(e)),
         },
         Check {
+            name: "ws_mux",
+            surface: "ws",
+            doc: "`/v1/ws` calls a public RPC by name and ends it on cancel",
+            run: |e| Box::pin(ws_mux(e)),
+        },
+        Check {
             name: "grpc_protocol_health",
             surface: "grpc",
             doc: "the overall health check answers",
@@ -284,6 +290,49 @@ async fn ws_echo(e: Ep) -> Result<String, String> {
             } else {
                 Err(format!("wrong echo {v}"))
             };
+        }
+    }
+}
+
+/// The multiplexed socket: one call, one answer, then a cancel that ends it.
+/// `Subscribe` is the engine's public RPC, so this needs no other backend.
+async fn ws_mux(e: Ep) -> Result<String, String> {
+    let mut ws = e.connect_ws("/v1/ws").await?;
+    let call = serde_json::json!({
+        "type": "call",
+        "id": "validate",
+        "method": "tbd.engine.v1.EngineService/Subscribe",
+        "body": {"subject_id": "validate"},
+    });
+    ws.send(Message::Text(call.to_string().into()))
+        .await
+        .map_err(|e| e.to_string())?;
+    let mut answered = false;
+    loop {
+        let msg = ws
+            .next()
+            .await
+            .ok_or("closed before the call ended")?
+            .map_err(|e| e.to_string())?;
+        let text = msg.into_text().map_err(|e| e.to_string())?;
+        let v: Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
+        match v["type"].as_str() {
+            Some("data") if !answered => {
+                answered = true;
+                let cancel = serde_json::json!({"type": "cancel", "id": "validate"});
+                ws.send(Message::Text(cancel.to_string().into()))
+                    .await
+                    .map_err(|e| e.to_string())?;
+            }
+            Some("data") => {}
+            Some("end") => {
+                let _ = ws.close(None).await;
+                return Ok("call, data, cancel, end ok".into());
+            }
+            _ => {
+                let _ = ws.close(None).await;
+                return Err(format!("unexpected frame {v}"));
+            }
         }
     }
 }

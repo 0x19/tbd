@@ -13,7 +13,7 @@ this page is the contract of what exists today.
 | Own contract | `proto/tbd/protocol/v1/protocol.proto`: `ProtocolService/Ping`; the REST, SSE, WebSocket (`/ws` and the multiplexed `/v1/ws`) and GraphQL surfaces below; `docs/protocol/openapi.json` (served at `/openapi.json`) for REST |
 | Config layers | `configs/protocol/{base,local,dev,production}.toml`; `protocol config` prints the merged result |
 | Deployment | `devops/k8s/base/protocol`, port 8080, metrics 9465 (9464 in the cluster); Envoy's edge (`:8080`) routes every host to it and health-checks `/readyz` |
-| Chaos | the `protocol` kind (`crates/chaos/src/kinds/protocol.rs`): `[stack.protocols.X]` with an `engine`, the `http_*`, `rest_evaluate`, `sse_events`, `graphql_evaluate`, `ws_echo`, `grpc_protocol_*` checks, the protocol load operations |
+| Chaos | the `protocol` kind (`crates/chaos/src/kinds/protocol.rs`): `[stack.protocols.X]` with an `engine`, the `http_*`, `rest_evaluate`, `sse_events`, `graphql_evaluate`, `ws_echo`, `ws_mux`, `grpc_protocol_*` checks, the protocol load operations |
 
 ## The services registry
 
