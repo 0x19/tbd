@@ -679,7 +679,13 @@ impl Owner {
                 self.judge(si, &["append_echo", "recorded_at_monotonic"], v);
                 let index = self.subjects[si].next_index - 1;
                 self.subjects[si].model.apply_append(&concrete, &resp);
-                if !resp.replayed && !concrete.idempotency_key.is_empty() {
+                // Relations are never replayed: the ledger checks the counterparty
+                // before the key, so once the peer is erased the same key answers
+                // `NotFound`, which is the contract and not an idempotency failure.
+                if !resp.replayed
+                    && !concrete.idempotency_key.is_empty()
+                    && concrete.counterparty_id.is_none()
+                {
                     self.subjects[si].appends.push(index);
                 }
                 true

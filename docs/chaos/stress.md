@@ -107,7 +107,7 @@ Every table is `deny_unknown_fields`; `chaos stress check` names the first probl
 | `history` | `History` walked through every page | `history_is_everything`, `pagination`, `recorded_at_monotonic` |
 | `history_cut` | `History` at the `recorded_at` of an earlier step | `history_cut` |
 | `retract` | a key with a value (70 %), or one without | `retract_semantics` |
-| `idempotent_replay` | an earlier append re-sent as is (a replay), mutated (a conflict), or after its fact was retracted | `idempotency` |
+| `idempotent_replay` | an earlier append (never a relation: the counterparty check comes before the key) re-sent as is (a replay), mutated (a conflict), or after its fact was retracted | `idempotency` |
 | `pair_relation` | a fact on a relation path naming a peer subject | `append_echo` |
 | `erase_cycle` | erase, reads and writes denied, a relation from a peer denied, restore, reads equal the model; with a short window: erase again, wait, the subject is gone and every peer that named it carries a tombstone | `erasure_denies`, `erasure_executes`, `cascade_tombstones_counterparty` |
 | `expiring` | a fact that expired long ago, two seconds ago, or expires in three seconds or a minute | `append_echo`, then `expiry` on reads |
@@ -189,4 +189,7 @@ is the one that broke the rule; the earlier ones are how the subject got there. 
 found so far in building the harness were all in the model; the ledger's answer and the
 model's expectation disagreed on which row's consent a cascade tombstone carries (the
 newest, as retract does), on whether a relation's replay is judged by the counterparty
-check first (it is), and on whether a zero-length window is a window (it is not).
+check first (it is: once the peer is erased, the same key answers `NotFound`, so
+relations are never replay candidates; found by the smoke campaign in the local
+cluster, where erase cycles complete while a replay is chosen), and on whether a
+zero-length window is a window (it is not).

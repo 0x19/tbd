@@ -33,7 +33,9 @@ same stack and timeline it uses for scenarios.
   and settle its outcome through the idempotency key or `NotFound`. An erasure window
   under `SAFE_WINDOW` (2 s) may close during the denial checks, so restore is allowed to
   find the subject gone and the cycle continues into the cascade; a real window never
-  awaits the cascade.
+  awaits the cascade. Relation appends are never replay candidates (`appends`): the
+  ledger's counterparty check precedes the key, so an erased peer turns the same key
+  into `NotFound`.
 - `replay.rs`: `Interpreter` judges a trace step by step from the request alone, with
   the same model and checkers the worker used, so `replay` reproduces a finding on any
   target; `shrink.rs` is ddmin over the steps with dependencies pinned back in, bounded
