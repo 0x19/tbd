@@ -34,6 +34,32 @@ jobs:
   test:
     name: nextest + doctests
     runs-on: ubuntu-latest
+    # The ledger's store tests take a server from these URLs (one container per
+    # job) instead of starting one per test through Docker.
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.6-pg17-trixie
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U test -d postgres"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+      clickhouse:
+        image: clickhouse/clickhouse-server:26.8.2.7
+        env:
+          CLICKHOUSE_USER: test
+          CLICKHOUSE_PASSWORD: test
+          CLICKHOUSE_DB: ledger
+        ports: ["8123:8123"]
+        options: >-
+          --health-cmd "clickhouse-client --user test --password test --query 'SELECT 1'"
+          --health-interval 5s --health-timeout 3s --health-retries 30
+    env:
+      LEDGER_TEST_DATABASE_URL: postgres://test:test@localhost:5432/postgres?sslmode=disable
+      LEDGER_TEST_CLICKHOUSE_URL: http://test:test@localhost:8123
     steps:
       - uses: actions/checkout@v6
       - uses: actions-rust-lang/setup-rust-toolchain@v1

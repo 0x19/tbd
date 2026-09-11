@@ -17,6 +17,14 @@ reports as `diverged`. The contract is `docs/ledger/README.md`.
 - `store/memory.rs`: `MemoryStore`, one mutex, a monotonic microsecond clock
   (`store/clock.rs`, `ManualClock` for tests). Not a stub: the same contract as Postgres,
   nothing survives the process. Chaos stacks and host runs without a database use it.
+- `store/pg.rs`: `PgStore` on sqlx (0.9, rustls/ring, `query_as` + `FromRow`, no
+  macros, so no database at build time). One transaction per write; the subject row is
+  locked `FOR NO KEY UPDATE` first and `recorded_at` is `clock_timestamp()` after the
+  lock; lock order is the `erasures` row, survivors' `subjects` rows in id order, then
+  the subject. `MIGRATOR` embeds `migrations/` (`build.rs` reruns on change; `*.sql` is
+  LF by `.gitattributes` because the checksum is over the bytes). `store/sql.rs`
+  translates path patterns into `= any` / `like any` with `\ % _` escaped, checked
+  against `PathPattern::matches` by a property test.
 - `lib.rs`: `serve`, `serve_on`, `serve_with` (the store comes from `[store]`),
   `serve_store` (an explicit store). `config.rs`: `[store]`, `[analytics]`, `[erasure]`,
   `[idempotency]`, `[health]`; `Config::in_memory(addr)` for embedders;
@@ -40,7 +48,10 @@ Invariants:
   listener (`http://envoy:50051`, matched by service name).
 
 Tests: `tests/it/conformance.rs` is the store contract, generic over the backend, run
-through the `conformance_suite!` macro (`memory` in `tests/it/main.rs`); `main.rs` boots
-the gRPC server on port 0 through `support.rs` with the shipped `configs/ledger` and env
-`local`. Never enumerate a backend's behaviour outside the suite: a case added there
-runs on every store.
+through the `conformance_suite!` macro: `memory::*` in `tests/it/main.rs`, `pg::*` in
+`tests/it/pg.rs` against a real Postgres (a `pgvector` container each test starts
+through `testcontainers`, or the admin URL in `LEDGER_TEST_DATABASE_URL`, which is what
+CI's services block sets; a database per test). Never enumerate a backend's behaviour
+outside the suite: a case added there runs on every store. `main.rs` boots the gRPC
+server on port 0 through `support.rs` with the shipped `configs/ledger` and env `local`.
+Docker-less machines: `mise run test` skips `pg::`/`clickhouse::` with a warning.

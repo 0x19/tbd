@@ -22,6 +22,8 @@ struct Cli {
 enum Command {
     /// Print the effective configuration for the environment as TOML.
     Config,
+    /// Apply the embedded migrations to `LEDGER_DATABASE_URL` and exit.
+    Migrate,
 }
 
 #[tokio::main]
@@ -51,6 +53,21 @@ async fn main() -> anyhow::Result<()> {
         return Ok(());
     }
     config.validate()?;
+    if let Some(Command::Migrate) = cli.command {
+        let _telemetry = tbd_common::telemetry::init(&cli.telemetry, "ledger")?;
+        anyhow::ensure!(
+            config.store.kind == tbd_ledger::StoreKind::Postgres,
+            "migrate needs store.kind = postgres and LEDGER_DATABASE_URL"
+        );
+        let store = tbd_ledger::PgStore::connect_lazy(&tbd_ledger::PgOptions {
+            url: config.store.url.clone(),
+            max_connections: 1,
+            acquire_timeout: config.store.acquire_timeout,
+        })?;
+        store.migrate().await?;
+        tracing::info!("migrations applied");
+        return Ok(());
+    }
 
     let mut telemetry = tbd_common::telemetry::init(&cli.telemetry, "ledger")?;
     tracing::info!(env = %source.env, files = ?source.files, "config");

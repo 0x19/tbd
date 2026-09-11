@@ -78,14 +78,34 @@ run = [
 ]
 
 [tasks.test]
-description = "Unit + integration tests (nextest) and doctests"
+description = "Unit + integration tests (nextest) and doctests. The ledger's store tests need Docker or LEDGER_TEST_DATABASE_URL / LEDGER_TEST_CLICKHOUSE_URL; with neither they are skipped with a warning (and fail under CI=1)"
 # The progress bar writes carriage returns, which smear into one line when
 # output goes through mise. The per-test list is what we want anyway.
 env = { NEXTEST_HIDE_PROGRESS_BAR = "1" }
-run = [
-  "cargo nextest run --workspace --all-features",
-  "cargo test --workspace --doc",
-]
+run = """
+set -eu
+filter=""
+if [ -z "${LEDGER_TEST_DATABASE_URL:-}" ] || [ -z "${LEDGER_TEST_CLICKHOUSE_URL:-}" ]; then
+  if docker info >/dev/null 2>&1; then
+    # Pull once, so the first container start never counts against a test's timeout.
+    for image in pgvector/pgvector:0.8.6-pg17-trixie clickhouse/clickhouse-server:26.8.2.7; do
+      docker image inspect "$image" >/dev/null 2>&1 || docker pull -q "$image"
+    done
+  elif [ -n "${CI:-}" ]; then
+    echo "CI without Docker and without LEDGER_TEST_*_URL: the ledger store tests cannot run" >&2
+    exit 1
+  else
+    echo "warning: no Docker and no LEDGER_TEST_*_URL: skipping the ledger store tests (pg::, clickhouse::)" >&2
+    filter="not (package(tbd-ledger) & (test(/^pg::/) | test(/^clickhouse::/)))"
+  fi
+fi
+if [ -n "$filter" ]; then
+  cargo nextest run --workspace --all-features -E "$filter"
+else
+  cargo nextest run --workspace --all-features
+fi
+cargo test --workspace --doc
+"""
 
 [tasks.validate]
 description = "Hit every surface of a running stack (TBD_ENV=cluster for the k3d cluster; --target kind=url or CHAOS_<KIND>_URL to override)"

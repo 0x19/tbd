@@ -14,7 +14,9 @@
 
 pub mod clock;
 pub mod memory;
+pub mod pg;
 pub mod registry;
+pub mod sql;
 pub mod validate;
 
 use std::{fmt, sync::Arc, time::Duration};

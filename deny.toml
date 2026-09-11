@@ -1,5 +1,7 @@
 [graph]
-all-features = true
+# Not `all-features`: sqlx's optional `tls-native-tls` feature would pull
+# openssl-sys, which the ban below forbids; the workspace never enables it.
+all-features = false
 exclude-unpublished = true
 
 [advisories]
@@ -25,6 +27,7 @@ allow-wildcard-paths = true
 deny = [
   { crate = "openssl", reason = "rustls only" },
   { crate = "openssl-sys", reason = "rustls only" },
+  { crate = "aws-lc-sys", reason = "ring is the one crypto provider; no second C build" },
 ]
 
 [sources]

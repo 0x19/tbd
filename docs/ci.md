@@ -12,7 +12,7 @@ name. If you add a check, add it in both places; this page lists the mapping.
 | `typos` | `typos` | a misspelling anywhere `_typos.toml` does not exclude |
 | `deny` | `deny` | a RUSTSEC advisory, a licence outside the allow list, a banned crate, an unknown registry |
 | `lint` | `lint` | any clippy warning (pedantic is on), any `buf lint` finding |
-| `test` | `test` | any failing test, `cargo nextest` plus doctests |
+| `test` | `test` | any failing test, `cargo nextest` plus doctests. The ledger's store tests (`pg::*`, `clickhouse::*`) run against real databases: in CI from the job's `services:` containers through `LEDGER_TEST_DATABASE_URL` and `LEDGER_TEST_CLICKHOUSE_URL`; locally from containers each test starts through Docker (`mise run test` pre-pulls the images). With neither, `mise run test` skips them with a warning; under `CI=1` it fails instead |
 | `doc` | `doc` | any rustdoc warning, broken intra-doc links included |
 | `chaos:docs:check` | `scenarios` | `docs/chaos/kinds.md` differs from `chaos kinds --md` (run `mise run chaos:docs` and commit) |
 | `chaos:run` | `scenarios` | any scenario under `scenarios/` failing an assertion or timeline action |
@@ -51,6 +51,7 @@ commands above still work if those tools are on `PATH`.
 | `deny` licence | add the licence to `[licenses] allow` in `deny.toml` after checking it is acceptable |
 | `lint` clippy | fix it; a targeted `#[allow(clippy::...)]` with a comment is acceptable when the lint is wrong for that spot |
 | `lint` buf | protos follow buf's STANDARD rules: directory matches package, services end in `Service`, RPC messages are `<Rpc>Request` / `<Rpc>Response` |
+| `test` `pg::` / `clickhouse::` | "need Docker or LEDGER_TEST_*_URL": start Docker, or point the variables at a running server (an admin URL; every test creates its own database). A container timeout on a cold machine: pull the two images first, `mise run test` does |
 | `doc` | usually a `[`Name`]` link to a private or renamed item |
 | `scenarios` | run `mise run chaos:run` locally; the report says which assertion failed and by how much. See [chaos/scenarios.md](chaos/scenarios.md). A `kinds.md` diff: `mise run chaos:docs` and commit |
 | `ui` prettier | `cd ui/chaos && pnpm format` |

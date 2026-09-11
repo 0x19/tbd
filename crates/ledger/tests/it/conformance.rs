@@ -847,6 +847,7 @@ async fn futures_join_all<F: Future>(futures: impl IntoIterator<Item = F>) -> Ve
 macro_rules! conformance_suite {
     ($prefix:ident, $make:expr) => {
         mod $prefix {
+            #[allow(unused_imports)]
             use super::*;
             macro_rules! case {
                 ($name:ident) => {

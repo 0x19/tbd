@@ -19,7 +19,11 @@ use tonic::transport::{Server, server::TcpIncoming};
 
 pub use config::{Config, Overrides, Source};
 pub use service::Ledger;
-pub use store::{Store, StoreError, StoreKind, memory::MemoryStore};
+pub use store::{
+    Store, StoreError, StoreKind,
+    memory::MemoryStore,
+    pg::{PgOptions, PgStore},
+};
 pub use tbd_common::{
     fault::{Behavior, FaultHandle},
     runtime::{Runtime, Stats, StatsHandle, StatsSnapshot},
@@ -54,15 +58,22 @@ pub enum ServeError {
 ///
 /// # Errors
 /// The configuration is inconsistent, or the backend cannot be reached.
-// Async for the Postgres backend, which connects here; the memory store does not await.
-#[allow(clippy::unused_async)]
 pub async fn build_store(config: &Config) -> Result<Arc<dyn Store>, ServeError> {
     config.validate()?;
     match config.store.kind {
         StoreKind::Memory => Ok(Arc::new(MemoryStore::new())),
-        StoreKind::Postgres => Err(ServeError::Store(StoreError::Internal(
-            "the postgres store is not built yet; run with LEDGER_STORE_KIND=memory".into(),
-        ))),
+        StoreKind::Postgres => {
+            let store = PgStore::connect_lazy(&PgOptions {
+                url: config.store.url.clone(),
+                max_connections: config.store.max_connections,
+                acquire_timeout: config.store.acquire_timeout,
+            })?;
+            if config.store.migrate_on_start {
+                store.migrate().await?;
+                tracing::info!("migrations applied");
+            }
+            Ok(Arc::new(store))
+        }
     }
 }
 

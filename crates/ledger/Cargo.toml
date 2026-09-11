@@ -26,6 +26,7 @@ metrics.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
+sqlx.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 toml.workspace = true
@@ -37,6 +38,7 @@ uuid.workspace = true
 
 [dev-dependencies]
 proptest.workspace = true
+testcontainers.workspace = true
 tokio = { workspace = true, features = ["test-util"] }
 
 [lints]
