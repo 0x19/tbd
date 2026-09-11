@@ -76,6 +76,22 @@ view when a deploy moved a latency percentile.
 About 1 % CPU on profiled processes from frame pointers, the Alloy pod's own sampling
 overhead, and tens of megabytes per image for symbols. Nothing at request latency.
 
+Memory is the real price of the in-process agent, and it is paid per process. Measured
+on 2026-09-11 with the release `ledger` binary on the memory store, idle:
+
+| | resident after 5 s | after 15 s and steady |
+|---|---|---|
+| `PYROSCOPE_SERVER_ADDRESS` unset | 9 MB | 9 MB |
+| set (in-process `pprof-rs`, 100 Hz) | 221 MB | 287 MB |
+
+The agent symbolises its samples from the binary's line tables, and that mapping is what
+the 280 MB is; every service in the cluster idles between 170 and 290 MB for the same
+reason. The pod limits (`devops/k8s/base/*/deployment.yaml`, 512Mi) are set with that
+in, because the first load run against a 256Mi ledger ended in `OOMKilled`. On real
+nodes the eBPF profiler covers every container without any of it, so unsetting
+`PYROSCOPE_SERVER_ADDRESS` there gives the memory back; in k3d, where eBPF cannot run,
+the in-process agent is the only source of profiles and the memory is the fee.
+
 ## Troubleshooting
 
 | Symptom | Look at |
