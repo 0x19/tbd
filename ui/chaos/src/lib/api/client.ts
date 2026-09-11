@@ -46,6 +46,34 @@ export class ApiError extends Error {
   }
 }
 
+const RELOGIN_KEY = "chaos-relogin-at";
+
+/**
+ * The browser session behind Envoy is gone (401 on an API call: the ID-token
+ * cookie expired and the refresh failed, or the person signed out elsewhere).
+ * A fetch cannot follow the sign-in redirect, a page load can: reload, and
+ * Envoy sends the browser through auth and back to this URL. At most once a
+ * minute, so a broken deployment shows its error instead of a reload loop.
+ */
+function relogin(): boolean {
+  if (typeof window === "undefined") return false;
+  const now = Date.now();
+  let last = 0;
+  try {
+    last = Number(window.sessionStorage.getItem(RELOGIN_KEY) ?? 0);
+  } catch {
+    // storage unavailable: still reload once per page life
+  }
+  if (now - last < 60_000) return false;
+  try {
+    window.sessionStorage.setItem(RELOGIN_KEY, String(now));
+  } catch {
+    // ignore
+  }
+  window.location.reload();
+  return true;
+}
+
 async function call<T>(
   schema: z.ZodType<T>,
   path: string,
@@ -61,6 +89,10 @@ async function call<T>(
     },
     body: json !== undefined ? JSON.stringify(json) : rest.body,
   });
+  if (res.status === 401 && relogin()) {
+    // The page is reloading; keep the caller waiting instead of showing an error.
+    await new Promise<never>(() => {});
+  }
   if (!res.ok) {
     let message = `${res.status} ${res.statusText}`;
     try {
@@ -169,7 +201,16 @@ export function subscribe<T>(
   ]) {
     source.addEventListener(type, handler as EventListener);
   }
-  if (onError) source.onerror = onError;
+  source.onerror = (e) => {
+    // EventSource hides the status; a stream that drops because the session is
+    // gone is told apart by asking `/me`, which answers 401 in that case.
+    void fetch(`${apiBase()}/me`, { headers: { accept: "application/json" } })
+      .then((res) => {
+        if (res.status === 401 && relogin()) return;
+        onError?.(e);
+      })
+      .catch(() => onError?.(e));
+  };
   return () => source.close();
 }
 
