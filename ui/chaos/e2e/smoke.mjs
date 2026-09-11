@@ -166,15 +166,15 @@ await step("campaigns list and editor check", async () => {
   await page.getByText("its own stack").first().waitFor();
   await shot({ path: `${SHOTS}/campaigns.png`, fullPage: true });
   await page.goto(`${BASE}/stress/view/?id=smoke`);
-  await page.getByText("checks", { exact: true }).waitFor({ timeout: 10000 });
+  await page.getByText("checks", { exact: true }).first().waitFor({ timeout: 10000 });
   await page.locator(".cm-editor .tok-string").first().waitFor({ timeout: 10000 });
-  await page.getByText("Owner workers").waitFor();
+  await page.getByText("Owner workers").first().waitFor();
   await shot({ path: `${SHOTS}/campaign.png`, fullPage: true });
   await page.getByRole("button", { name: "Reference" }).click();
   await page.getByRole("heading", { name: "The invariants" }).waitFor({ timeout: 10000 });
   await page.getByRole("button", { name: "Operation mix" }).click();
   await page.locator(".cm-editor").getByText("idempotent_replay").waitFor({ timeout: 5000 });
-  await page.getByText("checks", { exact: true }).waitFor({ timeout: 10000 });
+  await page.getByText("checks", { exact: true }).first().waitFor({ timeout: 10000 });
 });
 
 await step("run the smoke campaign live to the end", async () => {
@@ -183,11 +183,18 @@ await step("run the smoke campaign live to the end", async () => {
   await row.getByRole("button", { name: /^run$/i }).click();
   await page.waitForURL(/runs\/view\/\?id=/, { timeout: 10000 });
   await page.getByText("Lifecycle").waitFor({ timeout: 10000 });
-  await page.getByRole("heading", { name: "Invariants" }).waitFor({ timeout: 10000 });
+  await page.getByText("Invariant evaluations").waitFor({ timeout: 10000 });
   await shot({ path: `${SHOTS}/stress-live.png`, fullPage: true });
-  await page.getByText("passed", { exact: true }).first().waitFor({ timeout: 90000 });
+  // The run ends either way; a finding is reported below, not hidden.
+  await page
+    .getByText(/^(passed|failed)$/, { exact: true })
+    .first()
+    .waitFor({ timeout: 90000 });
   await page.getByText("append_echo").waitFor();
   await page.getByText("held").first().waitFor();
+  const findings = await page.locator('a[href^="/findings/view/"]').count();
+  console.log("  findings on this run:", findings / 2);
+  if (findings) throw new Error("the smoke campaign found something; open Findings");
   await shot({ path: `${SHOTS}/stress-done.png`, fullPage: true });
   // The stress entry under Campaigns is the one current Runs link for ?kind=stress.
   await page.goto(`${BASE}/runs/?kind=stress`);

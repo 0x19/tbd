@@ -64,7 +64,7 @@ export function NavGroup({ title, items }: NavGroup) {
                   <SidebarMenuSub>
                     {item.items.map((subItem) => (
                       <SidebarMenuSubItem key={subItem.title}>
-                        <SidebarMenuSubButton asChild isActive={checkIsActive(pathname, subItem)}>
+                        <SidebarMenuSubButton asChild isActive={checkIsActive(current, subItem)}>
                           <Link href={subItem.url} onClick={() => setOpenMobile(false)}>
                             {subItem.icon && <subItem.icon />}
                             <span>{subItem.title}</span>
