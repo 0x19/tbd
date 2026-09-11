@@ -1,6 +1,6 @@
 "use client";
 
-import { Info, Play } from "lucide-react";
+import { Play } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -9,26 +9,17 @@ import { toast } from "sonner";
 
 import { useChaos } from "@/app/providers";
 import { PageTitle, Sparkline, StatRow } from "@/components/kit";
+import { Hint, LoadShapeFields, ShapeField } from "@/components/load-shape";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from "@/components/ui/input-group";
+import { InputGroup, InputGroupInput } from "@/components/ui/input-group";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { api } from "@/lib/api/client";
 import { describe, useFetch } from "@/lib/api/hooks";
-import { type LoadRequest, OpKind, opTargetKind, type RunRecord } from "@/lib/api/schema";
+import type { RunRecord } from "@/lib/api/schema";
 import { ago, ms, num, pct } from "@/lib/format";
-import { listKinds, withCapability } from "@/lib/kinds";
-
-const OPS = OpKind.options;
-
-function secondsOf(s: string): number {
-  const m = /^(\d+(?:\.\d+)?)\s*(ms|s|m|h)?$/.exec(s.trim());
-  if (!m) return 0;
-  const n = Number(m[1]);
-  return m[2] === "ms" ? n / 1000 : m[2] === "m" ? n * 60 : m[2] === "h" ? n * 3600 : n;
-}
+import { DEFAULT_SHAPE, loadProblem, secondsOf, toLoadRequest, weightedOps } from "@/lib/load";
 
 /** The kit's delivery simulator: a policy rail on the left, the window and past results on the right. */
 export default function LoadPage() {
@@ -36,82 +27,18 @@ export default function LoadPage() {
   const { overview, kinds, lastEvent } = useChaos();
   const recent = useFetch(() => api.runs(200), 5000, [lastEvent]);
   const [name, setName] = useState("adhoc");
-  const [rate, setRate] = useState("200");
-  const [duration, setDuration] = useState("10s");
-  const [warmup, setWarmup] = useState("500ms");
-  const [timeout, setTimeoutValue] = useState("5s");
-  const [maxInFlight, setMaxInFlight] = useState("256");
-  const [ramp, setRamp] = useState(false);
-  const [startRate, setStartRate] = useState("10");
-  const [endRate, setEndRate] = useState("500");
-  const [weights, setWeights] = useState<Record<string, string>>({
-    rest_evaluate: "4",
-    graphql_evaluate: "2",
-    ws_echo: "2",
-    grpc_ping: "1",
-    ledger_append: "0",
-    ledger_current: "0",
-    ledger_history: "0",
-    ledger_retract: "0",
-    ledger_lifecycle: "0",
-    ledger_erase_cycle: "0",
-    ledger_fuzz: "0",
-  });
-  const [targetMode, setTargetMode] = useState<"stack" | "url">("stack");
-  const [targetUrl, setTargetUrl] = useState("");
+  const [shape, setShape] = useState(DEFAULT_SHAPE);
   const [busy, setBusy] = useState(false);
 
-  // Load goes to running instances of the kinds that take it (protocols), per the registry.
-  const loadKinds = withCapability(kinds, "load_target");
-  const loadKindNames = listKinds(loadKinds);
-  const stackProtocols = (overview?.stack ?? []).filter(
-    (i) => i.running && loadKinds.some((k) => k.name === i.kind),
-  );
-  const firstTarget = loadKinds[0]?.name ?? "protocol";
-  const dur = secondsOf(duration);
-  const r = Number(rate) || 0;
-  const expected = ramp ? Math.round(((Number(startRate) + Number(endRate)) / 2) * dur) : Math.round(r * dur);
-  const concurrency = Math.round((ramp ? Number(endRate) : r) * 0.01); // 10 ms per request at loopback
-  const capped = concurrency > (Number(maxInFlight) || 256);
-  const totalWeight = OPS.reduce((n, op) => n + (Number(weights[op]) || 0), 0);
-
-  const request = (): LoadRequest => ({
-    name: name || undefined,
-    // An explicit URL is one instance of the kind the weighted operations target
-    // (protocol unless only ledger operations carry weight).
-    targets:
-      targetMode === "url" && targetUrl
-        ? [
-            {
-              name: "url",
-              http_url: targetUrl,
-              kind: OPS.filter((op) => (Number(weights[op]) || 0) > 0).every(
-                (op) => opTargetKind(op) === "ledger",
-              )
-                ? "ledger"
-                : "protocol",
-            },
-          ]
-        : [],
-    load: {
-      rate: r,
-      duration,
-      warmup: warmup || undefined,
-      timeout: timeout || undefined,
-      max_in_flight: Number(maxInFlight) || undefined,
-      pattern: ramp
-        ? {
-            type: "ramp",
-            start_rate: Number(startRate),
-            end_rate: Number(endRate),
-          }
-        : undefined,
-      operations: OPS.map((op) => ({
-        op,
-        weight: Number(weights[op] ?? 0),
-      })).filter((o) => o.weight > 0),
-    },
-  });
+  const dur = secondsOf(shape.duration);
+  const r = Number(shape.rate) || 0;
+  const expected = shape.ramp
+    ? Math.round(((Number(shape.startRate) + Number(shape.endRate)) / 2) * dur)
+    : Math.round(r * dur);
+  const concurrency = Math.round((shape.ramp ? Number(shape.endRate) : r) * 0.01); // 10 ms per request at loopback
+  const capped = concurrency > (Number(shape.maxInFlight) || 256);
+  const problem = loadProblem(shape, overview, kinds);
+  const request = () => toLoadRequest(shape, name, overview);
 
   const start = async () => {
     setBusy(true);
@@ -132,17 +59,9 @@ export default function LoadPage() {
     <>
       <PageTitle
         title="Run new load"
-        description="Model the shape before you push it: open-loop rate, duration, mix, concurrency cap. Then watch it live."
+        description="Model the shape before you push it: open-loop rate, duration, mix, targets, concurrency cap. Then watch it live."
       >
-        <Button
-          onClick={start}
-          disabled={
-            busy ||
-            (targetMode === "url" && !targetUrl) ||
-            (targetMode === "stack" && !stackProtocols.length) ||
-            !totalWeight
-          }
-        >
+        <Button onClick={start} disabled={busy || problem !== null} title={problem ?? undefined}>
           <Play /> Run load
         </Button>
       </PageTitle>
@@ -150,108 +69,12 @@ export default function LoadPage() {
       <div className="grid gap-8 xl:grid-cols-[22rem_1fr]">
         <div className="grid content-start gap-6">
           <section>
-            <h2 className="mb-3 text-base font-semibold">Shape</h2>
             <div className="grid gap-3 rounded-xl border p-4">
-              <Field label="Name" help="Shown in the run list.">
+              <ShapeField label="Name" help="Shown in the run list.">
                 <InputGroup>
                   <InputGroupInput value={name} onChange={(e) => setName(e.target.value)} />
                 </InputGroup>
-              </Field>
-              <Field
-                label="Pattern"
-                help="Constant holds the rate; ramp interpolates from start to end over the duration."
-              >
-                <select
-                  className="bg-background h-8 w-full rounded-lg border px-2 text-sm"
-                  value={ramp ? "ramp" : "constant"}
-                  onChange={(e) => setRamp(e.target.value === "ramp")}
-                >
-                  <option value="constant">Constant</option>
-                  <option value="ramp">Ramp</option>
-                </select>
-              </Field>
-              {ramp ? (
-                <div className="grid grid-cols-2 gap-3">
-                  <Field label="Start rate" help="Requests per second at t = 0.">
-                    <InputGroup>
-                      <InputGroupInput
-                        value={startRate}
-                        onChange={(e) => setStartRate(e.target.value)}
-                        inputMode="numeric"
-                      />
-                      <InputGroupAddon align="inline-end">
-                        <InputGroupText>req/s</InputGroupText>
-                      </InputGroupAddon>
-                    </InputGroup>
-                  </Field>
-                  <Field label="End rate" help="Requests per second at the end.">
-                    <InputGroup>
-                      <InputGroupInput
-                        value={endRate}
-                        onChange={(e) => setEndRate(e.target.value)}
-                        inputMode="numeric"
-                      />
-                      <InputGroupAddon align="inline-end">
-                        <InputGroupText>req/s</InputGroupText>
-                      </InputGroupAddon>
-                    </InputGroup>
-                  </Field>
-                </div>
-              ) : (
-                <Field
-                  label="Rate"
-                  help="Requests per second across every target, open loop: latency does not slow the pacer."
-                >
-                  <InputGroup>
-                    <InputGroupInput
-                      value={rate}
-                      onChange={(e) => setRate(e.target.value)}
-                      inputMode="numeric"
-                    />
-                    <InputGroupAddon align="inline-end">
-                      <InputGroupText>req/s</InputGroupText>
-                    </InputGroupAddon>
-                  </InputGroup>
-                </Field>
-              )}
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Duration" help="Measured window, excluding warmup.">
-                  <InputGroup>
-                    <InputGroupInput
-                      value={duration}
-                      onChange={(e) => setDuration(e.target.value)}
-                      placeholder="10s"
-                    />
-                  </InputGroup>
-                </Field>
-                <Field label="Warmup" help="Same load first; its numbers are discarded.">
-                  <InputGroup>
-                    <InputGroupInput
-                      value={warmup}
-                      onChange={(e) => setWarmup(e.target.value)}
-                      placeholder="500ms"
-                    />
-                  </InputGroup>
-                </Field>
-                <Field label="Timeout" help="Per request; a timeout counts as a failure.">
-                  <InputGroup>
-                    <InputGroupInput
-                      value={timeout}
-                      onChange={(e) => setTimeoutValue(e.target.value)}
-                      placeholder="5s"
-                    />
-                  </InputGroup>
-                </Field>
-                <Field label="Max in flight" help="Concurrency cap; the pacer stalls when reached.">
-                  <InputGroup>
-                    <InputGroupInput
-                      value={maxInFlight}
-                      onChange={(e) => setMaxInFlight(e.target.value)}
-                      inputMode="numeric"
-                    />
-                  </InputGroup>
-                </Field>
-              </div>
+              </ShapeField>
               <div className="border-t pt-3 text-sm">
                 <div className="text-muted-foreground text-xs">Expected</div>
                 <div className="tabular-nums">
@@ -262,74 +85,11 @@ export default function LoadPage() {
                     `~${concurrency || 1} in flight at 10 ms`
                   )}
                 </div>
+                {problem ? <div className="text-destructive mt-1 text-xs">{problem}</div> : null}
               </div>
             </div>
           </section>
-
-          <section>
-            <h2 className="mb-3 text-base font-semibold">Operations</h2>
-            <div className="grid gap-3 rounded-xl border p-4">
-              {OPS.map((op) => (
-                <Field key={op} label={op} help="Relative weight in the mix; zero leaves it out.">
-                  <InputGroup>
-                    <InputGroupInput
-                      value={weights[op] ?? "0"}
-                      onChange={(e) =>
-                        setWeights({
-                          ...weights,
-                          [op]: e.target.value,
-                        })
-                      }
-                      inputMode="numeric"
-                    />
-                    <InputGroupAddon align="inline-end">
-                      <InputGroupText>
-                        {totalWeight
-                          ? `${Math.round(((Number(weights[op]) || 0) / totalWeight) * 100)}%`
-                          : "–"}
-                      </InputGroupText>
-                    </InputGroupAddon>
-                  </InputGroup>
-                </Field>
-              ))}
-            </div>
-          </section>
-
-          <section>
-            <h2 className="mb-3 text-base font-semibold">Target</h2>
-            <div className="grid gap-3 rounded-xl border p-4">
-              <Field
-                label="Where"
-                help={`The serve stack's ${loadKindNames}, or any ${firstTarget} base URL such as Envoy.`}
-              >
-                <select
-                  className="bg-background h-8 w-full rounded-lg border px-2 text-sm"
-                  value={targetMode}
-                  onChange={(e) => setTargetMode(e.target.value as "stack" | "url")}
-                >
-                  <option value="stack">
-                    Serve stack ({stackProtocols.map((p) => p.name).join(", ") || `no ${firstTarget} running`}
-                    )
-                  </option>
-                  <option value="url">A {firstTarget} URL</option>
-                </select>
-              </Field>
-              {targetMode === "url" ? (
-                <Field
-                  label={`${firstTarget.charAt(0).toUpperCase()}${firstTarget.slice(1)} base URL`}
-                  help="From the chaos pod inside the cluster this is Envoy; from a serve on your machine it is the edge."
-                >
-                  <InputGroup>
-                    <InputGroupInput
-                      value={targetUrl}
-                      onChange={(e) => setTargetUrl(e.target.value)}
-                      placeholder={overview?.config.targets[firstTarget] ?? "http://localhost:18080"}
-                    />
-                  </InputGroup>
-                </Field>
-              ) : null}
-            </div>
-          </section>
+          <LoadShapeFields shape={shape} onChange={setShape} />
         </div>
 
         <div className="grid content-start gap-8">
@@ -339,20 +99,19 @@ export default function LoadPage() {
             </h2>
             <StatRow
               items={[
-                { label: "Warmup", value: warmup || "none" },
-                { label: "Measured", value: duration || "–" },
+                { label: "Warmup", value: shape.warmup || "none" },
+                { label: "Measured", value: shape.duration || "–" },
                 {
                   label: "Requests",
                   value: `≈ ${num(expected)}`,
                 },
                 {
                   label: "Mix",
-                  value: `${OPS.filter((op) => Number(weights[op]) > 0).length} ops`,
+                  value: `${weightedOps(shape).length} ops`,
                 },
               ]}
             />
           </section>
-
           <section>
             <h2 className="mb-1 flex items-center gap-2 text-base font-semibold">
               Previous load runs <Hint text="The last runs of this kind, with their per-second throughput." />
@@ -415,31 +174,6 @@ export default function LoadPage() {
         </div>
       </div>
     </>
-  );
-}
-
-function Field({ label, help, children }: { label: string; help?: string; children: React.ReactNode }) {
-  return (
-    <label className="grid gap-1.5">
-      <span className="flex items-center gap-1 text-sm font-medium">
-        {label}
-        {help ? <Hint text={help} /> : null}
-      </span>
-      {children}
-    </label>
-  );
-}
-
-function Hint({ text }: { text: string }) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span className="inline-flex">
-          <Info className="text-muted-foreground size-3.5" />
-        </span>
-      </TooltipTrigger>
-      <TooltipContent>{text}</TooltipContent>
-    </Tooltip>
   );
 }
 

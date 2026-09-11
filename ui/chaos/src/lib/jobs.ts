@@ -1,6 +1,7 @@
 // Helpers around the API's `Job` shape: build one from form values and
 // describe one for lists.
-import type { Job, LoadRequest, ScenarioEntry } from "@/lib/api/schema";
+import type { Job, LoadRequest, Overview, ScenarioEntry } from "@/lib/api/schema";
+import { describeLoad, type LoadShape, toLoadRequest } from "@/lib/load";
 
 export type JobKind = "scenario" | "all_scenarios" | "load" | "validate";
 
@@ -21,34 +22,13 @@ export function describeJob(job: Job, scenarios?: ScenarioEntry[]): string {
     const name = scenarios?.find((s) => s.id === job.scenario)?.name;
     return `Scenario ${name ?? job.scenario}`;
   }
-  if ("load" in job) {
-    const l = job.load.load;
-    const shape =
-      l.pattern?.type === "ramp" ? `${l.pattern.start_rate}→${l.pattern.end_rate} req/s` : `${l.rate} req/s`;
-    return `Load ${shape} for ${l.duration}`;
-  }
+  if ("load" in job) return `Load ${describeLoad(job.load)}`;
   return "Validate";
 }
 
-/** The load page's default mix, for schedules that only ask for rate and duration. */
-export function loadJob(name: string, rate: number, duration: string): LoadRequest {
-  return {
-    name: name || undefined,
-    targets: [],
-    load: {
-      rate,
-      duration,
-      warmup: "500ms",
-      timeout: "5s",
-      max_in_flight: 256,
-      operations: [
-        { op: "rest_evaluate", weight: 4 },
-        { op: "graphql_evaluate", weight: 2 },
-        { op: "ws_echo", weight: 2 },
-        { op: "grpc_ping", weight: 1 },
-      ],
-    },
-  };
+/** A schedule's load job from the same form the load page uses. */
+export function loadJob(name: string, shape: LoadShape, overview: Overview | null): LoadRequest {
+  return toLoadRequest(shape, name, overview);
 }
 
 /** Cron presets offered in the schedule dialog; anything else is "custom". */

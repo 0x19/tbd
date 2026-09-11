@@ -3,7 +3,9 @@
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { useChaos } from "@/app/providers";
 import { Field } from "@/components/field";
+import { LoadShapeFields } from "@/components/load-shape";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -18,8 +20,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { api } from "@/lib/api/client";
 import { describe } from "@/lib/api/hooks";
-import type { Job, NotifyMode, ScenarioEntry, Schedule } from "@/lib/api/schema";
+import type { Job, NotifyMode, Overview, ScenarioEntry, Schedule } from "@/lib/api/schema";
 import { CRON_PRESETS, type JobKind, jobKind, loadJob } from "@/lib/jobs";
+import { DEFAULT_SHAPE, fromLoadRequest, loadProblem, type LoadShape } from "@/lib/load";
 
 export type SchedulePreset = { kind: JobKind; scenario?: string };
 
@@ -36,33 +39,38 @@ type Props = {
 
 const CUSTOM = "custom";
 
-function initialJob(schedule: Schedule | null | undefined, preset: SchedulePreset | null | undefined) {
+function initialJob(
+  schedule: Schedule | null | undefined,
+  preset: SchedulePreset | null | undefined,
+  overview: Overview | null,
+): { kind: JobKind; scenario: string; shape: LoadShape } {
   if (schedule) {
     const kind = jobKind(schedule.job);
     const j = schedule.job;
     return {
       kind,
       scenario: kind === "scenario" && typeof j === "object" && "scenario" in j ? j.scenario : "",
-      rate: kind === "load" && typeof j === "object" && "load" in j ? String(j.load.load.rate) : "200",
-      duration: kind === "load" && typeof j === "object" && "load" in j ? j.load.load.duration : "10s",
+      shape:
+        kind === "load" && typeof j === "object" && "load" in j
+          ? fromLoadRequest(j.load, overview)
+          : DEFAULT_SHAPE,
     };
   }
   return {
     kind: preset?.kind ?? "all_scenarios",
     scenario: preset?.scenario ?? "",
-    rate: "200",
-    duration: "10s",
+    shape: DEFAULT_SHAPE,
   };
 }
 
 /** Create or edit one schedule: a name, what to run, how often, on or off. */
 export function ScheduleDialog({ open, onOpenChange, schedule, preset, scenarios, onSaved }: Props) {
-  const init = initialJob(schedule, preset);
+  const { overview, kinds } = useChaos();
+  const init = initialJob(schedule, preset, overview);
   const [name, setName] = useState(schedule?.name ?? defaultName(init.kind, init.scenario));
   const [kind, setKind] = useState<JobKind>(init.kind);
   const [scenario, setScenario] = useState(init.scenario);
-  const [rate, setRate] = useState(init.rate);
-  const [duration, setDuration] = useState(init.duration);
+  const [shape, setShape] = useState(init.shape);
   const presetOf = CRON_PRESETS.find((p) => p.cron === (schedule?.cron ?? CRON_PRESETS[1]!.cron));
   const [presetCron, setPresetCron] = useState(presetOf ? presetOf.cron : CUSTOM);
   const [cron, setCron] = useState(schedule?.cron ?? CRON_PRESETS[1]!.cron);
@@ -75,15 +83,16 @@ export function ScheduleDialog({ open, onOpenChange, schedule, preset, scenarios
   const job = (): Job => {
     if (kind === "scenario") return { scenario };
     if (kind === "all_scenarios") return "all_scenarios";
-    if (kind === "load") return { load: loadJob(name, Number(rate) || 0, duration) };
+    if (kind === "load") return { load: loadJob(name, shape, overview) };
     return { validate: {} };
   };
 
+  const problem = kind === "load" ? loadProblem(shape, overview, kinds) : null;
   const valid =
     name.trim().length > 0 &&
     cron.trim().length > 0 &&
     (kind !== "scenario" || scenario.length > 0) &&
-    (kind !== "load" || (Number(rate) > 0 && duration.trim().length > 0));
+    problem === null;
 
   const save = async () => {
     setBusy(true);
@@ -102,7 +111,9 @@ export function ScheduleDialog({ open, onOpenChange, schedule, preset, scenarios
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent
+        className={kind === "load" ? "max-h-[90vh] overflow-y-auto sm:max-w-2xl" : "sm:max-w-lg"}
+      >
         <DialogHeader>
           <DialogTitle>{schedule ? "Edit schedule" : "New schedule"}</DialogTitle>
           <DialogDescription>
@@ -161,13 +172,8 @@ export function ScheduleDialog({ open, onOpenChange, schedule, preset, scenarios
                 </Select>
               </Field>
             ) : kind === "load" ? (
-              <div className="grid grid-cols-2 gap-2">
-                <Field label="Rate (req/s)">
-                  <Input value={rate} onChange={(e) => setRate(e.target.value)} inputMode="numeric" />
-                </Field>
-                <Field label="Duration">
-                  <Input value={duration} onChange={(e) => setDuration(e.target.value)} placeholder="10s" />
-                </Field>
+              <div className="text-muted-foreground self-end pb-2 text-xs">
+                The shape, the mix and where it goes, below: the same form as the load page.
               </div>
             ) : (
               <div className="text-muted-foreground self-end pb-2 text-xs">
@@ -177,6 +183,8 @@ export function ScheduleDialog({ open, onOpenChange, schedule, preset, scenarios
               </div>
             )}
           </div>
+
+          {kind === "load" ? <LoadShapeFields shape={shape} onChange={setShape} /> : null}
 
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="How often">
@@ -236,6 +244,7 @@ export function ScheduleDialog({ open, onOpenChange, schedule, preset, scenarios
         </div>
 
         <DialogFooter>
+          {problem ? <div className="text-destructive self-center text-xs sm:mr-auto">{problem}</div> : null}
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>

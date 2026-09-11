@@ -219,6 +219,14 @@ await step("schedules: create from a scenario, run now, pause, delete", async ()
   await vrow.getByRole("button", { name: "More" }).click();
   await page.getByRole("menuitem", { name: "Delete" }).click();
   await vrow.waitFor({ state: "hidden", timeout: 10000 });
+  // A load schedule takes the load page's form: the mix by kind and a target per kind.
+  await page.getByRole("button", { name: "New schedule" }).click();
+  await page.getByRole("combobox", { name: "Runs" }).click();
+  await page.getByRole("option", { name: "Load" }).click();
+  await page.getByLabel("ledger_append").fill("3");
+  await page.getByRole("combobox", { name: "Ledger target" }).waitFor({ timeout: 5000 });
+  await page.getByRole("combobox", { name: "Protocol target" }).waitFor();
+  await page.getByRole("button", { name: "Cancel" }).click();
   await page.getByText("running", { exact: true }).first().waitFor({ state: "hidden", timeout: 60000 });
 });
 

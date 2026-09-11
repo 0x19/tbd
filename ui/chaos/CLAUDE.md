@@ -14,8 +14,8 @@ first; `docs/chaos/api.md` is the contract the pages consume.
   Compiler rules relaxed like the kit) and Prettier (tailwind plugin). Regenerate `ui/`
   files from the kit or `pnpm dlx shadcn@latest add`, do not hand-edit.
 - What is ours: pages under `src/app/`, `src/components/{kit,charts,status-badge,
-runs-table,behavior-dialog,instances-table,field,queue-panel,schedule-dialog,
-toml-editor,markdown,scenario-reference}.tsx`, `src/lib/{api,format,runs,jobs,toml-highlight}`,
+runs-table,behavior-dialog,instances-table,field,queue-panel,schedule-dialog,load-shape,
+toml-editor,markdown,scenario-reference}.tsx`, `src/lib/{api,format,runs,jobs,load,toml-highlight}`,
   `src/app/editor.css` (TOML token colours and the `.doc` styles; globals.css stays the
   kit's),
   `src/data/{site,sidebar-data}`, `src/app/providers.tsx` (chaos overview context +
