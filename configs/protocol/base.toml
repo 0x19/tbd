@@ -43,6 +43,14 @@ required = false
 probe_interval = "5s"
 probe_timeout = "1s"
 
+[socket]
+# The multiplexed WebSocket at /v1/ws: every public RPC over one connection,
+# calls told apart by the id the client picks. A client may keep max_calls
+# calls in flight; a larger frame than max_frame_bytes is refused by the
+# WebSocket layer, so keep it at or under the REST body cap.
+max_calls = 64
+max_frame_bytes = 262144
+
 [principals]
 # Token subjects that are our own services (callers of kind `service`). Empty
 # until the id plane mints service credentials.

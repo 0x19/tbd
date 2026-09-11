@@ -34,6 +34,7 @@ const OPTS: SerializeOptions = SerializeOptions::new()
     .skip_default_fields(false);
 
 /// A dynamic message on the wire. The only way one is serialised.
+#[derive(Debug)]
 pub struct Out<'a>(pub &'a DynamicMessage);
 
 impl Serialize for Out<'_> {

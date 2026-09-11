@@ -12,10 +12,10 @@ backend is visible instead of clipped.
 
 | Metric | Type | Labels | Recorded when |
 |---|---|---|---|
-| `tbd_requests_total` | counter | `transport` (`http`, `grpc`), `route`, `status` | a request finishes; `status` is `ok`, an HTTP code, or a gRPC code name |
+| `tbd_requests_total` | counter | `transport` (`http`, `grpc`, `ws`), `route`, `status` | a request finishes; `status` is `ok`, an HTTP code, or a gRPC code name |
 | `tbd_request_duration_seconds` | histogram | `transport`, `route` | same moment; for streams this is time to first response |
 | `tbd_requests_in_flight` | gauge | `transport` | incremented on admission, decremented on completion, including early returns |
-| `tbd_streams_active` | gauge | `kind` (`subscribe`, `session`, `ws`, `sse`) | a stream opens or closes |
+| `tbd_streams_active` | gauge | `kind` (`subscribe`, `session`, `ws`, `sse`, `mux`) | a stream opens or closes |
 | `tbd_stream_items_total` | counter | `kind`, `direction` (`in`, `out`) | an item crosses a stream |
 | `tbd_engine_client_requests_total` | counter | `backend` (`engine`, `ledger`, …: the protocol's `[services]` name), `route`, `status` | the protocol finishes a call to a backend, measured on the client side |
 | `tbd_engine_client_duration_seconds` | histogram | `backend`, `route` | same moment |

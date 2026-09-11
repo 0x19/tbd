@@ -45,6 +45,7 @@ pub(crate) fn reserved_paths() -> &'static [(&'static str, &'static str)] {
         ("GET", "/v1/subjects/{subject_id}/events"),
         ("GET", "/openapi.json"),
         ("GET", "/ws"),
+        ("GET", crate::mux::PATH),
         ("GET", "/graphql"),
         ("POST", "/graphql"),
     ]

@@ -41,6 +41,9 @@ pub struct Config {
     /// `[principals]`
     #[serde(default)]
     pub principals: Principals,
+    /// `[socket]`
+    #[serde(default)]
+    pub socket: Socket,
 }
 
 /// `[server]`
@@ -93,6 +96,27 @@ impl Default for Health {
         Self {
             probe_interval: Duration::from_secs(5),
             probe_timeout: Duration::from_secs(1),
+        }
+    }
+}
+
+/// `[socket]`: the multiplexed WebSocket at `/v1/ws`.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct Socket {
+    /// Calls that may be in flight at once on one connection. A further call
+    /// is refused with `rate_limited` until one ends.
+    pub max_calls: usize,
+    /// Largest frame a client may send. The WebSocket layer refuses a larger
+    /// one, so keep it at or under the REST body cap.
+    pub max_frame_bytes: usize,
+}
+
+impl Default for Socket {
+    fn default() -> Self {
+        Self {
+            max_calls: 64,
+            max_frame_bytes: 256 * 1024,
         }
     }
 }
@@ -186,6 +210,7 @@ impl Config {
             services,
             health: Health::default(),
             principals: Principals::default(),
+            socket: Socket::default(),
         }
     }
 

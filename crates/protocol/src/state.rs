@@ -162,6 +162,7 @@ pub struct AppState {
     probe_timeout: Duration,
     probe_interval: Duration,
     service_subs: Arc<[String]>,
+    socket: crate::config::Socket,
 }
 
 impl AppState {
@@ -207,6 +208,7 @@ impl AppState {
             probe_timeout: config.health.probe_timeout,
             probe_interval: config.health.probe_interval,
             service_subs: config.principals.services.clone().into(),
+            socket: config.socket,
         })
     }
 
@@ -243,6 +245,12 @@ impl AppState {
     #[must_use]
     pub fn probe_interval(&self) -> Duration {
         self.probe_interval
+    }
+
+    /// The multiplexed socket's limits from `[socket]`.
+    #[must_use]
+    pub fn socket(&self) -> crate::config::Socket {
+        self.socket
     }
 
     /// Token subjects that are our own services (`[principals] services`).

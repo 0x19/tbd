@@ -58,6 +58,7 @@ Protocol surfaces map onto engine RPCs:
 | `GET /v1/subjects/{id}/events` (SSE) | `Subscribe` (server stream) |
 | `GET /v1/engine/subjects/{id}/events` (SSE), `/v1/ledger/...` (REST) | transcoded from the `google.api.http` options in the protos: any registered backend's annotated RPCs (`docs/protocol/README.md`) |
 | `/ws` | `Session` (bidirectional stream) |
+| `/v1/ws` | every public RPC multiplexed over one socket, by name: unary and server streams, calls told apart by the client's `id` |
 | `GET /readyz`, GraphQL `engineReady` | `grpc.health.v1.Health/Check` on every registered backend (`/readyz` reports each; the `required` ones gate it) |
 
 Envoy routes, from `devops/envoy/envoy.yaml`:

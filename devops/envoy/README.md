@@ -47,6 +47,7 @@ and what they check: [docs/auth/README.md](../../docs/auth/README.md).
 | gRPC, prefix `/tbd.engine.v1.EngineService/` | `engine` | none | `connect-failure, refused-stream, unavailable`, 2 tries, 5 s per try |
 | gRPC, anything else (`tbd.protocol.v1`, `grpc.health.v1`, reflection) | `protocol` | none | same |
 | path `/ws` | `protocol`, WebSocket upgrade | none, idle none | none |
+| path `/v1/ws` (multiplexed RPC socket) | `protocol`, WebSocket upgrade | none, idle none | none |
 | prefix `/v1/subjects/` (SSE) | `protocol` | none | none |
 | regex `^/v1/.*/events$` (transcoded server streams, SSE) | `protocol` | none | none |
 | prefix `/` (REST, GraphQL, health) | `protocol` | 15 s | `connect-failure, refused-stream` only |

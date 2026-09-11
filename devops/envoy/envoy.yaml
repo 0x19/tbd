@@ -541,6 +541,12 @@ static_resources:
                             cluster: protocol
                             timeout: 0s
                             idle_timeout: 0s
+                        # The multiplexed socket: every public RPC on one connection.
+                        - match: { path: "/v1/ws" }
+                          route:
+                            cluster: protocol
+                            timeout: 0s
+                            idle_timeout: 0s
                         # Server-sent events.
                         - match: { prefix: "/v1/subjects/" }
                           route:

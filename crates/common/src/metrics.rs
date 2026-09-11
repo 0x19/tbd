@@ -11,13 +11,15 @@ use metrics_exporter_prometheus::{Matcher, PrometheusBuilder};
 
 /// Metric names. Shared so dashboards and alerts can rely on them.
 pub mod names {
-    /// Counter: requests handled. Labels `transport`, `route`, `status`.
+    /// Counter: requests handled. Labels `transport` (`http`, `grpc`, `ws`:
+    /// one call on the multiplexed socket), `route`, `status`.
     pub const REQUESTS_TOTAL: &str = "tbd_requests_total";
     /// Histogram (seconds): time to answer, or to first response on streams. Labels `transport`, `route`.
     pub const REQUEST_DURATION: &str = "tbd_request_duration_seconds";
     /// Gauge: requests currently being handled. Label `transport`.
     pub const REQUESTS_IN_FLIGHT: &str = "tbd_requests_in_flight";
-    /// Gauge: open streams. Label `kind` (`subscribe`, `session`, `ws`, `sse`).
+    /// Gauge: open streams. Label `kind` (`subscribe`, `session`, `ws`, `sse`,
+    /// `mux`: one multiplexed socket, whatever it carries).
     pub const STREAMS_ACTIVE: &str = "tbd_streams_active";
     /// Counter: items on streams. Labels `kind`, `direction` (`in`, `out`).
     pub const STREAM_ITEMS_TOTAL: &str = "tbd_stream_items_total";
