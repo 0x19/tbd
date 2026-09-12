@@ -1,16 +1,16 @@
 "use client";
 
-// The overview's masthead and Stack card, in the kit's dashboard style: an
-// environment band with live instance dots and tool tiles, and a status card
-// with a donut whose legend doubles as the instance list.
+// The overview's header pieces and Stack card, in the kit's dashboard style:
+// the tools as one segmented button group beside Refresh, a context strip with
+// live instance dots, and a status card whose donut legend is the instance list.
 import {
-  ArrowUpRight,
   BookOpen,
   Crosshair,
   Flame,
   Gauge,
   LayoutDashboard,
   type LucideIcon,
+  RefreshCw,
   ScrollText,
   Server,
   ShieldCheck,
@@ -23,8 +23,10 @@ import { Cell, Pie, PieChart, type PieSectorShapeProps, Sector } from "recharts"
 import { describeBehavior } from "@/components/instances-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ButtonGroup } from "@/components/ui/button-group";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+import { Separator } from "@/components/ui/separator";
 import type { InstanceInfo, KindDescriptor, Overview } from "@/lib/api/schema";
 import { num } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -338,29 +340,11 @@ function compact(n: number): string {
   return String(n);
 }
 
-/**
- * The masthead: which environment this is, every instance as a live dot, what
- * it points at, what is on disk, and the observability tools. The first thing
- * on the page, so a troubleshooter knows where they are and can open the tool
- * they need without scrolling.
- */
-export function EnvironmentBand({ overview }: { overview: Overview }) {
-  const links = overview.config.links;
-  const stack = overview.stack ?? [];
-  const labelOf = (kind: string) => overview.kinds.find((k) => k.name === kind)?.label ?? kind;
-  const up = stack.filter((i) => i.running).length;
-  const faulted = stack.filter((i) => toneOf(i) === "warn").length;
-  const targets = Object.entries(overview.config.targets);
-  const health: Tone = !overview.stack ? "off" : up < stack.length ? "off" : faulted ? "warn" : "good";
-
-  const counts = [
-    { label: "scenarios", n: overview.scenarios, href: "/scenarios/" },
-    { label: "campaigns", n: overview.campaigns, href: "/stress/" },
-    { label: "findings", n: overview.findings, href: "/findings/", bad: overview.findings > 0 },
-    { label: "runs", n: overview.runs, href: "/runs/" },
-  ];
-
-  const tools: { icon: LucideIcon; title: string; href: string }[] = [
+/** The observability tools of this environment, in the order a failure is read. */
+export function toolLinks(
+  links: Overview["config"]["links"],
+): { icon: LucideIcon; title: string; href: string }[] {
+  return [
     { icon: LayoutDashboard, title: "Dashboards", href: links.grafana ? `${links.grafana}/dashboards` : "" },
     { icon: Waypoints, title: "Traces", href: links.grafana ? `${links.grafana}/explore` : "" },
     { icon: ScrollText, title: "Logs", href: links.victorialogs },
@@ -368,89 +352,121 @@ export function EnvironmentBand({ overview }: { overview: Overview }) {
     { icon: Flame, title: "Profiles", href: links.pyroscope },
     { icon: ShieldCheck, title: "Envoy", href: links.envoy_admin },
   ].filter((t) => t.href);
+}
+
+/** The page's action row: the tools as one segmented group, then Refresh. */
+export function OverviewActions({ overview, onRefresh }: { overview: Overview; onRefresh: () => void }) {
+  const tools = toolLinks(overview.config.links);
+  return (
+    <>
+      {tools.length ? (
+        <ButtonGroup>
+          {tools.map((t) => (
+            <Button key={t.title} variant="outline" size="sm" className="gap-1.5" asChild title={t.href}>
+              <a href={t.href} target="_blank" rel="noreferrer">
+                <t.icon />
+                <span className="hidden lg:inline">{t.title}</span>
+              </a>
+            </Button>
+          ))}
+        </ButtonGroup>
+      ) : null}
+      <Button variant="outline" size="sm" className="gap-1.5" onClick={onRefresh}>
+        <RefreshCw /> Refresh
+      </Button>
+    </>
+  );
+}
+
+/**
+ * The context line under the title: which environment this is, every instance
+ * as a live dot, what validate hits, the topology and what is on disk. One
+ * line that says where you are before any number on the page is read.
+ */
+export function EnvironmentStrip({ overview }: { overview: Overview }) {
+  const links = overview.config.links;
+  const stack = overview.stack ?? [];
+  const labelOf = (kind: string) => overview.kinds.find((k) => k.name === kind)?.label ?? kind;
+  const up = stack.filter((i) => i.running).length;
+  const faulted = stack.filter((i) => toneOf(i) === "warn").length;
+  const health: Tone = !overview.stack ? "off" : up < stack.length ? "off" : faulted ? "warn" : "good";
+  const targets = Object.entries(overview.config.targets);
+  const counts = [
+    { label: "scenarios", n: overview.scenarios, href: "/scenarios/" },
+    { label: "campaigns", n: overview.campaigns, href: "/stress/" },
+    { label: "findings", n: overview.findings, href: "/findings/", bad: overview.findings > 0 },
+    { label: "runs", n: overview.runs, href: "/runs/" },
+  ];
 
   return (
-    <div className="from-muted/60 to-card rounded-xl border bg-gradient-to-br shadow-xs">
-      <div className="flex flex-col gap-4 px-5 py-4 lg:flex-row lg:items-start lg:justify-between lg:gap-x-8">
-        <div className="min-w-0 space-y-2.5 lg:flex-1">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <span className={cn("size-2.5 rounded-full", DOT[health])} />
-            <span className="text-xl font-semibold tracking-tight">{overview.env}</span>
-            {links.domain ? (
-              <span className="text-muted-foreground font-mono text-xs">{links.domain}</span>
-            ) : null}
-            {overview.stack ? (
-              <Link href="/stack/" className="ml-1 flex items-center gap-1.5" title="the serve stack">
-                {stack.map((i) => (
-                  <span
-                    key={i.name}
-                    className={cn("size-2 rounded-full", DOT[toneOf(i)])}
-                    title={`${i.name} (${labelOf(i.kind)}) · ${stateOf(i)}`}
-                  />
-                ))}
-                <span className="text-muted-foreground ml-1 text-xs">
-                  {up}/{stack.length} up{faulted ? `, ${faulted} faulted` : ""}
-                </span>
-              </Link>
-            ) : (
-              <span className="text-muted-foreground text-xs">no stack (--no-stack)</span>
-            )}
-          </div>
+    <div className="bg-card text-card-foreground rounded-xl border shadow-xs">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-3 px-4 py-3 text-sm">
+        <span className="flex items-center gap-2">
+          <span className={cn("size-2 rounded-full", DOT[health])} />
+          <span className="font-semibold">{overview.env}</span>
+          {links.domain ? (
+            <span className="text-muted-foreground font-mono text-xs">{links.domain}</span>
+          ) : null}
+        </span>
 
-          <div className="text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
-            <span className="inline-flex min-w-0 items-center gap-1.5" title="what validate hits">
-              <Crosshair className="size-3.5 shrink-0" />
-              {describeTargets(targets, labelOf)}
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <Server className="size-3.5 shrink-0" />
-              <span className="font-mono">{overview.config.paths.topology}</span>
-            </span>
-          </div>
+        <Separator orientation="vertical" className="hidden h-4 sm:block" />
 
-          <div className="flex flex-wrap items-center gap-1.5">
-            {counts.map((c) => (
-              <Link
-                key={c.label}
-                href={c.href}
-                className="hover:bg-muted inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs transition-colors"
-              >
-                <span className={cn("font-medium tabular-nums", c.bad && "text-destructive")}>{c.n}</span>
-                <span className="text-muted-foreground">{c.label}</span>
-              </Link>
-            ))}
+        {overview.stack ? (
+          <Link
+            href="/stack/"
+            className="hover:text-foreground text-muted-foreground flex items-center gap-2 text-xs"
+          >
+            <span className="flex items-center gap-1">
+              {stack.map((i) => (
+                <span
+                  key={i.name}
+                  className={cn("size-2 rounded-full", DOT[toneOf(i)])}
+                  title={`${i.name} (${labelOf(i.kind)}) · ${stateOf(i)}`}
+                />
+              ))}
+            </span>
+            <span>
+              {up}/{stack.length} up{faulted ? `, ${faulted} faulted` : ""}
+            </span>
+          </Link>
+        ) : (
+          <span className="text-muted-foreground text-xs">no stack (--no-stack)</span>
+        )}
+
+        <Separator orientation="vertical" className="hidden h-4 sm:block" />
+
+        <span
+          className="text-muted-foreground flex min-w-0 flex-1 items-center gap-1.5 text-xs"
+          title={`validate hits ${targets.map(([k, u]) => `${u} (${labelOf(k)})`).join(", ") || "nothing"}`}
+        >
+          <Crosshair className="size-3.5 shrink-0" />
+          {describeTargets(targets, labelOf)}
+        </span>
+
+        <span
+          className="text-muted-foreground hidden items-center gap-1.5 text-xs xl:flex"
+          title="the serve topology"
+        >
+          <Server className="size-3.5 shrink-0" />
+          <span className="font-mono">{overview.config.paths.topology}</span>
+        </span>
+
+        <div className="flex flex-wrap items-center gap-1.5">
+          {counts.map((c) => (
             <Link
-              href="/kb/view/?doc=docs%2Fchaos%2Frunbook"
-              className="hover:bg-muted text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs transition-colors"
+              key={c.label}
+              href={c.href}
+              className="bg-muted/60 ring-border hover:bg-muted inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs ring-1 transition-colors ring-inset"
             >
-              <BookOpen className="size-3.5" /> What a failure means
+              <span className={cn("font-medium tabular-nums", c.bad && "text-destructive")}>{c.n}</span>
+              <span className="text-muted-foreground">{c.label}</span>
             </Link>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2 lg:shrink-0">
-          {tools.length ? (
-            tools.map((t) => (
-              <a
-                key={t.title}
-                href={t.href}
-                target="_blank"
-                rel="noreferrer"
-                className="bg-card hover:border-foreground/30 group flex flex-1 basis-24 flex-col items-center gap-1.5 rounded-lg border px-2 py-2.5 transition-colors lg:w-[5.5rem] lg:flex-none lg:basis-auto"
-                title={t.href}
-              >
-                <t.icon className="text-muted-foreground group-hover:text-foreground size-4 transition-colors" />
-                <span className="flex items-center gap-0.5 text-[11px] font-medium">
-                  {t.title}
-                  <ArrowUpRight className="size-3 opacity-0 transition-opacity group-hover:opacity-100" />
-                </span>
-              </a>
-            ))
-          ) : (
-            <p className="text-muted-foreground max-w-56 text-xs">
-              No observability links: set <span className="font-mono">[links]</span> in the chaos config.
-            </p>
-          )}
+          ))}
+          <Button variant="ghost" size="sm" className="gap-1.5" asChild>
+            <Link href="/kb/view/?doc=docs%2Fchaos%2Frunbook">
+              <BookOpen /> Runbook
+            </Link>
+          </Button>
         </div>
       </div>
     </div>
