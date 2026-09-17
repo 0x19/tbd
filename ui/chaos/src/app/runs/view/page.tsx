@@ -1,11 +1,12 @@
 "use client";
 
-import { ArrowLeft, Square } from "lucide-react";
+import { ArrowLeft, ScrollText, Square } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { toast } from "sonner";
 
+import { useChaos } from "@/app/providers";
 import { ChartHeadline, Legend, RunChart, SweepChart } from "@/components/charts";
 import { DetailList, HeatGrid, LevelChip, PageTitle, StageBar, StatRow } from "@/components/kit";
 import { BoolBadge, StatusBadge } from "@/components/status-badge";
@@ -69,6 +70,7 @@ function stageIndex(phase: string | null, finished: boolean, record: RunRecord |
 /** The kit's detail layout: back, big title with chips, lifecycle strip, stats, chart, tables. */
 function RunView() {
   const id = useSearchParams().get("id");
+  const { overview } = useChaos();
   const live = useRunFeed(id);
   const [cancelling, setCancelling] = useState(false);
   const record = live.record;
@@ -87,6 +89,25 @@ function RunView() {
       setCancelling(false);
     }
   };
+
+  // Logs live in VictoriaLogs, not here: duplicating them into the run record
+  // would mean a second store to keep, size and expire. What the run page owes
+  // the reader is the way in -- the same window, already scoped.
+  //
+  // A scenario's services run in-process inside the chaos pod, so their stdout
+  // is the chaos pod's. Widen by a few seconds either side: the setup and
+  // teardown that explain a failure happen just outside the measured window.
+  const logsBase = overview?.config?.links?.victorialogs ?? "";
+  const logsHref = (() => {
+    if (!logsBase || !record?.started_at) return "";
+    const pad = 5000;
+    const from = new Date(new Date(record.started_at).getTime() - pad).toISOString();
+    const to = new Date(
+      (record.finished_at ? new Date(record.finished_at).getTime() : Date.now()) + pad,
+    ).toISOString();
+    const query = `_time:[${from}, ${to}] app:chaos`;
+    return `${logsBase}?#/?query=${encodeURIComponent(query)}&start=${encodeURIComponent(from)}&end=${encodeURIComponent(to)}`;
+  })();
 
   if (!id) return <p className="text-muted-foreground text-sm">No run id.</p>;
 
@@ -145,6 +166,19 @@ function RunView() {
           )
         }
       >
+        {logsHref ? (
+          <Button
+            variant="outline"
+            size="sm"
+            asChild
+            title="This run's window in VictoriaLogs, padded either side"
+          >
+            <a href={logsHref} target="_blank" rel="noreferrer">
+              <ScrollText />
+              Logs
+            </a>
+          </Button>
+        ) : null}
         {running ? (
           <Button variant="destructive" size="sm" onClick={cancel} disabled={cancelling}>
             <Square /> Cancel run
@@ -302,7 +336,11 @@ function RunView() {
                   </ol>
                 ) : (
                   <p className="text-muted-foreground text-sm">
-                    {record?.kind === "load" ? "Ad-hoc load has no timeline." : "No timeline events yet."}
+                    {record?.kind === "load"
+                      ? "Ad-hoc load has no timeline."
+                      : running
+                        ? "No timeline events yet."
+                        : "This scenario injects nothing: no [[timeline]] block, so there is nothing to show."}
                   </p>
                 )}
               </CardContent>
