@@ -256,6 +256,7 @@ run = [
   "mise run stress:run",
   "mise run ui:check",
   "mise run ui:auth:check",
+  "mise run ui:www:check",
 ]
 
 # ------------------------------------------------------------- scaffold ----
@@ -313,9 +314,17 @@ run = "cargo run -p tbd-ledger"
 description = "Run the humans service (gRPC on HUMANS_LISTEN_ADDR)"
 run = "cargo run -p tbd-humans"
 
+[tasks."run:finance"]
+description = "Run the finance service (gRPC on FINANCE_LISTEN_ADDR)"
+run = "cargo run -p tbd-finance"
+
+[tasks."run:playground"]
+description = "Run the playground service (gRPC on PLAYGROUND_LISTEN_ADDR)"
+run = "cargo run -p tbd-playground"
+
 [tasks.dev]
 description = "Both services in one terminal (parallel, output prefixed per service)"
-depends = ["run:engine", "run:protocol", "run:ledger", "run:humans"]
+depends = ["run:engine", "run:protocol", "run:ledger", "run:humans", "run:finance", "run:playground"]
 
 [tasks."watch:engine"]
 description = "Engine with auto-reload on file change (bacon)"
@@ -333,6 +342,14 @@ run = "bacon ledger"
 description = "Humans with auto-reload on file change (bacon)"
 run = "bacon humans"
 
+[tasks."watch:finance"]
+description = "Finance with auto-reload on file change (bacon)"
+run = "bacon finance"
+
+[tasks."watch:playground"]
+description = "Playground with auto-reload on file change (bacon)"
+run = "bacon playground"
+
 # --------------------------------------------------------------- docker ----
 
 [tasks."docker:build"]
@@ -342,6 +359,8 @@ run = [
   "docker build -f devops/docker/Dockerfile --build-arg BIN=engine   --build-arg PORT=50051 -t $IMAGE_REGISTRY/tbd-engine:$IMAGE_TAG .",
   "docker build -f devops/docker/Dockerfile --build-arg BIN=protocol --build-arg PORT=8080  -t $IMAGE_REGISTRY/tbd-protocol:$IMAGE_TAG .",
   "docker build -f devops/docker/Dockerfile --build-arg BIN=chaos    --build-arg PORT=7700  -t $IMAGE_REGISTRY/tbd-chaos:$IMAGE_TAG .",
+  "docker build -f devops/docker/Dockerfile --build-arg BIN=playground --build-arg PORT=50055 -t $IMAGE_REGISTRY/tbd-playground:$IMAGE_TAG .",
+  "docker build -f devops/docker/Dockerfile --build-arg BIN=finance --build-arg PORT=50054 -t $IMAGE_REGISTRY/tbd-finance:$IMAGE_TAG .",
   "docker build -f devops/docker/Dockerfile --build-arg BIN=humans --build-arg PORT=50053 -t $IMAGE_REGISTRY/tbd-humans:$IMAGE_TAG .",
   "docker build -f devops/docker/Dockerfile --build-arg BIN=ledger --build-arg PORT=50052 -t $IMAGE_REGISTRY/tbd-ledger:$IMAGE_TAG .",
 ]
@@ -352,6 +371,8 @@ run = [
   "docker push $IMAGE_REGISTRY/tbd-engine:$IMAGE_TAG",
   "docker push $IMAGE_REGISTRY/tbd-protocol:$IMAGE_TAG",
   "docker push $IMAGE_REGISTRY/tbd-chaos:$IMAGE_TAG",
+  "docker push $IMAGE_REGISTRY/tbd-playground:$IMAGE_TAG",
+  "docker push $IMAGE_REGISTRY/tbd-finance:$IMAGE_TAG",
   "docker push $IMAGE_REGISTRY/tbd-humans:$IMAGE_TAG",
   "docker push $IMAGE_REGISTRY/tbd-ledger:$IMAGE_TAG",
 ]
@@ -407,10 +428,13 @@ mise run ui:build
 docker build -f devops/docker/Dockerfile --build-arg BIN=engine   --build-arg PORT=50051 -t $IMAGE_REGISTRY/tbd-engine:dev .
 docker build -f devops/docker/Dockerfile --build-arg BIN=protocol --build-arg PORT=8080  -t $IMAGE_REGISTRY/tbd-protocol:dev .
 docker build -f devops/docker/Dockerfile --build-arg BIN=chaos    --build-arg PORT=7700  -t $IMAGE_REGISTRY/tbd-chaos:dev .
+docker build -f devops/docker/Dockerfile --build-arg BIN=playground --build-arg PORT=50055 -t $IMAGE_REGISTRY/tbd-playground:dev .
+docker build -f devops/docker/Dockerfile --build-arg BIN=finance --build-arg PORT=50054 -t $IMAGE_REGISTRY/tbd-finance:dev .
 docker build -f devops/docker/Dockerfile --build-arg BIN=humans --build-arg PORT=50053 -t $IMAGE_REGISTRY/tbd-humans:dev .
 docker build -f devops/docker/Dockerfile --build-arg BIN=ledger --build-arg PORT=50052 -t $IMAGE_REGISTRY/tbd-ledger:dev .
 docker build -f devops/docker/Dockerfile.auth-ui $(mise run -q auth:ui-build-args) -t $IMAGE_REGISTRY/tbd-auth-ui:dev .
-k3d image import -m direct -c "$K3D_CLUSTER" $IMAGE_REGISTRY/tbd-engine:dev $IMAGE_REGISTRY/tbd-protocol:dev $IMAGE_REGISTRY/tbd-chaos:dev $IMAGE_REGISTRY/tbd-humans:dev $IMAGE_REGISTRY/tbd-ledger:dev $IMAGE_REGISTRY/tbd-auth-ui:dev
+docker build -f devops/docker/Dockerfile.www $(mise run -q www:build-args) -t $IMAGE_REGISTRY/tbd-www:dev .
+k3d image import -m direct -c "$K3D_CLUSTER" $IMAGE_REGISTRY/tbd-engine:dev $IMAGE_REGISTRY/tbd-protocol:dev $IMAGE_REGISTRY/tbd-chaos:dev $IMAGE_REGISTRY/tbd-playground:dev $IMAGE_REGISTRY/tbd-finance:dev $IMAGE_REGISTRY/tbd-humans:dev $IMAGE_REGISTRY/tbd-ledger:dev $IMAGE_REGISTRY/tbd-auth-ui:dev $IMAGE_REGISTRY/tbd-www:dev
 """
 
 # The chaos UI links to grafana.<domain>, logs.<domain>, ... of the public edge.
@@ -465,6 +489,40 @@ pnpm typecheck
 [tasks."ui:auth:build"]
 description = "Build the sign-in UI image (ghcr.io/0x19/tbd-auth-ui:dev)"
 run = "docker build -f devops/docker/Dockerfile.auth-ui $(mise run -q auth:ui-build-args) -t $IMAGE_REGISTRY/tbd-auth-ui:dev ."
+
+[tasks."ui:www:install"]
+hide = true
+dir = "ui/www"
+run = "pnpm install --frozen-lockfile"
+
+[tasks."ui:www:dev"]
+description = "Next.js dev server for the company site on :3003"
+depends = ["ui:www:install"]
+dir = "ui/www"
+run = "pnpm dev"
+
+[tasks."ui:www:check"]
+description = "ui/www: prettier, eslint, tsc (same bar as ui/chaos)"
+depends = ["ui:www:install"]
+dir = "ui/www"
+run = """
+pnpm format:check
+pnpm lint
+pnpm typecheck
+"""
+
+# The site is published at the base domain of the public edge; a build for any
+# other host asks robots to stay away, so the canonical URL is a build argument.
+[tasks."www:build-args"]
+hide = true
+run = """
+domain="${BASE_DOMAIN:-$(grep -s '^BASE_DOMAIN=' devops/edge/.env | cut -d= -f2- | tr -d '"')}"
+[ -n "$domain" ] && echo "--build-arg SITE_URL=https://$domain"
+"""
+
+[tasks."ui:www:build"]
+description = "Build the company site image (ghcr.io/0x19/tbd-www:dev)"
+run = "docker build -f devops/docker/Dockerfile.www $(mise run -q www:build-args) -t $IMAGE_REGISTRY/tbd-www:dev ."
 
 [tasks."ledger:secrets"]
 description = "Create the ledger-db Secret in tbd once (random passwords; never on disk). Pass URLs for managed databases: mise run ledger:secrets postgres://... http://user:pw@clickhouse:8123"
@@ -626,10 +684,46 @@ kubectl -n auth logs job/seed-clients | tail -3
 description = "Browser check of sign-up + authorization code (PKCE) + token exchange against auth.<domain> (AUTH_URL overrides)"
 depends = ["ui:install"]
 dir = "ui/chaos"
+# The check registers a person and promotes them to admin, to prove the role
+# model works. It must not leave them behind: `role == admin` is what gates the
+# chaos admin UI, Grafana, the logs and the metrics UIs, so a forgotten fixture
+# is a real account with real access. Purge runs whether the check passed or
+# failed -- a failed run leaves the same account.
 run = """
 export AUTH_URL="${AUTH_URL:-$(grep -s '^AUTH_PUBLIC_URL=' ../../devops/k8s/auth/auth.env | cut -d= -f2-)}"
 pnpm exec playwright install chromium >/dev/null
-node e2e/auth.mjs
+status=0
+node e2e/auth.mjs || status=$?
+( cd ../.. && mise run auth:e2e:purge ) || echo "warning: could not purge e2e identities"
+exit $status
+"""
+
+[tasks."auth:e2e:purge"]
+description = "Delete the identities auth:e2e creates (e2e-*@example.com). Safe to run any time."
+# Uses Kratos' own CLI in its pod rather than curl against the admin API: the
+# identity document nests ids (recovery and verification addresses carry their
+# own), so shell-grepping it picks the wrong ones.
+run = """
+pod=$(kubectl -n auth get pods -l app.kubernetes.io/name=kratos -o name 2>/dev/null | head -1)
+pod=${pod:-$(kubectl -n auth get pods -o name | grep kratos | head -1)}
+pod=${pod#pod/}
+prefix="${E2E_PREFIX:-e2e-}"
+ids=$(kubectl -n auth exec "$pod" -c kratos -- kratos list identities --endpoint http://127.0.0.1:4434 --format json 2>/dev/null \
+  | python3 -c "
+import sys, json, os
+prefix = os.environ.get('PREFIX', 'e2e-')
+d = json.load(sys.stdin)
+for i in d.get('identities', []):
+    email = (i.get('traits') or {}).get('email') or ''
+    if email.startswith(prefix):
+        print(i['id'], email)
+" )
+if [ -z "$ids" ]; then echo "no identities with prefix '$prefix'"; exit 0; fi
+echo "$ids" | while read -r id email; do
+  kubectl -n auth exec "$pod" -c kratos -- kratos delete identity "$id" --endpoint http://127.0.0.1:4434 >/dev/null 2>&1 \
+    && echo "deleted $email ($id)" || echo "FAILED $email ($id)"
+done
+echo "$(echo "$ids" | wc -l) identities processed"
 """
 
 [tasks."auth:token"]
@@ -653,7 +747,7 @@ mise run ledger:deploy
 kubectl apply -k devops/k8s/overlays/local
 kubectl -n observability rollout status statefulset/victoria-metrics statefulset/victoria-logs statefulset/tempo --timeout=180s
 kubectl -n observability rollout status statefulset/pyroscope deployment/otel-collector deployment/grafana --timeout=300s
-kubectl -n tbd rollout status deployment/engine deployment/protocol deployment/envoy deployment/chaos deployment/humans deployment/ledger --timeout=180s
+kubectl -n tbd rollout status deployment/engine deployment/protocol deployment/envoy deployment/chaos deployment/playground deployment/finance deployment/humans deployment/ledger --timeout=180s
 mise run local:urls
 """
 
@@ -664,8 +758,8 @@ run = """
 mise run local:build
 kubectl apply -k devops/k8s/overlays/local
 kubectl -n tbd rollout status statefulset/ledger-postgres statefulset/clickhouse --timeout=180s
-kubectl -n tbd rollout restart deployment/engine deployment/protocol deployment/chaos deployment/ledger deployment/humans
-kubectl -n tbd rollout status deployment/engine deployment/protocol deployment/chaos deployment/humans deployment/ledger --timeout=180s
+kubectl -n tbd rollout restart deployment/engine deployment/protocol deployment/chaos deployment/ledger deployment/humans deployment/finance deployment/www deployment/playground
+kubectl -n tbd rollout status deployment/engine deployment/protocol deployment/chaos deployment/playground deployment/finance deployment/humans deployment/ledger deployment/www --timeout=180s
 """
 
 [tasks."local:urls"]
@@ -674,6 +768,7 @@ echo "edge (REST/WS/GraphQL/gRPC)  http://localhost:18080"
 echo "engine LB (gRPC)             http://localhost:15051"
 echo "chaos API                    http://localhost:18080/api/chaos/v1/overview"
 echo "chaos UI                     http://chaos.localhost:18080/   (browsers resolve *.localhost themselves)"
+echo "company site                 http://www.localhost:18080/     (the public edge serves it at the base domain itself)"
 echo "sign-in (Hydra/Kratos)       $(grep -s '^AUTH_PUBLIC_URL=' devops/k8s/auth/auth.env | cut -d= -f2-)/login   discovery: /.well-known/openid-configuration"
 echo "grafana (admin/admin)        http://localhost:3000"
 echo "victoria-metrics             http://localhost:9090"

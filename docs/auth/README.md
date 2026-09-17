@@ -301,11 +301,19 @@ mise run auth:oidc google ID SECRET
 mise run auth:smtp URI FROM        # e-mail relay; turns recovery/verification on
 mise run auth:rotate client-ui | client-chaos | hmac | hydra-system
 mise run auth:e2e                  # browser check: sign-up, PKCE, refresh grace, roles, API 401, sign-out
+mise run auth:e2e:purge            # delete the e2e-*@example.com identities it creates
 mise run ui:auth:check | ui:auth:build
 kubectl -n auth logs deploy/hydra
 kubectl -n auth logs deploy/kratos
 kubectl -n auth logs deploy/auth-ui
 ```
+
+The browser check registers a person and promotes them to **admin**, because that is
+what it is testing. It now deletes them afterwards, pass or fail. It did not always:
+twenty-five accumulated, seven of them admins, and `role == admin` is what gates the
+chaos admin UI, Grafana, the logs and the metrics UIs -- so each one was a real
+account with real access, not a fixture. `auth:e2e:purge` is idempotent and safe to
+run at any time; `E2E_PREFIX` changes which identities it matches.
 
 Rotation: `client-ui` and `client-chaos` write a new secret, re-seed the client and
 restart Envoy / chaos; `hmac` re-keys the browser cookies (everyone signs in again);
