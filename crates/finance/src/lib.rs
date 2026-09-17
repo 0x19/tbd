@@ -11,6 +11,7 @@ pub mod import;
 pub mod invoice;
 pub mod money;
 mod service;
+mod service_invoices;
 pub mod store;
 pub mod sync;
 

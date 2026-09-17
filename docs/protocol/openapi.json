@@ -299,6 +299,90 @@
         }
       }
     },
+    "/v1/finance/clients": {
+      "get": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/ListClients",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/ListClients` on the `finance` backend.",
+        "operationId": "FinanceService.ListClients",
+        "parameters": [
+          {
+            "name": "party_ids",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "explode": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.ListClientsResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.ListClientsResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/UpsertClient",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/UpsertClient` on the `finance` backend.",
+        "operationId": "FinanceService.UpsertClient",
+        "requestBody": {
+          "description": "`tbd.finance.v1.UpsertClientRequest`; path variables override their fields",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/tbd.finance.v1.UpsertClientRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.UpsertClientResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.UpsertClientResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/finance/connections": {
       "get": {
         "tags": [
@@ -409,6 +493,469 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/tbd.finance.v1.CompleteConnectionResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/finance/invoices": {
+      "get": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/ListInvoices",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/ListInvoices` on the `finance` backend.",
+        "operationId": "FinanceService.ListInvoices",
+        "parameters": [
+          {
+            "name": "party_ids",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "explode": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.ListInvoicesResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.ListInvoicesResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/CreateInvoice",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/CreateInvoice` on the `finance` backend.",
+        "operationId": "FinanceService.CreateInvoice",
+        "requestBody": {
+          "description": "`tbd.finance.v1.CreateInvoiceRequest`; path variables override their fields",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/tbd.finance.v1.CreateInvoiceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.CreateInvoiceResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.CreateInvoiceResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/finance/invoices/{id}": {
+      "get": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/GetInvoice",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/GetInvoice` on the `finance` backend.",
+        "operationId": "FinanceService.GetInvoice",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.GetInvoiceResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.GetInvoiceResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/finance/invoices/{id}/approve": {
+      "post": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/ApproveInvoice",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/ApproveInvoice` on the `finance` backend.",
+        "operationId": "FinanceService.ApproveInvoice",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "`tbd.finance.v1.ApproveInvoiceRequest`; path variables override their fields",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/tbd.finance.v1.ApproveInvoiceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.ApproveInvoiceResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.ApproveInvoiceResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/finance/invoices/{id}/cancel": {
+      "post": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/CancelInvoice",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/CancelInvoice` on the `finance` backend.",
+        "operationId": "FinanceService.CancelInvoice",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "`tbd.finance.v1.CancelInvoiceRequest`; path variables override their fields",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/tbd.finance.v1.CancelInvoiceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.CancelInvoiceResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.CancelInvoiceResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/finance/invoices/{id}/document": {
+      "get": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/GetInvoiceDocument",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/GetInvoiceDocument` on the `finance` backend.",
+        "operationId": "FinanceService.GetInvoiceDocument",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.GetInvoiceDocumentResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.GetInvoiceDocumentResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/finance/invoices/{id}/preview": {
+      "post": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/PreviewInvoice",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/PreviewInvoice` on the `finance` backend.",
+        "operationId": "FinanceService.PreviewInvoice",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "`tbd.finance.v1.PreviewInvoiceRequest`; path variables override their fields",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/tbd.finance.v1.PreviewInvoiceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.PreviewInvoiceResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.PreviewInvoiceResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/finance/invoices/{id}/update": {
+      "post": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/UpdateInvoice",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/UpdateInvoice` on the `finance` backend.",
+        "operationId": "FinanceService.UpdateInvoice",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "`tbd.finance.v1.UpdateInvoiceRequest`; path variables override their fields",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/tbd.finance.v1.UpdateInvoiceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.UpdateInvoiceResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.UpdateInvoiceResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/finance/issuer": {
+      "get": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/GetIssuer",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/GetIssuer` on the `finance` backend.",
+        "operationId": "FinanceService.GetIssuer",
+        "parameters": [
+          {
+            "name": "party_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.GetIssuerResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.GetIssuerResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/UpsertIssuer",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/UpsertIssuer` on the `finance` backend.",
+        "operationId": "FinanceService.UpsertIssuer",
+        "requestBody": {
+          "description": "`tbd.finance.v1.UpsertIssuerRequest`; path variables override their fields",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/tbd.finance.v1.UpsertIssuerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.UpsertIssuerResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.UpsertIssuerResponse"
                 }
               }
             }
@@ -1977,6 +2524,27 @@
           }
         }
       },
+      "tbd.finance.v1.ApproveInvoiceRequest": {
+        "type": "object",
+        "description": "`tbd.finance.v1.ApproveInvoiceRequest`",
+        "properties": {
+          "content_hash": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.finance.v1.ApproveInvoiceResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.ApproveInvoiceResponse`",
+        "properties": {
+          "invoice": {
+            "$ref": "#/components/schemas/tbd.finance.v1.Invoice"
+          }
+        }
+      },
       "tbd.finance.v1.Balance": {
         "type": "object",
         "description": "`tbd.finance.v1.Balance`",
@@ -1993,6 +2561,27 @@
           },
           "observed_at": {
             "type": "string"
+          }
+        }
+      },
+      "tbd.finance.v1.CancelInvoiceRequest": {
+        "type": "object",
+        "description": "`tbd.finance.v1.CancelInvoiceRequest`",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.finance.v1.CancelInvoiceResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.CancelInvoiceResponse`",
+        "properties": {
+          "invoice": {
+            "$ref": "#/components/schemas/tbd.finance.v1.Invoice"
           }
         }
       },
@@ -2019,6 +2608,48 @@
             "type": "string"
           },
           "slug": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.finance.v1.ClientProfile": {
+        "type": "object",
+        "description": "`tbd.finance.v1.ClientProfile`",
+        "properties": {
+          "address_lines": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "archived": {
+            "type": "boolean"
+          },
+          "country_code": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "party_id": {
+            "type": "string"
+          },
+          "recipients": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "tax_id": {
+            "type": "string"
+          },
+          "vat_treatment": {
             "type": "string"
           }
         }
@@ -2084,6 +2715,24 @@
           }
         }
       },
+      "tbd.finance.v1.CreateInvoiceRequest": {
+        "type": "object",
+        "description": "`tbd.finance.v1.CreateInvoiceRequest`",
+        "properties": {
+          "client_id": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.finance.v1.CreateInvoiceResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.CreateInvoiceResponse`",
+        "properties": {
+          "invoice": {
+            "$ref": "#/components/schemas/tbd.finance.v1.Invoice"
+          }
+        }
+      },
       "tbd.finance.v1.DeclareCategoryRequest": {
         "type": "object",
         "description": "`tbd.finance.v1.DeclareCategoryRequest`",
@@ -2102,6 +2751,217 @@
         "properties": {
           "transaction": {
             "$ref": "#/components/schemas/tbd.finance.v1.Transaction"
+          }
+        }
+      },
+      "tbd.finance.v1.GetInvoiceDocumentResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.GetInvoiceDocumentResponse`",
+        "properties": {
+          "content_type": {
+            "type": "string"
+          },
+          "number": {
+            "type": "string"
+          },
+          "pdf": {
+            "type": "string",
+            "format": "byte"
+          }
+        }
+      },
+      "tbd.finance.v1.GetInvoiceResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.GetInvoiceResponse`",
+        "properties": {
+          "invoice": {
+            "$ref": "#/components/schemas/tbd.finance.v1.Invoice"
+          }
+        }
+      },
+      "tbd.finance.v1.GetIssuerResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.GetIssuerResponse`",
+        "properties": {
+          "issuer": {
+            "$ref": "#/components/schemas/tbd.finance.v1.IssuerProfile"
+          }
+        }
+      },
+      "tbd.finance.v1.Invoice": {
+        "type": "object",
+        "description": "`tbd.finance.v1.Invoice`",
+        "properties": {
+          "approved_at": {
+            "type": "string"
+          },
+          "cancelled_at": {
+            "type": "string"
+          },
+          "client_id": {
+            "type": "string"
+          },
+          "content_hash": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "delivery_date": {
+            "type": "string"
+          },
+          "document_id": {
+            "type": "string"
+          },
+          "due_date": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "issued_at": {
+            "type": "string"
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/tbd.finance.v1.InvoiceLine"
+            }
+          },
+          "note": {
+            "type": "string"
+          },
+          "number": {
+            "type": "string"
+          },
+          "party_id": {
+            "type": "string"
+          },
+          "place_of_issue": {
+            "type": "string"
+          },
+          "prefilled_from": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "subtotal_minor": {
+            "type": "string",
+            "format": "int64"
+          },
+          "total_minor": {
+            "type": "string",
+            "format": "int64"
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "vat_minor": {
+            "type": "string",
+            "format": "int64"
+          },
+          "vat_note": {
+            "type": "string"
+          },
+          "vat_treatment": {
+            "type": "string"
+          },
+          "year": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "tbd.finance.v1.InvoiceLine": {
+        "type": "object",
+        "description": "`tbd.finance.v1.InvoiceLine`",
+        "properties": {
+          "amount_minor": {
+            "type": "string",
+            "format": "int64"
+          },
+          "description": {
+            "type": "string"
+          },
+          "position": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "quantity_milli": {
+            "type": "string",
+            "format": "int64"
+          },
+          "unit_price_minor": {
+            "type": "string",
+            "format": "int64"
+          }
+        }
+      },
+      "tbd.finance.v1.IssuerProfile": {
+        "type": "object",
+        "description": "`tbd.finance.v1.IssuerProfile`",
+        "properties": {
+          "address_lines": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "bank_name": {
+            "type": "string"
+          },
+          "board_member": {
+            "type": "string"
+          },
+          "court": {
+            "type": "string"
+          },
+          "device": {
+            "type": "string"
+          },
+          "due_days": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "iban": {
+            "type": "string"
+          },
+          "issued_by": {
+            "type": "string"
+          },
+          "legal_name": {
+            "type": "string"
+          },
+          "oib": {
+            "type": "string"
+          },
+          "operator_id": {
+            "type": "string"
+          },
+          "party_id": {
+            "type": "string"
+          },
+          "place_of_issue": {
+            "type": "string"
+          },
+          "premises": {
+            "type": "string"
+          },
+          "registration_no": {
+            "type": "string"
+          },
+          "share_capital": {
+            "type": "string"
+          },
+          "swift": {
+            "type": "string"
+          },
+          "vat_id": {
+            "type": "string"
           }
         }
       },
@@ -2129,6 +2989,18 @@
           }
         }
       },
+      "tbd.finance.v1.ListClientsResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.ListClientsResponse`",
+        "properties": {
+          "clients": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/tbd.finance.v1.ClientProfile"
+            }
+          }
+        }
+      },
       "tbd.finance.v1.ListConnectionsResponse": {
         "type": "object",
         "description": "`tbd.finance.v1.ListConnectionsResponse`",
@@ -2137,6 +3009,18 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/tbd.finance.v1.Connection"
+            }
+          }
+        }
+      },
+      "tbd.finance.v1.ListInvoicesResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.ListInvoicesResponse`",
+        "properties": {
+          "invoices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/tbd.finance.v1.Invoice"
             }
           }
         }
@@ -2231,6 +3115,31 @@
           },
           "version": {
             "type": "string"
+          }
+        }
+      },
+      "tbd.finance.v1.PreviewInvoiceRequest": {
+        "type": "object",
+        "description": "`tbd.finance.v1.PreviewInvoiceRequest`",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.finance.v1.PreviewInvoiceResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.PreviewInvoiceResponse`",
+        "properties": {
+          "content_hash": {
+            "type": "string"
+          },
+          "number": {
+            "type": "string"
+          },
+          "pdf": {
+            "type": "string",
+            "format": "byte"
           }
         }
       },
@@ -2429,6 +3338,78 @@
           },
           "value_date": {
             "type": "string"
+          }
+        }
+      },
+      "tbd.finance.v1.UpdateInvoiceRequest": {
+        "type": "object",
+        "description": "`tbd.finance.v1.UpdateInvoiceRequest`",
+        "properties": {
+          "delivery_date": {
+            "type": "string"
+          },
+          "due_date": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/tbd.finance.v1.InvoiceLine"
+            }
+          },
+          "note": {
+            "type": "string"
+          },
+          "place_of_issue": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.finance.v1.UpdateInvoiceResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.UpdateInvoiceResponse`",
+        "properties": {
+          "invoice": {
+            "$ref": "#/components/schemas/tbd.finance.v1.Invoice"
+          }
+        }
+      },
+      "tbd.finance.v1.UpsertClientRequest": {
+        "type": "object",
+        "description": "`tbd.finance.v1.UpsertClientRequest`",
+        "properties": {
+          "client": {
+            "$ref": "#/components/schemas/tbd.finance.v1.ClientProfile"
+          }
+        }
+      },
+      "tbd.finance.v1.UpsertClientResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.UpsertClientResponse`",
+        "properties": {
+          "client": {
+            "$ref": "#/components/schemas/tbd.finance.v1.ClientProfile"
+          }
+        }
+      },
+      "tbd.finance.v1.UpsertIssuerRequest": {
+        "type": "object",
+        "description": "`tbd.finance.v1.UpsertIssuerRequest`",
+        "properties": {
+          "issuer": {
+            "$ref": "#/components/schemas/tbd.finance.v1.IssuerProfile"
+          }
+        }
+      },
+      "tbd.finance.v1.UpsertIssuerResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.UpsertIssuerResponse`",
+        "properties": {
+          "issuer": {
+            "$ref": "#/components/schemas/tbd.finance.v1.IssuerProfile"
           }
         }
       },

@@ -8,6 +8,7 @@ mod banking;
 mod categorise;
 mod connect;
 mod import;
+mod invoices;
 mod rpc;
 mod seed;
 mod support;

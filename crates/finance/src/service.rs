@@ -14,14 +14,21 @@ use tbd_common::{
 };
 use tbd_db::{Access, DbError};
 use tbd_proto::finance::v1::{
-    Account, Balance, Category, CompleteConnectionRequest, CompleteConnectionResponse, Connection,
-    DeclareCategoryRequest, DeclareCategoryResponse, ListAccountsRequest, ListAccountsResponse,
-    ListCategoriesRequest, ListCategoriesResponse, ListConnectionsRequest, ListConnectionsResponse,
-    ListPartiesRequest, ListPartiesResponse, ListRulesRequest, ListRulesResponse,
-    ListTransactionsRequest, ListTransactionsResponse, MonthlySummaryRequest,
-    MonthlySummaryResponse, Party, PingRequest, PingResponse, RefreshAccountRequest,
-    RefreshAccountResponse, Rule, StartConnectionRequest, StartConnectionResponse, SummaryRow,
-    Transaction, UpsertRuleRequest, UpsertRuleResponse, finance_service_server::FinanceService,
+    Account, ApproveInvoiceRequest, ApproveInvoiceResponse, Balance, CancelInvoiceRequest,
+    CancelInvoiceResponse, Category, CompleteConnectionRequest, CompleteConnectionResponse,
+    Connection, CreateInvoiceRequest, CreateInvoiceResponse, DeclareCategoryRequest,
+    DeclareCategoryResponse, GetInvoiceDocumentRequest, GetInvoiceDocumentResponse,
+    GetInvoiceRequest, GetInvoiceResponse, GetIssuerRequest, GetIssuerResponse,
+    ListAccountsRequest, ListAccountsResponse, ListCategoriesRequest, ListCategoriesResponse,
+    ListClientsRequest, ListClientsResponse, ListConnectionsRequest, ListConnectionsResponse,
+    ListInvoicesRequest, ListInvoicesResponse, ListPartiesRequest, ListPartiesResponse,
+    ListRulesRequest, ListRulesResponse, ListTransactionsRequest, ListTransactionsResponse,
+    MonthlySummaryRequest, MonthlySummaryResponse, Party, PingRequest, PingResponse,
+    PreviewInvoiceRequest, PreviewInvoiceResponse, RefreshAccountRequest, RefreshAccountResponse,
+    Rule, StartConnectionRequest, StartConnectionResponse, SummaryRow, Transaction,
+    UpdateInvoiceRequest, UpdateInvoiceResponse, UpsertClientRequest, UpsertClientResponse,
+    UpsertIssuerRequest, UpsertIssuerResponse, UpsertRuleRequest, UpsertRuleResponse,
+    finance_service_server::FinanceService,
 };
 use tonic::{Code, Request, Response, Status};
 use uuid::Uuid;
@@ -152,7 +159,7 @@ impl Finance {
 
     /// The pool, the caller's access and its narrowed view, or the status
     /// that stops the RPC. Every read starts here.
-    async fn read_context(
+    pub(crate) async fn read_context(
         &self,
         request: &Request<impl Sized>,
         party_ids: &[String],
@@ -205,7 +212,7 @@ impl Finance {
 
     /// Count the request, start its timer and apply any injected fault
     /// before real work.
-    async fn admit(&self, route: &'static str) -> Result<RequestTimer, Status> {
+    pub(crate) async fn admit(&self, route: &'static str) -> Result<RequestTimer, Status> {
         self.runtime.stats.request();
         let mut timer = RequestTimer::start("grpc", route);
         if let Err(fault) = self.runtime.fault.apply().await {
@@ -219,7 +226,7 @@ impl Finance {
         Ok(timer)
     }
 
-    fn reject(&self, timer: &mut RequestTimer, status: Status) -> Status {
+    pub(crate) fn reject(&self, timer: &mut RequestTimer, status: Status) -> Status {
         self.runtime.stats.failure();
         timer.set_status(format!("{:?}", status.code()));
         status
@@ -263,7 +270,7 @@ fn transaction_filter(req: &ListTransactionsRequest) -> Result<TransactionFilter
 }
 
 /// The one place a store error becomes a status.
-fn status_of(e: DbError) -> Status {
+pub(crate) fn status_of(e: DbError) -> Status {
     match e {
         DbError::NotFound { what } => Status::not_found(what),
         DbError::Invalid { field, reason } => {
@@ -799,6 +806,79 @@ impl FinanceService for Finance {
                 })
                 .collect(),
         }))
+    }
+
+    async fn get_issuer(
+        &self,
+        r: Request<GetIssuerRequest>,
+    ) -> Result<Response<GetIssuerResponse>, Status> {
+        self.rpc_get_issuer(r).await
+    }
+    async fn upsert_issuer(
+        &self,
+        r: Request<UpsertIssuerRequest>,
+    ) -> Result<Response<UpsertIssuerResponse>, Status> {
+        self.rpc_upsert_issuer(r).await
+    }
+    async fn list_clients(
+        &self,
+        r: Request<ListClientsRequest>,
+    ) -> Result<Response<ListClientsResponse>, Status> {
+        self.rpc_list_clients(r).await
+    }
+    async fn upsert_client(
+        &self,
+        r: Request<UpsertClientRequest>,
+    ) -> Result<Response<UpsertClientResponse>, Status> {
+        self.rpc_upsert_client(r).await
+    }
+    async fn list_invoices(
+        &self,
+        r: Request<ListInvoicesRequest>,
+    ) -> Result<Response<ListInvoicesResponse>, Status> {
+        self.rpc_list_invoices(r).await
+    }
+    async fn get_invoice(
+        &self,
+        r: Request<GetInvoiceRequest>,
+    ) -> Result<Response<GetInvoiceResponse>, Status> {
+        self.rpc_get_invoice(r).await
+    }
+    async fn create_invoice(
+        &self,
+        r: Request<CreateInvoiceRequest>,
+    ) -> Result<Response<CreateInvoiceResponse>, Status> {
+        self.rpc_create_invoice(r).await
+    }
+    async fn update_invoice(
+        &self,
+        r: Request<UpdateInvoiceRequest>,
+    ) -> Result<Response<UpdateInvoiceResponse>, Status> {
+        self.rpc_update_invoice(r).await
+    }
+    async fn preview_invoice(
+        &self,
+        r: Request<PreviewInvoiceRequest>,
+    ) -> Result<Response<PreviewInvoiceResponse>, Status> {
+        self.rpc_preview_invoice(r).await
+    }
+    async fn approve_invoice(
+        &self,
+        r: Request<ApproveInvoiceRequest>,
+    ) -> Result<Response<ApproveInvoiceResponse>, Status> {
+        self.rpc_approve_invoice(r).await
+    }
+    async fn cancel_invoice(
+        &self,
+        r: Request<CancelInvoiceRequest>,
+    ) -> Result<Response<CancelInvoiceResponse>, Status> {
+        self.rpc_cancel_invoice(r).await
+    }
+    async fn get_invoice_document(
+        &self,
+        r: Request<GetInvoiceDocumentRequest>,
+    ) -> Result<Response<GetInvoiceDocumentResponse>, Status> {
+        self.rpc_get_invoice_document(r).await
     }
 }
 

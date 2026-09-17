@@ -106,6 +106,255 @@ service FinanceService {
   rpc ListConnections(ListConnectionsRequest) returns (ListConnectionsResponse) {
     option (google.api.http) = {get: "/v1/finance/connections"};
   }
+  // ---- invoicing ----------------------------------------------------------
+
+  // The issuing profile of a party: what the footer of a Croatian invoice
+  // must carry. Absent until set; a draft cannot be created without it.
+  rpc GetIssuer(GetIssuerRequest) returns (GetIssuerResponse) {
+    option (google.api.http) = {get: "/v1/finance/issuer"};
+  }
+  rpc UpsertIssuer(UpsertIssuerRequest) returns (UpsertIssuerResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/issuer"
+      body: "*"
+    };
+  }
+
+  // Who we invoice.
+  rpc ListClients(ListClientsRequest) returns (ListClientsResponse) {
+    option (google.api.http) = {get: "/v1/finance/clients"};
+  }
+  rpc UpsertClient(UpsertClientRequest) returns (UpsertClientResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/clients"
+      body: "*"
+    };
+  }
+
+  // Every invoice the caller may see, newest first.
+  rpc ListInvoices(ListInvoicesRequest) returns (ListInvoicesResponse) {
+    option (google.api.http) = {get: "/v1/finance/invoices"};
+  }
+  rpc GetInvoice(GetInvoiceRequest) returns (GetInvoiceResponse) {
+    option (google.api.http) = {get: "/v1/finance/invoices/{id}"};
+  }
+
+  // A new draft for a client, pre-filled from the last approved invoice to
+  // them. No number is taken.
+  rpc CreateInvoice(CreateInvoiceRequest) returns (CreateInvoiceResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/invoices"
+      body: "*"
+    };
+  }
+
+  // Replace a draft's dates, note and lines. Totals are recomputed here,
+  // never trusted from the client.
+  rpc UpdateInvoice(UpdateInvoiceRequest) returns (UpdateInvoiceResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/invoices/{id}/update"
+      body: "*"
+    };
+  }
+
+  // Render the draft as it would be approved now: next number, current
+  // minute, watermarked. Writes nothing. Returns the hash `ApproveInvoice`
+  // must be given back, and the PDF.
+  rpc PreviewInvoice(PreviewInvoiceRequest) returns (PreviewInvoiceResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/invoices/{id}/preview"
+      body: "*"
+    };
+  }
+
+  // Approve: allocate the number, render, store. The content hash must be
+  // the one the preview returned; a draft changed since is
+  // FAILED_PRECONDITION and nothing is written.
+  rpc ApproveInvoice(ApproveInvoiceRequest) returns (ApproveInvoiceResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/invoices/{id}/approve"
+      body: "*"
+    };
+  }
+
+  // Cancel a draft or an approved invoice. An approved one keeps its number.
+  rpc CancelInvoice(CancelInvoiceRequest) returns (CancelInvoiceResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/invoices/{id}/cancel"
+      body: "*"
+    };
+  }
+
+  // The stored PDF of an approved invoice, base64.
+  rpc GetInvoiceDocument(GetInvoiceDocumentRequest) returns (GetInvoiceDocumentResponse) {
+    option (google.api.http) = {get: "/v1/finance/invoices/{id}/document"};
+  }
+}
+
+message IssuerProfile {
+  string party_id = 1;
+  string legal_name = 2;
+  repeated string address_lines = 3;
+  string oib = 4;
+  string vat_id = 5;
+  string iban = 6;
+  string swift = 7;
+  string bank_name = 8;
+  string court = 9;
+  string registration_no = 10;
+  string share_capital = 11;
+  string board_member = 12;
+  string issued_by = 13;
+  string place_of_issue = 14;
+  string operator_id = 15;
+  string premises = 16;
+  string device = 17;
+  int32 due_days = 18;
+}
+
+message GetIssuerRequest {
+  string party_id = 1;
+}
+message GetIssuerResponse {
+  // Absent when none has been set.
+  IssuerProfile issuer = 1;
+}
+message UpsertIssuerRequest {
+  IssuerProfile issuer = 1;
+}
+message UpsertIssuerResponse {
+  IssuerProfile issuer = 1;
+}
+
+message ClientProfile {
+  string id = 1;
+  string party_id = 2;
+  string name = 3;
+  repeated string address_lines = 4;
+  string country_code = 5;
+  string tax_id = 6;
+  // standard_hr, reverse_charge_eu, outside_scope_non_eu, exempt_issuer.
+  string vat_treatment = 7;
+  repeated string recipients = 8;
+  string currency = 9;
+  bool archived = 10;
+}
+
+message ListClientsRequest {
+  repeated string party_ids = 1;
+}
+message ListClientsResponse {
+  repeated ClientProfile clients = 1;
+}
+message UpsertClientRequest {
+  // Empty id creates.
+  ClientProfile client = 1;
+}
+message UpsertClientResponse {
+  ClientProfile client = 1;
+}
+
+message InvoiceLine {
+  int32 position = 1;
+  string description = 2;
+  // Thousandths: 1500 is 1.5.
+  int64 quantity_milli = 3;
+  int64 unit_price_minor = 4;
+  // Computed by the service.
+  int64 amount_minor = 5;
+}
+
+message Invoice {
+  string id = 1;
+  string party_id = 2;
+  string client_id = 3;
+  // draft, approved, sent, paid, cancelled.
+  string status = 4;
+  // Empty until approved.
+  string number = 5;
+  int32 year = 6;
+  string issued_at = 7;
+  string delivery_date = 8;
+  string due_date = 9;
+  string place_of_issue = 10;
+  string currency = 11;
+  int64 subtotal_minor = 12;
+  int64 vat_minor = 13;
+  int64 total_minor = 14;
+  string vat_treatment = 15;
+  string vat_note = 16;
+  string note = 17;
+  string content_hash = 18;
+  string approved_at = 19;
+  string document_id = 20;
+  string prefilled_from = 21;
+  string cancelled_at = 22;
+  string created_at = 23;
+  string updated_at = 24;
+  repeated InvoiceLine lines = 25;
+}
+
+message ListInvoicesRequest {
+  repeated string party_ids = 1;
+}
+message ListInvoicesResponse {
+  repeated Invoice invoices = 1;
+}
+message GetInvoiceRequest {
+  string id = 1;
+}
+message GetInvoiceResponse {
+  Invoice invoice = 1;
+}
+message CreateInvoiceRequest {
+  string client_id = 1;
+}
+message CreateInvoiceResponse {
+  Invoice invoice = 1;
+}
+message UpdateInvoiceRequest {
+  string id = 1;
+  string delivery_date = 2;
+  string due_date = 3;
+  string place_of_issue = 4;
+  string note = 5;
+  repeated InvoiceLine lines = 6;
+}
+message UpdateInvoiceResponse {
+  Invoice invoice = 1;
+}
+message PreviewInvoiceRequest {
+  string id = 1;
+}
+message PreviewInvoiceResponse {
+  // What ApproveInvoice must be given.
+  string content_hash = 1;
+  // The number the approval would take.
+  string number = 2;
+  // Watermarked PDF.
+  bytes pdf = 3;
+}
+message ApproveInvoiceRequest {
+  string id = 1;
+  string content_hash = 2;
+}
+message ApproveInvoiceResponse {
+  Invoice invoice = 1;
+}
+message CancelInvoiceRequest {
+  string id = 1;
+  string reason = 2;
+}
+message CancelInvoiceResponse {
+  Invoice invoice = 1;
+}
+message GetInvoiceDocumentRequest {
+  string id = 1;
+}
+message GetInvoiceDocumentResponse {
+  string content_type = 1;
+  bytes pdf = 2;
+  string number = 3;
 }
 
 message MonthlySummaryRequest {
