@@ -3,7 +3,7 @@
 // One invoice: a draft is edited here, previewed as the PDF it would become,
 // and approved with the hash of exactly that preview. An approved invoice is
 // the immutable record: its PDF, its number, who approved it.
-import { Check, Download, Eye, Plus, Trash2, X } from "lucide-react";
+import { Check, Download, ExternalLink, Eye, Maximize2, Plus, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
@@ -13,6 +13,7 @@ import { PageTitle } from "@/components/kit";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -81,6 +82,7 @@ function InvoiceView() {
     null,
   );
   const [docUrl, setDocUrl] = useState<string | null>(null);
+  const [full, setFull] = useState(false);
 
   // Load the draft into the form once; later edits are the person's.
   useEffect(() => {
@@ -394,19 +396,44 @@ function InvoiceView() {
         </div>
 
         <Card className="xl:col-span-2">
-          <CardHeader>
-            <CardTitle>
-              {inv.number ? "The invoice" : preview ? `Preview · ${preview.number}` : "Preview"}
-            </CardTitle>
-            <CardDescription>
-              {inv.number
-                ? "The stored PDF, byte for byte what was approved."
-                : preview
-                  ? dirty
-                    ? "The draft changed since this preview; preview again before approving."
-                    : "Approve exactly this. The hash of what you see is what gets approved."
-                  : "Preview renders the draft with the number it would take."}
-            </CardDescription>
+          <CardHeader className="flex flex-row items-start justify-between gap-2">
+            <div>
+              <CardTitle>
+                {inv.number ? "The invoice" : preview ? `Preview · ${preview.number}` : "Preview"}
+              </CardTitle>
+              <CardDescription>
+                {inv.number
+                  ? "The stored PDF, byte for byte what was approved."
+                  : preview
+                    ? dirty
+                      ? "The draft changed since this preview; preview again before approving."
+                      : "Approve exactly this. The hash of what you see is what gets approved."
+                    : "Preview renders the draft with the number it would take."}
+              </CardDescription>
+            </div>
+            {docUrl || preview ? (
+              <div className="flex shrink-0 gap-1">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="size-8"
+                  onClick={() => setFull(true)}
+                  aria-label="Full size"
+                >
+                  <Maximize2 />
+                </Button>
+                <Button asChild variant="outline" size="icon" className="size-8">
+                  <a
+                    href={docUrl ?? preview!.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label="Open in a new tab"
+                  >
+                    <ExternalLink />
+                  </a>
+                </Button>
+              </div>
+            ) : null}
           </CardHeader>
           <CardContent>
             {docUrl || preview ? (
@@ -423,6 +450,19 @@ function InvoiceView() {
           </CardContent>
         </Card>
       </div>
+
+      <Dialog open={full} onOpenChange={setFull}>
+        <DialogContent className="h-[94vh] w-[96vw] max-w-[96vw] gap-0 p-0 sm:max-w-[96vw]">
+          <DialogTitle className="sr-only">Invoice preview</DialogTitle>
+          {docUrl || preview ? (
+            <iframe
+              title="invoice, full size"
+              src={`${docUrl ?? preview!.url}#view=FitH`}
+              className="bg-muted h-full w-full rounded-lg"
+            />
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
