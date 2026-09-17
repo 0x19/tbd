@@ -8,9 +8,11 @@ import { useMemo, useState } from "react";
 import { useFinance } from "@/app/providers";
 import { CategoryBars, Legend, MoneyFlowChart, SparkLine } from "@/components/charts";
 import { KpiStrip, PageTitle } from "@/components/kit";
+import { MonthStepper } from "@/components/month-stepper";
 import { ScopeToggle } from "@/components/scope-toggle";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/lib/api/client";
@@ -18,13 +20,14 @@ import { useFetch } from "@/lib/api/hooks";
 import { money, monthLabel, monthsBefore, thisMonth } from "@/lib/format";
 import { byCategory, byMonth, chartValue, currencies } from "@/lib/summary";
 
-const WINDOW = 12;
+const WINDOWS = [3, 6, 12, 24] as const;
 
 export default function OverviewPage() {
   const router = useRouter();
   const { partyIds, loading: partiesLoading, error: partiesError } = useFinance();
-  const from = monthsBefore(thisMonth(), WINDOW - 1);
-  const summary = useFetch(() => api.summary(partyIds, from), 60_000, [partyIds.join(",")]);
+  const [window, setWindow] = useState<(typeof WINDOWS)[number]>(12);
+  const from = monthsBefore(thisMonth(), window - 1);
+  const summary = useFetch(() => api.summary(partyIds, from), 60_000, [partyIds.join(","), from]);
   const rows = useMemo(() => summary.data?.rows ?? [], [summary.data]);
   const ccys = useMemo(() => currencies(rows), [rows]);
   const [currency, setCurrency] = useState<string | null>(null);
@@ -54,9 +57,24 @@ export default function OverviewPage() {
     <>
       <PageTitle
         title="Overview"
-        description={`Where the money goes, ${WINDOW} months back. Transfers between your own accounts are left out.`}
+        description="Where the money goes. Transfers between your own accounts are left out."
       >
         <ScopeToggle className="md:hidden" />
+        <Select
+          value={String(window)}
+          onValueChange={(v) => setWindow(Number(v) as (typeof WINDOWS)[number])}
+        >
+          <SelectTrigger className="w-36">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {WINDOWS.map((w) => (
+              <SelectItem key={w} value={String(w)}>
+                Last {w} months
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         {ccys.length > 1 ? (
           <Tabs value={ccy} onValueChange={setCurrency}>
             <TabsList>
@@ -127,36 +145,26 @@ export default function OverviewPage() {
           <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3">
             <div>
               <CardTitle>Money in, money spent</CardTitle>
-              <CardDescription>Click a month to see its categories.</CardDescription>
+              <CardDescription>Click a bar to pick the month.</CardDescription>
             </div>
-            <Legend
-              items={[
-                { label: "In", color: "var(--chart-2)" },
-                { label: "Spent", color: "var(--chart-1)" },
-                { label: "Transfers & capital", color: "var(--chart-4)" },
-              ]}
-            />
+            <div className="flex flex-wrap items-center gap-4">
+              <Legend
+                items={[
+                  { label: "In", color: "var(--chart-2)" },
+                  { label: "Spent", color: "var(--chart-1)" },
+                  { label: "Transfers & capital", color: "var(--chart-4)" },
+                ]}
+              />
+              {months.length ? (
+                <MonthStepper months={months.map((m) => m.month)} value={current} onChange={setMonth} />
+              ) : null}
+            </div>
           </CardHeader>
           <CardContent>
             {loading ? (
               <Skeleton className="h-[280px] w-full" />
             ) : months.length ? (
-              <>
-                <MoneyFlowChart months={months} currency={ccy} />
-                <div className="mt-3 flex flex-wrap gap-1">
-                  {months.map((m) => (
-                    <Button
-                      key={m.month}
-                      size="sm"
-                      variant={m.month === current ? "default" : "ghost"}
-                      className="h-7 px-2 text-xs"
-                      onClick={() => setMonth(m.month)}
-                    >
-                      {monthLabel(m.month)}
-                    </Button>
-                  ))}
-                </div>
-              </>
+              <MoneyFlowChart months={months} currency={ccy} selected={current} onSelect={setMonth} />
             ) : (
               <p className="text-muted-foreground text-sm">No booked transactions in this window.</p>
             )}

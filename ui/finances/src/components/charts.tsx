@@ -2,7 +2,17 @@
 
 // The money charts, in the kit's style: a big number with an uppercase caption,
 // the kit's --chart-* palette, tooltips through ChartContainer.
-import { Bar, BarChart, CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Line,
+  LineChart,
+  XAxis,
+  type XAxisTickContentProps,
+  YAxis,
+} from "recharts";
 
 import { type ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { money, monthShort } from "@/lib/format";
@@ -47,22 +57,43 @@ function axisMoney(v: number): string {
 /** Money in against money spent, month by month. Transfers and capital
  *  movements are the third, muted series so they are visible but not
  *  mistaken for spending. */
+function tickLabel(ym: string, first: boolean): string {
+  const [y, m] = ym.split("-");
+  return m === "01" || first ? `${monthShort(ym)} '${y!.slice(2)}` : monthShort(ym);
+}
+
+/** The bars are the month picker: click one and it is the selected month, the
+ *  others step back. */
 export function MoneyFlowChart({
   months,
   currency,
+  selected,
+  onSelect,
   height = 280,
 }: {
   months: MonthTotals[];
   currency: string;
+  selected?: string;
+  onSelect?: (ym: string) => void;
   height?: number;
 }) {
-  const data = months.map((m) => ({
-    month: monthShort(m.month),
+  const data = months.map((m, i) => ({
+    month: tickLabel(m.month, i === 0),
     ym: m.month,
     in: chartValue(m.in),
     spent: chartValue(m.spent),
     other: chartValue(m.out - m.spent),
   }));
+  const dim = (ym: string) => (selected && ym !== selected ? 0.35 : 1);
+  const cells = (key: string) =>
+    data.map((d) => (
+      <Cell
+        key={`${key}-${d.ym}`}
+        fillOpacity={dim(d.ym)}
+        cursor={onSelect ? "pointer" : undefined}
+        onClick={onSelect ? () => onSelect(d.ym) : undefined}
+      />
+    ));
   return (
     <ChartContainer config={flowConfig} className="w-full" style={{ height }}>
       <BarChart
@@ -72,7 +103,30 @@ export function MoneyFlowChart({
         margin={{ top: 6, right: 0, bottom: 0, left: 0 }}
       >
         <CartesianGrid stroke="var(--border)" strokeDasharray="4 4" strokeOpacity={0.55} vertical={false} />
-        <XAxis axisLine={false} dataKey="month" tickLine={false} tickMargin={10} tick={{ fontSize: 12 }} />
+        <XAxis
+          axisLine={false}
+          dataKey="month"
+          tickLine={false}
+          tickMargin={10}
+          tick={({ x, y, payload, index }: XAxisTickContentProps) => {
+            const ym = data[index]?.ym;
+            const active = ym === selected;
+            return (
+              <text
+                x={Number(x)}
+                y={Number(y) + 12}
+                textAnchor="middle"
+                fontSize={12}
+                fontWeight={active ? 600 : 400}
+                fill={active ? "var(--foreground)" : "var(--muted-foreground)"}
+                style={{ cursor: onSelect ? "pointer" : undefined }}
+                onClick={onSelect && ym ? () => onSelect(ym) : undefined}
+              >
+                {String(payload.value)}
+              </text>
+            );
+          }}
+        />
         <YAxis
           axisLine={false}
           tickLine={false}
@@ -97,9 +151,15 @@ export function MoneyFlowChart({
           }
           cursor={{ fill: "color-mix(in oklch, var(--muted) 45%, transparent)" }}
         />
-        <Bar dataKey="in" fill="var(--color-in)" radius={[4, 4, 0, 0]} />
-        <Bar dataKey="spent" fill="var(--color-spent)" radius={[4, 4, 0, 0]} />
-        <Bar dataKey="other" fill="var(--color-other)" radius={[4, 4, 0, 0]} />
+        <Bar dataKey="in" fill="var(--color-in)" radius={[4, 4, 0, 0]}>
+          {cells("in")}
+        </Bar>
+        <Bar dataKey="spent" fill="var(--color-spent)" radius={[4, 4, 0, 0]}>
+          {cells("spent")}
+        </Bar>
+        <Bar dataKey="other" fill="var(--color-other)" radius={[4, 4, 0, 0]}>
+          {cells("other")}
+        </Bar>
       </BarChart>
     </ChartContainer>
   );
