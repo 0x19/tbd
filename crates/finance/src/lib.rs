@@ -4,6 +4,7 @@
 //! server can be run from `main`, from integration tests on an ephemeral port,
 //! and from the chaos tool with fault injection and counters attached.
 
+pub mod categorise;
 pub mod config;
 pub mod import;
 mod service;

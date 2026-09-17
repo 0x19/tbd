@@ -22,6 +22,15 @@ struct Cli {
 enum Command {
     /// Print the effective configuration for the environment as TOML.
     Config,
+    /// Apply the party's rules to its transactions.
+    ///
+    /// A pass is a pure function of the rules: what a rule decided is cleared
+    /// and redecided, what a person declared is left alone.
+    Categorise {
+        /// The party whose rules and transactions to run over.
+        #[arg(long)]
+        party: uuid::Uuid,
+    },
     /// Import transactions the prototype already pulled from the provider.
     ///
     /// Reads saved responses rather than calling the API: the ASPSP allows only
@@ -51,6 +60,23 @@ async fn main() -> anyhow::Result<()> {
             println!("# {}", f.display());
         }
         print!("{}", toml::to_string_pretty(&config)?);
+        return Ok(());
+    }
+
+    if let Some(Command::Categorise { party }) = &cli.command {
+        if config.store.url.is_empty() {
+            anyhow::bail!("set FINANCE_DATABASE_URL: categorising needs a store");
+        }
+        let pool = tbd_db::connect_lazy(&tbd_db::PgOptions {
+            url: config.store.url.clone(),
+            max_connections: 4,
+            ..tbd_db::PgOptions::default()
+        })?;
+        let report = tbd_finance::categorise::apply_rules(&pool, *party).await?;
+        println!(
+            "{} categorised by rule, {} kept as declared, {} still unmatched",
+            report.categorised, report.declared_kept, report.unmatched
+        );
         return Ok(());
     }
 

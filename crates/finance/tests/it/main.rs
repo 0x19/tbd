@@ -4,7 +4,9 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 mod access;
+mod categorise;
 mod import;
+mod seed;
 mod support;
 
 use tbd_finance::{Behavior, FaultHandle, Runtime};
