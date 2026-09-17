@@ -4,18 +4,29 @@
 import type { z } from "zod";
 
 import {
+  type ClientProfile,
   CompleteConnectionResponse,
   DeclareCategoryResponse,
+  GetIssuerResponse,
+  InvoiceDocumentResponse,
+  type InvoiceLine,
+  InvoiceResponse,
+  type IssuerProfile,
   ListAccountsResponse,
   ListCategoriesResponse,
+  ListClientsResponse,
   ListConnectionsResponse,
+  ListInvoicesResponse,
   ListPartiesResponse,
   ListRulesResponse,
   ListTransactionsResponse,
   Me,
   MonthlySummaryResponse,
+  PreviewInvoiceResponse,
   RefreshAccountResponse,
   StartConnectionResponse,
+  UpsertClientResponse,
+  UpsertIssuerResponse,
   type UpsertRule,
   UpsertRuleResponse,
 } from "./schema";
@@ -161,4 +172,40 @@ export const api = {
       method: "POST",
       json: { state, code },
     }),
+
+  // ---- invoicing ----
+  issuer: (party_id: string) => call(GetIssuerResponse, `/v1/finance/issuer${query({ party_id })}`),
+  upsertIssuer: (issuer: IssuerProfile) =>
+    call(UpsertIssuerResponse, "/v1/finance/issuer", { method: "POST", json: { issuer } }),
+  clients: (party_ids: string[]) => call(ListClientsResponse, `/v1/finance/clients${query({ party_ids })}`),
+  upsertClient: (client: Omit<ClientProfile, "archived">) =>
+    call(UpsertClientResponse, "/v1/finance/clients", { method: "POST", json: { client } }),
+  invoices: (party_ids: string[]) =>
+    call(ListInvoicesResponse, `/v1/finance/invoices${query({ party_ids })}`),
+  invoice: (id: string) => call(InvoiceResponse, `/v1/finance/invoices/${id}`),
+  createInvoice: (client_id: string) =>
+    call(InvoiceResponse, "/v1/finance/invoices", { method: "POST", json: { client_id } }),
+  updateInvoice: (
+    id: string,
+    draft: {
+      delivery_date: string;
+      due_date: string;
+      place_of_issue: string;
+      note: string;
+      lines: InvoiceLine[];
+    },
+  ) => call(InvoiceResponse, `/v1/finance/invoices/${id}/update`, { method: "POST", json: draft }),
+  previewInvoice: (id: string) =>
+    call(PreviewInvoiceResponse, `/v1/finance/invoices/${id}/preview`, { method: "POST", json: {} }),
+  approveInvoice: (id: string, content_hash: string) =>
+    call(InvoiceResponse, `/v1/finance/invoices/${id}/approve`, { method: "POST", json: { content_hash } }),
+  cancelInvoice: (id: string, reason: string) =>
+    call(InvoiceResponse, `/v1/finance/invoices/${id}/cancel`, { method: "POST", json: { reason } }),
+  invoiceDocument: (id: string) => call(InvoiceDocumentResponse, `/v1/finance/invoices/${id}/document`),
 };
+
+/** A base64 PDF from the API as an object URL for an <iframe> or a download. */
+export function pdfUrl(base64: string): string {
+  const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+  return URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+}

@@ -5,6 +5,7 @@ import {
   IconListDetails,
   IconPlugConnected,
   IconReceipt2,
+  IconSettings,
 } from "@tabler/icons-react";
 
 import { type NavGroup } from "@/components/layout/types";
@@ -28,7 +29,10 @@ export const navGroups: NavGroup[] = [
   },
   {
     title: "Invoicing",
-    items: [{ title: "Invoices", url: "/invoices/", icon: IconReceipt2 }],
+    items: [
+      { title: "Invoices", url: "/invoices/", icon: IconReceipt2 },
+      { title: "Issuer & clients", url: "/invoices/settings/", icon: IconSettings },
+    ],
   },
 ];
 
@@ -38,6 +42,7 @@ const clean = (p: string) => (p.split("?")[0] ?? "").replace(/\/$/, "") || "/";
 export function crumbs(pathname: string): string[] {
   const c = clean(pathname);
   if (c === "/connect/callback") return ["Banking", "Connections", "Bank authorization"];
+  if (c === "/invoices/view") return ["Invoicing", "Invoices", "Invoice"];
   for (const group of navGroups) {
     for (const item of group.items) {
       const urls = item.items ? item.items.map((i) => i.url) : [item.url];

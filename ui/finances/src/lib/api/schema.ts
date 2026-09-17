@@ -177,3 +177,96 @@ export const Me = z.object({
   role: z.string().nullable().optional(),
 });
 export type Me = z.infer<typeof Me>;
+
+// ---- invoicing --------------------------------------------------------------
+
+export const IssuerProfile = z.object({
+  party_id: z.string(),
+  legal_name: z.string(),
+  address_lines: z.array(z.string()),
+  oib: z.string(),
+  vat_id: z.string(),
+  iban: z.string(),
+  swift: z.string(),
+  bank_name: z.string(),
+  court: z.string(),
+  registration_no: z.string(),
+  share_capital: z.string(),
+  board_member: z.string(),
+  issued_by: z.string(),
+  place_of_issue: z.string(),
+  operator_id: z.string(),
+  premises: z.string(),
+  device: z.string(),
+  due_days: z.number(),
+});
+export type IssuerProfile = z.infer<typeof IssuerProfile>;
+export const GetIssuerResponse = z.object({ issuer: IssuerProfile.nullable().optional() });
+export const UpsertIssuerResponse = z.object({ issuer: IssuerProfile.nullable().optional() });
+
+export const ClientProfile = z.object({
+  id: z.string(),
+  party_id: z.string(),
+  name: z.string(),
+  address_lines: z.array(z.string()),
+  country_code: z.string(),
+  tax_id: z.string(),
+  vat_treatment: z.string(),
+  recipients: z.array(z.string()),
+  currency: z.string(),
+  archived: z.boolean(),
+});
+export type ClientProfile = z.infer<typeof ClientProfile>;
+export const ListClientsResponse = z.object({ clients: z.array(ClientProfile) });
+export const UpsertClientResponse = z.object({ client: ClientProfile.nullable().optional() });
+
+export const InvoiceLine = z.object({
+  position: z.number(),
+  description: z.string(),
+  quantity_milli: Minor,
+  unit_price_minor: Minor,
+  amount_minor: Minor,
+});
+export type InvoiceLine = z.infer<typeof InvoiceLine>;
+
+export const Invoice = z.object({
+  id: z.string(),
+  party_id: z.string(),
+  client_id: z.string(),
+  status: z.string(),
+  number: z.string(),
+  year: z.number(),
+  issued_at: z.string(),
+  delivery_date: z.string(),
+  due_date: z.string(),
+  place_of_issue: z.string(),
+  currency: z.string(),
+  subtotal_minor: Minor,
+  vat_minor: Minor,
+  total_minor: Minor,
+  vat_treatment: z.string(),
+  vat_note: z.string(),
+  note: z.string(),
+  content_hash: z.string(),
+  approved_at: z.string(),
+  document_id: z.string(),
+  prefilled_from: z.string(),
+  cancelled_at: z.string(),
+  created_at: z.string(),
+  updated_at: z.string(),
+  lines: z.array(InvoiceLine),
+});
+export type Invoice = z.infer<typeof Invoice>;
+export const ListInvoicesResponse = z.object({ invoices: z.array(Invoice) });
+export const InvoiceResponse = z.object({ invoice: Invoice.nullable().optional() });
+export const PreviewInvoiceResponse = z.object({
+  content_hash: z.string(),
+  number: z.string(),
+  pdf: z.string(),
+});
+export type PreviewInvoiceResponse = z.infer<typeof PreviewInvoiceResponse>;
+export const InvoiceDocumentResponse = z.object({
+  content_type: z.string(),
+  pdf: z.string(),
+  number: z.string(),
+});
