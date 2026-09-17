@@ -17,7 +17,12 @@ use tbd_proto::engine::v1::{EvaluateRequest, SubscribeRequest, subscribe_respons
 use utoipa::ToSchema;
 use utoipa_axum::{router::OpenApiRouter, routes};
 
-use crate::{AppState, Principal, Problem, error::ErrorBody, principal::Key, state::Readiness};
+use crate::{
+    AppState, Problem,
+    error::ErrorBody,
+    principal::{Caller, Key},
+    state::Readiness,
+};
 use tbd_common::metrics::StreamGuard;
 
 /// The REST routes with their `OpenAPI` paths: one source for both, so the
@@ -70,13 +75,13 @@ pub struct Health {
     responses(
         (status = 200, description = "The principal Envoy verified", body = Me),
         (status = 401, description = "Envoy forwarded no identity", body = ErrorBody)))]
-async fn me(principal: Principal) -> Json<Me> {
+async fn me(Caller(principal): Caller) -> Json<Me> {
     Json(Me {
         client_id: principal.client_id().map(str::to_owned),
         kind: principal.kind_slug(),
         subject: principal.sub,
         org: principal.org,
-        key: principal.key,
+        key: principal.key.map(Into::into),
         scopes: principal.scopes,
         role: principal.role,
     })
@@ -199,11 +204,11 @@ pub enum EventBody {
         (status = 503, description = "The engine is unavailable", body = ErrorBody)))]
 async fn events(
     State(state): State<AppState>,
-    principal: Option<Principal>,
+    caller: Option<Caller>,
     Path(subject_id): Path<String>,
 ) -> Result<Sse<impl Stream<Item = Result<SseEvent, Infallible>>>, Problem> {
     tracing::debug!(
-        caller = principal.as_ref().map(Principal::kind_slug),
+        caller = caller.as_ref().map(|c| c.kind_slug()),
         "events stream requested"
     );
     let stream = state

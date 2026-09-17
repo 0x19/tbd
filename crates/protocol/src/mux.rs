@@ -41,9 +41,10 @@ use tokio::{sync::mpsc, task::AbortHandle};
 use tonic::client::Grpc;
 
 use crate::{
-    AppState, Principal,
+    AppState,
     config::Socket,
     error::{Code, Detail, Problem},
+    principal::Caller,
     transcode::{Rpc, Transcoder, call::Out, codec::DynamicCodec},
 };
 
@@ -59,11 +60,9 @@ pub fn routes(transcoder: &Transcoder, limits: Socket) -> Router<AppState> {
     Router::new().route(
         PATH,
         get(
-            move |ws: WebSocketUpgrade,
-                  principal: Option<Principal>,
-                  State(state): State<AppState>| {
+            move |ws: WebSocketUpgrade, caller: Option<Caller>, State(state): State<AppState>| {
                 let rpcs = Arc::clone(&rpcs);
-                async move { upgrade(ws, principal.as_ref(), state, rpcs, limits) }
+                async move { upgrade(ws, caller.as_deref(), state, rpcs, limits) }
             },
         ),
     )
@@ -71,13 +70,13 @@ pub fn routes(transcoder: &Transcoder, limits: Socket) -> Router<AppState> {
 
 fn upgrade(
     ws: WebSocketUpgrade,
-    principal: Option<&Principal>,
+    principal: Option<&tbd_common::principal::Principal>,
     state: AppState,
     rpcs: Arc<BTreeMap<String, Arc<Rpc>>>,
     limits: Socket,
 ) -> Response {
     tracing::debug!(
-        caller = principal.map(Principal::kind_slug),
+        caller = principal.map(tbd_common::principal::Principal::kind_slug),
         calls = rpcs.len(),
         "mux upgrade requested"
     );
