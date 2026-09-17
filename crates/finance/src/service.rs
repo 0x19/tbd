@@ -404,6 +404,7 @@ impl FinanceService for Finance {
                     currency: r.currency,
                     total_minor: r.total_minor,
                     count: u32::try_from(r.count).unwrap_or(u32::MAX),
+                    internal: r.internal,
                 })
                 .collect(),
             party_ids: view.party_ids().iter().map(ToString::to_string).collect(),

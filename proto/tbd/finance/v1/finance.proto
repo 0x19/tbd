@@ -135,6 +135,10 @@ message SummaryRow {
   // Signed minor units; JSON string.
   int64 total_minor = 7;
   uint32 count = 8;
+  // Rows that are transfers between the caller's own accounts. Only present
+  // when the request asked to include them; a single party's view shows an
+  // owner draw as money in, a combined view leaves it out.
+  bool internal = 9;
 }
 
 message ListPartiesRequest {}

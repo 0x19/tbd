@@ -2358,6 +2358,9 @@
           "currency": {
             "type": "string"
           },
+          "internal": {
+            "type": "boolean"
+          },
           "kind": {
             "type": "string"
           },

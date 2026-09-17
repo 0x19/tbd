@@ -24,10 +24,18 @@ const WINDOWS = [3, 6, 12, 24] as const;
 
 export default function OverviewPage() {
   const router = useRouter();
-  const { partyIds, loading: partiesLoading, error: partiesError } = useFinance();
+  const { partyIds, scope, loading: partiesLoading, error: partiesError } = useFinance();
   const [window, setWindow] = useState<(typeof WINDOWS)[number]>(12);
   const from = monthsBefore(thisMonth(), window - 1);
-  const summary = useFetch(() => api.summary(partyIds, from), 60_000, [partyIds.join(","), from]);
+  // Transfers between your own accounts count twice in a combined view, so
+  // there they are left out. In a single party's view they are real: an owner
+  // draw is the company's money out and the person's money in.
+  const includeInternal = scope !== "all";
+  const summary = useFetch(() => api.summary(partyIds, from, includeInternal), 60_000, [
+    partyIds.join(","),
+    from,
+    includeInternal,
+  ]);
   const rows = useMemo(() => summary.data?.rows ?? [], [summary.data]);
   const ccys = useMemo(() => currencies(rows), [rows]);
   const [currency, setCurrency] = useState<string | null>(null);
@@ -57,7 +65,11 @@ export default function OverviewPage() {
     <>
       <PageTitle
         title="Overview"
-        description="Where the money goes. Transfers between your own accounts are left out."
+        description={
+          includeInternal
+            ? "Where the money goes. Transfers with your other accounts count here."
+            : "Where the money goes. Transfers between your own accounts are left out."
+        }
       >
         <ScopeToggle className="md:hidden" />
         <Select
@@ -115,11 +127,11 @@ export default function OverviewPage() {
             {
               icon: ArrowUpRight,
               label: `In · ${monthLabel(current)}`,
-              value: cur ? money(cur.income.toString(), ccy) : "—",
-              previous: prev ? `${monthLabel(prev.month)}: ${money(prev.income.toString(), ccy)}` : undefined,
+              value: cur ? money(cur.in.toString(), ccy) : "—",
+              previous: prev ? `${monthLabel(prev.month)}: ${money(prev.in.toString(), ccy)}` : undefined,
               delta:
-                cur && prev && delta(cur.income, prev.income) != null
-                  ? { value: delta(cur.income, prev.income)!, label: "vs previous month", goodWhen: "up" }
+                cur && prev && delta(cur.in, prev.in) != null
+                  ? { value: delta(cur.in, prev.in)!, label: "vs previous month", goodWhen: "up" }
                   : undefined,
             },
             {
@@ -188,7 +200,11 @@ export default function OverviewPage() {
                 items={cats}
                 currency={ccy}
                 total={spentTotal > 0n ? spentTotal : allOut}
-                onPick={(id) => router.push(`/transactions/?month=${current}&category=${id}`)}
+                onPick={(id) =>
+                  id === "internal"
+                    ? undefined
+                    : router.push(`/transactions/?month=${current}&category=${id}`)
+                }
               />
             ) : (
               <p className="text-muted-foreground text-sm">Nothing spent.</p>
@@ -217,13 +233,13 @@ export default function OverviewPage() {
             <CardDescription>In, month by month</CardDescription>
             <CardTitle className="text-2xl tabular-nums">
               {months.length
-                ? money((months.reduce((s, m) => s + m.income, 0n) / BigInt(months.length)).toString(), ccy)
+                ? money((months.reduce((s, m) => s + m.in, 0n) / BigInt(months.length)).toString(), ccy)
                 : "—"}
               <span className="text-muted-foreground ml-2 text-sm font-normal">avg</span>
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {months.length ? <SparkLine values={months.map((m) => chartValue(m.income))} /> : null}
+            {months.length ? <SparkLine values={months.map((m) => chartValue(m.in))} /> : null}
           </CardContent>
         </Card>
         <Card>

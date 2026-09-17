@@ -41,6 +41,7 @@ export const SummaryRow = z.object({
   currency: z.string(),
   total_minor: Minor,
   count: z.number(),
+  internal: z.boolean(),
 });
 export type SummaryRow = z.infer<typeof SummaryRow>;
 

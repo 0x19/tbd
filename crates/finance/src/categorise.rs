@@ -206,6 +206,8 @@ pub struct SummaryRow {
     pub total_minor: i64,
     /// How many transactions.
     pub count: i64,
+    /// Transfers between accounts the same person holds, when included.
+    pub internal: bool,
 }
 
 /// The monthly breakdown for a set of parties.
@@ -238,7 +240,8 @@ pub async fn monthly_summary(
                 c.kind as kind,
                 t.currency as currency,
                 sum(t.amount_minor)::bigint as total_minor,
-                count(*)::bigint as count
+                count(*)::bigint as count,
+                t.internal as internal
            from finance.transactions_enriched t
            left join finance.categories c on c.id = t.category_id
           where t.party_id = any($1)
@@ -246,7 +249,7 @@ pub async fn monthly_summary(
             and t.booking_date is not null
             and ($2 or not t.internal)
             and ($3::text is null or to_char(t.booking_date, 'YYYY-MM') >= $3)
-          group by 1, 2, 3, 4, 5, 6
+          group by 1, 2, 3, 4, 5, 6, t.internal
           order by 1 desc, 7 asc",
     )
     .bind(parties)

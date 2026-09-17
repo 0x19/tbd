@@ -31,7 +31,9 @@ export function byMonth(rows: SummaryRow[], currency: string): MonthTotals[] {
     const v = BigInt(r.total_minor);
     if (v < ZERO) {
       t.out += abs(v);
-      if (r.kind === "expense" || r.kind === "tax" || r.kind === "") t.spent += abs(v);
+      // Money moved to another of the caller's own accounts is out, but it is
+      // not spent -- however the row was (or was not) categorised.
+      if (!r.internal && (r.kind === "expense" || r.kind === "tax" || r.kind === "")) t.spent += abs(v);
     } else {
       t.in += v;
       if (r.kind === "income") t.income += v;
@@ -57,11 +59,13 @@ export function byCategory(rows: SummaryRow[], currency: string, months?: Set<st
   for (const r of rows) {
     if (r.currency !== currency) continue;
     if (months && !months.has(r.month)) continue;
-    const key = r.category_id || "none";
+    // An own transfer with no category of its own is shown as one line,
+    // "Own accounts", apart from the genuinely uncategorised.
+    const key = r.category_id || (r.internal ? "internal" : "none");
     const t = m.get(key) ?? {
       category_id: key,
-      category: r.category || "Uncategorised",
-      kind: r.kind,
+      category: r.category || (r.internal ? "Own accounts" : "Uncategorised"),
+      kind: r.category_id ? r.kind : r.internal ? "transfer" : r.kind,
       total: ZERO,
       count: 0,
     };
