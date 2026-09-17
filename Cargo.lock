@@ -4867,6 +4867,7 @@ dependencies = [
  "serde_json",
  "tbd-common",
  "tbd-engine",
+ "tbd-finance",
  "tbd-ledger",
  "tbd-proto",
  "thiserror 2.0.20",

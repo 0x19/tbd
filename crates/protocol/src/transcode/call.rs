@@ -70,11 +70,27 @@ async fn call(
             format!("backend {} is not registered", binding.backend),
         )
     })?;
+    // The identity Envoy verified travels with the call. The backend takes its
+    // principal from this header the same way the protocol does; without it
+    // every access-controlled RPC answers UNAUTHENTICATED, however well the
+    // browser was signed in. Taken before the body is consumed.
+    let payload = request
+        .headers()
+        .get(crate::principal::PAYLOAD_HEADER)
+        .and_then(|v| tonic::metadata::MetadataValue::try_from(v.as_bytes()).ok());
     let body = match binding.body {
         BodyRule::None => None,
         BodyRule::Whole | BodyRule::Field(_) => Some(read_json_body(request).await?),
     };
     let message = super::bind::request(binding, vars, query, body.as_deref())?;
+    let outbound = |message| {
+        let mut req = tonic::Request::new(message);
+        if let Some(payload) = &payload {
+            req.metadata_mut()
+                .insert(crate::principal::PAYLOAD_HEADER, payload.clone());
+        }
+        req
+    };
 
     let mut grpc = Grpc::new(backend.transport());
     grpc.ready().await.map_err(|e| {
@@ -86,11 +102,7 @@ async fn call(
     let codec = DynamicCodec::new(binding.method.output());
     if binding.streaming {
         let stream = grpc
-            .server_streaming(
-                tonic::Request::new(message),
-                binding.grpc_path.clone(),
-                codec,
-            )
+            .server_streaming(outbound(message), binding.grpc_path.clone(), codec)
             .await?
             .into_inner();
         let guard = StreamGuard::open("sse");
@@ -109,11 +121,7 @@ async fn call(
             .into_response());
     }
     let response = grpc
-        .unary(
-            tonic::Request::new(message),
-            binding.grpc_path.clone(),
-            codec,
-        )
+        .unary(outbound(message), binding.grpc_path.clone(), codec)
         .await?
         .into_inner();
     let body = match &binding.response_body {

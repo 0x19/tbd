@@ -30,6 +30,7 @@ use axum::{
         State, WebSocketUpgrade,
         ws::{Message, WebSocket},
     },
+    http::HeaderMap,
     response::Response,
     routing::get,
 };
@@ -60,9 +61,18 @@ pub fn routes(transcoder: &Transcoder, limits: Socket) -> Router<AppState> {
     Router::new().route(
         PATH,
         get(
-            move |ws: WebSocketUpgrade, caller: Option<Caller>, State(state): State<AppState>| {
+            move |ws: WebSocketUpgrade,
+                  caller: Option<Caller>,
+                  headers: HeaderMap,
+                  State(state): State<AppState>| {
                 let rpcs = Arc::clone(&rpcs);
-                async move { upgrade(ws, caller.as_deref(), state, rpcs, limits) }
+                // The identity Envoy verified at the upgrade is what every call
+                // on this socket carries to its backend; a socket cannot change
+                // who it is mid-way.
+                let payload = headers
+                    .get(crate::principal::PAYLOAD_HEADER)
+                    .and_then(|v| tonic::metadata::MetadataValue::try_from(v.as_bytes()).ok());
+                async move { upgrade(ws, caller.as_deref(), payload, state, rpcs, limits) }
             },
         ),
     )
@@ -71,6 +81,7 @@ pub fn routes(transcoder: &Transcoder, limits: Socket) -> Router<AppState> {
 fn upgrade(
     ws: WebSocketUpgrade,
     principal: Option<&tbd_common::principal::Principal>,
+    payload: Option<tonic::metadata::MetadataValue<tonic::metadata::Ascii>>,
     state: AppState,
     rpcs: Arc<BTreeMap<String, Arc<Rpc>>>,
     limits: Socket,
@@ -82,7 +93,7 @@ fn upgrade(
     );
     ws.max_message_size(limits.max_frame_bytes)
         .max_frame_size(limits.max_frame_bytes)
-        .on_upgrade(move |socket| serve(socket, state, rpcs, limits))
+        .on_upgrade(move |socket| serve(socket, state, payload, rpcs, limits))
 }
 
 /// A frame from the client.
@@ -169,6 +180,7 @@ type Refused = (Option<String>, Problem);
 async fn serve(
     socket: WebSocket,
     state: AppState,
+    payload: Option<tonic::metadata::MetadataValue<tonic::metadata::Ascii>>,
     rpcs: Arc<BTreeMap<String, Arc<Rpc>>>,
     limits: Socket,
 ) {
@@ -197,7 +209,7 @@ async fn serve(
                     Message::Ping(_) | Message::Pong(_) => continue,
                 };
                 guard.item("in");
-                let frame = match accept(&text, &state, &rpcs, limits, &mut calls, &events_tx) {
+                let frame = match accept(&text, &state, payload.as_ref(), &rpcs, limits, &mut calls, &events_tx) {
                     Ok(Accepted::Started) => continue,
                     Ok(Accepted::Ended(id)) => render(&ServerFrame::End { id: &id }),
                     Err((id, problem)) => {
@@ -264,6 +276,7 @@ async fn serve(
 fn accept(
     text: &str,
     state: &AppState,
+    payload: Option<&tonic::metadata::MetadataValue<tonic::metadata::Ascii>>,
     rpcs: &Arc<BTreeMap<String, Arc<Rpc>>>,
     limits: Socket,
     calls: &mut HashMap<String, AbortHandle>,
@@ -314,6 +327,7 @@ fn accept(
             let task = tokio::spawn(run(
                 Arc::clone(rpc),
                 state.clone(),
+                payload.cloned(),
                 id.clone(),
                 message,
                 events.clone(),
@@ -341,13 +355,14 @@ fn request(rpc: &Rpc, body: Option<serde_json::Value>) -> Result<DynamicMessage,
 async fn run(
     rpc: Arc<Rpc>,
     state: AppState,
+    payload: Option<tonic::metadata::MetadataValue<tonic::metadata::Ascii>>,
     id: String,
     message: DynamicMessage,
     events: mpsc::Sender<Event>,
 ) {
     let name = rpc.name();
     let mut timer = RequestTimer::start(TRANSPORT, name.clone());
-    let outcome = forward(&rpc, &state, &id, message, &events).await;
+    let outcome = forward(&rpc, &state, payload, &id, message, &events).await;
     timer.set_status(match &outcome {
         Ok(()) => "ok",
         Err(problem) => problem.code.slug(),
@@ -358,6 +373,7 @@ async fn run(
 async fn forward(
     rpc: &Rpc,
     state: &AppState,
+    payload: Option<tonic::metadata::MetadataValue<tonic::metadata::Ascii>>,
     id: &str,
     message: DynamicMessage,
     events: &mpsc::Sender<Event>,
@@ -376,9 +392,17 @@ async fn forward(
         )))
     })?;
     let codec = DynamicCodec::new(rpc.method.output());
+    // The identity verified at the upgrade goes with every call, as it does
+    // on the REST side (transcode/call.rs).
+    let mut outbound = tonic::Request::new(message);
+    if let Some(payload) = payload {
+        outbound
+            .metadata_mut()
+            .insert(crate::principal::PAYLOAD_HEADER, payload);
+    }
     if rpc.streaming {
         let mut stream = grpc
-            .server_streaming(tonic::Request::new(message), rpc.grpc_path.clone(), codec)
+            .server_streaming(outbound, rpc.grpc_path.clone(), codec)
             .await?
             .into_inner();
         while let Some(item) = stream.next().await {
@@ -387,7 +411,7 @@ async fn forward(
         Ok(())
     } else {
         let response = grpc
-            .unary(tonic::Request::new(message), rpc.grpc_path.clone(), codec)
+            .unary(outbound, rpc.grpc_path.clone(), codec)
             .await?
             .into_inner();
         data(events, id, &response).await

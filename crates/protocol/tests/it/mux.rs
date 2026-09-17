@@ -253,3 +253,43 @@ async fn a_backend_that_is_down_fails_the_call_not_the_socket() {
     .await;
     assert_eq!(next(&mut ws).await["type"], "data");
 }
+
+/// Like `connect`, presenting a verified identity at the upgrade.
+async fn connect_as(stack: &support::Stack, sub: &str) -> Socket {
+    use base64::Engine as _;
+    use tokio_tungstenite::tungstenite::client::IntoClientRequest as _;
+    let mut request = stack.ws_url("/v1/ws").into_client_request().unwrap();
+    let claims = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .encode(json!({"sub": sub, "client_id": sub}).to_string());
+    request
+        .headers_mut()
+        .insert("x-jwt-payload", claims.parse().unwrap());
+    tokio_tungstenite::connect_async(request).await.unwrap().0
+}
+
+// The identity verified at the upgrade goes with every call on the socket.
+// Same shape as the REST test: anonymous is refused by the backend
+// (unauthenticated); verified gets past that to the missing store.
+#[tokio::test]
+async fn the_verified_identity_reaches_the_backend_over_the_socket() {
+    let stack = support::start().await;
+    let mut anonymous = connect(&stack).await;
+    send(
+        &mut anonymous,
+        &json!({"type": "call", "id": "1", "method": "tbd.finance.v1.FinanceService/ListTransactions"}),
+    )
+    .await;
+    let frame = next(&mut anonymous).await;
+    assert_eq!(frame["type"], "error", "{frame}");
+    assert_eq!(frame["code"], "unauthenticated", "{frame}");
+
+    let mut verified = connect_as(&stack, "person-1").await;
+    send(
+        &mut verified,
+        &json!({"type": "call", "id": "1", "method": "tbd.finance.v1.FinanceService/ListTransactions"}),
+    )
+    .await;
+    let frame = next(&mut verified).await;
+    assert_eq!(frame["type"], "error", "{frame}");
+    assert_eq!(frame["code"], "unavailable", "identity forwarded: {frame}");
+}
