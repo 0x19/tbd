@@ -1,13 +1,15 @@
 // Browser smoke of the built finance UI through Envoy: every page renders,
-// no console errors, the scope toggle changes the totals, a category filter
-// reaches the transactions page. Run with `mise run ui:finances:e2e` against
-// the local cluster (UI_BASE overrides). Needs a signed-in session: the
-// harness in e2e/auth.mjs signs in through Ory like ui/chaos does.
+// no console errors, the scope toggle changes the totals. Run with
+// `mise run ui:finances:e2e` against the local cluster (UI_BASE overrides).
+//
+// The host has no open variant -- it is one person's money -- so the smoke
+// needs a signed-in admin session. Until the register-promote-purge harness
+// from `auth:e2e` is wired in here, pass the `tbd_id` cookie of a signed-in
+// browser in E2E_COOKIE; without it the smoke says so and exits non-zero
+// rather than passing on the sign-in redirect.
 import { mkdirSync } from "node:fs";
 
 import { chromium } from "playwright";
-
-import { signIn } from "./auth.mjs";
 
 const BASE = process.env.UI_BASE ?? "http://finance.localhost:18080";
 const SHOTS = process.env.SHOTS ?? "e2e/shots";
@@ -25,7 +27,12 @@ async function shot(name) {
   await page.screenshot({ path: `${SHOTS}/${name}.png`, fullPage: true, animations: "disabled" });
 }
 
-await signIn(page, BASE);
+const cookie = process.env.E2E_COOKIE;
+if (!cookie) {
+  console.error("E2E_COOKIE is not set: sign in to the finance host in a browser and pass its tbd_id cookie");
+  process.exit(2);
+}
+await page.context().addCookies([{ name: "tbd_id", value: cookie, url: BASE }]);
 
 for (const path of ["/", "/transactions/", "/categories/", "/accounts/", "/connections/", "/invoices/"]) {
   await page.goto(`${BASE}${path}`, { waitUntil: "networkidle" });
