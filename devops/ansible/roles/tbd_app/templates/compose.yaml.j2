@@ -26,6 +26,8 @@ services:
       PROTOCOL_ENGINE_URL: http://engine:{{ engine_port }}
       PROTOCOL_HUMANS_URL: http://humans:{{ humans_port }}
       PROTOCOL_LEDGER_URL: http://ledger:{{ ledger_port }}
+      PROTOCOL_PLAYGROUND_URL: http://playground:{{ playground_port }}
+      PROTOCOL_FINANCE_URL: http://finance:{{ finance_port }}
     ports:
       - "{{ protocol_port }}:{{ protocol_port }}"
     depends_on:
@@ -95,6 +97,31 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: "{{ otlp_endpoint | default('') }}"
       PYROSCOPE_SERVER_ADDRESS: "{{ pyroscope_server | default('') }}"
     restart: unless-stopped
+  finance:
+    image: {{ finance_image }}:{{ image_tag }}
+    environment:
+      RUST_LOG: {{ rust_log }}
+      LOG_FORMAT: {{ log_format }}
+      TBD_ENV: production
+      FINANCE_LISTEN_ADDR: 0.0.0.0:{{ finance_port }}
+      FINANCE_METRICS_ADDR: 0.0.0.0:9464
+      FINANCE_DATABASE_URL: "postgres://ledger:{{ vault_ledger_postgres_password }}@ledger-postgres:5432/tbd?sslmode=disable"
+      FINANCE_EB_APPLICATION_ID: "{{ vault_finance_eb_application_id | default('') }}"
+      FINANCE_EB_PRIVATE_KEY: "{{ vault_finance_eb_private_key | default('') }}"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "{{ otlp_endpoint | default('') }}"
+      PYROSCOPE_SERVER_ADDRESS: "{{ pyroscope_server | default('') }}"
+    restart: unless-stopped
+  playground:
+    image: {{ playground_image }}:{{ image_tag }}
+    environment:
+      RUST_LOG: {{ rust_log }}
+      LOG_FORMAT: {{ log_format }}
+      TBD_ENV: production
+      PLAYGROUND_LISTEN_ADDR: 0.0.0.0:{{ playground_port }}
+      PLAYGROUND_METRICS_ADDR: 0.0.0.0:9464
+      OTEL_EXPORTER_OTLP_ENDPOINT: "{{ otlp_endpoint | default('') }}"
+      PYROSCOPE_SERVER_ADDRESS: "{{ pyroscope_server | default('') }}"
+    restart: unless-stopped
 {% if chaos_enabled | default(false) %}
 
   # chaos API + admin UI. Off by default; dev hosts set chaos_enabled: true.
@@ -108,6 +135,8 @@ services:
       CHAOS_LISTEN_ADDR: 0.0.0.0:7700
       CHAOS_PROTOCOL_URL: http://protocol:{{ protocol_port }}
       CHAOS_ENGINE_URL: http://engine:{{ engine_port }}
+      CHAOS_PLAYGROUND_URL: http://playground:{{ playground_port }}
+      CHAOS_FINANCE_URL: http://finance:{{ finance_port }}
       CHAOS_HUMANS_URL: http://humans:{{ humans_port }}
       CHAOS_LEDGER_URL: http://ledger:{{ ledger_port }}
       CHAOS_RESULTS_DIR: /data/results

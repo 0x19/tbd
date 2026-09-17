@@ -39,6 +39,29 @@ spec:
           envFrom:
             - configMapRef:
                 name: tbd-env
+          env:
+            # The database URL carries a credential: from the finance-db
+            # Secret (mise run finance:secrets), never from the ConfigMap.
+            - name: FINANCE_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: finance-db
+                  key: database-url
+            # The bank credentials are optional on purpose: without them the
+            # service serves reads and the sync worker does not start, which
+            # is what a cluster without a linked bank should do.
+            - name: FINANCE_EB_APPLICATION_ID
+              valueFrom:
+                secretKeyRef:
+                  name: finance-bank
+                  key: application-id
+                  optional: true
+            - name: FINANCE_EB_PRIVATE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: finance-bank
+                  key: private-key
+                  optional: true
           livenessProbe:
             grpc:
               port: 50054

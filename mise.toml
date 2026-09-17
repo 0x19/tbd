@@ -545,6 +545,43 @@ kubectl -n tbd create secret generic ledger-db \
 echo "ledger-db created"
 """
 
+[tasks."finance:secrets"]
+description = "Create the finance Secrets in tbd: finance-db (the app database URL, derived from ledger-db) and, given the key file, finance-bank (Enable Banking application id + RSA key). Never on disk in the repo."
+usage = '''
+arg "[application_id]" help="Enable Banking application id (the JWT kid)"
+arg "[private_key_path]" help="path to the application's PKCS#8 PEM, e.g. ~/.config/enablebanking/private.key"
+arg "[postgres_url]" help="external app database URL; default derives from the ledger-db Secret's password on the in-cluster Postgres, database tbd"
+'''
+run = """
+kubectl apply -f devops/k8s/base/namespace.yaml >/dev/null
+if kubectl -n tbd get secret finance-db >/dev/null 2>&1; then
+  echo "finance-db exists; leaving it"
+else
+  if [ -n "${usage_postgres_url:-}" ]; then
+    url="$usage_postgres_url"
+  else
+    pw=$(kubectl -n tbd get secret ledger-db -o jsonpath='{.data.postgres-password}' | base64 -d)
+    [ -n "$pw" ] || { echo "ledger-db Secret missing; run mise run ledger:secrets first" >&2; exit 1; }
+    url="postgres://ledger:$pw@ledger-postgres.tbd.svc:5432/tbd?sslmode=disable"
+  fi
+  kubectl -n tbd create secret generic finance-db --from-literal=database-url="$url"
+  echo "finance-db created"
+fi
+if [ -n "${usage_application_id:-}" ] && [ -n "${usage_private_key_path:-}" ]; then
+  if kubectl -n tbd get secret finance-bank >/dev/null 2>&1; then
+    echo "finance-bank exists; leaving it (delete it to rotate)"
+  else
+    grep -q "BEGIN PRIVATE KEY" "$usage_private_key_path" || { echo "$usage_private_key_path is not a PKCS#8 PEM (convert: openssl pkcs8 -topk8 -nocrypt)" >&2; exit 1; }
+    kubectl -n tbd create secret generic finance-bank \
+      --from-literal=application-id="$usage_application_id" \
+      --from-file=private-key="$usage_private_key_path"
+    echo "finance-bank created"
+  fi
+else
+  echo "no application id / key given; finance-bank not created (the sync worker stays off)"
+fi
+"""
+
 [tasks."ledger:deploy"]
 description = "Apply the ledger's databases (Postgres + pgvector, ClickHouse) to the tbd namespace and wait for them"
 depends = ["ledger:secrets"]

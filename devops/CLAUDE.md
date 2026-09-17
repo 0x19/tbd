@@ -77,6 +77,14 @@ tags. See `docs/ci.md`.
   the Envoy rule does not apply. Prod brings managed instances and passes their URLs to
   `ledger:secrets`. The image pins live in three places, `compose.yaml`,
   `k8s/ledger-db/` and `ansible/group_vars/all.yml`: bump all or none.
+- The finance service reads the shared app database (`tbd` on `ledger-postgres`,
+  migrated by `tbd migrate`) through `FINANCE_DATABASE_URL` from the `finance-db`
+  Secret, and its bank credentials (`FINANCE_EB_APPLICATION_ID`, `FINANCE_EB_PRIVATE_KEY`,
+  a PKCS#8 PEM) from `finance-bank`, both made by `mise run finance:secrets
+  <application_id> <key_path>`. The bank keys are `optional: true` on the Deployment:
+  without them the service serves reads and the sync worker does not start. Compose
+  reads the same from `.env`; the ansible template from the vault. The key never
+  lives in a file in this repo.
 - `edge/` is the only thing that faces the internet from a home/office deployment. Caddy
   terminates TLS and forwards to Envoy's edge on the host port (18080 for the local
   cluster). gRPC is matched on `Content-Type: application/grpc*` and gets the h2c
