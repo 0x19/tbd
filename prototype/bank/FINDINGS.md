@@ -266,3 +266,29 @@ Not throwaway — these are production endpoints on `proximity.is`:
 
 Credentials live at `~/.config/enablebanking/` — `private.key` (PKCS#8, 4096-bit, mode 600)
 and `public.crt`. Neither is in git.
+
+
+## Measured later, from the Rust sync worker (2026-09-17)
+
+Two things the prototype could not measure, because every prototype call was
+made minutes after a browser authorization -- attended, in PSD2 terms.
+
+**Unattended history is 90 days.** The first sync asked every account for
+730 days. Business EUR came back with 122 rows; the database holds 122 booked
+in the last 90 days and 255 in total. Personal EUR: 531 back, 526 booked in
+90 days, 2,606 in total. The bank silently clips the window to the 90 days
+PSD2 allows without the person present. The 21 months the prototype pulled
+were only available because the pull followed the authorization directly.
+Consequence: deep history is an attended action at link time, and the
+worker's `initial_history_days` is 90, not 730.
+
+**The 4-per-day cap did not appear.** Twelve fetches (balances +
+transactions, so 24 requests) on one account inside a minute, no 429, no
+`Retry-After`. Either Erste does not enforce the PSD2 limit through Enable
+Banking, or it counts differently from a fetch. The worker keeps a budget of
+four with three for the scheduler anyway: it costs nothing, and the 429 path
+is tested for the day the bank starts counting.
+
+Also confirmed: nothing new was booked on the 17th by the time of the first
+sync, so the first unattended pull was 653 duplicates and 0 inserts -- the
+dedup path taking every row, as it should.

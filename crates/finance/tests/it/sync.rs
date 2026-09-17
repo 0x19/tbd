@@ -419,8 +419,8 @@ async fn the_routine_window_starts_before_the_watermark_not_at_now() {
     assert_eq!(rows[0].0, "initial");
     assert_eq!(
         rows[0].1.to_string(),
-        "2024-09-17",
-        "730 days back on first sight"
+        "2026-01-01",
+        "the start of the year on first sight"
     );
     assert_eq!(rows[1].0, "scheduled");
     assert_eq!(

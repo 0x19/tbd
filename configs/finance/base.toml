@@ -48,8 +48,12 @@ budget_per_day = 4
 scheduled_budget = 3
 # How far back a routine fetch reaches past the last booked date, days.
 overlap_days = 7
-# How far back the first fetch of a new account reaches, days.
-initial_history_days = 730
+# The first fetch of a new account reaches back to 1 January of the current
+# year, and never less than this many days. Measured on Erste
+# (prototype/bank/FINDINGS.md): an unattended fetch returns 90 days whatever
+# is asked for; the full year comes from the attended pull right after
+# authorization, which is what the connect flow does.
+initial_history_days = 90
 # How long before a consent lapses the service starts saying so, days.
 reconsent_lead_days = 14
 # Backoff after a 429 with no Retry-After, seconds (6h, as documented).

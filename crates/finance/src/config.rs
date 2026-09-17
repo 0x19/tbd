@@ -120,7 +120,10 @@ pub struct Sync {
     /// late-booked transaction is not missed. Dedup makes the overlap free.
     #[serde(default = "default_overlap_days")]
     pub overlap_days: u32,
-    /// How far back the first fetch of a new account reaches.
+    /// The least a first fetch reaches back; it always reaches at least to
+    /// 1 January of the current year. Unattended, Erste answers 90 days
+    /// whatever is asked (measured); the full year is the attended pull
+    /// right after authorization.
     #[serde(default = "default_initial_history_days")]
     pub initial_history_days: u32,
     /// How long before a consent lapses the service starts saying so.
@@ -148,7 +151,7 @@ const fn default_overlap_days() -> u32 {
     7
 }
 const fn default_initial_history_days() -> u32 {
-    730
+    90
 }
 const fn default_reconsent_lead_days() -> u32 {
     14

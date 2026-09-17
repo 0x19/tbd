@@ -16,7 +16,7 @@
 
 use std::{sync::Arc, time::Duration};
 
-use chrono::{DateTime, Days, NaiveDate, Utc};
+use chrono::{DateTime, Datelike, Days, NaiveDate, Utc};
 use sqlx::{PgPool, Postgres, Transaction};
 use tbd_db::{DbError, map_err};
 use tokio_util::sync::CancellationToken;
@@ -356,12 +356,19 @@ impl<P: Provider + 'static> Syncer<P> {
     ///
     /// A routine fetch starts `overlap_days` before the last booked date, so
     /// a transaction booked late is not missed; dedup makes the overlap free.
-    /// A first fetch reaches back `initial_history_days`.
+    ///
+    /// A first fetch reaches back to 1 January of the current year, and never
+    /// less than `initial_history_days` -- so an account linked in early
+    /// January still gets a useful window. The bank may clip it: unattended,
+    /// Erste answers 90 days whatever is asked (measured); the full year is
+    /// what the attended pull right after authorization returns.
     fn window(&self, account: &Claimed, now: DateTime<Utc>) -> (NaiveDate, NaiveDate) {
         let today = now.date_naive();
+        let year_start = NaiveDate::from_ymd_opt(today.year(), 1, 1).unwrap_or(today);
         let initial = today
             .checked_sub_days(Days::new(u64::from(self.config.initial_history_days)))
-            .unwrap_or(today);
+            .unwrap_or(today)
+            .min(year_start);
         let from = account.last_booked_through.map_or(initial, |through| {
             through
                 .checked_sub_days(Days::new(u64::from(self.config.overlap_days)))

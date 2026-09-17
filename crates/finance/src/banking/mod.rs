@@ -12,6 +12,7 @@
 //! provider that parsed into its own structs would be a second parser, and
 //! the two would drift -- silently, into wrong money.
 
+pub mod adopt;
 pub mod auth;
 pub mod client;
 pub mod connect;
