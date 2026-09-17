@@ -146,7 +146,8 @@ async fn the_first_tick_fetches_every_page_and_records_a_run() {
             Outcome::Ok {
                 pages: 2,
                 inserted: 2,
-                duplicates: 0
+                duplicates: 0,
+                booked: 0,
             }
         )]
     );
@@ -189,6 +190,77 @@ async fn the_first_tick_fetches_every_page_and_records_a_run() {
         "2026-09-15",
         "the watermark is the latest booking date"
     );
+}
+
+#[tokio::test]
+async fn a_pending_row_becomes_booked_when_the_bank_books_it_and_never_the_reverse() {
+    let (_s, w) = world().await;
+    let mut pending = txn("p1", "2026-09-16", "19.79", "PLODINE");
+    pending["status"] = json!("PDNG");
+    w.mock
+        .with_pages("uid-eur", vec![page(&[pending.clone()], None)]);
+    let syncer = Syncer::new(w.pool.clone(), Arc::clone(&w.mock), config());
+    syncer.tick(at(8)).await.unwrap();
+    let (status,): (String,) = sqlx::query_as(
+        "select status from finance.bank_transactions where account_id = $1 and entry_reference = 'p1'",
+    )
+    .bind(w.account)
+    .fetch_one(&w.pool)
+    .await
+    .unwrap();
+    assert_eq!(status, "pending");
+
+    // The next day the bank books it: same reference, status BOOK.
+    let mut booked = pending.clone();
+    booked["status"] = json!("BOOK");
+    booked["booking_date"] = json!("2026-09-17");
+    w.mock.with_pages("uid-eur", vec![page(&[booked], None)]);
+    let tick = syncer.tick(at(9)).await.unwrap();
+    assert!(matches!(
+        tick.synced[0].1,
+        Outcome::Ok {
+            inserted: 0,
+            booked: 1,
+            ..
+        }
+    ));
+    let (booked_on_run,): (i32,) = sqlx::query_as(
+        "select booked from finance.sync_runs where account_id = $1 order by started_at desc limit 1",
+    )
+    .bind(w.account)
+    .fetch_one(&w.pool)
+    .await
+    .unwrap();
+    assert_eq!(booked_on_run, 1, "the run records the promotion");
+    let (status, booking, n): (String, chrono::NaiveDate, i64) = sqlx::query_as(
+        "select status, booking_date, (select count(*) from finance.bank_transactions where account_id = $1)
+           from finance.bank_transactions where account_id = $1 and entry_reference = 'p1'",
+    )
+    .bind(w.account)
+    .fetch_one(&w.pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        status, "booked",
+        "the pending row was promoted, not duplicated"
+    );
+    assert_eq!(booking.to_string(), "2026-09-17");
+    assert_eq!(n, 1);
+
+    // A booked row is immutable: a later page claiming it is pending again,
+    // or carries a different amount, changes nothing.
+    let mut again = pending;
+    again["transaction_amount"]["amount"] = json!("99.99");
+    w.mock.with_pages("uid-eur", vec![page(&[again], None)]);
+    syncer.tick(at(10)).await.unwrap();
+    let (status, amount): (String, i64) = sqlx::query_as(
+        "select status, amount_minor from finance.bank_transactions where account_id = $1 and entry_reference = 'p1'",
+    )
+    .bind(w.account)
+    .fetch_one(&w.pool)
+    .await
+    .unwrap();
+    assert_eq!((status.as_str(), amount), ("booked", -1979));
 }
 
 #[tokio::test]

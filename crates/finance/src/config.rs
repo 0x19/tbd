@@ -94,10 +94,11 @@ impl Provider {
 
 /// `[sync]`: how often, and how much, the syncer asks the bank.
 ///
-/// The numbers encode one fact about PSD2: most banks allow **four**
-/// unattended fetches per account per day, and the fifth is a 429 that costs
-/// the rest of the day. Everything here is about not spending the fourth by
-/// accident.
+/// PSD2 lets a bank cap unattended fetches at four per account per day. Erste
+/// did not enforce it when measured, so the defaults poll hourly and rely on
+/// the 429 path as the safety net. The structure -- a budget with a share
+/// reserved for a person -- stays, because the day the bank counts is the
+/// day it matters.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Sync {
@@ -108,7 +109,7 @@ pub struct Sync {
     /// The least time between two scheduled fetches of one account.
     #[serde(default = "default_min_interval")]
     pub min_interval_secs: u64,
-    /// Fetches per account per day the bank allows. Erste: 4.
+    /// Fetches per account per day, counting manual refreshes.
     #[serde(default = "default_budget")]
     pub budget_per_day: u32,
     /// How many of those the scheduler may spend. The rest is reserved for a
@@ -136,16 +137,16 @@ pub struct Sync {
 }
 
 const fn default_sync_interval() -> u64 {
-    15 * 60
+    5 * 60
 }
 const fn default_min_interval() -> u64 {
-    5 * 60 * 60
+    60 * 60
 }
 const fn default_budget() -> u32 {
-    4
+    30
 }
 const fn default_scheduled_budget() -> u32 {
-    3
+    24
 }
 const fn default_overlap_days() -> u32 {
     7

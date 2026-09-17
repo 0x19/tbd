@@ -59,6 +59,8 @@ pub enum Outcome {
         inserted: usize,
         /// Rows already present.
         duplicates: usize,
+        /// Rows seen before as pending that the bank has now booked.
+        booked: usize,
     },
     /// The bank said to wait. `sync_backoff_until` is set.
     RateLimited,
@@ -438,7 +440,7 @@ impl<P: Provider + 'static> Syncer<P> {
         sqlx::query(
             "update finance.sync_runs
                 set finished_at = $2, outcome = 'ok', pages = $3, inserted = $4,
-                    duplicates = $5, skipped = $6, balances = $7
+                    duplicates = $5, skipped = $6, balances = $7, booked = $8
               where id = $1",
         )
         .bind(run_id)
@@ -448,20 +450,22 @@ impl<P: Provider + 'static> Syncer<P> {
         .bind(i32::try_from(got.duplicates).unwrap_or(i32::MAX))
         .bind(i32::try_from(got.skipped).unwrap_or(i32::MAX))
         .bind(i32::try_from(recorded).unwrap_or(i32::MAX))
+        .bind(i32::try_from(got.booked).unwrap_or(i32::MAX))
         .execute(&self.pool)
         .await
         .map_err(map_err)?;
 
-        // New rows get categorised now, not on the next manual pass. A pass
-        // is a pure function of the rules, so running it after every sync
-        // with new rows is free of surprises.
-        if got.inserted > 0 {
+        // New or newly booked rows get categorised now, not on the next
+        // manual pass. A pass is a pure function of the rules, so running it
+        // after every sync that changed something is free of surprises.
+        if got.inserted > 0 || got.booked > 0 {
             categorise::apply_rules(&self.pool, account.party_id).await?;
         }
         Ok(Outcome::Ok {
             pages: pages.len(),
             inserted: got.inserted,
             duplicates: got.duplicates,
+            booked: got.booked,
         })
     }
 

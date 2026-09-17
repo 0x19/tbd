@@ -35,6 +35,8 @@ pub struct Imported {
     pub inserted: usize,
     /// Rows already present, recognised by their dedup key.
     pub duplicates: usize,
+    /// Rows seen before as pending that the bank has now booked.
+    pub booked: usize,
     /// Rows skipped because they could not be mapped, with the reason logged.
     pub skipped: usize,
 }
@@ -369,6 +371,7 @@ pub async fn from_prototype(
         .await?;
         report.inserted += got.inserted;
         report.duplicates += got.duplicates;
+        report.booked += got.booked;
         report.skipped += got.skipped;
     }
 
@@ -445,11 +448,10 @@ pub async fn ingest_pages(
                 continue;
             };
             let key = next_key(t, &parsed, seen_keys);
-            let affected = insert_row(pool, party_id, account_id, t, &parsed, &key).await?;
-            if affected == 0 {
-                report.duplicates += 1;
-            } else {
-                report.inserted += 1;
+            match insert_row(pool, party_id, account_id, t, &parsed, &key).await? {
+                Written::Inserted => report.inserted += 1,
+                Written::Booked => report.booked += 1,
+                Written::Duplicate => report.duplicates += 1,
             }
         }
     }
@@ -588,7 +590,27 @@ fn next_key(raw: &Value, parsed: &Row, seen: &mut HashMap<Vec<u8>, u32>) -> Vec<
     key
 }
 
-/// Insert one row, or recognise it as already present.
+/// What inserting a row did.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Written {
+    /// New to us.
+    Inserted,
+    /// Seen before as pending; the bank has now booked it, and the row was
+    /// rewritten with the booked version. Only this direction is allowed:
+    /// a booked row is never touched again, whatever a later page says.
+    Booked,
+    /// Already present, unchanged.
+    Duplicate,
+}
+
+/// Insert one row, promote it from pending to booked, or recognise it as
+/// already present.
+///
+/// The pending-to-booked case is why this is not `do nothing`: a card payment
+/// arrives as `PDNG` one day and `BOOK` the next, with the same
+/// `entry_reference` and therefore the same dedup key. Ignoring the second
+/// sighting leaves it pending forever -- and out of every summary, which
+/// counts booked rows only.
 async fn insert_row(
     pool: &PgPool,
     party_id: Uuid,
@@ -596,19 +618,33 @@ async fn insert_row(
     raw: &Value,
     parsed: &Row,
     key: &[u8],
-) -> Result<u64, DbError> {
+) -> Result<Written, DbError> {
     let status = match raw.get("status").and_then(Value::as_str) {
         Some("BOOK") => "booked",
         _ => "pending",
     };
-    Ok(sqlx::query(
+    let remittance = remittance(raw);
+    let query = sqlx::query_as(
         "insert into finance.bank_transactions
             (id, party_id, account_id, status, entry_reference, dedup_key,
              amount_minor, currency, scale, credit_debit, booking_date, value_date,
              counterparty_name, counterparty_iban, remittance, reference_number, raw)
          values ($1, $2, $3, $4, $5, $6, $7, $8, 2, $9, $10::date, $11::date,
                  $12, $13, $14, $15, $16)
-         on conflict (account_id, dedup_key) do nothing",
+         on conflict (account_id, dedup_key) do update
+            set status = excluded.status,
+                booking_date = excluded.booking_date,
+                value_date = excluded.value_date,
+                amount_minor = excluded.amount_minor,
+                counterparty_name = excluded.counterparty_name,
+                counterparty_iban = excluded.counterparty_iban,
+                remittance = excluded.remittance,
+                reference_number = excluded.reference_number,
+                raw = excluded.raw,
+                updated_at = clock_timestamp()
+          where finance.bank_transactions.status = 'pending'
+            and excluded.status = 'booked'
+         returning (xmax = 0) as inserted",
     )
     .bind(Uuid::new_v4())
     .bind(party_id)
@@ -623,13 +659,15 @@ async fn insert_row(
     .bind(parsed.value.as_deref())
     .bind(parsed.counterparty.as_deref())
     .bind(parsed.counterparty_iban.as_deref())
-    .bind(remittance(raw).as_deref())
+    .bind(remittance.as_deref())
     .bind(raw.get("reference_number").and_then(Value::as_str))
-    .bind(raw)
-    .execute(pool)
-    .await
-    .map_err(map_err)?
-    .rows_affected())
+    .bind(raw);
+    let row: Option<(bool,)> = query.fetch_optional(pool).await.map_err(map_err)?;
+    Ok(match row {
+        Some((true,)) => Written::Inserted,
+        Some((false,)) => Written::Booked,
+        None => Written::Duplicate,
+    })
 }
 
 /// Read and parse a JSON file, naming it when either fails.
