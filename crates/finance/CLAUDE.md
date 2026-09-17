@@ -31,6 +31,12 @@ The finance service. gRPC only. Scaffolded by `tbd new service` (docs/tbd/README
   daily fetches are the scheduler's; the fourth is a person's. Measured on Erste
   (`prototype/bank/FINDINGS.md`): unattended history is 90 days whatever is asked; no
   4/day 429 seen in 12 fetches. `tick(now)` is a pure step for tests; `run` loops it.
+- `invoice/`: drafts, previews, approvals (`store.rs`), the gapless counter
+  (`numbering.rs`, a locked row, never a sequence), integer totals (`totals.rs`), and
+  the Typst renderer (`render.rs`: template, Inter and the mark compiled in; PDF id
+  and date pinned, so a render is a pure function of the document). The approval
+  names the preview's content hash; a changed draft is FAILED_PRECONDITION. See
+  `docs/finance/invoice.md`. `service_invoices.rs` holds the RPCs.
 - `categorise.rs` + `seeds/rules.sql`: a pass clears every `inferred` categorisation and
   reapplies rules in priority order; `declared` always survives. The seed is idempotent on
   `(party_id, name)`; a rule joins to its category by slug and a typo drops it silently,
