@@ -47,3 +47,12 @@ pub mod humans {
             include_bytes!(concat!(env!("OUT_DIR"), "/humans_descriptor.bin"));
     }
 }
+
+pub mod finance {
+    pub mod v1 {
+        tonic::include_proto!("tbd.finance.v1");
+        /// Encoded `FileDescriptorSet` for this package, for gRPC reflection.
+        pub const DESCRIPTOR_SET: &[u8] =
+            include_bytes!(concat!(env!("OUT_DIR"), "/finance_descriptor.bin"));
+    }
+}

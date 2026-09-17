@@ -4,6 +4,7 @@
 //! UI's forms all derive from it. `tbd new service` writes a module and a line.
 
 pub mod engine;
+pub mod finance;
 pub mod humans;
 pub mod ledger;
 pub mod protocol;
@@ -25,6 +26,7 @@ pub static ALL: &[&Kind] = &[
     &protocol::KIND,
     &ledger::KIND,
     &humans::KIND,
+    &finance::KIND,
     // tbd:kinds-end (tbd new service inserts above this line; do not edit)
 ];
 
