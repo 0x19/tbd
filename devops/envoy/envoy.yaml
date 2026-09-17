@@ -8,7 +8,7 @@
 #                     x-tbd-backend header, so service replicas are a pure scale-out.
 #   :9901  admin      /ready, /stats/prometheus, /clusters, /config_dump.
 #
-# Clusters resolve by DNS name: `engine`, `protocol`, `humans`, `ledger`, `chaos`, `otel-collector`,
+# Clusters resolve by DNS name: `engine`, `protocol`, `playground`, `finance`, `humans`, `ledger`, `chaos`, `otel-collector`,
 # `hydra`, `kratos`, `auth-ui`, `grafana`, `victoria-logs`, `pyroscope`,
 # `victoria-metrics`.
 #
@@ -307,6 +307,26 @@ static_resources:
                           route: { cluster: kratos, timeout: 15s }
                         - match: { prefix: "/" }
                           route: { cluster: auth-ui, timeout: 15s }
+                    # The company site (ui/www) at the root of the base domain. Public:
+                    # no sign-in, no token, no rate limit. The public edge rewrites the
+                    # apex Host to `www.<domain>` so this one rule serves both the apex
+                    # and the www name; locally it is http://www.localhost:18080/.
+                    - name: www
+                      domains: ["www.*"]
+                      typed_per_filter_config: *ui_open
+                      routes:
+                        - match: { prefix: "/" }
+                          route:
+                            cluster: www
+                            timeout: 15s
+                            # Every route here is an idempotent GET of a static
+                            # file. A pod replaced during a deploy resets the
+                            # pooled connection, so retry rather than hand the
+                            # visitor a 503 for a file that exists.
+                            retry_policy:
+                              retry_on: connect-failure,refused-stream,reset,unavailable
+                              num_retries: 2
+                              per_try_timeout: 5s
                     # chaos API on its own host: chaos.api.<domain>/... -> /api/chaos/...
                     - name: chaos-api
                       domains: ["chaos.api.*"]
@@ -366,6 +386,30 @@ static_resources:
                                         path: [{ key: jwt }, { key: scp }]
                                         value: { list_match: { one_of: { string_match: { exact: tbd.api } } } }
                       routes:
+                        # The company's published privacy policy and terms. They exist to be
+                        # read by people who are not signed in — a bank-data provider's
+                        # reviewer, for one — so all three gates come off: oauth2 (which
+                        # would 302 a browser to the sign-in page), jwt_authn and rbac.
+                        # Static files from ui/chaos/public, no API and no data behind them.
+                        - match: { path: "/privacy.html" }
+                          typed_per_filter_config: &public_page
+                            envoy.filters.http.oauth2:
+                              "@type": type.googleapis.com/envoy.config.route.v3.FilterConfig
+                              disabled: true
+                            envoy.filters.http.jwt_authn:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.PerRouteConfig
+                              disabled: true
+                            envoy.filters.http.rbac:
+                              "@type": type.googleapis.com/envoy.config.route.v3.FilterConfig
+                              disabled: true
+                          route:
+                            cluster: chaos
+                            timeout: 15s
+                        - match: { path: "/terms.html" }
+                          typed_per_filter_config: *public_page
+                          route:
+                            cluster: chaos
+                            timeout: 15s
                         - match: { prefix: "/api/chaos/" }
                           route:
                             cluster: chaos
@@ -443,6 +487,78 @@ static_resources:
                           route:
                             cluster: victoria-metrics
                             timeout: 0s
+                    # The finance service's browser surface. Today it holds exactly
+                    # one thing: the bank's OAuth redirect target. The page is static
+                    # and reads the code out of its own URL — nothing here exchanges
+                    # it, so this route mints no consent and stores no secret. It has
+                    # to be open, because the bank redirects a browser that has no
+                    # session with us yet. When the finance service exists, this
+                    # becomes a real UI host behind *ui_gated and the page POSTs the
+                    # code to an authenticated RPC instead of displaying it.
+                    - name: finance
+                      domains: ["finance.*"]
+                      typed_per_filter_config: *ui_gated
+                      routes:
+                        - match: { path: "/connect/callback" }
+                          typed_per_filter_config: *public_page
+                          response_headers_to_add:
+                            - header: { key: content-type, value: "text/html; charset=utf-8" }
+                            - header: { key: referrer-policy, value: "no-referrer" }
+                            - header: { key: cache-control, value: "no-store" }
+                          direct_response:
+                            status: 200
+                            body:
+                              inline_string: |
+                                <!doctype html>
+                                <html lang="en"><head><meta charset="utf-8">
+                                <meta name="viewport" content="width=device-width, initial-scale=1">
+                                <meta name="robots" content="noindex">
+                                <title>Bank authorization</title>
+                                <style>
+                                :root{color-scheme:light dark;--bg:#fbfbfa;--fg:#1a1a18;--muted:#6a6a64;--rule:#e3e3df}
+                                @media(prefers-color-scheme:dark){:root{--bg:#16161a;--fg:#e8e8e4;--muted:#9a9a94;--rule:#2c2c31}}
+                                body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 ui-sans-serif,-apple-system,"Segoe UI",system-ui,sans-serif}
+                                main{max-width:38rem;margin:0 auto;padding:4rem 1.25rem}
+                                h1{font-size:1.5rem;letter-spacing:-.02em;margin:0 0 .3rem}
+                                p{color:var(--muted);margin:.4rem 0 1.4rem}
+                                code{display:block;font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;
+                                background:transparent;border:1px solid var(--rule);border-radius:8px;padding:.85rem;
+                                word-break:break-all;margin:.4rem 0 1rem}
+                                b{font-weight:600;color:var(--fg)}
+                                .warn{font-size:.875rem;border-left:2px solid var(--rule);padding-left:.85rem}
+                                </style></head><body><main>
+                                <h1 id="h">Bank authorization</h1>
+                                <p id="sub">Reading the response&hellip;</p>
+                                <div id="out"></div>
+                                <p class="warn">This code is single-use and expires within minutes.
+                                It is a credential: do not paste it into anything but the prototype,
+                                and do not share this page.</p>
+                                </main><script>
+                                var q = new URLSearchParams(location.search);
+                                var code = q.get("code"), state = q.get("state"), err = q.get("error");
+                                var out = document.getElementById("out");
+                                var sub = document.getElementById("sub");
+                                if (err) {
+                                  document.getElementById("h").textContent = "Authorization failed";
+                                  sub.textContent = q.get("error_description") || err;
+                                } else if (code) {
+                                  sub.innerHTML = "Authorized. Paste this into the prototype:";
+                                  out.innerHTML = "<b>code</b><code>" + code + "</code>" +
+                                    (state ? "<b>state</b><code>" + state + "</code>" : "");
+                                } else {
+                                  sub.textContent = "No authorization code in this URL. Start the flow again.";
+                                }
+                                // The code must not survive in history or in a referrer header.
+                                if (location.search) history.replaceState(null, "", location.pathname);
+                                </script></body></html>
+                        - match: { prefix: "/" }
+                          typed_per_filter_config: *public_page
+                          response_headers_to_add:
+                            - header: { key: content-type, value: "text/plain; charset=utf-8" }
+                          direct_response:
+                            status: 404
+                            body:
+                              inline_string: "not found\n"
                     # The API: api.<domain> publicly, localhost:18080 locally. Every
                     # route needs a bearer token except the health endpoints, which
                     # probes, Envoy's own health checks and uptime monitors call.
@@ -632,6 +748,32 @@ static_resources:
                             cluster: humans
                             timeout: 0s
                             retry_policy: *grpc_retry
+                        # finance, matched by service name; the engine stays the catch-all.
+                        - match: { prefix: "/tbd.finance.v1.FinanceService/", grpc: {} }
+                          route:
+                            cluster: finance
+                            timeout: 0s
+                            retry_policy: *grpc_retry
+                        # finance health: the grpc.health.v1 path is shared, so the protocol
+                        # names the backend it is asking about in x-tbd-backend.
+                        - match: { prefix: "/grpc.health.v1.Health/", grpc: {}, headers: [{ name: x-tbd-backend, string_match: { exact: finance } }] }
+                          route:
+                            cluster: finance
+                            timeout: 0s
+                            retry_policy: *grpc_retry
+                        # playground, matched by service name; the engine stays the catch-all.
+                        - match: { prefix: "/tbd.playground.v1.PlaygroundService/", grpc: {} }
+                          route:
+                            cluster: playground
+                            timeout: 0s
+                            retry_policy: *grpc_retry
+                        # playground health: the grpc.health.v1 path is shared, so the protocol
+                        # names the backend it is asking about in x-tbd-backend.
+                        - match: { prefix: "/grpc.health.v1.Health/", grpc: {}, headers: [{ name: x-tbd-backend, string_match: { exact: playground } }] }
+                          route:
+                            cluster: playground
+                            timeout: 0s
+                            retry_policy: *grpc_retry
                         - match: { prefix: "/" }
                           route:
                             cluster: engine
@@ -760,6 +902,68 @@ static_resources:
           healthy_threshold: 1
           grpc_health_check:
             service_name: tbd.humans.v1.HumansService
+      outlier_detection:
+        consecutive_gateway_failure: 5
+        interval: 5s
+        base_ejection_time: 30s
+        max_ejection_percent: 50
+
+    - name: finance
+      type: STRICT_DNS
+      dns_lookup_family: V4_ONLY
+      dns_refresh_rate: 5s
+      lb_policy: LEAST_REQUEST
+      connect_timeout: 1s
+      typed_extension_protocol_options:
+        envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+          "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+          explicit_http_config:
+            http2_protocol_options: {}
+      load_assignment:
+        cluster_name: finance
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address: { address: finance, port_value: 50054 }
+      health_checks:
+        - timeout: 1s
+          interval: 5s
+          unhealthy_threshold: 2
+          healthy_threshold: 1
+          grpc_health_check:
+            service_name: tbd.finance.v1.FinanceService
+      outlier_detection:
+        consecutive_gateway_failure: 5
+        interval: 5s
+        base_ejection_time: 30s
+        max_ejection_percent: 50
+
+    - name: playground
+      type: STRICT_DNS
+      dns_lookup_family: V4_ONLY
+      dns_refresh_rate: 5s
+      lb_policy: LEAST_REQUEST
+      connect_timeout: 1s
+      typed_extension_protocol_options:
+        envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+          "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+          explicit_http_config:
+            http2_protocol_options: {}
+      load_assignment:
+        cluster_name: playground
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address: { address: playground, port_value: 50055 }
+      health_checks:
+        - timeout: 1s
+          interval: 5s
+          unhealthy_threshold: 2
+          healthy_threshold: 1
+          grpc_health_check:
+            service_name: tbd.playground.v1.PlaygroundService
       outlier_detection:
         consecutive_gateway_failure: 5
         interval: 5s
@@ -896,6 +1100,23 @@ static_resources:
               - endpoint:
                   address:
                     socket_address: { address: auth-ui, port_value: 3000 }
+    - name: www
+      type: STRICT_DNS
+      dns_lookup_family: V4_ONLY
+      dns_refresh_rate: 5s
+      lb_policy: ROUND_ROBIN
+      connect_timeout: 1s
+      load_assignment:
+        cluster_name: www
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address: { address: www, port_value: 8080 }
+      # No active health check on purpose. STRICT_DNS resolves the Service to a
+      # single ClusterIP, so a probe that lands on a pod being replaced ejects
+      # the only endpoint and the whole site answers 503 for an interval. The
+      # readiness probe already keeps unready pods out of the Service.
     - name: otel-collector
       type: STRICT_DNS
       dns_lookup_family: V4_ONLY

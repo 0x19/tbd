@@ -6,7 +6,10 @@
 #   api.<base>       Envoy edge :18080  (REST, SSE, GraphQL, WebSocket, gRPC)   public
 #   grafana.<base>, logs.<base>, profiles.<base>, metrics.<base>, chaosadmin.<base>
 #                    Envoy :18080, which signs the browser in through Ory Hydra
+#   finance.<base>   the finance UI; the bank OAuth callback is open, the rest gated
 #   auth.<base>      sign-in: Ory Hydra + Kratos + login pages, via Envoy :18080      public
+#   <base>           the company site (ui/www), Envoy's `www.*` host                  public
+#                    www.<base> redirects to the apex, so there is one canonical URL
 #
 # Env: BASE_DOMAIN, ACME_EMAIL.
 {
@@ -78,7 +81,33 @@ chaosadmin.{$BASE_DOMAIN} {
 	import gated
 }
 
+# The finance service's browser surface. Envoy's `finance.*` host decides what is
+# open and what needs the login; today the only route is the bank's OAuth callback.
+finance.{$BASE_DOMAIN} {
+	import gated
+}
+
 # Where people sign in: Ory Hydra, Kratos and the login pages, via Envoy.
 auth.{$BASE_DOMAIN} {
 	import gated
+}
+
+# One canonical name for the site: www redirects to the apex.
+www.{$BASE_DOMAIN} {
+	redir https://{$BASE_DOMAIN}{uri} permanent
+}
+
+# The company site at the root of the base domain. Public, no sign-in. The Host
+# is rewritten to the www name because that is what Envoy's public `www.*`
+# virtual host matches, which keeps the domain itself out of envoy.yaml.
+{$BASE_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy cluster:18080 {
+		header_up Host www.{$BASE_DOMAIN}
+		header_up X-Forwarded-Proto https
+	}
+	log {
+		output stdout
+		format json
+	}
 }
