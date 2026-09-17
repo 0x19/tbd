@@ -170,6 +170,100 @@
         }
       }
     },
+    "/v1/finance/ping": {
+      "get": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/Ping",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/Ping` on the `finance` backend.",
+        "operationId": "FinanceService.Ping",
+        "parameters": [
+          {
+            "name": "message",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.PingResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.PingResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/finance/transactions": {
+      "get": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/ListTransactions",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/ListTransactions` on the `finance` backend.",
+        "operationId": "FinanceService.ListTransactions",
+        "parameters": [
+          {
+            "name": "party_ids",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "explode": true
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.ListTransactionsResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.ListTransactionsResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/humans/ping": {
       "get": {
         "tags": [
@@ -952,7 +1046,7 @@
       },
       "Key": {
         "type": "object",
-        "description": "A key the id plane issued: a client, or a sub-key under a parent client.",
+        "description": "The key claims, as `OpenAPI` sees them.\n\nA mirror of `tbd_common::principal::Key`. The type itself lives in\n`tbd-common`, which cannot derive `utoipa::ToSchema` without taking a\ndependency on a documentation crate it has no other use for. Mirroring it\nhere keeps `docs/protocol/openapi.json` byte-identical across this\nrefactor -- a published contract must not shift because of an internal\nmove.",
         "required": [
           "id"
         ],
@@ -1128,6 +1222,77 @@
             "$ref": "#/components/schemas/tbd.engine.v1.ScoreUpdated"
           },
           "subject_id": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.finance.v1.ListTransactionsResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.ListTransactionsResponse`",
+        "properties": {
+          "party_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "transactions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/tbd.finance.v1.Transaction"
+            }
+          }
+        }
+      },
+      "tbd.finance.v1.PingResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.PingResponse`",
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "stub": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.finance.v1.Transaction": {
+        "type": "object",
+        "description": "`tbd.finance.v1.Transaction`",
+        "properties": {
+          "account_id": {
+            "type": "string"
+          },
+          "amount_minor": {
+            "type": "string",
+            "format": "int64"
+          },
+          "booking_date": {
+            "type": "string"
+          },
+          "counterparty_name": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "party_id": {
+            "type": "string"
+          },
+          "remittance": {
+            "type": "string"
+          },
+          "scale": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "status": {
             "type": "string"
           }
         }

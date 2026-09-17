@@ -34,6 +34,14 @@ required = false
 url = "http://127.0.0.1:50052"
 service = "tbd.ledger.v1.LedgerService"
 required = false
+[services.finance]
+url = "http://127.0.0.1:50054"
+service = "tbd.finance.v1.FinanceService"
+required = false
+[services.playground]
+url = "http://127.0.0.1:50055"
+service = "tbd.playground.v1.PlaygroundService"
+required = false
 # tbd:services-end (tbd new service inserts above this line; do not edit)
 
 [health]

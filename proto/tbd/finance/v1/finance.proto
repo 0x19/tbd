@@ -1,0 +1,70 @@
+syntax = "proto3";
+
+package tbd.finance.v1;
+
+import "google/api/annotations.proto";
+
+// The finance service. Ping is the liveness RPC every service carries; real
+// RPCs are added beside it.
+service FinanceService {
+  // Echo a message. Proves configuration, telemetry and fault injection reach
+  // an RPC.
+  rpc Ping(PingRequest) returns (PingResponse) {
+    option (google.api.http) = {get: "/v1/finance/ping"};
+  }
+
+  // Transactions the caller is allowed to see.
+  //
+  // There is deliberately no party filter in the request. The set of parties a
+  // caller may read is derived from the token Envoy verified, never from
+  // anything the caller sends: a request naming someone else's party could not
+  // be told apart from an honest one. `party_ids` narrows *within* that set and
+  // can only ever shrink it.
+  rpc ListTransactions(ListTransactionsRequest) returns (ListTransactionsResponse) {
+    option (google.api.http) = {get: "/v1/finance/transactions"};
+  }
+}
+
+message PingRequest {
+  string message = 1;
+}
+
+message PingResponse {
+  string message = 1;
+  // Version of the binary that answered.
+  string version = 2;
+  // True while the service is a placeholder with nothing real behind it.
+  bool stub = 3;
+}
+
+message ListTransactionsRequest {
+  // Narrow to these parties. Ids the caller has no grant for are dropped, not
+  // refused: refusing would confirm which of them exist. Empty means every
+  // party the caller may read.
+  repeated string party_ids = 1;
+  // Page size, 1..=500. Zero means the default.
+  uint32 limit = 2;
+}
+
+message ListTransactionsResponse {
+  repeated Transaction transactions = 1;
+  // Parties this answer was drawn from: what the caller may read, after
+  // narrowing. Empty when the caller may read nothing.
+  repeated string party_ids = 2;
+}
+
+message Transaction {
+  string id = 1;
+  string account_id = 2;
+  string party_id = 3;
+  // BOOKED or PENDING.
+  string status = 4;
+  // Minor units, signed: negative is money out. Rendered as a JSON string by
+  // the transcoder, which is what money wants in a browser.
+  int64 amount_minor = 5;
+  string currency = 6;
+  uint32 scale = 7;
+  string booking_date = 8;
+  string counterparty_name = 9;
+  string remittance = 10;
+}
