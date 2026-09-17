@@ -32,3 +32,9 @@ ui/www/node_modules/
 ui/www/.next/
 ui/www/out/
 !devops/docker/www.Caddyfile
+# The finance UI (Dockerfile.finances builds it from source; never its outputs).
+!ui/finances/
+ui/finances/node_modules/
+ui/finances/.next/
+ui/finances/out/
+!devops/docker/finances.Caddyfile
