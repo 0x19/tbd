@@ -237,6 +237,18 @@ pub fn registrations(service: &Service) -> Result<Vec<Registration>, TemplateErr
         templates::snippet("protocol-service"),
         "[services.@@name@@]",
     )?;
+    // The protocol's integration harness boots an embedded registry. A service
+    // missing from it has its transcoded routes skipped, so the served OpenAPI
+    // document loses them while docs/protocol/openapi.json still has them, and
+    // `openapi_is_served_and_matches_the_committed_document` fails pointing at
+    // the document rather than at the registry.
+    b.after(
+        "protocol:test-registry",
+        "crates/protocol/tests/it/support.rs",
+        Anchor::line(contains("(\"humans\".to_owned()")),
+        "            (\"@@name@@\".to_owned(), \"http://127.0.0.1:1\".to_owned()),",
+        "(\"@@name@@\".to_owned()",
+    )?;
     b.after(
         "protocol:k8s-env",
         "devops/k8s/base/configmap.yaml",
@@ -601,5 +613,6 @@ pub const CHECKLIST: &[&str] = &[
     "cargo check -p @@package@@                      # updates Cargo.lock",
     "mise run chaos:docs                              # docs/chaos/kinds.md gains the @@name@@ kind",
     "kustomize build devops/k8s/overlays/local > /dev/null && docker compose config -q && mise run envoy:validate",
+    "mise run protocol:openapi                        # the @@name@@ proto's google.api.http routes join the document",
     "mise run ci",
 ];

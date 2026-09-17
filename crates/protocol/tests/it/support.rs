@@ -57,10 +57,17 @@ pub async fn start() -> Stack {
             // Registered and never up, like a scaffolded service before its
             // first deploy: its routes exist and answer `unavailable`.
             ("humans".to_owned(), "http://127.0.0.1:1".to_owned()),
+            ("playground".to_owned(), "http://127.0.0.1:1".to_owned()),
+            ("finance".to_owned(), "http://127.0.0.1:1".to_owned()),
         ],
     );
-    if let Some(humans) = protocol_config.services.get_mut("humans") {
-        humans.required = false;
+    // Everything but the two backends this harness actually starts is
+    // registered and never up. Derived from the registry rather than listed, so
+    // `tbd new service` only has to add its line above.
+    for (name, service) in &mut protocol_config.services {
+        if name != "engine" && name != "ledger" {
+            service.required = false;
+        }
     }
     // A subject the tests can present as one of our own services.
     protocol_config.principals.services = vec!["svc-ledger".to_owned()];
