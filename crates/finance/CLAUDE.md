@@ -14,7 +14,27 @@ The finance service. gRPC only. Scaffolded by `tbd new service` (docs/tbd/README
   `FINANCE_*` environment variables (`Overrides`). Every key lives in `base.toml`;
   `deny_unknown_fields` makes a mistyped key fail at start. `finance config` prints
   the effective result.
-- `main.rs`: the only file that prints (the `config` subcommand).
+- `main.rs`: the only file that prints. Subcommands are one-shots with no telemetry:
+  `config`, `import` (prototype JSON), `adopt` (a prototype consent as a connection),
+  `categorise`, `session` (one signed GET, spends no allowance), `sync` (one tick, or
+  `--account` a manual refresh).
+- `import.rs`: the **only** place provider JSON becomes rows (`ingest_pages`,
+  `ingest_balances`), audited against 2,861 real Erste rows. The importer and the
+  syncer both call it; a second parser would drift into wrong money without an error.
+- `banking/`: `Provider` trait (hands back JSON *unparsed*, see above), the Enable
+  Banking client (`ring` RS256, pages by repeating the date window because Erste 422s a
+  continuation key sent alone), `Mock` with every failure mode and a call counter,
+  `connect.rs` (consent: `state` is ours and single-use, a foreign party gets `NotFound`),
+  `adopt.rs` (one-time migration of the prototype's consents).
+- `sync.rs`: the worker. Budget, backoff and watermark are columns on the account, decided
+  under `for update skip locked` and committed *before* the network call. Three of four
+  daily fetches are the scheduler's; the fourth is a person's. Measured on Erste
+  (`prototype/bank/FINDINGS.md`): unattended history is 90 days whatever is asked; no
+  4/day 429 seen in 12 fetches. `tick(now)` is a pure step for tests; `run` loops it.
+- `categorise.rs` + `seeds/rules.sql`: a pass clears every `inferred` categorisation and
+  reapplies rules in priority order; `declared` always survives. The seed is idempotent on
+  `(party_id, name)`; a rule joins to its category by slug and a typo drops it silently,
+  so `tests/it/seed.rs` counts.
 
 - Observability: `tbd_common::telemetry::grpc_request_span` is the `trace_fn`, so every
   call gets a `grpc.request` span with the caller's `traceparent` adopted and
@@ -32,4 +52,7 @@ Invariants:
 
 Tests: `tests/it/main.rs` boots the server on port 0 through `support.rs` with the
 shipped `configs/finance` and env `local`, and exposes the `Runtime` so tests can
-inject faults and read counters.
+inject faults and read counters. `start_with_store()` gives a fresh migrated database
+(testcontainers, or `TBD_TEST_DATABASE_URL`). `banking.rs` runs the real client against
+wiremock; `sync.rs` and `connect.rs` run the worker and the consent flow against the
+`Mock` bank, counting its calls -- the interesting number is usually zero.
