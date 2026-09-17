@@ -14,16 +14,26 @@ use tbd_common::{
 };
 use tbd_db::{Access, DbError};
 use tbd_proto::finance::v1::{
-    ListTransactionsRequest, ListTransactionsResponse, PingRequest, PingResponse, Transaction,
-    finance_service_server::FinanceService,
+    Account, Balance, Category, CompleteConnectionRequest, CompleteConnectionResponse, Connection,
+    DeclareCategoryRequest, DeclareCategoryResponse, ListAccountsRequest, ListAccountsResponse,
+    ListCategoriesRequest, ListCategoriesResponse, ListConnectionsRequest, ListConnectionsResponse,
+    ListPartiesRequest, ListPartiesResponse, ListRulesRequest, ListRulesResponse,
+    ListTransactionsRequest, ListTransactionsResponse, MonthlySummaryRequest,
+    MonthlySummaryResponse, Party, PingRequest, PingResponse, RefreshAccountRequest,
+    RefreshAccountResponse, Rule, StartConnectionRequest, StartConnectionResponse, SummaryRow,
+    Transaction, UpsertRuleRequest, UpsertRuleResponse, finance_service_server::FinanceService,
 };
 use tonic::{Code, Request, Response, Status};
 use uuid::Uuid;
 
 use crate::{
     Runtime,
-    config::Ping,
-    store::{self, MemoryStore, PgStore, Store},
+    banking::{Provider, connect},
+    categorise,
+    config::{Ping, Sync as SyncConfig},
+    money,
+    store::{self, MemoryStore, PgStore, Store, TransactionFilter},
+    sync::{Outcome, Skipped, Syncer},
 };
 
 /// The service. Cheap to clone; holds its configuration section and shared handles.
@@ -42,6 +52,11 @@ pub struct Finance {
     /// Subject to readable parties, for memory-backed stacks only. Empty with a
     /// database, where grants are rows in `public.party_access`.
     grants: Vec<(String, Vec<Uuid>)>,
+    /// The bank, when one is configured. Without it the connection and
+    /// refresh RPCs answer `FAILED_PRECONDITION` and say why.
+    provider: Option<Arc<dyn Provider>>,
+    sync: SyncConfig,
+    redirect_url: String,
 }
 
 impl Finance {
@@ -58,6 +73,9 @@ impl Finance {
             store: None,
             pool: None,
             grants: Vec::new(),
+            provider: None,
+            sync: SyncConfig::default(),
+            redirect_url: String::new(),
         }
     }
 
@@ -70,6 +88,9 @@ impl Finance {
             store: Some(Arc::new(PgStore::new(pool.clone()))),
             pool: Some(pool),
             grants: Vec::new(),
+            provider: None,
+            sync: SyncConfig::default(),
+            redirect_url: String::new(),
         }
     }
 
@@ -91,6 +112,9 @@ impl Finance {
             store: Some(Arc::new(store)),
             pool: None,
             grants: Vec::new(),
+            provider: None,
+            sync: SyncConfig::default(),
+            redirect_url: String::new(),
         }
         .with_grants(grants)
     }
@@ -98,6 +122,46 @@ impl Finance {
     fn with_grants(mut self, grants: Vec<(String, Vec<Uuid>)>) -> Self {
         self.grants = grants;
         self
+    }
+
+    /// Attach a bank, so connections can be made and accounts refreshed.
+    #[must_use]
+    pub fn with_bank(
+        mut self,
+        provider: Arc<dyn Provider>,
+        sync: SyncConfig,
+        redirect_url: String,
+    ) -> Self {
+        self.provider = Some(provider);
+        self.sync = sync;
+        self.redirect_url = redirect_url;
+        self
+    }
+
+    fn pool(&self) -> Result<&PgPool, Status> {
+        self.pool
+            .as_ref()
+            .ok_or_else(|| Status::unavailable("this needs a database"))
+    }
+
+    fn bank(&self) -> Result<&Arc<dyn Provider>, Status> {
+        self.provider
+            .as_ref()
+            .ok_or_else(|| Status::failed_precondition("no bank configured"))
+    }
+
+    /// The pool, the caller's access and its narrowed view, or the status
+    /// that stops the RPC. Every read starts here.
+    async fn read_context(
+        &self,
+        request: &Request<impl Sized>,
+        party_ids: &[String],
+    ) -> Result<(&PgPool, Access, Access), Status> {
+        let pool = self.pool()?;
+        let access = self.access(request).await?;
+        let narrow = parse_uuids(party_ids, "party_ids")?;
+        let view = store::view(&access, &narrow);
+        Ok((pool, access, view))
     }
 
     fn store(&self) -> Result<&Arc<dyn Store>, Status> {
@@ -160,6 +224,42 @@ impl Finance {
         timer.set_status(format!("{:?}", status.code()));
         status
     }
+}
+
+/// The listing filter from the request, or why it is malformed.
+fn transaction_filter(req: &ListTransactionsRequest) -> Result<TransactionFilter, Status> {
+    let mut filter = TransactionFilter {
+        offset: req.offset,
+        ..TransactionFilter::default()
+    };
+    if !req.month.is_empty() {
+        if req.month.len() != 7
+            || chrono::NaiveDate::parse_from_str(&format!("{}-01", req.month), "%Y-%m-%d").is_err()
+        {
+            return Err(Status::invalid_argument("month: want YYYY-MM"));
+        }
+        filter.month = Some(req.month.clone());
+    }
+    if !req.category_id.is_empty() {
+        filter.category = Some(if req.category_id == "none" {
+            None
+        } else {
+            Some(
+                Uuid::parse_str(&req.category_id)
+                    .map_err(|_| Status::invalid_argument("category_id: not a uuid"))?,
+            )
+        });
+    }
+    if !req.account_id.is_empty() {
+        filter.account_id = Some(
+            Uuid::parse_str(&req.account_id)
+                .map_err(|_| Status::invalid_argument("account_id: not a uuid"))?,
+        );
+    }
+    if !req.search.trim().is_empty() {
+        filter.search = Some(req.search.trim().to_owned());
+    }
+    Ok(filter)
 }
 
 /// The one place a store error becomes a status.
@@ -245,7 +345,11 @@ impl FinanceService for Finance {
             Ok(store) => store,
             Err(status) => return Err(self.reject(&mut timer, status)),
         };
-        let rows = match store.transactions(&access, &narrow, limit).await {
+        let filter = match transaction_filter(&req) {
+            Ok(f) => f,
+            Err(status) => return Err(self.reject(&mut timer, status)),
+        };
+        let rows = match store.transactions(&access, &narrow, &filter, limit).await {
             Ok(rows) => rows,
             Err(e) => return Err(self.reject(&mut timer, status_of(e))),
         };
@@ -261,22 +365,540 @@ impl FinanceService for Finance {
             "list_transactions"
         );
         Ok(Response::new(ListTransactionsResponse {
-            transactions: rows
+            transactions: rows.into_iter().map(transaction_proto).collect(),
+            party_ids: view.party_ids().iter().map(ToString::to_string).collect(),
+        }))
+    }
+
+    async fn monthly_summary(
+        &self,
+        request: Request<MonthlySummaryRequest>,
+    ) -> Result<Response<MonthlySummaryResponse>, Status> {
+        let mut timer = self.admit("FinanceService/MonthlySummary").await?;
+        let req = request.get_ref().clone();
+        let (pool, _, view) = match self.read_context(&request, &req.party_ids).await {
+            Ok(c) => c,
+            Err(status) => return Err(self.reject(&mut timer, status)),
+        };
+        let from = if req.from_month.is_empty() {
+            None
+        } else {
+            Some(req.from_month.as_str())
+        };
+        let rows =
+            match categorise::monthly_summary(pool, view.party_ids(), req.include_internal, from)
+                .await
+            {
+                Ok(rows) => rows,
+                Err(e) => return Err(self.reject(&mut timer, status_of(e))),
+            };
+        Ok(Response::new(MonthlySummaryResponse {
+            rows: rows
                 .into_iter()
-                .map(|t| Transaction {
-                    id: t.id.to_string(),
-                    account_id: t.account_id.to_string(),
-                    party_id: t.party_id.to_string(),
-                    status: t.status.to_uppercase(),
-                    amount_minor: t.amount_minor,
-                    currency: t.currency,
-                    scale: u32::try_from(t.scale).unwrap_or(2),
-                    booking_date: t.booking_date.map(|d| d.to_string()).unwrap_or_default(),
-                    counterparty_name: t.counterparty_name.unwrap_or_default(),
-                    remittance: t.remittance.unwrap_or_default(),
+                .map(|r| SummaryRow {
+                    month: r.month,
+                    party_id: r.party_id.to_string(),
+                    category_id: r.category_id.map(|c| c.to_string()).unwrap_or_default(),
+                    category: r.category.unwrap_or_default(),
+                    kind: r.kind.unwrap_or_default(),
+                    currency: r.currency,
+                    total_minor: r.total_minor,
+                    count: u32::try_from(r.count).unwrap_or(u32::MAX),
                 })
                 .collect(),
             party_ids: view.party_ids().iter().map(ToString::to_string).collect(),
         }))
+    }
+
+    async fn list_parties(
+        &self,
+        request: Request<ListPartiesRequest>,
+    ) -> Result<Response<ListPartiesResponse>, Status> {
+        let mut timer = self.admit("FinanceService/ListParties").await?;
+        let (pool, access, _) = match self.read_context(&request, &[]).await {
+            Ok(c) => c,
+            Err(status) => return Err(self.reject(&mut timer, status)),
+        };
+        let rows = match money::parties(pool, &access).await {
+            Ok(rows) => rows,
+            Err(e) => return Err(self.reject(&mut timer, status_of(e))),
+        };
+        Ok(Response::new(ListPartiesResponse {
+            parties: rows
+                .into_iter()
+                .map(|p| Party {
+                    id: p.party.id.0.to_string(),
+                    kind: format!("{:?}", p.party.kind).to_lowercase(),
+                    display_name: p.party.display_name,
+                    capability: format!("{:?}", p.capability).to_lowercase(),
+                })
+                .collect(),
+        }))
+    }
+
+    async fn list_accounts(
+        &self,
+        request: Request<ListAccountsRequest>,
+    ) -> Result<Response<ListAccountsResponse>, Status> {
+        let mut timer = self.admit("FinanceService/ListAccounts").await?;
+        let party_ids = request.get_ref().party_ids.clone();
+        let (pool, _, view) = match self.read_context(&request, &party_ids).await {
+            Ok(c) => c,
+            Err(status) => return Err(self.reject(&mut timer, status)),
+        };
+        let (accounts, balances) = match (
+            money::accounts(pool, &view).await,
+            money::latest_balances(pool, &view).await,
+        ) {
+            (Ok(a), Ok(b)) => (a, b),
+            (Err(e), _) | (_, Err(e)) => return Err(self.reject(&mut timer, status_of(e))),
+        };
+        Ok(Response::new(ListAccountsResponse {
+            accounts: accounts
+                .into_iter()
+                .map(|a| {
+                    let today = chrono::Utc::now().date_naive();
+                    let used = if a.sync_budget_day == Some(today) {
+                        a.sync_budget_used
+                    } else {
+                        0
+                    };
+                    Account {
+                        id: a.id.to_string(),
+                        party_id: a.party_id.to_string(),
+                        connection_id: a.connection_id.map(|c| c.to_string()).unwrap_or_default(),
+                        provider: a.provider,
+                        iban: a.iban.unwrap_or_default(),
+                        currency: a.currency,
+                        name: a.name,
+                        sync_enabled: a.sync_enabled,
+                        last_synced_at: a
+                            .last_synced_at
+                            .map(|t| t.to_rfc3339())
+                            .unwrap_or_default(),
+                        last_sync_status: a.last_sync_status.unwrap_or_default(),
+                        last_sync_error: a.last_sync_error.unwrap_or_default(),
+                        last_booked_through: a
+                            .last_booked_through
+                            .map(|d| d.to_string())
+                            .unwrap_or_default(),
+                        sync_backoff_until: a
+                            .sync_backoff_until
+                            .map(|t| t.to_rfc3339())
+                            .unwrap_or_default(),
+                        sync_budget_used: u32::try_from(used).unwrap_or(0),
+                        balances: balances
+                            .iter()
+                            .filter(|b| b.account_id == a.id)
+                            .map(|b| Balance {
+                                balance_type: b.balance_type.clone(),
+                                amount_minor: b.amount_minor,
+                                currency: b.currency.clone(),
+                                observed_at: b.observed_at.to_rfc3339(),
+                            })
+                            .collect(),
+                    }
+                })
+                .collect(),
+        }))
+    }
+
+    async fn refresh_account(
+        &self,
+        request: Request<RefreshAccountRequest>,
+    ) -> Result<Response<RefreshAccountResponse>, Status> {
+        let mut timer = self.admit("FinanceService/RefreshAccount").await?;
+        let Ok(account) = Uuid::parse_str(&request.get_ref().account_id) else {
+            return Err(self.reject(
+                &mut timer,
+                Status::invalid_argument("account_id: not a uuid"),
+            ));
+        };
+        let (pool, access, _) = match self.read_context(&request, &[]).await {
+            Ok(c) => c,
+            Err(status) => return Err(self.reject(&mut timer, status)),
+        };
+        let bank = match self.bank() {
+            Ok(b) => b,
+            Err(status) => return Err(self.reject(&mut timer, status)),
+        };
+        if let Err(e) = money::account_party(pool, &access, account).await {
+            return Err(self.reject(&mut timer, status_of(e)));
+        }
+        let syncer = Syncer::new(pool.clone(), Arc::clone(bank), self.sync.clone());
+        let result = match syncer.refresh(account, chrono::Utc::now()).await {
+            Ok(r) => r,
+            Err(crate::sync::SyncError::NotFound) => {
+                return Err(self.reject(&mut timer, Status::not_found("account")));
+            }
+            Err(crate::sync::SyncError::Db(e)) => return Err(self.reject(&mut timer, status_of(e))),
+        };
+        Ok(Response::new(match result {
+            Ok(Outcome::Ok {
+                inserted,
+                duplicates,
+                booked,
+                ..
+            }) => RefreshAccountResponse {
+                outcome: "ok".into(),
+                skipped: String::new(),
+                inserted: u32::try_from(inserted).unwrap_or(u32::MAX),
+                booked: u32::try_from(booked).unwrap_or(u32::MAX),
+                duplicates: u32::try_from(duplicates).unwrap_or(u32::MAX),
+            },
+            Ok(outcome) => RefreshAccountResponse {
+                outcome: match outcome {
+                    Outcome::RateLimited => "rate_limited",
+                    Outcome::ConsentInvalid => "consent_invalid",
+                    Outcome::Transport => "transport",
+                    _ => "error",
+                }
+                .into(),
+                ..RefreshAccountResponse::default()
+            },
+            Err(skipped) => RefreshAccountResponse {
+                outcome: "skipped".into(),
+                skipped: match skipped {
+                    Skipped::BudgetSpent => "budget_spent",
+                    Skipped::BackingOff => "backing_off",
+                    Skipped::NoConsent => "no_consent",
+                    Skipped::Busy => "busy",
+                }
+                .into(),
+                ..RefreshAccountResponse::default()
+            },
+        }))
+    }
+
+    async fn list_categories(
+        &self,
+        request: Request<ListCategoriesRequest>,
+    ) -> Result<Response<ListCategoriesResponse>, Status> {
+        let mut timer = self.admit("FinanceService/ListCategories").await?;
+        let party_ids = request.get_ref().party_ids.clone();
+        let (pool, _, view) = match self.read_context(&request, &party_ids).await {
+            Ok(c) => c,
+            Err(status) => return Err(self.reject(&mut timer, status)),
+        };
+        let rows = match money::categories(pool, &view).await {
+            Ok(rows) => rows,
+            Err(e) => return Err(self.reject(&mut timer, status_of(e))),
+        };
+        Ok(Response::new(ListCategoriesResponse {
+            categories: rows.into_iter().map(category_proto).collect(),
+        }))
+    }
+
+    async fn declare_category(
+        &self,
+        request: Request<DeclareCategoryRequest>,
+    ) -> Result<Response<DeclareCategoryResponse>, Status> {
+        let mut timer = self.admit("FinanceService/DeclareCategory").await?;
+        let req = request.get_ref().clone();
+        let (Ok(transaction), Ok(category)) = (
+            Uuid::parse_str(&req.transaction_id),
+            Uuid::parse_str(&req.category_id),
+        ) else {
+            return Err(self.reject(
+                &mut timer,
+                Status::invalid_argument("transaction_id, category_id: want uuids"),
+            ));
+        };
+        let (pool, access, _) = match self.read_context(&request, &[]).await {
+            Ok(c) => c,
+            Err(status) => return Err(self.reject(&mut timer, status)),
+        };
+        if let Err(e) = money::declare(pool, &access, transaction, category).await {
+            return Err(self.reject(&mut timer, status_of(e)));
+        }
+        let store = match self.store() {
+            Ok(store) => store,
+            Err(status) => return Err(self.reject(&mut timer, status)),
+        };
+        let filter = TransactionFilter {
+            id: Some(transaction),
+            ..TransactionFilter::default()
+        };
+        let row = match store.transactions(&access, &[], &filter, 1).await {
+            Ok(mut rows) => rows.pop(),
+            Err(e) => return Err(self.reject(&mut timer, status_of(e))),
+        };
+        Ok(Response::new(DeclareCategoryResponse {
+            transaction: row.map(transaction_proto),
+        }))
+    }
+
+    async fn list_rules(
+        &self,
+        request: Request<ListRulesRequest>,
+    ) -> Result<Response<ListRulesResponse>, Status> {
+        let mut timer = self.admit("FinanceService/ListRules").await?;
+        let party_ids = request.get_ref().party_ids.clone();
+        let (pool, _, view) = match self.read_context(&request, &party_ids).await {
+            Ok(c) => c,
+            Err(status) => return Err(self.reject(&mut timer, status)),
+        };
+        let rows = match money::rules(pool, &view).await {
+            Ok(rows) => rows,
+            Err(e) => return Err(self.reject(&mut timer, status_of(e))),
+        };
+        Ok(Response::new(ListRulesResponse {
+            rules: rows.into_iter().map(rule_proto).collect(),
+        }))
+    }
+
+    async fn upsert_rule(
+        &self,
+        request: Request<UpsertRuleRequest>,
+    ) -> Result<Response<UpsertRuleResponse>, Status> {
+        let mut timer = self.admit("FinanceService/UpsertRule").await?;
+        let req = request.get_ref().clone();
+        let input = match rule_input(&req) {
+            Ok(i) => i,
+            Err(status) => return Err(self.reject(&mut timer, status)),
+        };
+        let (pool, access, _) = match self.read_context(&request, &[]).await {
+            Ok(c) => c,
+            Err(status) => return Err(self.reject(&mut timer, status)),
+        };
+        let (row, applied) = match money::upsert_rule(pool, &access, input).await {
+            Ok(r) => r,
+            Err(e) => return Err(self.reject(&mut timer, status_of(e))),
+        };
+        Ok(Response::new(UpsertRuleResponse {
+            rule: Some(rule_proto(row)),
+            categorised: u32::try_from(applied.categorised).unwrap_or(u32::MAX),
+            unmatched: u32::try_from(applied.unmatched).unwrap_or(u32::MAX),
+        }))
+    }
+
+    async fn start_connection(
+        &self,
+        request: Request<StartConnectionRequest>,
+    ) -> Result<Response<StartConnectionResponse>, Status> {
+        let mut timer = self.admit("FinanceService/StartConnection").await?;
+        let req = request.get_ref().clone();
+        let Ok(party) = Uuid::parse_str(&req.party_id) else {
+            return Err(self.reject(&mut timer, Status::invalid_argument("party_id: not a uuid")));
+        };
+        if req.psu_type != "business" && req.psu_type != "personal" {
+            return Err(self.reject(
+                &mut timer,
+                Status::invalid_argument("psu_type: want business or personal"),
+            ));
+        }
+        let (pool, access, _) = match self.read_context(&request, &[]).await {
+            Ok(c) => c,
+            Err(status) => return Err(self.reject(&mut timer, status)),
+        };
+        let bank = match self.bank() {
+            Ok(b) => b,
+            Err(status) => return Err(self.reject(&mut timer, status)),
+        };
+        if self.redirect_url.is_empty() {
+            return Err(self.reject(
+                &mut timer,
+                Status::failed_precondition("no redirect_url configured"),
+            ));
+        }
+        // Not yours is not-found, like everything else.
+        if let Err(e) = access.require(tbd_db::PartyId(party), "party") {
+            return Err(self.reject(&mut timer, status_of(e)));
+        }
+        let aspsp_name = if req.aspsp_name.is_empty() {
+            "Erste & Steiermärkische Bank"
+        } else {
+            &req.aspsp_name
+        };
+        let aspsp_country = if req.aspsp_country.is_empty() {
+            "HR"
+        } else {
+            &req.aspsp_country
+        };
+        match connect::start(
+            pool,
+            bank.as_ref(),
+            party,
+            &req.psu_type,
+            aspsp_name,
+            aspsp_country,
+            &self.redirect_url,
+        )
+        .await
+        {
+            Ok(started) => Ok(Response::new(StartConnectionResponse {
+                connection_id: started.connection_id.to_string(),
+                url: started.url,
+            })),
+            Err(e) => Err(self.reject(&mut timer, connect_status(e))),
+        }
+    }
+
+    async fn complete_connection(
+        &self,
+        request: Request<CompleteConnectionRequest>,
+    ) -> Result<Response<CompleteConnectionResponse>, Status> {
+        let mut timer = self.admit("FinanceService/CompleteConnection").await?;
+        let req = request.get_ref().clone();
+        if req.state.is_empty() || req.code.is_empty() {
+            return Err(self.reject(
+                &mut timer,
+                Status::invalid_argument("state and code are required"),
+            ));
+        }
+        let (pool, access, _) = match self.read_context(&request, &[]).await {
+            Ok(c) => c,
+            Err(status) => return Err(self.reject(&mut timer, status)),
+        };
+        let bank = match self.bank() {
+            Ok(b) => b,
+            Err(status) => return Err(self.reject(&mut timer, status)),
+        };
+        // The state names the party; the caller must be allowed that party.
+        let party = match money::connection_party_by_state(pool, &access, &req.state).await {
+            Ok(p) => p,
+            Err(e) => return Err(self.reject(&mut timer, status_of(e))),
+        };
+        match connect::complete(pool, bank.as_ref(), party, &req.state, &req.code).await {
+            Ok(done) => Ok(Response::new(CompleteConnectionResponse {
+                connection_id: done.connection_id.to_string(),
+                account_ids: done.accounts.iter().map(ToString::to_string).collect(),
+            })),
+            Err(e) => Err(self.reject(&mut timer, connect_status(e))),
+        }
+    }
+
+    async fn list_connections(
+        &self,
+        request: Request<ListConnectionsRequest>,
+    ) -> Result<Response<ListConnectionsResponse>, Status> {
+        let mut timer = self.admit("FinanceService/ListConnections").await?;
+        let party_ids = request.get_ref().party_ids.clone();
+        let (pool, _, view) = match self.read_context(&request, &party_ids).await {
+            Ok(c) => c,
+            Err(status) => return Err(self.reject(&mut timer, status)),
+        };
+        let rows = match money::connections(pool, &view).await {
+            Ok(rows) => rows,
+            Err(e) => return Err(self.reject(&mut timer, status_of(e))),
+        };
+        Ok(Response::new(ListConnectionsResponse {
+            connections: rows
+                .into_iter()
+                .map(|c| Connection {
+                    id: c.id.to_string(),
+                    party_id: c.party_id.to_string(),
+                    provider: c.provider,
+                    psu_type: c.psu_type,
+                    aspsp_name: c.aspsp_name,
+                    status: c.status,
+                    valid_until: c.valid_until.map(|t| t.to_rfc3339()).unwrap_or_default(),
+                    authorized_at: c.authorized_at.map(|t| t.to_rfc3339()).unwrap_or_default(),
+                    accounts: u32::try_from(c.accounts).unwrap_or(u32::MAX),
+                })
+                .collect(),
+        }))
+    }
+}
+
+/// Uuids from strings, or a bad request naming the field. A malformed id is
+/// never "not found", so a caller cannot learn which ids are well formed by
+/// watching the error change.
+fn parse_uuids(ids: &[String], field: &str) -> Result<Vec<Uuid>, Status> {
+    ids.iter()
+        .map(|id| {
+            Uuid::parse_str(id)
+                .map_err(|_| Status::invalid_argument(format!("{field}: not a uuid")))
+        })
+        .collect()
+}
+
+fn transaction_proto(t: store::Transaction) -> Transaction {
+    Transaction {
+        id: t.id.to_string(),
+        account_id: t.account_id.to_string(),
+        party_id: t.party_id.to_string(),
+        status: t.status.to_uppercase(),
+        amount_minor: t.amount_minor,
+        currency: t.currency,
+        scale: u32::try_from(t.scale).unwrap_or(2),
+        booking_date: t.booking_date.map(|d| d.to_string()).unwrap_or_default(),
+        counterparty_name: t.counterparty_name.unwrap_or_default(),
+        remittance: t.remittance.unwrap_or_default(),
+        value_date: t.value_date.map(|d| d.to_string()).unwrap_or_default(),
+        counterparty_iban: t.counterparty_iban.unwrap_or_default(),
+        category_id: t.category_id.map(|c| c.to_string()).unwrap_or_default(),
+        category: t.category.unwrap_or_default(),
+        category_source: t.category_source.unwrap_or_default(),
+        internal: t.internal,
+    }
+}
+
+fn category_proto(c: money::CategoryRow) -> Category {
+    Category {
+        id: c.id.to_string(),
+        party_id: c.party_id.to_string(),
+        slug: c.slug,
+        name: c.name,
+        kind: c.kind,
+        deductible: c.deductible,
+        archived: c.archived_at.is_some(),
+    }
+}
+
+fn rule_proto(r: money::RuleRow) -> Rule {
+    Rule {
+        id: r.id.to_string(),
+        party_id: r.party_id.to_string(),
+        priority: r.priority,
+        name: r.name,
+        category_id: r.category_id.to_string(),
+        match_counterparty_like: r.match_counterparty_like.unwrap_or_default(),
+        match_counterparty_iban: r.match_counterparty_iban.unwrap_or_default(),
+        match_remittance_like: r.match_remittance_like.unwrap_or_default(),
+        match_currency: r.match_currency.unwrap_or_default(),
+        match_credit_debit: r.match_credit_debit.unwrap_or_default(),
+        enabled: r.enabled,
+        hits: r.hits,
+    }
+}
+
+fn rule_input(req: &UpsertRuleRequest) -> Result<money::RuleInput, Status> {
+    let opt = |s: &str| {
+        if s.trim().is_empty() {
+            None
+        } else {
+            Some(s.to_owned())
+        }
+    };
+    Ok(money::RuleInput {
+        id: if req.id.is_empty() {
+            None
+        } else {
+            Some(Uuid::parse_str(&req.id).map_err(|_| Status::invalid_argument("id: not a uuid"))?)
+        },
+        party_id: Uuid::parse_str(&req.party_id)
+            .map_err(|_| Status::invalid_argument("party_id: not a uuid"))?,
+        priority: req.priority,
+        name: req.name.clone(),
+        category_id: Uuid::parse_str(&req.category_id)
+            .map_err(|_| Status::invalid_argument("category_id: not a uuid"))?,
+        match_counterparty_like: opt(&req.match_counterparty_like),
+        match_counterparty_iban: opt(&req.match_counterparty_iban),
+        match_remittance_like: opt(&req.match_remittance_like),
+        match_currency: opt(&req.match_currency),
+        match_credit_debit: opt(&req.match_credit_debit),
+        enabled: req.enabled,
+    })
+}
+
+fn connect_status(e: connect::ConnectError) -> Status {
+    match e {
+        connect::ConnectError::NotFound => Status::not_found("connection"),
+        connect::ConnectError::AlreadyCompleted => {
+            Status::already_exists("that authorization was already completed")
+        }
+        connect::ConnectError::Provider(p) => Status::unavailable(format!("bank: {p}")),
+        connect::ConnectError::Db(d) => status_of(d),
     }
 }

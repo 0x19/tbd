@@ -31,6 +31,10 @@ max_connections = 10
 base_url = "https://api.enablebanking.com"
 # Per-request timeout, seconds.
 timeout_secs = 60
+# Where the bank sends the browser after authorization: registered with the
+# provider, on the finance UI host, where the page completes the connection
+# as the signed-in person. Environments override the host.
+redirect_url = "https://finance.proximity.is/connect/callback"
 
 [sync]
 # PSD2 lets a bank cap unattended fetches at four per account per day. Erste

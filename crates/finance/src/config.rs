@@ -61,6 +61,11 @@ pub struct Provider {
     /// well under this; the timeout exists for the day it does not answer.
     #[serde(default = "default_provider_timeout")]
     pub timeout_secs: u64,
+    /// Where the bank sends the browser after authorization. Must be one of
+    /// the URLs registered with the provider, and must be on the finance UI
+    /// host so the page can complete the connection as the signed-in person.
+    #[serde(default)]
+    pub redirect_url: String,
 }
 
 fn default_base_url() -> String {
@@ -79,6 +84,7 @@ impl Default for Provider {
             private_key: String::new(),
             private_key_path: String::new(),
             timeout_secs: default_provider_timeout(),
+            redirect_url: String::new(),
         }
     }
 }

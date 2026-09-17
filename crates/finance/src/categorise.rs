@@ -192,6 +192,10 @@ pub async fn declare(pool: &PgPool, transaction: Uuid, category: Uuid) -> Result
 pub struct SummaryRow {
     /// `YYYY-MM`.
     pub month: String,
+    /// Whose money.
+    pub party_id: Uuid,
+    /// The category, or null when nothing has claimed the rows yet.
+    pub category_id: Option<Uuid>,
     /// Category name, or null when nothing has claimed the rows yet.
     pub category: Option<String>,
     /// `expense`, `income`, `transfer`, `tax`, `capital`, or null.
@@ -221,9 +225,15 @@ pub async fn monthly_summary(
     pool: &PgPool,
     parties: &[Uuid],
     include_internal: bool,
+    from_month: Option<&str>,
 ) -> Result<Vec<SummaryRow>, DbError> {
+    if parties.is_empty() {
+        return Ok(Vec::new());
+    }
     sqlx::query_as::<_, SummaryRow>(
         "select to_char(t.booking_date, 'YYYY-MM') as month,
+                t.party_id as party_id,
+                c.id as category_id,
                 c.name as category,
                 c.kind as kind,
                 t.currency as currency,
@@ -235,11 +245,13 @@ pub async fn monthly_summary(
             and t.status = 'booked'
             and t.booking_date is not null
             and ($2 or not t.internal)
-          group by 1, 2, 3, 4
-          order by 1 desc, 5 asc",
+            and ($3::text is null or to_char(t.booking_date, 'YYYY-MM') >= $3)
+          group by 1, 2, 3, 4, 5, 6
+          order by 1 desc, 7 asc",
     )
     .bind(parties)
     .bind(include_internal)
+    .bind(from_month)
     .fetch_all(pool)
     .await
     .map_err(map_err)

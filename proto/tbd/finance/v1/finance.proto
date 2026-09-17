@@ -23,6 +23,305 @@ service FinanceService {
   rpc ListTransactions(ListTransactionsRequest) returns (ListTransactionsResponse) {
     option (google.api.http) = {get: "/v1/finance/transactions"};
   }
+
+  // Money in and out by month and category, for the parties the caller may
+  // read. Grouped by currency as well: a cross-currency total is never
+  // computed, because it would need a rate, and a rate needs a date and a
+  // source. Transfers between the caller's own accounts are excluded unless
+  // asked for -- they are real on both sides, but counting them in a combined
+  // view is the same euros twice.
+  rpc MonthlySummary(MonthlySummaryRequest) returns (MonthlySummaryResponse) {
+    option (google.api.http) = {get: "/v1/finance/summary"};
+  }
+
+  // The parties the caller may read: what the personal / business / combined
+  // toggle chooses between. Never more than the grant.
+  rpc ListParties(ListPartiesRequest) returns (ListPartiesResponse) {
+    option (google.api.http) = {get: "/v1/finance/parties"};
+  }
+
+  // Bank accounts and their sync state.
+  rpc ListAccounts(ListAccountsRequest) returns (ListAccountsResponse) {
+    option (google.api.http) = {get: "/v1/finance/accounts"};
+  }
+
+  // Fetch one account from the bank now, from the reserve the scheduler
+  // never spends. Refused without a request when the day's allowance is
+  // gone or the bank has asked us to wait.
+  rpc RefreshAccount(RefreshAccountRequest) returns (RefreshAccountResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/accounts/refresh"
+      body: "*"
+    };
+  }
+
+  // Categories for the caller's parties.
+  rpc ListCategories(ListCategoriesRequest) returns (ListCategoriesResponse) {
+    option (google.api.http) = {get: "/v1/finance/categories"};
+  }
+
+  // Set a transaction's category by hand. A person's decision beats every
+  // rule, now and on every later pass.
+  rpc DeclareCategory(DeclareCategoryRequest) returns (DeclareCategoryResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/transactions/declare"
+      body: "*"
+    };
+  }
+
+  // The rules that categorise transactions, in the order they apply.
+  rpc ListRules(ListRulesRequest) returns (ListRulesResponse) {
+    option (google.api.http) = {get: "/v1/finance/rules"};
+  }
+
+  // Create or change a rule, then reapply every rule for the party. A pass is
+  // a pure function of the rules, so the answer after this call is the same
+  // one the next sync would reach.
+  rpc UpsertRule(UpsertRuleRequest) returns (UpsertRuleResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/rules"
+      body: "*"
+    };
+  }
+
+  // Begin linking a bank: returns the URL the person must visit.
+  rpc StartConnection(StartConnectionRequest) returns (StartConnectionResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/connections"
+      body: "*"
+    };
+  }
+
+  // Finish linking with what the bank's redirect carried. The code travels in
+  // the body, never a query string; a state that is not the caller's is
+  // NOT_FOUND, never PERMISSION_DENIED, which would confirm it exists.
+  rpc CompleteConnection(CompleteConnectionRequest) returns (CompleteConnectionResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/connections/complete"
+      body: "*"
+    };
+  }
+
+  // Every bank link the caller may see, and its state.
+  rpc ListConnections(ListConnectionsRequest) returns (ListConnectionsResponse) {
+    option (google.api.http) = {get: "/v1/finance/connections"};
+  }
+}
+
+message MonthlySummaryRequest {
+  // Narrow to these parties; same rule as ListTransactions.
+  repeated string party_ids = 1;
+  // Count transfers between the caller's own accounts. Off by default.
+  bool include_internal = 2;
+  // Earliest month, YYYY-MM. Empty means everything.
+  string from_month = 3;
+}
+
+message MonthlySummaryResponse {
+  repeated SummaryRow rows = 1;
+  repeated string party_ids = 2;
+}
+
+message SummaryRow {
+  // YYYY-MM.
+  string month = 1;
+  string party_id = 2;
+  // Empty when nothing has claimed the rows yet.
+  string category_id = 3;
+  string category = 4;
+  // expense, income, transfer, tax, capital; empty when uncategorised.
+  string kind = 5;
+  string currency = 6;
+  // Signed minor units; JSON string.
+  int64 total_minor = 7;
+  uint32 count = 8;
+}
+
+message ListPartiesRequest {}
+
+message ListPartiesResponse {
+  repeated Party parties = 1;
+}
+
+message Party {
+  string id = 1;
+  // person or org.
+  string kind = 2;
+  string display_name = 3;
+  // own or read.
+  string capability = 4;
+}
+
+message ListAccountsRequest {
+  repeated string party_ids = 1;
+}
+
+message ListAccountsResponse {
+  repeated Account accounts = 1;
+}
+
+message Account {
+  string id = 1;
+  string party_id = 2;
+  string connection_id = 3;
+  string provider = 4;
+  string iban = 5;
+  string currency = 6;
+  string name = 7;
+  bool sync_enabled = 8;
+  // RFC 3339, empty when never.
+  string last_synced_at = 9;
+  // ok, rate_limited, consent_invalid, transport, error; empty when never.
+  string last_sync_status = 10;
+  string last_sync_error = 11;
+  string last_booked_through = 12;
+  // RFC 3339, empty when not backing off.
+  string sync_backoff_until = 13;
+  uint32 sync_budget_used = 14;
+  // Latest balance the bank reported, minor units, per balance type.
+  repeated Balance balances = 15;
+}
+
+message Balance {
+  // The bank's type: CLBD, ITAV, ...
+  string balance_type = 1;
+  int64 amount_minor = 2;
+  string currency = 3;
+  string observed_at = 4;
+}
+
+message RefreshAccountRequest {
+  string account_id = 1;
+}
+
+message RefreshAccountResponse {
+  // ok, rate_limited, consent_invalid, transport, error; or skipped.
+  string outcome = 1;
+  // When skipped: budget_spent, backing_off, no_consent, busy.
+  string skipped = 2;
+  uint32 inserted = 3;
+  uint32 booked = 4;
+  uint32 duplicates = 5;
+}
+
+message ListCategoriesRequest {
+  repeated string party_ids = 1;
+}
+
+message ListCategoriesResponse {
+  repeated Category categories = 1;
+}
+
+message Category {
+  string id = 1;
+  string party_id = 2;
+  string slug = 3;
+  string name = 4;
+  string kind = 5;
+  bool deductible = 6;
+  bool archived = 7;
+}
+
+message DeclareCategoryRequest {
+  string transaction_id = 1;
+  string category_id = 2;
+}
+
+message DeclareCategoryResponse {
+  Transaction transaction = 1;
+}
+
+message ListRulesRequest {
+  repeated string party_ids = 1;
+}
+
+message ListRulesResponse {
+  repeated Rule rules = 1;
+}
+
+message Rule {
+  string id = 1;
+  string party_id = 2;
+  int32 priority = 3;
+  string name = 4;
+  string category_id = 5;
+  // Every condition optional; those set must all match. Normalised: upper
+  // case, Croatian diacritics stripped.
+  string match_counterparty_like = 6;
+  string match_counterparty_iban = 7;
+  string match_remittance_like = 8;
+  string match_currency = 9;
+  // CRDT, DBIT or empty.
+  string match_credit_debit = 10;
+  bool enabled = 11;
+  // Rows this rule owns after the last pass.
+  int64 hits = 12;
+}
+
+message UpsertRuleRequest {
+  // Empty creates; otherwise the rule to change.
+  string id = 1;
+  string party_id = 2;
+  int32 priority = 3;
+  string name = 4;
+  string category_id = 5;
+  string match_counterparty_like = 6;
+  string match_counterparty_iban = 7;
+  string match_remittance_like = 8;
+  string match_currency = 9;
+  string match_credit_debit = 10;
+  bool enabled = 11;
+}
+
+message UpsertRuleResponse {
+  Rule rule = 1;
+  // What the pass after the change did, for the whole party.
+  uint32 categorised = 2;
+  uint32 unmatched = 3;
+}
+
+message StartConnectionRequest {
+  string party_id = 1;
+  // business or personal.
+  string psu_type = 2;
+  string aspsp_name = 3;
+  string aspsp_country = 4;
+}
+
+message StartConnectionResponse {
+  string connection_id = 1;
+  string url = 2;
+}
+
+message CompleteConnectionRequest {
+  string state = 1;
+  string code = 2;
+}
+
+message CompleteConnectionResponse {
+  string connection_id = 1;
+  repeated string account_ids = 2;
+}
+
+message ListConnectionsRequest {
+  repeated string party_ids = 1;
+}
+
+message ListConnectionsResponse {
+  repeated Connection connections = 1;
+}
+
+message Connection {
+  string id = 1;
+  string party_id = 2;
+  string provider = 3;
+  string psu_type = 4;
+  string aspsp_name = 5;
+  // pending, authorized, expired, revoked, failed.
+  string status = 6;
+  string valid_until = 7;
+  string authorized_at = 8;
+  uint32 accounts = 9;
 }
 
 message PingRequest {
@@ -44,6 +343,16 @@ message ListTransactionsRequest {
   repeated string party_ids = 1;
   // Page size, 1..=500. Zero means the default.
   uint32 limit = 2;
+  // YYYY-MM: only that month. Empty means newest first, any month.
+  string month = 3;
+  // Only this category; "none" for uncategorised rows.
+  string category_id = 4;
+  // Only this account.
+  string account_id = 5;
+  // Case-insensitive substring of counterparty or remittance.
+  string search = 6;
+  // Rows before this many are skipped, for paging.
+  uint32 offset = 7;
 }
 
 message ListTransactionsResponse {
@@ -67,4 +376,13 @@ message Transaction {
   string booking_date = 8;
   string counterparty_name = 9;
   string remittance = 10;
+  string value_date = 11;
+  string counterparty_iban = 12;
+  // Empty when nothing has claimed it.
+  string category_id = 13;
+  string category = 14;
+  // declared (a person) or inferred (a rule); empty when uncategorised.
+  string category_source = 15;
+  // A transfer between the caller's own accounts.
+  bool internal = 16;
 }

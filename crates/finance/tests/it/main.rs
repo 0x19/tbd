@@ -8,6 +8,7 @@ mod banking;
 mod categorise;
 mod connect;
 mod import;
+mod rpc;
 mod seed;
 mod support;
 mod sync;

@@ -135,18 +135,30 @@ async fn the_owner_sees_their_own_money_and_nobody_elses() {
 
     let access = tbd_db::Access::for_user(&pool, owner).await.unwrap();
     let store = tbd_finance::store::PgStore::new(pool.clone());
-    let mine = tbd_finance::store::Store::transactions(&store, &access, &[], 500)
-        .await
-        .unwrap();
+    let mine = tbd_finance::store::Store::transactions(
+        &store,
+        &access,
+        &[],
+        &tbd_finance::store::TransactionFilter::default(),
+        500,
+    )
+    .await
+    .unwrap();
     assert!(
         !mine.is_empty(),
         "the owner sees nothing of their own money"
     );
 
     let outsider = tbd_db::Access::for_user(&pool, stranger).await.unwrap();
-    let theirs = tbd_finance::store::Store::transactions(&store, &outsider, &[], 500)
-        .await
-        .unwrap();
+    let theirs = tbd_finance::store::Store::transactions(
+        &store,
+        &outsider,
+        &[],
+        &tbd_finance::store::TransactionFilter::default(),
+        500,
+    )
+    .await
+    .unwrap();
     assert!(
         theirs.is_empty(),
         "LEAK: an unrelated user saw {} real transactions",

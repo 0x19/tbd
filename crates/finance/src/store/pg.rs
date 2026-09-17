@@ -5,7 +5,7 @@ use sqlx::PgPool;
 use tbd_db::{Access, DbError, map_err};
 use uuid::Uuid;
 
-use super::{Store, Transaction, page_size, view};
+use super::{Store, Transaction, TransactionFilter, page_size, view};
 
 /// The real store.
 #[derive(Debug, Clone)]
@@ -31,6 +31,7 @@ impl Store for PgStore {
         &self,
         access: &Access,
         narrow_to: &[Uuid],
+        filter: &TransactionFilter,
         limit: u32,
     ) -> Result<Vec<Transaction>, DbError> {
         let view = view(access, narrow_to);
@@ -39,16 +40,41 @@ impl Store for PgStore {
         if view.is_empty() {
             return Ok(Vec::new());
         }
+        // Every optional filter is a `$n is null or ...` clause, so one
+        // statement serves every combination and the planner sees one shape.
+        // `category`: $4 says whether to filter at all, $5 the id (null for
+        // "uncategorised").
+        let (filter_category, category_id) = match filter.category {
+            None => (false, None),
+            Some(id) => (true, id),
+        };
         sqlx::query_as::<_, Transaction>(
-            "select id, account_id, party_id, status, amount_minor, currency, scale,
-                    booking_date, counterparty_name, remittance
-               from finance.bank_transactions
-              where party_id = any($1)
-              order by booking_date desc nulls last, id desc
-              limit $2",
+            "select t.id, t.account_id, t.party_id, t.status, t.amount_minor, t.currency,
+                    t.scale, t.booking_date, t.counterparty_name, t.remittance,
+                    t.value_date, t.counterparty_iban, t.category_id,
+                    c.name as category, t.category_source, t.internal
+               from finance.transactions_enriched t
+               left join finance.categories c on c.id = t.category_id
+              where t.party_id = any($1)
+                and ($3::text is null or to_char(t.booking_date, 'YYYY-MM') = $3)
+                and (not $4 or t.category_id is not distinct from $5)
+                and ($6::uuid is null or t.account_id = $6)
+                and ($7::text is null
+                     or coalesce(t.counterparty_name, '') || ' ' || coalesce(t.remittance, '')
+                        ilike '%' || $7 || '%')
+                and ($9::uuid is null or t.id = $9)
+              order by t.booking_date desc nulls last, t.id desc
+              limit $2 offset $8",
         )
         .bind(view.party_ids())
         .bind(i64::from(page_size(limit)))
+        .bind(filter.month.as_deref())
+        .bind(filter_category)
+        .bind(category_id)
+        .bind(filter.account_id)
+        .bind(filter.search.as_deref())
+        .bind(i64::from(filter.offset))
+        .bind(filter.id)
         .fetch_all(&self.pool)
         .await
         .map_err(map_err)

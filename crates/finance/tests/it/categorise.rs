@@ -223,8 +223,12 @@ async fn transfers_between_our_own_accounts_are_derived_not_assigned() {
             .unwrap();
     assert_eq!(internal, 1, "the owner draw was not recognised as internal");
 
-    let spend = monthly_summary(&pool, &[company.0], false).await.unwrap();
-    let with = monthly_summary(&pool, &[company.0], true).await.unwrap();
+    let spend = monthly_summary(&pool, &[company.0], false, None)
+        .await
+        .unwrap();
+    let with = monthly_summary(&pool, &[company.0], true, None)
+        .await
+        .unwrap();
     let total = |rows: &[tbd_finance::categorise::SummaryRow]| -> i64 {
         rows.iter().map(|r| r.total_minor).sum()
     };
@@ -259,7 +263,9 @@ async fn a_summary_never_mixes_currencies() {
     .await
     .unwrap();
 
-    let rows = monthly_summary(&pool, &[owner.0], false).await.unwrap();
+    let rows = monthly_summary(&pool, &[owner.0], false, None)
+        .await
+        .unwrap();
     let currencies: Vec<&str> = rows.iter().map(|r| r.currency.as_str()).collect();
     assert!(currencies.contains(&"EUR") && currencies.contains(&"USD"));
     assert_eq!(

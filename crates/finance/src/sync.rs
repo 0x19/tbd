@@ -126,13 +126,13 @@ struct Claimed {
 
 /// The worker.
 #[derive(Debug)]
-pub struct Syncer<P: Provider> {
+pub struct Syncer<P: Provider + ?Sized> {
     pool: PgPool,
     provider: Arc<P>,
     config: SyncConfig,
 }
 
-impl<P: Provider + 'static> Syncer<P> {
+impl<P: Provider + ?Sized + 'static> Syncer<P> {
     /// Build one. Nothing runs until `tick` or `run`.
     #[must_use]
     pub fn new(pool: PgPool, provider: Arc<P>, config: SyncConfig) -> Self {

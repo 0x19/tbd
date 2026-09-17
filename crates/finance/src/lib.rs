@@ -8,6 +8,7 @@ pub mod banking;
 pub mod categorise;
 pub mod config;
 pub mod import;
+pub mod money;
 mod service;
 pub mod store;
 pub mod sync;
@@ -94,6 +95,36 @@ pub async fn serve_seeded(
     shutdown: impl Future<Output = ()> + Send + 'static,
 ) -> Result<(), ServeError> {
     let service = Finance::with_memory(config.ping.clone(), runtime, store, grants);
+    serve_built(listener, &config, service, shutdown).await
+}
+
+/// Serve a Postgres-backed service with a caller-supplied bank.
+///
+/// Tests and the chaos tool use it with the `Mock` bank, so the connection
+/// and refresh RPCs can be driven end to end without a provider account. No
+/// sync worker is started: a test ticks the syncer itself, or not at all.
+///
+/// # Errors
+/// The listener's address cannot be read, the store URL does not parse, or
+/// the server fails.
+pub async fn serve_with_bank(
+    listener: TcpListener,
+    config: Config,
+    runtime: Runtime,
+    provider: std::sync::Arc<dyn banking::Provider>,
+    shutdown: impl Future<Output = ()> + Send + 'static,
+) -> Result<(), ServeError> {
+    let pool = tbd_db::connect_lazy(&tbd_db::PgOptions {
+        url: config.store.url.clone(),
+        max_connections: config.store.max_connections,
+        ..tbd_db::PgOptions::default()
+    })
+    .map_err(|e| ServeError::Store(e.to_string()))?;
+    let service = Finance::with_pool(config.ping.clone(), runtime, pool).with_bank(
+        provider,
+        config.sync.clone(),
+        config.provider.redirect_url.clone(),
+    );
     serve_built(listener, &config, service, shutdown).await
 }
 

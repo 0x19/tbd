@@ -30,7 +30,7 @@ pub use memory::MemoryStore;
 pub use pg::PgStore;
 
 /// One transaction, as the service hands it out.
-#[derive(Debug, Clone, PartialEq, Eq, sqlx::FromRow)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, sqlx::FromRow)]
 pub struct Transaction {
     /// Our id.
     pub id: Uuid,
@@ -53,6 +53,90 @@ pub struct Transaction {
     pub counterparty_name: Option<String>,
     /// Free text. On Erste this is where an invoice number arrives.
     pub remittance: Option<String>,
+    /// When the money moved, where that differs from the booking.
+    #[sqlx(default)]
+    pub value_date: Option<chrono::NaiveDate>,
+    /// The other side's account, when the bank gave it.
+    #[sqlx(default)]
+    pub counterparty_iban: Option<String>,
+    /// What it was categorised as, if anything.
+    #[sqlx(default)]
+    pub category_id: Option<Uuid>,
+    /// That category's name.
+    #[sqlx(default)]
+    pub category: Option<String>,
+    /// `declared` (a person) or `inferred` (a rule).
+    #[sqlx(default)]
+    pub category_source: Option<String>,
+    /// A transfer between accounts the same person holds. Derived, never
+    /// stored: true exactly when the counterparty is an account we hold.
+    #[sqlx(default)]
+    pub internal: bool,
+}
+
+/// What a caller narrows a listing to, beyond the parties.
+///
+/// Every field optional; those set must all hold. None of them widens
+/// anything -- the parties come from the grant, and these only cut within it.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct TransactionFilter {
+    /// `YYYY-MM`.
+    pub month: Option<String>,
+    /// `Some(None)` is "uncategorised"; `Some(Some(id))` is one category.
+    pub category: Option<Option<Uuid>>,
+    /// One account.
+    pub account_id: Option<Uuid>,
+    /// Case-insensitive substring of the counterparty or the remittance.
+    pub search: Option<String>,
+    /// Rows to skip, for paging.
+    pub offset: u32,
+    /// Exactly this row. Still subject to the grant: a row the caller may
+    /// not read is simply not there.
+    pub id: Option<Uuid>,
+}
+
+impl TransactionFilter {
+    /// Whether a row passes. One implementation, used by the memory store and
+    /// as the reference the SQL must agree with.
+    #[must_use]
+    pub fn matches(&self, t: &Transaction) -> bool {
+        if let Some(id) = self.id
+            && t.id != id
+        {
+            return false;
+        }
+        if let Some(month) = &self.month
+            && t.booking_date
+                .map(|d| d.format("%Y-%m").to_string())
+                .as_deref()
+                != Some(month)
+        {
+            return false;
+        }
+        if let Some(category) = &self.category
+            && t.category_id != *category
+        {
+            return false;
+        }
+        if let Some(account) = self.account_id
+            && t.account_id != account
+        {
+            return false;
+        }
+        if let Some(search) = &self.search {
+            let needle = search.to_lowercase();
+            let hay = format!(
+                "{} {}",
+                t.counterparty_name.as_deref().unwrap_or_default(),
+                t.remittance.as_deref().unwrap_or_default()
+            )
+            .to_lowercase();
+            if !hay.contains(&needle) {
+                return false;
+            }
+        }
+        true
+    }
 }
 
 /// Largest page a caller may ask for.
@@ -79,6 +163,7 @@ pub trait Store: Send + Sync + std::fmt::Debug + 'static {
         &self,
         access: &Access,
         narrow_to: &[Uuid],
+        filter: &TransactionFilter,
         limit: u32,
     ) -> Result<Vec<Transaction>, DbError>;
 }

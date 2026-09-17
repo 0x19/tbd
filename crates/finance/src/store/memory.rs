@@ -12,7 +12,7 @@ use async_trait::async_trait;
 use tbd_db::{Access, DbError};
 use uuid::Uuid;
 
-use super::{Store, Transaction, page_size, view};
+use super::{Store, Transaction, TransactionFilter, page_size, view};
 
 /// Transactions held in memory.
 #[derive(Debug, Clone, Default)]
@@ -68,6 +68,7 @@ impl Store for MemoryStore {
         &self,
         access: &Access,
         narrow_to: &[Uuid],
+        filter: &TransactionFilter,
         limit: u32,
     ) -> Result<Vec<Transaction>, DbError> {
         let view = view(access, narrow_to);
@@ -81,7 +82,8 @@ impl Store for MemoryStore {
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         Ok(guard
             .iter()
-            .filter(|t| allowed.contains(&t.party_id))
+            .filter(|t| allowed.contains(&t.party_id) && filter.matches(t))
+            .skip(filter.offset as usize)
             .take(page_size(limit) as usize)
             .cloned()
             .collect())
