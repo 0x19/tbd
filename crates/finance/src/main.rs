@@ -31,6 +31,14 @@ enum Command {
         #[arg(long)]
         party: uuid::Uuid,
     },
+    /// Ask the provider about a session: one signed GET that proves the key,
+    /// the application and TLS, and spends none of an account's daily
+    /// allowance.
+    Session {
+        /// The provider's session id.
+        #[arg(long)]
+        id: String,
+    },
     /// Import transactions the prototype already pulled from the provider.
     ///
     /// Reads saved responses rather than calling the API: the ASPSP allows only
@@ -77,6 +85,23 @@ async fn main() -> anyhow::Result<()> {
             "{} categorised by rule, {} kept as declared, {} still unmatched",
             report.categorised, report.declared_kept, report.unmatched
         );
+        return Ok(());
+    }
+
+    if let Some(Command::Session { id }) = &cli.command {
+        let provider = tbd_finance::banking::from_config(&config.provider)?;
+        let status = tbd_finance::banking::Provider::session(&provider, id).await?;
+        println!(
+            "status: {}\nvalid until: {}\naccounts: {}",
+            status.status,
+            status
+                .valid_until
+                .map_or_else(|| "unknown".to_owned(), |t| t.to_rfc3339()),
+            status.account_uids.len()
+        );
+        for uid in &status.account_uids {
+            println!("  {uid}");
+        }
         return Ok(());
     }
 

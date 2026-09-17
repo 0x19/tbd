@@ -4,11 +4,13 @@
 //! server can be run from `main`, from integration tests on an ephemeral port,
 //! and from the chaos tool with fault injection and counters attached.
 
+pub mod banking;
 pub mod categorise;
 pub mod config;
 pub mod import;
 mod service;
 pub mod store;
+pub mod sync;
 
 use std::net::SocketAddr;
 
@@ -44,6 +46,9 @@ pub enum ServeError {
     /// database is not this, because the pool is lazy.
     #[error("store: {0}")]
     Store(String),
+    /// The bank credentials are set but unusable.
+    #[error("provider: {0}")]
+    Provider(String),
 }
 
 /// Bind `[server] listen` and serve until `shutdown` resolves.
@@ -122,6 +127,32 @@ pub async fn serve_with(
             ..tbd_db::PgOptions::default()
         })
         .map_err(|e| ServeError::Store(e.to_string()))?;
+
+        // The sync worker runs beside the server, on the same pool, only
+        // when a bank is configured. Without credentials there is nothing to
+        // call, and saying so once at start beats a worker that wakes every
+        // fifteen minutes to fail.
+        if config.provider.configured() {
+            let provider = banking::from_config(&config.provider)
+                .map_err(|e| ServeError::Provider(e.to_string()))?;
+            let syncer = sync::Syncer::new(
+                pool.clone(),
+                std::sync::Arc::new(provider),
+                config.sync.clone(),
+            );
+            let cancel = tokio_util::sync::CancellationToken::new();
+            let worker = tokio::spawn(syncer.run(cancel.clone()));
+            tracing::info!(
+                interval_secs = config.sync.interval_secs,
+                "sync worker started"
+            );
+            let service = Finance::with_pool(config.ping.clone(), runtime, pool);
+            let result = serve_built(listener, &config, service, shutdown).await;
+            cancel.cancel();
+            let _ = worker.await;
+            return result;
+        }
+        tracing::info!("no provider configured; sync worker not started");
         Finance::with_pool(config.ping.clone(), runtime, pool)
     };
     serve_built(listener, &config, service, shutdown).await

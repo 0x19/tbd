@@ -18,6 +18,12 @@ use sqlx::PgPool;
 use tbd_db::{DbError, map_err};
 use uuid::Uuid;
 
+/// Dedup keys seen so far in one ingestion, with how many times each.
+///
+/// The ordinal that keeps two identical rows apart lives here, so it has to
+/// span every page of every account a single run ingests.
+pub type SeenKeys = HashMap<Vec<u8>, u32>;
+
 /// What one import did.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct Imported {
@@ -99,22 +105,34 @@ pub fn normalise(value: &str) -> String {
     out
 }
 
-/// One account as the session recorded it.
-struct SeenAccount {
-    uid: String,
-    iban: Option<String>,
-    currency: String,
-    name: String,
+/// One account as the provider describes it.
+///
+/// Public because the sync worker builds these from live API responses while
+/// the importer builds them from saved ones, and both hand them to the same
+/// ingestion path.
+#[derive(Debug, Clone)]
+pub struct ProviderAccount {
+    /// The provider's opaque account id, used on every later call.
+    pub uid: String,
+    /// IBAN, when the provider gives one.
+    pub iban: Option<String>,
+    /// ISO 4217. One IBAN is several accounts -- Erste exposes the company's
+    /// in EUR, GBP, USD and HRK -- so this is part of the identity.
+    pub currency: String,
+    /// What the bank calls it.
+    pub name: String,
 }
 
-fn accounts_in(session: &Value) -> Vec<SeenAccount> {
+/// The accounts a session response describes.
+#[must_use]
+pub fn accounts_in(session: &Value) -> Vec<ProviderAccount> {
     session
         .get("accounts")
         .and_then(Value::as_array)
         .map(|rows| {
             rows.iter()
                 .filter_map(|a| {
-                    Some(SeenAccount {
+                    Some(ProviderAccount {
                         uid: a.get("uid")?.as_str()?.to_owned(),
                         iban: a
                             .get("account_id")
@@ -301,9 +319,9 @@ pub async fn from_prototype(
     // the wrong account: on the real data it put 255 EUR rows on a USD
     // account. Prefer the live session when it was saved.
     let uids = pull_order(dir, profile, &seen_accounts);
-    let by_uid: HashMap<&str, &SeenAccount> =
+    let by_uid: HashMap<&str, &ProviderAccount> =
         seen_accounts.iter().map(|a| (a.uid.as_str(), a)).collect();
-    let mut seen_keys: HashMap<Vec<u8>, u32> = HashMap::new();
+    let mut seen_keys = SeenKeys::new();
 
     // Balances first: a snapshot is what a later reconciliation checks the
     // transactions against, and recording it is free.
@@ -314,37 +332,90 @@ pub async fn from_prototype(
         report.balances += import_balances(pool, dir, profile, index, account_id).await?;
     }
 
-    for path in transaction_files(&dir.join("raw"), profile)? {
-        let name = path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or_default();
-        let index: usize = name
-            .trim_start_matches(&format!("transactions-{profile}-"))
-            .split('-')
-            .next()
-            .and_then(|i| i.parse().ok())
-            .unwrap_or(usize::MAX);
-        let Some(uid) = uids.get(index) else {
-            continue;
-        };
+    // Pages grouped by the account they belong to, in page order. The old code
+    // walked files in filename order, which puts `p10` before `p2` -- harmless
+    // on Erste, where every row carries an `entry_reference` and the ordinal
+    // never comes into play, but wrong for any provider that does not.
+    for (index, uid) in uids.iter().enumerate() {
         let Some(&account_id) = accounts.get(uid) else {
             continue;
         };
         let Some(account) = by_uid.get(uid.as_str()) else {
             continue;
         };
-        let own_iban = account.iban.as_deref();
+        let paths = transaction_pages(&dir.join("raw"), profile, index)?;
+        if paths.is_empty() {
+            continue;
+        }
+        let mut pages = Vec::with_capacity(paths.len());
+        for path in &paths {
+            pages.push(read_json(path)?);
+        }
+        let source = paths
+            .first()
+            .and_then(|p| p.file_name())
+            .and_then(|n| n.to_str())
+            .unwrap_or("saved responses")
+            .to_owned();
+        let got = ingest_pages(
+            pool,
+            party_id,
+            account_id,
+            account,
+            &pages,
+            &source,
+            &mut seen_keys,
+        )
+        .await?;
+        report.inserted += got.inserted;
+        report.duplicates += got.duplicates;
+        report.skipped += got.skipped;
+    }
 
-        let body = read_json(&path)?;
-        let Some(rows) = body.get("transactions").and_then(Value::as_array) else {
+    Ok(report)
+}
+
+/// Ingest one account's transaction pages, however they were fetched.
+///
+/// This is the only place provider JSON becomes rows, and it is deliberately
+/// the only one. The parsing was audited against 2,861 real Erste transactions
+/// and found four defects doing it (`prototype/bank/FINDINGS.md`); a sync
+/// worker with its own copy would have to find them again, and the way that
+/// failure shows up is money quietly filed under the wrong heading rather than
+/// an error. The importer reads pages from disk and the syncer reads them from
+/// the API. Nothing else differs.
+///
+/// `seen_keys` carries the ordinal that keeps two genuinely identical rows from
+/// collapsing into one, so a caller ingesting several accounts passes the same
+/// map through all of them. It is a [`SeenKeys`], and nothing more general:
+/// the ordinal is meaningless across hashers.
+///
+/// `source` names where the pages came from, for the error when they are
+/// attributed to the wrong account.
+///
+/// # Errors
+/// The database is unreachable, or a page's rows are in a currency the account
+/// does not hold -- which means the pages belong to a different account, and
+/// ingesting them anyway would be worse than ingesting nothing.
+pub async fn ingest_pages(
+    pool: &PgPool,
+    party_id: Uuid,
+    account_id: Uuid,
+    account: &ProviderAccount,
+    pages: &[Value],
+    source: &str,
+    seen_keys: &mut SeenKeys,
+) -> Result<Imported, DbError> {
+    let mut report = Imported::default();
+
+    // The check that would have caught the ordering bug on the first run. An
+    // account holds one currency; rows that disagree with it are filed against
+    // the wrong account. On the real data this put 255 EUR rows on a USD
+    // account, and nothing complained.
+    for page in pages {
+        let Some(rows) = page.get("transactions").and_then(Value::as_array) else {
             continue;
         };
-
-        // The check that would have caught the ordering bug on the first run.
-        // An account holds one currency; a file whose rows disagree with it is
-        // filed against the wrong account, and importing it anyway would be
-        // worse than importing nothing.
         if let Some(found) = rows
             .iter()
             .filter_map(|t| t.get("transaction_amount")?.get("currency")?.as_str())
@@ -353,22 +424,27 @@ pub async fn from_prototype(
             return Err(DbError::Invalid {
                 field: "currency",
                 reason: format!(
-                    "{}: rows are {found} but account {} ({}) is {} -- the file is \
+                    "{source}: rows are {found} but account {} ({}) is {} -- the pages are \
                      attributed to the wrong account",
-                    path.display(),
                     account.uid,
                     account.iban.as_deref().unwrap_or("no iban"),
                     account.currency
                 ),
             });
         }
+    }
 
+    let own_iban = account.iban.as_deref();
+    for page in pages {
+        let Some(rows) = page.get("transactions").and_then(Value::as_array) else {
+            continue;
+        };
         for t in rows {
             let Some(parsed) = row(t, own_iban) else {
                 report.skipped += 1;
                 continue;
             };
-            let key = next_key(t, &parsed, &mut seen_keys);
+            let key = next_key(t, &parsed, seen_keys);
             let affected = insert_row(pool, party_id, account_id, t, &parsed, &key).await?;
             if affected == 0 {
                 report.duplicates += 1;
@@ -377,7 +453,6 @@ pub async fn from_prototype(
             }
         }
     }
-
     Ok(report)
 }
 
@@ -405,6 +480,23 @@ async fn import_balances(
     };
 
     let body = read_json(&path)?;
+    ingest_balances(pool, account_id, &body).await
+}
+
+/// Record a balance snapshot, however it was fetched.
+///
+/// Every balance the bank reports (`closingBooked`, `interimAvailable`, ...)
+/// becomes one row, so a reconciliation can pick the type it trusts. One
+/// snapshot cannot prove the transactions are complete; two can, which is why
+/// this is free to call on every sync.
+///
+/// # Errors
+/// The database is unreachable.
+pub async fn ingest_balances(
+    pool: &PgPool,
+    account_id: Uuid,
+    body: &Value,
+) -> Result<usize, DbError> {
     let Some(rows) = body.get("balances").and_then(Value::as_array) else {
         return Ok(0);
     };
@@ -453,7 +545,7 @@ async fn import_balances(
 /// *different* orders, and the pull used the live one. Where its response was
 /// saved, that is the authority; otherwise fall back to the link-time order and
 /// let the currency check below catch a mismatch.
-fn pull_order(dir: &Path, profile: &str, link_time: &[SeenAccount]) -> Vec<String> {
+fn pull_order(dir: &Path, profile: &str, link_time: &[ProviderAccount]) -> Vec<String> {
     let live = dir.join("raw").join(format!("session-live-{profile}.json"));
     if let Ok(value) = read_json(&live)
         && let Some(uids) = value.get("accounts").and_then(Value::as_array)
@@ -554,12 +646,15 @@ fn read_json(path: &Path) -> Result<Value, DbError> {
 
 /// Create the account, or find the one already there.
 ///
+/// # Errors
+/// The database is unreachable.
+///
 /// Keyed on `(party, iban, currency)`, because one IBAN is several accounts:
 /// Erste exposes the company's in EUR, GBP, USD and HRK.
-async fn upsert_account(
+pub async fn upsert_account(
     pool: &PgPool,
     party_id: Uuid,
-    seen: &SeenAccount,
+    seen: &ProviderAccount,
 ) -> Result<Uuid, DbError> {
     let id = Uuid::new_v4();
     let existing: Option<(Uuid,)> = sqlx::query_as(
@@ -581,24 +676,40 @@ async fn upsert_account(
     Ok(existing.map_or(id, |(found,)| found))
 }
 
-/// Files named `transactions-<profile>-<index>[-<ccy>]-p<n>.json`, in order.
-fn transaction_files(raw: &Path, profile: &str) -> Result<Vec<std::path::PathBuf>, DbError> {
-    let prefix = format!("transactions-{profile}-");
-    let mut files: Vec<_> = std::fs::read_dir(raw)
+/// One account's saved transaction pages, in page order.
+///
+/// Files are named `transactions-<profile>-<index>[-<ccy>]-p<n>.json`. The page
+/// number is parsed rather than sorted as text: `p10` sorts before `p2`, and
+/// one real account here has 51 pages.
+fn transaction_pages(
+    raw: &Path,
+    profile: &str,
+    index: usize,
+) -> Result<Vec<std::path::PathBuf>, DbError> {
+    let prefix = format!("transactions-{profile}-{index}-");
+    // `transactions-personal-1-...` must not be matched by the prefix for
+    // index 1 when looking for index 1, nor by index 11's. The trailing `-`
+    // above makes the index exact.
+    let mut pages: Vec<(u32, std::path::PathBuf)> = std::fs::read_dir(raw)
         .map_err(|e| DbError::Invalid {
             field: "raw",
             reason: format!("{}: {e}", raw.display()),
         })?
         .filter_map(Result::ok)
         .map(|e| e.path())
-        .filter(|p| {
-            p.file_name()
-                .and_then(|n| n.to_str())
-                .is_some_and(|n| n.starts_with(&prefix))
+        .filter_map(|path| {
+            let name = path.file_name()?.to_str()?;
+            let rest = name.strip_prefix(&prefix)?;
+            let page = rest
+                .rsplit_once("-p")
+                .or_else(|| rest.rsplit_once('p'))
+                .and_then(|(_, n)| n.strip_suffix(".json"))
+                .and_then(|n| n.parse().ok())?;
+            Some((page, path.clone()))
         })
         .collect();
-    files.sort();
-    Ok(files)
+    pages.sort_by_key(|(page, _)| *page);
+    Ok(pages.into_iter().map(|(_, path)| path).collect())
 }
 
 #[cfg(test)]

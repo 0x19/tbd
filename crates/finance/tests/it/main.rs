@@ -4,10 +4,13 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 mod access;
+mod banking;
 mod categorise;
+mod connect;
 mod import;
 mod seed;
 mod support;
+mod sync;
 
 use tbd_finance::{Behavior, FaultHandle, Runtime};
 use tbd_proto::finance::v1::PingRequest;
