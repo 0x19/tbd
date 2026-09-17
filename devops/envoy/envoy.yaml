@@ -209,6 +209,11 @@ static_resources:
                           audiences: [tbd-ui]
                           from_cookies: [tbd_id]
                           payload_in_metadata: jwt
+                          # The finance UI calls the protocol from the browser on its own
+                          # host; the protocol takes its principal from this header the
+                          # same way it does for a bearer token. Envoy strips whatever a
+                          # client sends in it, so its presence means "verified".
+                          forward_payload_header: x-jwt-payload
                           claim_to_headers:
                             - { header_name: x-user-sub, claim_name: sub }
                             - { header_name: x-user-email, claim_name: email }
@@ -497,68 +502,60 @@ static_resources:
                     # code to an authenticated RPC instead of displaying it.
                     - name: finance
                       domains: ["finance.*"]
-                      typed_per_filter_config: *ui_gated
+                      # The finance UI: one person's money. Browser login as on every UI
+                      # host, then a narrower gate than the chaos admin's: an admin, or a
+                      # machine token carrying tbd.finance. Never tbd.api on its own -- a
+                      # token that reads the chaos admin must not read the books.
+                      typed_per_filter_config:
+                        envoy.filters.http.jwt_authn:
+                          "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.PerRouteConfig
+                          requirement_name: ui
+                        envoy.filters.http.rbac:
+                          "@type": type.googleapis.com/envoy.extensions.filters.http.rbac.v3.RBACPerRoute
+                          rbac:
+                            rules:
+                              action: ALLOW
+                              policies:
+                                finance:
+                                  permissions: [{ any: true }]
+                                  principals:
+                                    - metadata:
+                                        filter: envoy.filters.http.jwt_authn
+                                        path: [{ key: jwt }, { key: role }]
+                                        value: { string_match: { exact: admin } }
+                                    - metadata:
+                                        filter: envoy.filters.http.jwt_authn
+                                        path: [{ key: jwt }, { key: scp }]
+                                        value: { list_match: { one_of: { string_match: { exact: tbd.finance } } } }
                       routes:
-                        - match: { path: "/connect/callback" }
-                          typed_per_filter_config: *public_page
-                          response_headers_to_add:
-                            - header: { key: content-type, value: "text/html; charset=utf-8" }
-                            - header: { key: referrer-policy, value: "no-referrer" }
-                            - header: { key: cache-control, value: "no-store" }
-                          direct_response:
-                            status: 200
-                            body:
-                              inline_string: |
-                                <!doctype html>
-                                <html lang="en"><head><meta charset="utf-8">
-                                <meta name="viewport" content="width=device-width, initial-scale=1">
-                                <meta name="robots" content="noindex">
-                                <title>Bank authorization</title>
-                                <style>
-                                :root{color-scheme:light dark;--bg:#fbfbfa;--fg:#1a1a18;--muted:#6a6a64;--rule:#e3e3df}
-                                @media(prefers-color-scheme:dark){:root{--bg:#16161a;--fg:#e8e8e4;--muted:#9a9a94;--rule:#2c2c31}}
-                                body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 ui-sans-serif,-apple-system,"Segoe UI",system-ui,sans-serif}
-                                main{max-width:38rem;margin:0 auto;padding:4rem 1.25rem}
-                                h1{font-size:1.5rem;letter-spacing:-.02em;margin:0 0 .3rem}
-                                p{color:var(--muted);margin:.4rem 0 1.4rem}
-                                code{display:block;font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;
-                                background:transparent;border:1px solid var(--rule);border-radius:8px;padding:.85rem;
-                                word-break:break-all;margin:.4rem 0 1rem}
-                                b{font-weight:600;color:var(--fg)}
-                                .warn{font-size:.875rem;border-left:2px solid var(--rule);padding-left:.85rem}
-                                </style></head><body><main>
-                                <h1 id="h">Bank authorization</h1>
-                                <p id="sub">Reading the response&hellip;</p>
-                                <div id="out"></div>
-                                <p class="warn">This code is single-use and expires within minutes.
-                                It is a credential: do not paste it into anything but the prototype,
-                                and do not share this page.</p>
-                                </main><script>
-                                var q = new URLSearchParams(location.search);
-                                var code = q.get("code"), state = q.get("state"), err = q.get("error");
-                                var out = document.getElementById("out");
-                                var sub = document.getElementById("sub");
-                                if (err) {
-                                  document.getElementById("h").textContent = "Authorization failed";
-                                  sub.textContent = q.get("error_description") || err;
-                                } else if (code) {
-                                  sub.innerHTML = "Authorized. Paste this into the prototype:";
-                                  out.innerHTML = "<b>code</b><code>" + code + "</code>" +
-                                    (state ? "<b>state</b><code>" + state + "</code>" : "");
-                                } else {
-                                  sub.textContent = "No authorization code in this URL. Start the flow again.";
-                                }
-                                // The code must not survive in history or in a referrer header.
-                                if (location.search) history.replaceState(null, "", location.pathname);
-                                </script></body></html>
+                        # The multiplexed socket: streams stay open.
+                        - match: { path: "/v1/ws" }
+                          route:
+                            cluster: protocol
+                            timeout: 0s
+                        # The finance RPCs through the protocol, same origin as the page.
+                        # The bank's redirect lands on /connect/callback/ (a page below)
+                        # and the page POSTs the code to /v1/finance/connections/complete
+                        # as the signed-in person; nothing here is open.
+                        - match: { prefix: "/v1/" }
+                          route:
+                            cluster: protocol
+                            timeout: 60s
+                            retry_policy:
+                              retry_on: connect-failure,refused-stream
+                              num_retries: 1
+                        - match: { path: "/openapi.json" }
+                          route:
+                            cluster: protocol
+                            timeout: 15s
                         - match: { prefix: "/" }
-                          typed_per_filter_config: *public_page
-                          response_headers_to_add:
-                            - header: { key: content-type, value: "text/plain; charset=utf-8" }
-                          direct_response:
-                            status: 404
-                            body:
-                              inline_string: "not found\n"
+                          route:
+                            cluster: finances-ui
+                            timeout: 15s
+                            retry_policy:
+                              retry_on: connect-failure,refused-stream,reset,unavailable
+                              num_retries: 2
+                              per_try_timeout: 5s
                     # The API: api.<domain> publicly, localhost:18080 locally. Every
                     # route needs a bearer token except the health endpoints, which
                     # probes, Envoy's own health checks and uptime monitors call.
@@ -1100,6 +1097,19 @@ static_resources:
               - endpoint:
                   address:
                     socket_address: { address: auth-ui, port_value: 3000 }
+    - name: finances-ui
+      type: STRICT_DNS
+      dns_lookup_family: V4_ONLY
+      dns_refresh_rate: 5s
+      lb_policy: ROUND_ROBIN
+      connect_timeout: 1s
+      load_assignment:
+        cluster_name: finances-ui
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address: { address: finances-ui, port_value: 8080 }
     - name: www
       type: STRICT_DNS
       dns_lookup_family: V4_ONLY

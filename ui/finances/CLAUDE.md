@@ -1,0 +1,34 @@
+@AGENTS.md
+
+# ui/finances
+
+The finance UI: `ui/chaos` copied and reduced to its shell, with pages for money
+instead of scenarios. Same kit (the shadcnblocks Admin Kit, `/mnt/development/0x19/admin-kit/`),
+same conventions; read `ui/chaos/CLAUDE.md` for what is the kit's and what is ours.
+
+- The API is the protocol's REST surface for `tbd.finance.v1.FinanceService`
+  (`proto/tbd/finance/v1/finance.proto`, `docs/protocol/README.md`): same origin in a
+  build (Envoy serves the UI at the root of `finance.*` and routes `/v1/` to the
+  protocol), `http://127.0.0.1:18080` under `next dev` with a token in
+  `NEXT_PUBLIC_FINANCE_TOKEN` (`NEXT_PUBLIC_FINANCE_API` overrides the host).
+  `src/lib/api/schema.ts` mirrors the proto as the transcoder renders it: proto field
+  names, int64 as a JSON string, every field present. Change both in the same commit.
+- **Money never becomes a float.** Amounts are minor-unit strings on the wire and
+  `BigInt` in `src/lib/summary.ts`; `money()` formats digits, `chartValue()` converts
+  for an axis only.
+- **The scope is the grant.** `Providers` fetches `ListParties`; the personal/business/
+  combined toggle (`scope-toggle.tsx`, the sidebar footer, ⌘K) chooses among *those*.
+  No page ever holds a party id the server did not list.
+- Pages: `/` (overview: in vs spent by month, a month's categories), `/transactions/`
+  (filters in the URL, inline recategorise = `DeclareCategory`), `/categories/` (rules
+  with hits; `rule-dialog.tsx` saves through `UpsertRule`, which reapplies at once),
+  `/accounts/` (balances, sync state, "Fetch now" = `RefreshAccount`), `/connections/`
+  (`StartConnection` sends the browser to the bank), `/connect/callback/` (the
+  registered redirect: reads `state`+`code` from its URL, POSTs `CompleteConnection`,
+  then scrubs the URL), `/invoices/` (says it is not built).
+- Static export, no `basePath`, `trailingSlash: true`; detail-less by design so far.
+  `pnpm dev` is on 3004.
+- Checks: `mise run ui:finances:check` (prettier, eslint, tsc) is part of `mise run ci`;
+  `ui:finances:build` before the image; `ui:finances:e2e` against the local cluster.
+- Served by Caddy from `devops/docker/Dockerfile.finances` (the `ui/www` pattern), never
+  by the chaos binary: this host carries personal accounts.

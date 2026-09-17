@@ -257,6 +257,7 @@ run = [
   "mise run ui:check",
   "mise run ui:auth:check",
   "mise run ui:www:check",
+  "mise run ui:finances:check",
 ]
 
 # ------------------------------------------------------------- scaffold ----
@@ -434,7 +435,8 @@ docker build -f devops/docker/Dockerfile --build-arg BIN=humans --build-arg PORT
 docker build -f devops/docker/Dockerfile --build-arg BIN=ledger --build-arg PORT=50052 -t $IMAGE_REGISTRY/tbd-ledger:dev .
 docker build -f devops/docker/Dockerfile.auth-ui $(mise run -q auth:ui-build-args) -t $IMAGE_REGISTRY/tbd-auth-ui:dev .
 docker build -f devops/docker/Dockerfile.www $(mise run -q www:build-args) -t $IMAGE_REGISTRY/tbd-www:dev .
-k3d image import -m direct -c "$K3D_CLUSTER" $IMAGE_REGISTRY/tbd-engine:dev $IMAGE_REGISTRY/tbd-protocol:dev $IMAGE_REGISTRY/tbd-chaos:dev $IMAGE_REGISTRY/tbd-playground:dev $IMAGE_REGISTRY/tbd-finance:dev $IMAGE_REGISTRY/tbd-humans:dev $IMAGE_REGISTRY/tbd-ledger:dev $IMAGE_REGISTRY/tbd-auth-ui:dev $IMAGE_REGISTRY/tbd-www:dev
+docker build -f devops/docker/Dockerfile.finances -t $IMAGE_REGISTRY/tbd-finances-ui:dev .
+k3d image import -m direct -c "$K3D_CLUSTER" $IMAGE_REGISTRY/tbd-engine:dev $IMAGE_REGISTRY/tbd-protocol:dev $IMAGE_REGISTRY/tbd-chaos:dev $IMAGE_REGISTRY/tbd-playground:dev $IMAGE_REGISTRY/tbd-finance:dev $IMAGE_REGISTRY/tbd-humans:dev $IMAGE_REGISTRY/tbd-ledger:dev $IMAGE_REGISTRY/tbd-auth-ui:dev $IMAGE_REGISTRY/tbd-www:dev $IMAGE_REGISTRY/tbd-finances-ui:dev
 """
 
 # The chaos UI links to grafana.<domain>, logs.<domain>, ... of the public edge.
@@ -489,6 +491,37 @@ pnpm typecheck
 [tasks."ui:auth:build"]
 description = "Build the sign-in UI image (ghcr.io/0x19/tbd-auth-ui:dev)"
 run = "docker build -f devops/docker/Dockerfile.auth-ui $(mise run -q auth:ui-build-args) -t $IMAGE_REGISTRY/tbd-auth-ui:dev ."
+
+[tasks."ui:finances:install"]
+hide = true
+dir = "ui/finances"
+run = "pnpm install --frozen-lockfile"
+
+[tasks."ui:finances:dev"]
+description = "Next.js dev server for the finance UI on :3004 against the local cluster's edge (NEXT_PUBLIC_FINANCE_TOKEN from `mise run auth:token`)"
+depends = ["ui:finances:install"]
+dir = "ui/finances"
+run = "pnpm dev"
+
+[tasks."ui:finances:check"]
+description = "ui/finances: prettier, eslint, tsc (same bar as ui/chaos)"
+depends = ["ui:finances:install"]
+dir = "ui/finances"
+run = """
+pnpm format:check
+pnpm lint
+pnpm typecheck
+"""
+
+[tasks."ui:finances:build"]
+description = "Build the finance UI image (ghcr.io/0x19/tbd-finances-ui:dev)"
+run = "docker build -f devops/docker/Dockerfile.finances -t $IMAGE_REGISTRY/tbd-finances-ui:dev ."
+
+[tasks."ui:finances:e2e"]
+description = "Browser smoke of the deployed finance UI through Envoy (UI_BASE=http://finance.localhost:18080)"
+depends = ["ui:finances:install"]
+dir = "ui/finances"
+run = "pnpm e2e"
 
 [tasks."ui:www:install"]
 hide = true
