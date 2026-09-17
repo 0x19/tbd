@@ -103,9 +103,12 @@ Operations and what they exercise:
 | `ledger_lifecycle` | append, current, retract, history cut on a fresh subject | current showed the fact, the cut does not show the value: the retraction rule per request |
 | `ledger_erase_cycle` | append, erase, restore, erase, on a fresh subject; then, when the grace the ledger announces is shorter than 1.5 s (`[stack.ledgers.X] grace = "0s"`), wait past it | reads denied while erased, back after restore, and the subject gone after the window when it was awaited; against a ledger with the real grace the request passes after the denial |
 | `ledger_fuzz` | seeded hostile requests (`[load] seed`) | a clean refusal (`InvalidArgument`, `NotFound`, `FailedPrecondition`, `ResourceExhausted`, `OutOfRange`, `Aborted`) or a clean answer; `Internal`, `Unknown` or a dropped connection is a `contract` failure |
+| `finance_ping` | `FinanceService/Ping` over gRPC on the finance port | the message echoes **and** `stub` is still true; the service is a scaffold, and a stub flag that flips under load is a `contract` failure |
+| `finance_money` | `ListTransactions` as the owner, checking the amounts | every amount is the exact minor units it went in as, with the sign its direction implies, `EUR`, scale 2. A magnitude or a sign that changes in flight is a `contract` failure -- the quietest bug in accounting software, because the totals still look plausible |
+| `finance_access` | three `ListTransactions` calls as two different callers (`x-jwt-payload`, as Envoy delivers it): the owner, the reader, and the reader naming a party it was not granted | the owner sees both parties, the reader sees the company and **only** the company, and naming a forbidden party directly returns nothing. Any leak is a `contract` failure, which no `max_error_rate` forgives. Needs `seed = "access"` on the instance |
 
 Every operation targets one kind: the four above the ledger rows run against
-protocols, the `ledger_*` ones against ledgers. A mix spreads each operation over its
+protocols, the `ledger_*` ones against ledgers, the `finance_*` ones against finances. A mix spreads each operation over its
 own kind's instances, and `chaos check` refuses a scenario whose stack lacks a kind an
 operation needs. `grpc_ping` never reaches the engine. Mixing it in shows whether a
 problem is in the protocol or behind it. The ledger operations share a pool of

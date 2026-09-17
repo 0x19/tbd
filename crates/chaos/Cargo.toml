@@ -18,12 +18,15 @@ tbd-engine.workspace = true
 tbd-proto.workspace = true
 prost-types.workspace = true
 tbd-protocol.workspace = true
+tbd-playground.workspace = true
+tbd-finance.workspace = true
 tbd-humans.workspace = true
 tbd-ledger.workspace = true
 tbd-stress.workspace = true
 
 anyhow.workspace = true
 async-trait.workspace = true
+base64.workspace = true
 axum.workspace = true
 clap.workspace = true
 futures.workspace = true

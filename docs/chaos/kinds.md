@@ -12,6 +12,8 @@ declared and what derives from it: [extending.md](extending.md#add-a-service-kin
 | `protocol` | `[stack.protocols.<name>]` | http/ws/graphql/grpc | no | no | no | yes | yes | `http://127.0.0.1:8080`, `CHAOS_PROTOCOL_URL` | `engine` (a running engine, required) |
 | `ledger` | `[stack.ledgers.<name>]` | grpc | yes | yes | yes | yes | yes | `http://127.0.0.1:50052`, `CHAOS_LEDGER_URL` | `grace` (duration, default `7d`); `database_url` (text) |
 | `humans` | `[stack.humans.<name>]` | grpc | yes | no | yes | no | yes | `http://127.0.0.1:50053`, `CHAOS_HUMANS_URL` | none |
+| `finance` | `[stack.finances.<name>]` | grpc | yes | no | yes | yes | yes | `http://127.0.0.1:50054`, `CHAOS_FINANCE_URL` | `database_url` (text); `seed` (text) |
+| `playground` | `[stack.playgrounds.<name>]` | grpc | yes | no | yes | no | yes | `http://127.0.0.1:50055`, `CHAOS_PLAYGROUND_URL` | none |
 
 | Check | Surface | Kind | Passes when |
 |---|---|---|---|
@@ -30,3 +32,5 @@ declared and what derives from it: [extending.md](extending.md#add-a-service-kin
 | `grpc_ledger_ping` | grpc | `ledger` | `Ping` echoes the message and names the store behind it |
 | `grpc_ledger_facts` | grpc | `ledger` | append, current, history, retract, a history cut without the value, erase, restore, on a throwaway subject |
 | `grpc_humans_ping` | grpc | `humans` | `Ping` echoes the message and is labelled a stub |
+| `grpc_finance_ping` | grpc | `finance` | `Ping` echoes the message and is labelled a stub |
+| `grpc_playground_ping` | grpc | `playground` | `Ping` echoes the message and is labelled a stub |

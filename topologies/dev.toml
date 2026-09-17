@@ -13,3 +13,9 @@ listen = "127.0.0.1:50052"
 
 [stack.humans.humans-1]
 listen = "127.0.0.1:50053"
+
+[stack.finances.finance-1]
+listen = "127.0.0.1:50054"
+
+[stack.playgrounds.playground-1]
+listen = "127.0.0.1:50055"

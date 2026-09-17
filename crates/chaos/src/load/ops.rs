@@ -11,6 +11,10 @@ use async_trait::async_trait;
 use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use tbd_proto::finance::v1::{
+    ListTransactionsRequest as FinanceListRequest, PingRequest as FinancePingRequest,
+    finance_service_client::FinanceServiceClient,
+};
 use tbd_proto::protocol::v1::{PingRequest, protocol_service_client::ProtocolServiceClient};
 use tokio::sync::Mutex;
 use tokio_tungstenite::tungstenite::Message;
@@ -166,6 +170,15 @@ pub enum OpKind {
     LedgerEraseCycle,
     /// Hostile ledger requests that must draw a clean refusal, never an internal error.
     LedgerFuzz,
+    /// `FinanceService/Ping` over gRPC on the finance port.
+    FinancePing,
+    /// Two callers against one finance instance: the owner, who may read a
+    /// personal party and a company, and a reader granted the company only.
+    /// Fails the run if the reader is ever handed a personal row.
+    FinanceAccess,
+    /// Money over the wire: the amounts that come back must be the exact minor
+    /// units that went in, with the sign the direction implies.
+    FinanceMoney,
 }
 
 /// What every operation of a run shares: the ledger subject pool and the seed.
@@ -192,6 +205,7 @@ impl OpKind {
             | Self::LedgerLifecycle
             | Self::LedgerEraseCycle
             | Self::LedgerFuzz => "ledger",
+            Self::FinancePing | Self::FinanceAccess | Self::FinanceMoney => "finance",
         }
     }
 
@@ -203,6 +217,9 @@ impl OpKind {
             Self::GraphqlEvaluate => Arc::new(GraphqlEvaluate),
             Self::WsEcho => Arc::new(WsEcho),
             Self::GrpcPing => Arc::new(GrpcPing),
+            Self::FinancePing => Arc::new(FinancePing),
+            Self::FinanceAccess => Arc::new(FinanceAccess),
+            Self::FinanceMoney => Arc::new(FinanceMoney),
             Self::LedgerAppend => Arc::new(super::ledger_ops::Append(Arc::clone(pool))),
             Self::LedgerCurrent => Arc::new(super::ledger_ops::Current(Arc::clone(pool))),
             Self::LedgerHistory => Arc::new(super::ledger_ops::History(Arc::clone(pool))),
@@ -346,6 +363,210 @@ impl Operation for GrpcPing {
             Ok(())
         } else {
             Err(OpError::Contract("wrong echo".into()))
+        }
+    }
+}
+
+/// `FinanceService/Ping`.
+///
+/// The service is a scaffold: `Ping` is all it serves, and it answers
+/// `stub: true`. That is deliberate — this operation exists so the finance
+/// instance is drivable under load and fault injection from the first commit,
+/// rather than arriving untested once it has real RPCs. It asserts the echo
+/// **and** that the stub flag is still honest.
+struct FinancePing;
+
+#[async_trait]
+impl Operation for FinancePing {
+    fn name(&self) -> &'static str {
+        "finance_ping"
+    }
+
+    async fn run(&self, clients: &Clients, target: &Target) -> Result<(), OpError> {
+        let mut client = FinanceServiceClient::new(clients.grpc(target).await?);
+        let resp = client
+            .ping(FinancePingRequest {
+                message: "load".into(),
+            })
+            .await
+            .map_err(|s| match s.code() {
+                tonic::Code::Unavailable | tonic::Code::Unknown => OpError::Transport,
+                code => OpError::Grpc(format!("{code:?}")),
+            })?
+            .into_inner();
+        if resp.message != "load" {
+            return Err(OpError::Contract("wrong echo".into()));
+        }
+        if !resp.stub {
+            return Err(OpError::Contract(
+                "finance reported stub: false while it is still a scaffold".into(),
+            ));
+        }
+        Ok(())
+    }
+}
+
+/// The party ids the seeded world uses. Fixed so an assertion can name them.
+const PERSONAL_PARTY: &str = "11111111-1111-4111-8111-111111111111";
+const COMPANY_PARTY: &str = "22222222-2222-4222-8222-222222222222";
+
+/// Envoy's verified-claims header, as the service reads it.
+fn caller(subject: &str) -> tonic::metadata::MetadataValue<tonic::metadata::Ascii> {
+    use base64::Engine as _;
+    let claims = format!(r#"{{"sub":"{subject}","scp":["tbd.finance"]}}"#);
+    let encoded = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(claims);
+    encoded
+        .parse()
+        .unwrap_or_else(|_| "".parse().unwrap_or_else(|_| unreachable!()))
+}
+
+/// Access control, driven continuously.
+///
+/// Each request is the pair that matters: the owner reads everything they were
+/// granted, and the reader reads the company and *only* the company. A leak is
+/// silent -- nothing errors, a query just returns one row too many -- so this
+/// asserts on absence, and a violation is an `OpError::Contract`, which no
+/// scenario's `max_error_rate` forgives.
+struct FinanceAccess;
+
+#[async_trait]
+impl Operation for FinanceAccess {
+    fn name(&self) -> &'static str {
+        "finance_access"
+    }
+
+    async fn run(&self, clients: &Clients, target: &Target) -> Result<(), OpError> {
+        let channel = clients.grpc(target).await?;
+        let mut client = FinanceServiceClient::new(channel);
+
+        let map = |s: tonic::Status| match s.code() {
+            tonic::Code::Unavailable | tonic::Code::Unknown => OpError::Transport,
+            code => OpError::Grpc(format!("{code:?}")),
+        };
+
+        // The owner: both parties, nothing missing.
+        let mut request = tonic::Request::new(FinanceListRequest::default());
+        request
+            .metadata_mut()
+            .insert("x-jwt-payload", caller("chaos-owner"));
+        let owner = client
+            .list_transactions(request)
+            .await
+            .map_err(map)?
+            .into_inner();
+        if owner.transactions.len() != 2 {
+            return Err(OpError::Contract(format!(
+                "owner saw {} transactions, expected 2",
+                owner.transactions.len()
+            )));
+        }
+
+        // The reader: the company, and never the personal party.
+        let mut request = tonic::Request::new(FinanceListRequest::default());
+        request
+            .metadata_mut()
+            .insert("x-jwt-payload", caller("chaos-reader"));
+        let reader = client
+            .list_transactions(request)
+            .await
+            .map_err(map)?
+            .into_inner();
+        if reader
+            .transactions
+            .iter()
+            .any(|t| t.party_id == PERSONAL_PARTY)
+        {
+            return Err(OpError::Contract(
+                "LEAK: the reader was handed a personal transaction".into(),
+            ));
+        }
+        if reader.transactions.len() != 1 || reader.transactions[0].party_id != COMPANY_PARTY {
+            return Err(OpError::Contract(format!(
+                "reader saw {} transactions, expected exactly the company's",
+                reader.transactions.len()
+            )));
+        }
+
+        // And naming the forbidden party directly must not reach it either.
+        let mut request = tonic::Request::new(FinanceListRequest {
+            party_ids: vec![PERSONAL_PARTY.to_owned()],
+            ..Default::default()
+        });
+        request
+            .metadata_mut()
+            .insert("x-jwt-payload", caller("chaos-reader"));
+        let named = client
+            .list_transactions(request)
+            .await
+            .map_err(map)?
+            .into_inner();
+        if !named.transactions.is_empty() {
+            return Err(OpError::Contract(
+                "LEAK: naming a forbidden party directly returned rows".into(),
+            ));
+        }
+        Ok(())
+    }
+}
+
+/// Money, checked to the cent on every request.
+///
+/// The seeded world holds two amounts chosen to catch the failures that matter:
+/// a debit of -4,250 minor units and a credit of 1,450,082 -- the second being
+/// a real Tenderly settlement, 14,500.82 EUR, large enough that a float would
+/// start losing it and awkward enough that a naive decimal parse would too.
+///
+/// What this proves that a unit test does not: the value survives the whole
+/// path under load -- the store, the gRPC encoding, the JSON the transcoder
+/// renders int64 as -- and keeps its sign. A wrong sign is the quietest bug in
+/// accounting software: the totals still look plausible.
+struct FinanceMoney;
+
+#[async_trait]
+impl Operation for FinanceMoney {
+    fn name(&self) -> &'static str {
+        "finance_money"
+    }
+
+    async fn run(&self, clients: &Clients, target: &Target) -> Result<(), OpError> {
+        let mut client = FinanceServiceClient::new(clients.grpc(target).await?);
+        let mut request = tonic::Request::new(FinanceListRequest::default());
+        request
+            .metadata_mut()
+            .insert("x-jwt-payload", caller("chaos-owner"));
+        let resp = client
+            .list_transactions(request)
+            .await
+            .map_err(|s| match s.code() {
+                tonic::Code::Unavailable | tonic::Code::Unknown => OpError::Transport,
+                code => OpError::Grpc(format!("{code:?}")),
+            })?
+            .into_inner();
+
+        let mut debit = None;
+        let mut credit = None;
+        for t in &resp.transactions {
+            if t.amount_minor < 0 {
+                debit = Some(t.amount_minor);
+            } else {
+                credit = Some(t.amount_minor);
+            }
+            if t.currency != "EUR" {
+                return Err(OpError::Contract(format!(
+                    "currency came back as {:?}",
+                    t.currency
+                )));
+            }
+            if t.scale != 2 {
+                return Err(OpError::Contract(format!("scale came back as {}", t.scale)));
+            }
+        }
+
+        match (debit, credit) {
+            (Some(-4_250), Some(1_450_082)) => Ok(()),
+            (d, c) => Err(OpError::Contract(format!(
+                "amounts changed in flight: debit {d:?} (want -4250), credit {c:?} (want 1450082)"
+            ))),
         }
     }
 }
