@@ -8,6 +8,7 @@ pub mod banking;
 pub mod categorise;
 pub mod config;
 pub mod import;
+pub mod invoice;
 pub mod money;
 mod service;
 pub mod store;

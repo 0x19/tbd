@@ -68,6 +68,13 @@ base64            = "0.22"
 # crypto: ring is the one provider (deny.toml bans a second C build). Already in
 # the tree as rustls's backend; named here so the JWT signing can use it directly.
 ring              = "0.17"
+# PDF rendering (finance invoices): Typst as an embedded library, no packages,
+typst-as-lib      = { version = "0.16", default-features = false }
+typst             = "0.15"
+# The invoicing period and the time printed on an invoice are Europe/Zagreb.
+chrono-tz         = "0.10"
+typst-pdf         = "0.15"
+typst-layout      = "0.15"
 anyhow    = "1"
 
 # observability

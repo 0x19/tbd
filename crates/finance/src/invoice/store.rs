@@ -1,0 +1,968 @@
+//! Drafts, previews, approvals and the rows behind them.
+//!
+//! Every function takes an [`Access`] and refuses a row outside it as
+//! not-found, like the rest of the service. The one transaction that matters
+//! is [`approve`]: lock the draft, rebuild the document, compare the hash the
+//! approver saw, take the number, render, store the PDF, write the approval
+//! -- all or nothing.
+
+use chrono::{DateTime, Datelike, NaiveDate, Utc};
+use chrono_tz::Europe::Zagreb;
+use sha2::{Digest, Sha256};
+use sqlx::{PgPool, Postgres, Transaction};
+use tbd_db::{Access, DbError, PartyId, UserId, map_err};
+use uuid::Uuid;
+
+use super::{Client, InvoiceDoc, Issuer, Line, VatTreatment, numbering, render, totals};
+
+/// Why an invoicing call was refused.
+#[derive(Debug, thiserror::Error)]
+pub enum InvoiceError {
+    /// The database, or a row outside the grant (not-found).
+    #[error(transparent)]
+    Db(#[from] DbError),
+    /// The invoice is not a draft, and only drafts change.
+    #[error("invoice is {0}, not a draft")]
+    NotDraft(String),
+    /// The draft changed since the preview the approver saw.
+    #[error("the draft changed since it was previewed; preview again")]
+    StaleDraft,
+    /// The issuing party has no issuer profile yet.
+    #[error("no issuer profile for this party; set one first")]
+    NoIssuer,
+    /// A draft with no lines cannot be approved.
+    #[error("an invoice needs at least one line")]
+    NoLines,
+    /// The renderer.
+    #[error(transparent)]
+    Render(#[from] render::RenderError),
+    /// Serialisation of the canonical document.
+    #[error("canonical document: {0}")]
+    Canonical(#[from] serde_json::Error),
+}
+
+#[allow(missing_docs)]
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct IssuerRow {
+    pub party_id: Uuid,
+    pub legal_name: String,
+    pub address_lines: Vec<String>,
+    pub oib: String,
+    pub vat_id: String,
+    pub iban: String,
+    pub swift: String,
+    pub bank_name: String,
+    pub court: String,
+    pub registration_no: String,
+    pub share_capital: String,
+    pub board_member: String,
+    pub issued_by: String,
+    pub place_of_issue: String,
+    pub operator_id: String,
+    pub premises: String,
+    pub device: String,
+    pub due_days: i32,
+}
+
+impl IssuerRow {
+    fn doc(&self) -> Issuer {
+        Issuer {
+            legal_name: self.legal_name.clone(),
+            address_lines: self.address_lines.clone(),
+            oib: self.oib.clone(),
+            vat_id: self.vat_id.clone(),
+            iban: self.iban.clone(),
+            swift: self.swift.clone(),
+            bank_name: self.bank_name.clone(),
+            court: self.court.clone(),
+            registration_no: self.registration_no.clone(),
+            share_capital: self.share_capital.clone(),
+            board_member: self.board_member.clone(),
+            issued_by: self.issued_by.clone(),
+            operator_id: self.operator_id.clone(),
+        }
+    }
+}
+
+#[allow(missing_docs)]
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct ClientRow {
+    pub id: Uuid,
+    pub party_id: Uuid,
+    pub name: String,
+    pub address_lines: Vec<String>,
+    pub country_code: String,
+    pub tax_id: String,
+    pub vat_treatment: String,
+    pub recipients: Vec<String>,
+    pub currency: String,
+    pub archived_at: Option<DateTime<Utc>>,
+}
+
+#[allow(missing_docs)]
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct InvoiceRow {
+    pub id: Uuid,
+    pub party_id: Uuid,
+    pub client_id: Uuid,
+    pub status: String,
+    pub year: i32,
+    pub ordinal: Option<i32>,
+    pub premises: String,
+    pub device: String,
+    pub number: Option<String>,
+    pub issued_at: Option<DateTime<Utc>>,
+    pub delivery_date: NaiveDate,
+    pub due_date: NaiveDate,
+    pub place_of_issue: String,
+    pub currency: String,
+    pub subtotal_minor: i64,
+    pub vat_minor: i64,
+    pub total_minor: i64,
+    pub vat_treatment: String,
+    pub vat_note: String,
+    pub note: String,
+    pub content_hash: Option<String>,
+    pub approved_at: Option<DateTime<Utc>>,
+    pub document_id: Option<Uuid>,
+    pub prefilled_from: Option<Uuid>,
+    pub cancelled_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[allow(missing_docs)]
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct LineRow {
+    pub id: Uuid,
+    pub invoice_id: Uuid,
+    pub position: i32,
+    pub description: String,
+    pub quantity_milli: i64,
+    pub unit_price_minor: i64,
+    pub amount_minor: i64,
+}
+
+/// What a person writes on an issuer profile.
+#[allow(missing_docs)]
+#[derive(Debug, Clone)]
+pub struct IssuerInput {
+    pub party_id: Uuid,
+    pub legal_name: String,
+    pub address_lines: Vec<String>,
+    pub oib: String,
+    pub vat_id: String,
+    pub iban: String,
+    pub swift: String,
+    pub bank_name: String,
+    pub court: String,
+    pub registration_no: String,
+    pub share_capital: String,
+    pub board_member: String,
+    pub issued_by: String,
+    pub place_of_issue: String,
+    pub operator_id: String,
+    pub premises: String,
+    pub device: String,
+    pub due_days: i32,
+}
+
+/// What a person writes on a client.
+#[allow(missing_docs)]
+#[derive(Debug, Clone)]
+pub struct ClientInput {
+    pub id: Option<Uuid>,
+    pub party_id: Uuid,
+    pub name: String,
+    pub address_lines: Vec<String>,
+    pub country_code: String,
+    pub tax_id: String,
+    pub vat_treatment: VatTreatment,
+    pub recipients: Vec<String>,
+    pub currency: String,
+}
+
+/// What a person writes on a draft.
+#[allow(missing_docs)]
+#[derive(Debug, Clone)]
+pub struct DraftInput {
+    pub delivery_date: NaiveDate,
+    pub due_date: NaiveDate,
+    pub place_of_issue: String,
+    pub note: String,
+    pub lines: Vec<LineInput>,
+}
+
+/// One line as written.
+#[allow(missing_docs)]
+#[derive(Debug, Clone)]
+pub struct LineInput {
+    pub description: String,
+    pub quantity_milli: i64,
+    pub unit_price_minor: i64,
+}
+
+/// A preview: the document, its hash, and the PDF.
+#[derive(Debug, Clone)]
+pub struct Preview {
+    /// The canonical document the hash names.
+    pub doc: InvoiceDoc,
+    /// What `approve` must be given back.
+    pub content_hash: String,
+    /// Watermarked PDF bytes.
+    pub pdf: Vec<u8>,
+}
+
+/// A statement assembled from constant column lists and nothing else.
+fn sql(s: &str) -> sqlx::AssertSqlSafe<String> {
+    sqlx::AssertSqlSafe(s.to_owned())
+}
+
+const ISSUER_COLUMNS: &str =
+    "party_id, legal_name, address_lines, oib, vat_id, iban, swift, bank_name, court,
+    registration_no, share_capital, board_member, issued_by, place_of_issue, operator_id, premises,
+    device, due_days";
+const CLIENT_COLUMNS: &str = "id, party_id, name, address_lines, country_code, tax_id, vat_treatment, recipients, currency, archived_at";
+const INVOICE_COLUMNS: &str =
+    "id, party_id, client_id, status, year, ordinal, premises, device, number, issued_at,
+    delivery_date, due_date, place_of_issue, currency, subtotal_minor, vat_minor, total_minor,
+    vat_treatment, vat_note, note, content_hash, approved_at, document_id, prefilled_from,
+    cancelled_at, created_at, updated_at";
+
+/// The issuer profile of a party the caller may read.
+///
+/// # Errors
+/// The database, or the party is outside the grant.
+pub async fn issuer(
+    pool: &PgPool,
+    access: &Access,
+    party: Uuid,
+) -> Result<Option<IssuerRow>, InvoiceError> {
+    access.require(PartyId(party), "party")?;
+    Ok(sqlx::query_as::<_, IssuerRow>(sql(&format!(
+        "select {ISSUER_COLUMNS} from finance.issuers where party_id = $1"
+    )))
+    .bind(party)
+    .fetch_optional(pool)
+    .await
+    .map_err(map_err)?)
+}
+
+/// Create or replace the issuer profile.
+///
+/// # Errors
+/// The database, or the party is outside the grant.
+pub async fn upsert_issuer(
+    pool: &PgPool,
+    access: &Access,
+    input: IssuerInput,
+) -> Result<IssuerRow, InvoiceError> {
+    access.require(PartyId(input.party_id), "party")?;
+    sqlx::query(
+        "insert into finance.issuers (party_id, legal_name, address_lines, oib, vat_id, iban, swift,
+            bank_name, court, registration_no, share_capital, board_member, issued_by, place_of_issue,
+            operator_id, premises, device, due_days)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+         on conflict (party_id) do update set
+            legal_name = excluded.legal_name, address_lines = excluded.address_lines, oib = excluded.oib,
+            vat_id = excluded.vat_id, iban = excluded.iban, swift = excluded.swift,
+            bank_name = excluded.bank_name, court = excluded.court,
+            registration_no = excluded.registration_no, share_capital = excluded.share_capital,
+            board_member = excluded.board_member, issued_by = excluded.issued_by,
+            place_of_issue = excluded.place_of_issue, operator_id = excluded.operator_id,
+            premises = excluded.premises, device = excluded.device, due_days = excluded.due_days,
+            updated_at = clock_timestamp()",
+    )
+    .bind(input.party_id)
+    .bind(&input.legal_name)
+    .bind(&input.address_lines)
+    .bind(&input.oib)
+    .bind(&input.vat_id)
+    .bind(&input.iban)
+    .bind(&input.swift)
+    .bind(&input.bank_name)
+    .bind(&input.court)
+    .bind(&input.registration_no)
+    .bind(&input.share_capital)
+    .bind(&input.board_member)
+    .bind(&input.issued_by)
+    .bind(&input.place_of_issue)
+    .bind(&input.operator_id)
+    .bind(&input.premises)
+    .bind(&input.device)
+    .bind(input.due_days)
+    .execute(pool)
+    .await
+    .map_err(map_err)?;
+    issuer(pool, access, input.party_id)
+        .await?
+        .ok_or(InvoiceError::NoIssuer)
+}
+
+/// Clients of the parties in the view.
+///
+/// # Errors
+/// The database.
+pub async fn clients(pool: &PgPool, view: &Access) -> Result<Vec<ClientRow>, InvoiceError> {
+    if view.is_empty() {
+        return Ok(Vec::new());
+    }
+    Ok(sqlx::query_as::<_, ClientRow>(sql(&format!(
+        "select {CLIENT_COLUMNS} from finance.clients where party_id = any($1) order by name"
+    )))
+    .bind(view.party_ids())
+    .fetch_all(pool)
+    .await
+    .map_err(map_err)?)
+}
+
+/// Create or change a client.
+///
+/// # Errors
+/// The database, or the party or existing client is outside the grant.
+pub async fn upsert_client(
+    pool: &PgPool,
+    access: &Access,
+    input: ClientInput,
+) -> Result<ClientRow, InvoiceError> {
+    access.require(PartyId(input.party_id), "party")?;
+    if input.name.trim().is_empty() {
+        return Err(DbError::Invalid {
+            field: "name",
+            reason: "empty".into(),
+        }
+        .into());
+    }
+    let id = match input.id {
+        Some(id) => {
+            let owned: Option<(Uuid,)> =
+                sqlx::query_as("select id from finance.clients where id = $1 and party_id = $2")
+                    .bind(id)
+                    .bind(input.party_id)
+                    .fetch_optional(pool)
+                    .await
+                    .map_err(map_err)?;
+            owned.ok_or(DbError::NotFound { what: "client" })?;
+            id
+        }
+        None => Uuid::new_v4(),
+    };
+    sqlx::query(
+        "insert into finance.clients (id, party_id, name, address_lines, country_code, tax_id, vat_treatment,
+            recipients, currency)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+         on conflict (id) do update set name = excluded.name, address_lines = excluded.address_lines,
+            country_code = excluded.country_code, tax_id = excluded.tax_id,
+            vat_treatment = excluded.vat_treatment, recipients = excluded.recipients,
+            currency = excluded.currency",
+    )
+    .bind(id)
+    .bind(input.party_id)
+    .bind(input.name.trim())
+    .bind(&input.address_lines)
+    .bind(input.country_code.to_uppercase())
+    .bind(input.tax_id.trim())
+    .bind(input.vat_treatment.as_str())
+    .bind(&input.recipients)
+    .bind(input.currency.to_uppercase())
+    .execute(pool)
+    .await
+    .map_err(map_err)?;
+    let row = sqlx::query_as::<_, ClientRow>(sql(&format!(
+        "select {CLIENT_COLUMNS} from finance.clients where id = $1"
+    )))
+    .bind(id)
+    .fetch_one(pool)
+    .await
+    .map_err(map_err)?;
+    Ok(row)
+}
+
+/// Invoices in the view, newest first.
+///
+/// # Errors
+/// The database.
+pub async fn invoices(pool: &PgPool, view: &Access) -> Result<Vec<InvoiceRow>, InvoiceError> {
+    if view.is_empty() {
+        return Ok(Vec::new());
+    }
+    Ok(sqlx::query_as::<_, InvoiceRow>(sql(&format!(
+        "select {INVOICE_COLUMNS} from finance.invoices where party_id = any($1)
+          order by coalesce(issued_at, created_at) desc"
+    )))
+    .bind(view.party_ids())
+    .fetch_all(pool)
+    .await
+    .map_err(map_err)?)
+}
+
+/// One invoice with its lines, if the caller may see it.
+///
+/// # Errors
+/// The database, or not in the view.
+pub async fn invoice(
+    pool: &PgPool,
+    access: &Access,
+    id: Uuid,
+) -> Result<(InvoiceRow, Vec<LineRow>), InvoiceError> {
+    let row = sqlx::query_as::<_, InvoiceRow>(sql(&format!(
+        "select {INVOICE_COLUMNS} from finance.invoices where id = $1"
+    )))
+    .bind(id)
+    .fetch_optional(pool)
+    .await
+    .map_err(map_err)?
+    .ok_or(DbError::NotFound { what: "invoice" })?;
+    access.require(PartyId(row.party_id), "invoice")?;
+    let lines = lines_of(pool, id).await?;
+    Ok((row, lines))
+}
+
+async fn lines_of(pool: &PgPool, id: Uuid) -> Result<Vec<LineRow>, DbError> {
+    sqlx::query_as::<_, LineRow>(
+        "select id, invoice_id, position, description, quantity_milli, unit_price_minor, amount_minor
+           from finance.invoice_lines where invoice_id = $1 order by position",
+    )
+    .bind(id)
+    .fetch_all(pool)
+    .await
+    .map_err(map_err)
+}
+
+/// Today in Zagreb: the day an invoice is dated by.
+fn today() -> NaiveDate {
+    Utc::now().with_timezone(&Zagreb).date_naive()
+}
+
+/// A new draft for a client, pre-filled from the last approved invoice to
+/// them when there is one -- "same as last month" is what a monthly invoice
+/// almost always is.
+///
+/// # Errors
+/// The database; the client is outside the grant; the party has no issuer.
+pub async fn create_draft(
+    pool: &PgPool,
+    access: &Access,
+    client_id: Uuid,
+) -> Result<InvoiceRow, InvoiceError> {
+    let client = sqlx::query_as::<_, ClientRow>(sql(&format!(
+        "select {CLIENT_COLUMNS} from finance.clients where id = $1"
+    )))
+    .bind(client_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(map_err)?
+    .ok_or(DbError::NotFound { what: "client" })?;
+    access.require(PartyId(client.party_id), "client")?;
+    let issuer = issuer(pool, access, client.party_id)
+        .await?
+        .ok_or(InvoiceError::NoIssuer)?;
+    let treatment =
+        VatTreatment::parse(&client.vat_treatment).unwrap_or(VatTreatment::OutsideScopeNonEu);
+
+    let previous = sqlx::query_as::<_, InvoiceRow>(sql(&format!(
+        "select {INVOICE_COLUMNS} from finance.invoices
+          where client_id = $1 and status in ('approved', 'sent', 'paid')
+          order by issued_at desc limit 1"
+    )))
+    .bind(client_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(map_err)?;
+    let prefill_lines = match &previous {
+        Some(p) => lines_of(pool, p.id).await?,
+        None => Vec::new(),
+    };
+
+    let id = Uuid::new_v4();
+    let day = today();
+    let due = day + chrono::Days::new(u64::try_from(issuer.due_days).unwrap_or(15));
+    let mut tx = pool.begin().await.map_err(map_err)?;
+    sqlx::query(
+        "insert into finance.invoices (id, party_id, client_id, status, year, premises, device, delivery_date,
+            due_date, place_of_issue, currency, vat_treatment, vat_note, prefilled_from)
+         values ($1,$2,$3,'draft',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)",
+    )
+    .bind(id)
+    .bind(client.party_id)
+    .bind(client_id)
+    .bind(day.year())
+    .bind(&issuer.premises)
+    .bind(&issuer.device)
+    .bind(day)
+    .bind(due)
+    .bind(&issuer.place_of_issue)
+    .bind(&client.currency)
+    .bind(treatment.as_str())
+    .bind(treatment.note())
+    .bind(previous.as_ref().map(|p| p.id))
+    .execute(&mut *tx)
+    .await
+    .map_err(map_err)?;
+    let inputs: Vec<LineInput> = prefill_lines
+        .iter()
+        .map(|l| LineInput {
+            description: l.description.clone(),
+            quantity_milli: l.quantity_milli,
+            unit_price_minor: l.unit_price_minor,
+        })
+        .collect();
+    write_lines(&mut tx, id, &inputs, treatment).await?;
+    event(
+        &mut tx,
+        id,
+        access.user(),
+        "created",
+        serde_json::json!({ "prefilled_from": previous.map(|p| p.id) }),
+    )
+    .await?;
+    tx.commit().await.map_err(map_err)?;
+    invoice(pool, access, id).await.map(|(row, _)| row)
+}
+
+/// Replace a draft's editable fields and lines, and recompute its totals.
+///
+/// # Errors
+/// The database; not in the view; not a draft.
+pub async fn update_draft(
+    pool: &PgPool,
+    access: &Access,
+    id: Uuid,
+    input: DraftInput,
+) -> Result<InvoiceRow, InvoiceError> {
+    let (row, _) = invoice(pool, access, id).await?;
+    if row.status != "draft" {
+        return Err(InvoiceError::NotDraft(row.status));
+    }
+    let treatment =
+        VatTreatment::parse(&row.vat_treatment).unwrap_or(VatTreatment::OutsideScopeNonEu);
+    let mut tx = pool.begin().await.map_err(map_err)?;
+    sqlx::query(
+        "update finance.invoices
+            set delivery_date = $2, due_date = $3, place_of_issue = $4, note = $5, updated_at = clock_timestamp()
+          where id = $1 and status = 'draft'",
+    )
+    .bind(id)
+    .bind(input.delivery_date)
+    .bind(input.due_date)
+    .bind(input.place_of_issue.trim())
+    .bind(input.note.trim())
+    .execute(&mut *tx)
+    .await
+    .map_err(map_err)?;
+    write_lines(&mut tx, id, &input.lines, treatment).await?;
+    event(
+        &mut tx,
+        id,
+        access.user(),
+        "edited",
+        serde_json::json!({ "lines": input.lines.len() }),
+    )
+    .await?;
+    tx.commit().await.map_err(map_err)?;
+    invoice(pool, access, id).await.map(|(row, _)| row)
+}
+
+async fn write_lines(
+    tx: &mut Transaction<'_, Postgres>,
+    id: Uuid,
+    inputs: &[LineInput],
+    treatment: VatTreatment,
+) -> Result<(), InvoiceError> {
+    sqlx::query("delete from finance.invoice_lines where invoice_id = $1")
+        .bind(id)
+        .execute(&mut **tx)
+        .await
+        .map_err(map_err)?;
+    let mut lines = Vec::with_capacity(inputs.len());
+    for (i, l) in inputs.iter().enumerate() {
+        if l.quantity_milli <= 0 {
+            return Err(DbError::Invalid {
+                field: "quantity",
+                reason: "must be positive".into(),
+            }
+            .into());
+        }
+        lines.push(Line {
+            position: i32::try_from(i + 1).unwrap_or(i32::MAX),
+            description: l.description.trim().to_owned(),
+            quantity_milli: l.quantity_milli,
+            unit_price_minor: l.unit_price_minor,
+            amount_minor: 0,
+        });
+    }
+    totals::settle(&mut lines);
+    for l in &lines {
+        sqlx::query(
+            "insert into finance.invoice_lines (id, invoice_id, position, description, quantity_milli,
+                unit_price_minor, amount_minor) values ($1,$2,$3,$4,$5,$6,$7)",
+        )
+        .bind(Uuid::new_v4())
+        .bind(id)
+        .bind(l.position)
+        .bind(&l.description)
+        .bind(l.quantity_milli)
+        .bind(l.unit_price_minor)
+        .bind(l.amount_minor)
+        .execute(&mut **tx)
+        .await
+        .map_err(map_err)?;
+    }
+    let (subtotal, vat, total) = totals::totals(&lines, treatment);
+    sqlx::query(
+        "update finance.invoices set subtotal_minor = $2, vat_minor = $3, total_minor = $4 where id = $1",
+    )
+    .bind(id)
+    .bind(subtotal)
+    .bind(vat)
+    .bind(total)
+    .execute(&mut **tx)
+    .await
+    .map_err(map_err)?;
+    Ok(())
+}
+
+async fn event(
+    tx: &mut Transaction<'_, Postgres>,
+    invoice: Uuid,
+    user: UserId,
+    what: &str,
+    detail: serde_json::Value,
+) -> Result<(), DbError> {
+    sqlx::query("insert into finance.invoice_events (id, invoice_id, user_id, event, detail) values ($1,$2,$3,$4,$5)")
+        .bind(Uuid::new_v4())
+        .bind(invoice)
+        .bind(if user.0.is_nil() { None } else { Some(user.0) })
+        .bind(what)
+        .bind(detail)
+        .execute(&mut **tx)
+        .await
+        .map_err(map_err)?;
+    Ok(())
+}
+
+/// The canonical document for an invoice as it is right now: the stored one
+/// for an approved invoice, a preview (next number, current time) for a
+/// draft.
+async fn document_of(
+    pool: &PgPool,
+    row: &InvoiceRow,
+    lines: &[LineRow],
+    issued_at: DateTime<Utc>,
+    ordinal: Option<i32>,
+) -> Result<InvoiceDoc, InvoiceError> {
+    let issuer = sqlx::query_as::<_, IssuerRow>(sql(&format!(
+        "select {ISSUER_COLUMNS} from finance.issuers where party_id = $1"
+    )))
+    .bind(row.party_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(map_err)?
+    .ok_or(InvoiceError::NoIssuer)?;
+    let client = sqlx::query_as::<_, ClientRow>(sql(&format!(
+        "select {CLIENT_COLUMNS} from finance.clients where id = $1"
+    )))
+    .bind(row.client_id)
+    .fetch_one(pool)
+    .await
+    .map_err(map_err)?;
+    let treatment =
+        VatTreatment::parse(&row.vat_treatment).unwrap_or(VatTreatment::OutsideScopeNonEu);
+    let (number, preview) = match (row.number.as_deref(), ordinal) {
+        (Some(n), _) => (n.to_owned(), false),
+        (None, Some(next)) => (
+            format!("{next}-{}-{}-{}", row.premises, row.device, row.year),
+            true,
+        ),
+        (None, None) => (String::from("—"), true),
+    };
+    Ok(InvoiceDoc {
+        number,
+        number_preview: preview,
+        issued_at,
+        delivery_date: row.delivery_date,
+        due_date: row.due_date,
+        place_of_issue: row.place_of_issue.clone(),
+        currency: row.currency.clone(),
+        issuer: issuer.doc(),
+        client: Client {
+            name: client.name,
+            address_lines: client.address_lines,
+            country: country_name(&client.country_code),
+            tax_id: client.tax_id,
+        },
+        lines: lines
+            .iter()
+            .map(|l| Line {
+                position: l.position,
+                description: l.description.clone(),
+                quantity_milli: l.quantity_milli,
+                unit_price_minor: l.unit_price_minor,
+                amount_minor: l.amount_minor,
+            })
+            .collect(),
+        subtotal_minor: row.subtotal_minor,
+        vat_minor: row.vat_minor,
+        total_minor: row.total_minor,
+        vat_treatment: treatment,
+        vat_note: if row.status == "draft" {
+            treatment.note().to_owned()
+        } else {
+            row.vat_note.clone()
+        },
+        note: row.note.clone(),
+    })
+}
+
+/// The few countries an invoice from here names. Anything else prints its code.
+fn country_name(code: &str) -> String {
+    match code {
+        "RS" => "Serbia",
+        "HR" => "Croatia",
+        "DE" => "Germany",
+        "AT" => "Austria",
+        "SI" => "Slovenia",
+        "US" => "United States",
+        "GB" => "United Kingdom",
+        "NL" => "Netherlands",
+        "CH" => "Switzerland",
+        other => other,
+    }
+    .to_owned()
+}
+
+/// Render a draft as it would be approved now: next number, current time,
+/// watermarked. Writes nothing. The hash is what `approve` takes.
+///
+/// # Errors
+/// The database; not in the view; the renderer.
+pub async fn preview(pool: &PgPool, access: &Access, id: Uuid) -> Result<Preview, InvoiceError> {
+    let (row, lines) = invoice(pool, access, id).await?;
+    let next = if row.status == "draft" {
+        Some(numbering::peek(pool, row.party_id, row.year).await?)
+    } else {
+        None
+    };
+    // The preview's time is truncated to the minute: the approval that follows
+    // renders with its own "now", and a hash that changed because a second
+    // ticked would refuse every approval.
+    let now = minute(Utc::now());
+    let doc = document_of(pool, &row, &lines, row.issued_at.unwrap_or(now), next).await?;
+    let content_hash = doc.content_hash()?;
+    let pdf = tokio::task::spawn_blocking({
+        let doc = doc.clone();
+        move || render::render(&doc)
+    })
+    .await
+    .map_err(|e| DbError::Internal(format!("render task: {e}")))??
+    .pdf;
+    Ok(Preview {
+        doc,
+        content_hash,
+        pdf,
+    })
+}
+
+fn minute(t: DateTime<Utc>) -> DateTime<Utc> {
+    t.with_timezone(&Utc)
+        .date_naive()
+        .and_hms_opt(
+            t.format("%H").to_string().parse().unwrap_or(0),
+            t.format("%M").to_string().parse().unwrap_or(0),
+            0,
+        )
+        .map_or(t, |n| n.and_utc())
+}
+
+/// What an approval produces.
+#[derive(Debug, Clone)]
+pub struct Approved {
+    /// The invoice, now numbered.
+    pub invoice: InvoiceRow,
+    /// The stored PDF.
+    pub document_id: Uuid,
+}
+
+/// Approve a draft: the one transaction that allocates a number.
+///
+/// The approver presents the hash from the preview they saw. The draft is
+/// locked, the document rebuilt with the number it will take and the same
+/// minute-truncated time, and the hash compared; a difference is
+/// [`InvoiceError::StaleDraft`] and nothing changes. Then, still inside the
+/// transaction: the number is taken under the counter's lock, the PDF is
+/// rendered and stored content-addressed, the VAT note frozen onto the
+/// invoice, the approval recorded with who and what hash.
+///
+/// # Errors
+/// See [`InvoiceError`].
+pub async fn approve(
+    pool: &PgPool,
+    access: &Access,
+    id: Uuid,
+    content_hash: &str,
+) -> Result<Approved, InvoiceError> {
+    let (row, lines) = invoice(pool, access, id).await?;
+    if row.status != "draft" {
+        return Err(InvoiceError::NotDraft(row.status));
+    }
+    if lines.is_empty() {
+        return Err(InvoiceError::NoLines);
+    }
+    let mut tx = pool.begin().await.map_err(map_err)?;
+    // Lock the draft: two approvals of one invoice serialise here, and the
+    // second sees `approved` and is refused.
+    let (status,): (String,) =
+        sqlx::query_as("select status from finance.invoices where id = $1 for update")
+            .bind(id)
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(map_err)?;
+    if status != "draft" {
+        return Err(InvoiceError::NotDraft(status));
+    }
+    let ordinal = numbering::allocate(&mut tx, row.party_id, row.year).await?;
+    let issued_at = minute(Utc::now());
+    let mut doc = document_of(pool, &row, &lines, issued_at, Some(ordinal)).await?;
+    if doc.content_hash()? != content_hash {
+        // Rolls the allocation back with the transaction: no number was taken.
+        return Err(InvoiceError::StaleDraft);
+    }
+    doc.number_preview = false;
+    let final_hash = doc.content_hash()?;
+    let pdf = tokio::task::spawn_blocking({
+        let doc = doc.clone();
+        move || render::render(&doc)
+    })
+    .await
+    .map_err(|e| DbError::Internal(format!("render task: {e}")))??
+    .pdf;
+
+    let mut hasher = Sha256::new();
+    hasher.update(&pdf);
+    let sha = format!("{:x}", hasher.finalize());
+    let document_id = Uuid::new_v4();
+    sqlx::query(
+        "insert into finance.documents (id, party_id, kind, sha256, content_type, size_bytes)
+         values ($1, $2, 'invoice', $3, 'application/pdf', $4)",
+    )
+    .bind(document_id)
+    .bind(row.party_id)
+    .bind(&sha)
+    .bind(i64::try_from(pdf.len()).unwrap_or(i64::MAX))
+    .execute(&mut *tx)
+    .await
+    .map_err(map_err)?;
+    sqlx::query("insert into finance.document_blobs (document_id, bytes) values ($1, $2)")
+        .bind(document_id)
+        .bind(&pdf)
+        .execute(&mut *tx)
+        .await
+        .map_err(map_err)?;
+    sqlx::query(
+        "update finance.invoices
+            set status = 'approved', ordinal = $2, issued_at = $3, approved_at = $3, approved_by = $4,
+                content_hash = $5, document_id = $6, vat_note = $7, updated_at = clock_timestamp()
+          where id = $1",
+    )
+    .bind(id)
+    .bind(ordinal)
+    .bind(issued_at)
+    .bind(if access.user().0.is_nil() { None } else { Some(access.user().0) })
+    .bind(&final_hash)
+    .bind(document_id)
+    .bind(&doc.vat_note)
+    .execute(&mut *tx)
+    .await
+    .map_err(map_err)?;
+    event(
+        &mut tx,
+        id,
+        access.user(),
+        "approved",
+        serde_json::json!({ "number": doc.number, "content_hash": final_hash, "presented": content_hash, "sha256": sha }),
+    )
+    .await?;
+    tx.commit().await.map_err(map_err)?;
+    let (invoice, _) = invoice_after(pool, id).await?;
+    Ok(Approved {
+        invoice,
+        document_id,
+    })
+}
+
+async fn invoice_after(
+    pool: &PgPool,
+    id: Uuid,
+) -> Result<(InvoiceRow, Vec<LineRow>), InvoiceError> {
+    let row = sqlx::query_as::<_, InvoiceRow>(sql(&format!(
+        "select {INVOICE_COLUMNS} from finance.invoices where id = $1"
+    )))
+    .bind(id)
+    .fetch_one(pool)
+    .await
+    .map_err(map_err)?;
+    let lines = lines_of(pool, id).await?;
+    Ok((row, lines))
+}
+
+/// Cancel. A draft simply ends; an approved invoice keeps its number --
+/// gapless means 1..n with no holes, not that every number is live.
+///
+/// # Errors
+/// The database; not in the view; already cancelled or paid.
+pub async fn cancel(
+    pool: &PgPool,
+    access: &Access,
+    id: Uuid,
+    reason: &str,
+) -> Result<InvoiceRow, InvoiceError> {
+    let (row, _) = invoice(pool, access, id).await?;
+    if row.status == "cancelled" || row.status == "paid" {
+        return Err(InvoiceError::NotDraft(row.status));
+    }
+    let mut tx = pool.begin().await.map_err(map_err)?;
+    sqlx::query(
+        "update finance.invoices set status = 'cancelled', cancelled_at = clock_timestamp(),
+            updated_at = clock_timestamp() where id = $1",
+    )
+    .bind(id)
+    .execute(&mut *tx)
+    .await
+    .map_err(map_err)?;
+    event(
+        &mut tx,
+        id,
+        access.user(),
+        "cancelled",
+        serde_json::json!({ "reason": reason }),
+    )
+    .await?;
+    tx.commit().await.map_err(map_err)?;
+    invoice_after(pool, id).await.map(|(row, _)| row)
+}
+
+/// A stored document's bytes, if the caller may see it.
+///
+/// # Errors
+/// The database; not in the view.
+pub async fn document(
+    pool: &PgPool,
+    access: &Access,
+    id: Uuid,
+) -> Result<(String, Vec<u8>), InvoiceError> {
+    let meta: Option<(Uuid, String)> =
+        sqlx::query_as("select party_id, content_type from finance.documents where id = $1")
+            .bind(id)
+            .fetch_optional(pool)
+            .await
+            .map_err(map_err)?;
+    let (party, content_type) = meta.ok_or(DbError::NotFound { what: "document" })?;
+    access.require(PartyId(party), "document")?;
+    let (bytes,): (Vec<u8>,) =
+        sqlx::query_as("select bytes from finance.document_blobs where document_id = $1")
+            .bind(id)
+            .fetch_one(pool)
+            .await
+            .map_err(map_err)?;
+    Ok((content_type, bytes))
+}
