@@ -42,6 +42,12 @@ use tbd_proto::finance::v1::{
     WatchConnectorsRequest, WatchConnectorsResponse, finance_service_server::FinanceService,
 };
 use tbd_proto::finance::v1::{
+    DeleteCounterpartyPolicyRequest, DeleteCounterpartyPolicyResponse, LinkDocumentRequest,
+    LinkDocumentResponse, MonthlyReconciliationRequest, MonthlyReconciliationResponse,
+    SetCounterpartyPolicyRequest, SetCounterpartyPolicyResponse, UnlinkDocumentRequest,
+    UnlinkDocumentResponse,
+};
+use tbd_proto::finance::v1::{
     ExtractDocumentRequest, ExtractDocumentResponse, UpdateDocumentRequest, UpdateDocumentResponse,
 };
 use tonic::{Code, Request, Response, Status};
@@ -1057,6 +1063,36 @@ impl FinanceService for Finance {
         r: Request<ListConnectorsRequest>,
     ) -> Result<Response<ListConnectorsResponse>, Status> {
         self.rpc_list_connectors(r).await
+    }
+    async fn monthly_reconciliation(
+        &self,
+        r: Request<MonthlyReconciliationRequest>,
+    ) -> Result<Response<MonthlyReconciliationResponse>, Status> {
+        self.rpc_monthly_reconciliation(r).await
+    }
+    async fn link_document(
+        &self,
+        r: Request<LinkDocumentRequest>,
+    ) -> Result<Response<LinkDocumentResponse>, Status> {
+        self.rpc_link_document(r).await
+    }
+    async fn unlink_document(
+        &self,
+        r: Request<UnlinkDocumentRequest>,
+    ) -> Result<Response<UnlinkDocumentResponse>, Status> {
+        self.rpc_unlink_document(r).await
+    }
+    async fn set_counterparty_policy(
+        &self,
+        r: Request<SetCounterpartyPolicyRequest>,
+    ) -> Result<Response<SetCounterpartyPolicyResponse>, Status> {
+        self.rpc_set_counterparty_policy(r).await
+    }
+    async fn delete_counterparty_policy(
+        &self,
+        r: Request<DeleteCounterpartyPolicyRequest>,
+    ) -> Result<Response<DeleteCounterpartyPolicyResponse>, Status> {
+        self.rpc_delete_counterparty_policy(r).await
     }
     async fn update_document(
         &self,

@@ -10,6 +10,7 @@ mod connect;
 mod connectors;
 mod import;
 mod invoices;
+mod reconcile;
 mod rpc;
 mod seed;
 mod support;

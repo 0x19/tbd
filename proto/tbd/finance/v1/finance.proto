@@ -296,6 +296,38 @@ service FinanceService {
   rpc ListDocuments(ListDocumentsRequest) returns (ListDocumentsResponse) {
     option (google.api.http) = {get: "/v1/finance/documents"};
   }
+  // A month of one party's transactions, each with what the accountant
+  // needs for it and which receipt covers it. Runs the matcher first, so
+  // a receipt pulled since is linked before the page sees it.
+  rpc MonthlyReconciliation(MonthlyReconciliationRequest) returns (MonthlyReconciliationResponse) {
+    option (google.api.http) = {get: "/v1/finance/reconciliation/{party_id}/{month}"};
+  }
+  // A person links a receipt to the transaction that paid it.
+  rpc LinkDocument(LinkDocumentRequest) returns (LinkDocumentResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/reconciliation/link"
+      body: "*"
+    };
+  }
+  rpc UnlinkDocument(UnlinkDocumentRequest) returns (UnlinkDocumentResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/reconciliation/unlink"
+      body: "*"
+    };
+  }
+  // A person's word on a counterparty: what the accountant needs for it.
+  rpc SetCounterpartyPolicy(SetCounterpartyPolicyRequest) returns (SetCounterpartyPolicyResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/reconciliation/policies"
+      body: "*"
+    };
+  }
+  rpc DeleteCounterpartyPolicy(DeleteCounterpartyPolicyRequest) returns (DeleteCounterpartyPolicyResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/reconciliation/policies/{id}/delete"
+      body: "*"
+    };
+  }
   // Set what a receipt says, by hand. Declared fields survive a re-read.
   rpc UpdateDocument(UpdateDocumentRequest) returns (UpdateDocumentResponse) {
     option (google.api.http) = {
@@ -487,6 +519,101 @@ message VendorCount {
   string vendor = 1;
   uint32 count = 2;
 }
+message MonthlyReconciliationRequest {
+  string party_id = 1;
+  // YYYY-MM.
+  string month = 2;
+}
+message MonthlyReconciliationResponse {
+  repeated ReconciliationRow rows = 1;
+  ReconciliationSummary summary = 2;
+  repeated CounterpartyPolicy policies = 3;
+}
+message ReconciliationRow {
+  Transaction transaction = 1;
+  // What the accountant needs from us: eracun (the supplier's e-invoice
+  // reaches them), receipt (we supply it), none (tax, salary, bank fee,
+  // cash: nothing exists), personal (not a business cost), income (our
+  // own invoice), internal (a transfer between own accounts).
+  string need = 2;
+  // Why: "HR IBAN", "state budget (HR68)", "card, 75,00 USD", "policy".
+  string need_reason = 3;
+  // For receipt: covered | missing. Otherwise empty.
+  string status = 4;
+  // Receipts linked to it.
+  repeated LinkedDocument documents = 5;
+  // Likely receipts the matcher was not sure enough about, best first.
+  repeated LinkedDocument suggestions = 6;
+  // The policy that decided `need`, if a person set one.
+  string policy_id = 7;
+  // The original amount and currency the card was charged in, when the
+  // bank said so ("75,00 USD"); empty otherwise.
+  string original_amount_minor = 8;
+  string original_currency = 9;
+}
+message LinkedDocument {
+  string document_id = 1;
+  string vendor = 2;
+  string doc_date = 3;
+  string total_minor = 4;
+  string currency = 5;
+  string filename = 6;
+  string invoice_no = 7;
+  // declared or inferred; empty for a suggestion.
+  string source = 8;
+  uint32 confidence = 9;
+  string reason = 10;
+}
+message ReconciliationSummary {
+  uint32 transactions = 1;
+  uint32 eracun = 2;
+  uint32 receipt_covered = 3;
+  uint32 receipt_missing = 4;
+  uint32 none = 5;
+  uint32 personal = 6;
+  uint32 income = 7;
+  uint32 internal = 8;
+  // Sum of amounts still missing a receipt, minor units, by currency.
+  map<string, string> missing_minor = 9;
+}
+message CounterpartyPolicy {
+  string id = 1;
+  string party_id = 2;
+  string match = 3;
+  bool exact = 4;
+  string policy = 5;
+  string note = 6;
+}
+message LinkDocumentRequest {
+  string transaction_id = 1;
+  string document_id = 2;
+}
+message LinkDocumentResponse {
+  ReconciliationRow row = 1;
+}
+message UnlinkDocumentRequest {
+  string transaction_id = 1;
+  string document_id = 2;
+}
+message UnlinkDocumentResponse {
+  ReconciliationRow row = 1;
+}
+message SetCounterpartyPolicyRequest {
+  string party_id = 1;
+  // The counterparty name as the bank gives it, or a fragment of it.
+  string match = 2;
+  bool exact = 3;
+  // eracun, receipt, none, personal.
+  string policy = 4;
+  string note = 5;
+}
+message SetCounterpartyPolicyResponse {
+  CounterpartyPolicy policy = 1;
+}
+message DeleteCounterpartyPolicyRequest {
+  string id = 1;
+}
+message DeleteCounterpartyPolicyResponse {}
 message UpdateDocumentRequest {
   string id = 1;
   string vendor = 2;

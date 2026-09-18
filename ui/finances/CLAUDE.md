@@ -40,7 +40,11 @@ same conventions; read `ui/chaos/CLAUDE.md` for what is the kit's and what is ou
   (receipts as a ledger: search, vendor and month filters and the sums come from
   `ListDocuments`; a row opens a sheet with the PDF inline, the fields with how each was
   found (`found_by`), an editor that declares corrections through `UpdateDocument`, and
-  "Read again" = `ExtractDocument`).
+  "Read again" = `ExtractDocument`), `/accountant/` (the company's month from
+  `MonthlyReconciliation`: each transaction's need and its receipt; a policy select per
+  counterparty = `SetCounterpartyPolicy`, suggestions and "Find" = `LinkDocument`; the
+  bundle -- receipts, summary.csv, missing.csv, README -- is zipped in the browser by
+  `src/lib/zip.ts`, since a month of PDFs would not fit one gRPC message).
 - Streams: `useEvents(url, schema, onEvent)` in `hooks.ts` wraps `EventSource` with
   credentials; every `data:` frame is one JSON message. Envoy keeps `/v1/**/events`
   open on the finance host. EventSource cannot send the dev bearer token, so in

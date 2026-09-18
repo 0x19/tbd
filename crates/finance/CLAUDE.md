@@ -71,6 +71,16 @@ The finance service. gRPC only. Scaffolded by `tbd new service` (docs/tbd/README
   (`declared_at`), which `write_read` never overwrites. The reader runs on every document
   as it is stored, on every unread one at start-up (`backfill`, after the run sweep), and
   on `ExtractDocument`. `service_documents.rs` holds the RPCs.
+- `reconcile/`: the accountant's month. `mod.rs` is two pure rule sets with their tests
+  on the real August statement: *need* (what the accountant needs from us: `eracun` for an
+  HR IBAN, since domestic B2B is e-invoiced; `none` for state-budget references (HR68),
+  payouts to a person (HR69 40002), cash and bank fees; `receipt` for card charges and
+  foreign transfers) and *score* (a receipt against a charge: the original amount the
+  card was charged in, read from the remittance, then vendor token and date; `LINK` makes
+  an inferred link, `SUGGEST` an offer). A person's counterparty policy or hand-made link
+  overrides either; an undone inferred link stays `rejected` so the matcher does not make
+  it again. `store.rs` runs the matcher greedily, best pairs first, each side once.
+  `service_reconcile.rs` holds the RPCs.
 - `categorise.rs` + `seeds/rules.sql`: a pass clears every `inferred` categorisation and
   reapplies rules in priority order; `declared` always survives. A text condition is a
   substring unless anchored (`^INA ` pins the start, ` BAR$` the end): unanchored `INA `

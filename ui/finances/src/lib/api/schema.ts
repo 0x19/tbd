@@ -408,3 +408,60 @@ export const ListDocumentsResponse = z.object({
 });
 export const DocumentResponse = z.object({ document: Document.nullable().optional() });
 export const GetDocumentResponse = z.object({ document: Document.nullable().optional(), bytes: z.string() });
+
+// ---- reconciliation (the accountant's month) ----
+export const LinkedDocument = z.object({
+  document_id: z.string(),
+  vendor: z.string(),
+  doc_date: z.string(),
+  total_minor: z.string(),
+  currency: z.string(),
+  filename: z.string(),
+  invoice_no: z.string(),
+  // declared | inferred; empty for a suggestion.
+  source: z.string(),
+  confidence: z.number(),
+  reason: z.string(),
+});
+export type LinkedDocument = z.infer<typeof LinkedDocument>;
+export const ReconciliationRow = z.object({
+  transaction: Transaction,
+  // eracun | receipt | none | personal | income | internal.
+  need: z.string(),
+  need_reason: z.string(),
+  // covered | missing | "".
+  status: z.string(),
+  documents: z.array(LinkedDocument),
+  suggestions: z.array(LinkedDocument),
+  policy_id: z.string(),
+  original_amount_minor: z.string(),
+  original_currency: z.string(),
+});
+export type ReconciliationRow = z.infer<typeof ReconciliationRow>;
+export const CounterpartyPolicy = z.object({
+  id: z.string(),
+  party_id: z.string(),
+  match: z.string(),
+  exact: z.boolean(),
+  policy: z.string(),
+  note: z.string(),
+});
+export type CounterpartyPolicy = z.infer<typeof CounterpartyPolicy>;
+export const MonthlyReconciliationResponse = z.object({
+  rows: z.array(ReconciliationRow),
+  summary: z.object({
+    transactions: z.number(),
+    eracun: z.number(),
+    receipt_covered: z.number(),
+    receipt_missing: z.number(),
+    none: z.number(),
+    personal: z.number(),
+    income: z.number(),
+    internal: z.number(),
+    missing_minor: z.record(z.string(), z.string()),
+  }),
+  policies: z.array(CounterpartyPolicy),
+});
+export type MonthlyReconciliationResponse = z.infer<typeof MonthlyReconciliationResponse>;
+export const ReconciliationRowResponse = z.object({ row: ReconciliationRow });
+export const CounterpartyPolicyResponse = z.object({ policy: CounterpartyPolicy });

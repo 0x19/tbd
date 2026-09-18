@@ -12,10 +12,12 @@ pub mod documents;
 pub mod import;
 pub mod invoice;
 pub mod money;
+pub mod reconcile;
 mod service;
 mod service_connectors;
 mod service_documents;
 mod service_invoices;
+mod service_reconcile;
 pub mod store;
 pub mod sync;
 

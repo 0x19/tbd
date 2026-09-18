@@ -1,6 +1,7 @@
 import {
   IconBuildingBank,
   IconCategory,
+  IconChecklist,
   IconFileInvoice,
   IconLayoutDashboard,
   IconListDetails,
@@ -33,6 +34,7 @@ export const navGroups: NavGroup[] = [
     title: "Documents",
     items: [
       { title: "Receipts", url: "/documents/", icon: IconFileInvoice },
+      { title: "Accountant", url: "/accountant/", icon: IconChecklist },
       { title: "Connectors", url: "/connectors/", icon: IconPlugConnected },
     ],
   },

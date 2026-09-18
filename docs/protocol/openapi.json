@@ -1982,6 +1982,238 @@
         }
       }
     },
+    "/v1/finance/reconciliation/link": {
+      "post": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/LinkDocument",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/LinkDocument` on the `finance` backend.",
+        "operationId": "FinanceService.LinkDocument",
+        "requestBody": {
+          "description": "`tbd.finance.v1.LinkDocumentRequest`; path variables override their fields",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/tbd.finance.v1.LinkDocumentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.LinkDocumentResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.LinkDocumentResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/finance/reconciliation/policies": {
+      "post": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/SetCounterpartyPolicy",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/SetCounterpartyPolicy` on the `finance` backend.",
+        "operationId": "FinanceService.SetCounterpartyPolicy",
+        "requestBody": {
+          "description": "`tbd.finance.v1.SetCounterpartyPolicyRequest`; path variables override their fields",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/tbd.finance.v1.SetCounterpartyPolicyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.SetCounterpartyPolicyResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.SetCounterpartyPolicyResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/finance/reconciliation/policies/{id}/delete": {
+      "post": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/DeleteCounterpartyPolicy",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/DeleteCounterpartyPolicy` on the `finance` backend.",
+        "operationId": "FinanceService.DeleteCounterpartyPolicy",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "`tbd.finance.v1.DeleteCounterpartyPolicyRequest`; path variables override their fields",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/tbd.finance.v1.DeleteCounterpartyPolicyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.DeleteCounterpartyPolicyResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.DeleteCounterpartyPolicyResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/finance/reconciliation/unlink": {
+      "post": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/UnlinkDocument",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/UnlinkDocument` on the `finance` backend.",
+        "operationId": "FinanceService.UnlinkDocument",
+        "requestBody": {
+          "description": "`tbd.finance.v1.UnlinkDocumentRequest`; path variables override their fields",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/tbd.finance.v1.UnlinkDocumentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.UnlinkDocumentResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.UnlinkDocumentResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/finance/reconciliation/{party_id}/{month}": {
+      "get": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/MonthlyReconciliation",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/MonthlyReconciliation` on the `finance` backend.",
+        "operationId": "FinanceService.MonthlyReconciliation",
+        "parameters": [
+          {
+            "name": "party_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "month",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.MonthlyReconciliationResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.MonthlyReconciliationResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/finance/rules": {
       "get": {
         "tags": [
@@ -3845,6 +4077,30 @@
           }
         }
       },
+      "tbd.finance.v1.CounterpartyPolicy": {
+        "type": "object",
+        "description": "`tbd.finance.v1.CounterpartyPolicy`",
+        "properties": {
+          "exact": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "match": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "party_id": {
+            "type": "string"
+          },
+          "policy": {
+            "type": "string"
+          }
+        }
+      },
       "tbd.finance.v1.CreateInvoiceRequest": {
         "type": "object",
         "description": "`tbd.finance.v1.CreateInvoiceRequest`",
@@ -3896,6 +4152,19 @@
       "tbd.finance.v1.DeleteConnectorResponse": {
         "type": "object",
         "description": "`tbd.finance.v1.DeleteConnectorResponse`"
+      },
+      "tbd.finance.v1.DeleteCounterpartyPolicyRequest": {
+        "type": "object",
+        "description": "`tbd.finance.v1.DeleteCounterpartyPolicyRequest`",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.finance.v1.DeleteCounterpartyPolicyResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.DeleteCounterpartyPolicyResponse`"
       },
       "tbd.finance.v1.DeleteLineTemplateRequest": {
         "type": "object",
@@ -4285,6 +4554,64 @@
           }
         }
       },
+      "tbd.finance.v1.LinkDocumentRequest": {
+        "type": "object",
+        "description": "`tbd.finance.v1.LinkDocumentRequest`",
+        "properties": {
+          "document_id": {
+            "type": "string"
+          },
+          "transaction_id": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.finance.v1.LinkDocumentResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.LinkDocumentResponse`",
+        "properties": {
+          "row": {
+            "$ref": "#/components/schemas/tbd.finance.v1.ReconciliationRow"
+          }
+        }
+      },
+      "tbd.finance.v1.LinkedDocument": {
+        "type": "object",
+        "description": "`tbd.finance.v1.LinkedDocument`",
+        "properties": {
+          "confidence": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "doc_date": {
+            "type": "string"
+          },
+          "document_id": {
+            "type": "string"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "invoice_no": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "total_minor": {
+            "type": "string"
+          },
+          "vendor": {
+            "type": "string"
+          }
+        }
+      },
       "tbd.finance.v1.ListAccountsResponse": {
         "type": "object",
         "description": "`tbd.finance.v1.ListAccountsResponse`",
@@ -4457,6 +4784,27 @@
           }
         }
       },
+      "tbd.finance.v1.MonthlyReconciliationResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.MonthlyReconciliationResponse`",
+        "properties": {
+          "policies": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/tbd.finance.v1.CounterpartyPolicy"
+            }
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/tbd.finance.v1.ReconciliationRow"
+            }
+          },
+          "summary": {
+            "$ref": "#/components/schemas/tbd.finance.v1.ReconciliationSummary"
+          }
+        }
+      },
       "tbd.finance.v1.MonthlySummaryResponse": {
         "type": "object",
         "description": "`tbd.finance.v1.MonthlySummaryResponse`",
@@ -4530,6 +4878,89 @@
           "pdf": {
             "type": "string",
             "format": "byte"
+          }
+        }
+      },
+      "tbd.finance.v1.ReconciliationRow": {
+        "type": "object",
+        "description": "`tbd.finance.v1.ReconciliationRow`",
+        "properties": {
+          "documents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/tbd.finance.v1.LinkedDocument"
+            }
+          },
+          "need": {
+            "type": "string"
+          },
+          "need_reason": {
+            "type": "string"
+          },
+          "original_amount_minor": {
+            "type": "string"
+          },
+          "original_currency": {
+            "type": "string"
+          },
+          "policy_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "suggestions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/tbd.finance.v1.LinkedDocument"
+            }
+          },
+          "transaction": {
+            "$ref": "#/components/schemas/tbd.finance.v1.Transaction"
+          }
+        }
+      },
+      "tbd.finance.v1.ReconciliationSummary": {
+        "type": "object",
+        "description": "`tbd.finance.v1.ReconciliationSummary`",
+        "properties": {
+          "eracun": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "income": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "internal": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "missing_minor": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "none": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "personal": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "receipt_covered": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "receipt_missing": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "transactions": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },
@@ -4631,6 +5062,36 @@
         "properties": {
           "account": {
             "$ref": "#/components/schemas/tbd.finance.v1.Account"
+          }
+        }
+      },
+      "tbd.finance.v1.SetCounterpartyPolicyRequest": {
+        "type": "object",
+        "description": "`tbd.finance.v1.SetCounterpartyPolicyRequest`",
+        "properties": {
+          "exact": {
+            "type": "boolean"
+          },
+          "match": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "party_id": {
+            "type": "string"
+          },
+          "policy": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.finance.v1.SetCounterpartyPolicyResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.SetCounterpartyPolicyResponse`",
+        "properties": {
+          "policy": {
+            "$ref": "#/components/schemas/tbd.finance.v1.CounterpartyPolicy"
           }
         }
       },
@@ -4830,6 +5291,27 @@
           },
           "value_date": {
             "type": "string"
+          }
+        }
+      },
+      "tbd.finance.v1.UnlinkDocumentRequest": {
+        "type": "object",
+        "description": "`tbd.finance.v1.UnlinkDocumentRequest`",
+        "properties": {
+          "document_id": {
+            "type": "string"
+          },
+          "transaction_id": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.finance.v1.UnlinkDocumentResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.UnlinkDocumentResponse`",
+        "properties": {
+          "row": {
+            "$ref": "#/components/schemas/tbd.finance.v1.ReconciliationRow"
           }
         }
       },

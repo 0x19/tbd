@@ -7,6 +7,7 @@ import {
   type ClientProfile,
   CompleteConnectionResponse,
   ConnectorResponse,
+  CounterpartyPolicyResponse,
   DeclareCategoryResponse,
   DeleteLineTemplateResponse,
   DocumentResponse,
@@ -32,8 +33,10 @@ import {
   ListRulesResponse,
   ListTransactionsResponse,
   Me,
+  MonthlyReconciliationResponse,
   MonthlySummaryResponse,
   PreviewInvoiceResponse,
+  ReconciliationRowResponse,
   RefreshAccountResponse,
   SetAccountSyncResponse,
   StartConnectionResponse,
@@ -272,6 +275,23 @@ export const api = {
     offset?: number;
   }) => call(ListDocumentsResponse, `/v1/finance/documents${query({ kind: "receipt", limit: 100, ...p })}`),
   document: (id: string) => call(GetDocumentResponse, `/v1/finance/documents/${id}`),
+  // ---- reconciliation ----
+  reconciliation: (party_id: string, month: string) =>
+    call(MonthlyReconciliationResponse, `/v1/finance/reconciliation/${party_id}/${month}`),
+  linkDocument: (transaction_id: string, document_id: string) =>
+    call(ReconciliationRowResponse, "/v1/finance/reconciliation/link", {
+      method: "POST",
+      json: { transaction_id, document_id },
+    }),
+  unlinkDocument: (transaction_id: string, document_id: string) =>
+    call(ReconciliationRowResponse, "/v1/finance/reconciliation/unlink", {
+      method: "POST",
+      json: { transaction_id, document_id },
+    }),
+  setPolicy: (p: { party_id: string; match: string; exact: boolean; policy: string; note: string }) =>
+    call(CounterpartyPolicyResponse, "/v1/finance/reconciliation/policies", { method: "POST", json: p }),
+  deletePolicy: (id: string) =>
+    call(z.object({}), `/v1/finance/reconciliation/policies/${id}/delete`, { method: "POST", json: {} }),
   updateDocument: (
     id: string,
     fields: { vendor: string; doc_date: string; total_minor: string; currency: string; invoice_no: string },
