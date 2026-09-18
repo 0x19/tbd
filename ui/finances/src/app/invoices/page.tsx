@@ -258,9 +258,13 @@ function Invoices() {
           <CardHeader>
             <CardTitle>No clients yet</CardTitle>
             <CardDescription>
-              An invoice needs an issuer profile and a client. Set both under{" "}
-              <Link href="/invoices/settings/" className="underline">
-                Issuer &amp; clients
+              An invoice needs an{" "}
+              <Link href="/issuer/" className="underline">
+                issuer
+              </Link>{" "}
+              and a{" "}
+              <Link href="/clients/" className="underline">
+                client
               </Link>
               .
             </CardDescription>

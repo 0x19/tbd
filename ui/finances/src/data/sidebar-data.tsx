@@ -7,6 +7,7 @@ import {
   IconPlugConnected,
   IconReceipt2,
   IconSettings,
+  IconUsers,
 } from "@tabler/icons-react";
 
 import { type NavGroup } from "@/components/layout/types";
@@ -39,7 +40,8 @@ export const navGroups: NavGroup[] = [
     title: "Invoicing",
     items: [
       { title: "Invoices", url: "/invoices/", icon: IconReceipt2 },
-      { title: "Issuer & clients", url: "/invoices/settings/", icon: IconSettings },
+      { title: "Clients", url: "/clients/", icon: IconUsers },
+      { title: "Issuer", url: "/issuer/", icon: IconSettings },
     ],
   },
 ];

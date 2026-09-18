@@ -31,7 +31,8 @@ same conventions; read `ui/chaos/CLAUDE.md` for what is the kit's and what is ou
   `/accounts/` (balances, sync state, "Fetch now" = `RefreshAccount`), `/connections/`
   (`StartConnection` sends the browser to the bank), `/connect/callback/` (the
   registered redirect: reads `state`+`code` from its URL, POSTs `CompleteConnection`,
-  then scrubs the URL), `/invoices/` (drafts, preview, approve, PDF), `/connectors/`
+  then scrubs the URL), `/invoices/` (drafts, preview, approve, PDF), `/clients/` (a table; a sheet per
+  client with its details and line templates), `/issuer/` (one form in sections), `/connectors/`
   (one flat list drawn from the `WatchConnectors` SSE feed via `useEvents`: a pull's
   progress and outcome, a relink, a removal arrive as events; `useFetch` polls only
   while the feed is down. Link a mailbox chooses the party; the row's party select
