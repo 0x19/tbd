@@ -7,10 +7,10 @@ import { crumbs } from "@/data/sidebar-data";
 import { site } from "@/data/site";
 import { useT } from "@/lib/i18n";
 
-import { LangToggle } from "../lang-toggle";
 import { ScopeToggle } from "../scope-toggle";
 
-/** The kit's sub-header: root breadcrumb, section and tail; the party scope on the right. */
+/** The kit's sub-header: root breadcrumb, section and tail; the party scope on the right.
+ *  The language toggle lives in the header, which every width shows; this bar does not. */
 export function SubHeader() {
   const pathname = usePathname();
   const trail = crumbs(pathname);
@@ -33,10 +33,11 @@ export function SubHeader() {
             </span>
           ))}
         </div>
-        <div className="flex items-center gap-2 xl:ml-auto">
-          {multi ? <ScopeToggle /> : null}
-          <LangToggle />
-        </div>
+        {multi ? (
+          <div className="flex items-center gap-2 xl:ml-auto">
+            <ScopeToggle />
+          </div>
+        ) : null}
       </div>
     </header>
   );
