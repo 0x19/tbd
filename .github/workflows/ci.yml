@@ -122,6 +122,10 @@ jobs:
             port: "8080"
           - bin: chaos
             port: "7700"
+          - bin: playground
+            port: "50055"
+          - bin: finance
+            port: "50054"
           - bin: humans
             port: "50053"
           - bin: ledger

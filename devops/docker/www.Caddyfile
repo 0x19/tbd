@@ -1,0 +1,34 @@
+# The company site (ui/www): a static export, served as files and nothing else.
+# No TLS here — Envoy terminates in front, and the public edge terminates TLS in
+# front of that.
+:8080 {
+	root * /srv
+	encode zstd gzip
+
+	# Liveness for Kubernetes and Envoy's cluster health check.
+	@health path /healthz
+	respond @health "ok" 200
+
+	# Hashed asset names never change. Pages must revalidate every time, or a
+	# browser sits on yesterday's copy for the length of the max-age and a deploy
+	# looks like it did nothing; a revalidation of an unchanged page is a 304.
+	header /_next/static/* Cache-Control "public, max-age=31536000, immutable"
+	header Cache-Control "public, max-age=0, must-revalidate"
+	header -Server
+
+	# `trailingSlash` export: /contact -> /contact/index.html.
+	try_files {path} {path}/index.html {path}.html
+	file_server
+
+	handle_errors {
+		rewrite * /404.html
+		file_server {
+			status {err.status_code}
+		}
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

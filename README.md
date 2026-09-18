@@ -10,6 +10,8 @@ project as-is.
 | Piece | What it is |
 |---|---|
 | **engine** | gRPC streaming compute service: unary `Evaluate`, server-streaming `Subscribe`, bidirectional `Session`. Health and reflection built in. Port 50051. |
+| **playground** | The public sandbox: one shared stack under constant load that anyone may try to break, over REST, SSE and the socket. Four clamped RPCs, no identity, no caller-supplied address. Port 50055. [docs/playground/README.md](docs/playground/README.md). |
+| **finance** | gRPC service scaffolded by `tbd new service`: health, reflection, metrics, one labelled-stub `Ping` until its real RPCs land. Port 50054. |
 | **humans** | gRPC service scaffolded by `tbd new service`: health, reflection, metrics, one labelled-stub `Ping` until its real RPCs land. Port 50053. |
 | **ledger** | gRPC service scaffolded by `tbd new service`: health, reflection, metrics, one labelled-stub `Ping` until its real RPCs land. Port 50052. |
 | **protocol** | The edge gateway. One port, four surfaces: REST and SSE under `/v1`, WebSocket at `/ws`, GraphQL at `/graphql`, gRPC over h2c; `/openapi.json` for REST. Forwards to the backends registered in `configs/protocol` (engine, humans, ledger) over gRPC through Envoy, owns no logic, JSON in and out, one error envelope. Port 8080. [docs/protocol/README.md](docs/protocol/README.md). |
@@ -18,6 +20,7 @@ project as-is.
 | **chaos** | Runs both services in one process, validates every surface, generates load, injects faults on a timeline and asserts. Used for development and in CI. |
 | **auth** | Ory Hydra + Kratos: OAuth2/OIDC, password, passkeys, Google; one sign-in host. Envoy is the only thing that checks a token; services read the identity Envoy forwards and verify nothing themselves. |
 | **observability** | Prometheus metrics, OpenTelemetry traces, JSON logs with trace ids and continuous CPU profiles from every service and Envoy, into VictoriaMetrics, Tempo, VictoriaLogs and Pyroscope, with Grafana dashboards. |
+| **www** | The public company site (`ui/www`): a Next.js static export on Caddy, served at the root of the base domain through Envoy and the public edge. Content lives in one file. [ui/www/README.md](ui/www/README.md). |
 | **devops** | One Dockerfile, kustomize overlays including a local k3d cluster, Ansible playbooks, compose. |
 
 Every score the engine returns today is a **stub** and carries `stub: true` on every
@@ -177,6 +180,8 @@ crates/
   common/     telemetry, shutdown, shared CLI flags, fault injection. Transport-free.
   proto/      generated gRPC code from proto/. No hand-written logic.
   engine/     the engine service (lib + bin + tests/it)
+  playground/ the playground service (lib + bin + tests/it)
+  finance/    the finance service (lib + bin + tests/it)
   humans/     the humans service (lib + bin + tests/it)
   ledger/     the ledger service (lib + bin + tests/it)
   protocol/   the protocol service (lib + bin + tests/it)

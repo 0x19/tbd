@@ -15,6 +15,10 @@ images:
     newTag: v0.0.0-REPLACE
   - name: ghcr.io/0x19/tbd-humans
     newTag: v0.0.0-REPLACE
+  - name: ghcr.io/0x19/tbd-finance
+    newTag: v0.0.0-REPLACE
+  - name: ghcr.io/0x19/tbd-playground
+    newTag: v0.0.0-REPLACE
 patches:
   - target:
       kind: Deployment
@@ -55,6 +59,30 @@ patches:
   - target:
       kind: Deployment
       name: humans
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 2
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests: { cpu: 250m, memory: 128Mi }
+          limits: { cpu: "2", memory: 512Mi }
+  - target:
+      kind: Deployment
+      name: finance
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 2
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests: { cpu: 250m, memory: 128Mi }
+          limits: { cpu: "2", memory: 512Mi }
+  - target:
+      kind: Deployment
+      name: playground
     patch: |-
       - op: replace
         path: /spec/replicas

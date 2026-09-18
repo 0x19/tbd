@@ -6,6 +6,8 @@
 [targets]
 protocol = "http://localhost:18080"
 engine = "http://localhost:15051"
+playground = "http://localhost:15051"
+finance = "http://localhost:15051"
 humans = "http://localhost:15051"
 # The ledger shares the engine LB; Envoy matches by gRPC service name.
 ledger = "http://localhost:15051"

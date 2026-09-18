@@ -37,8 +37,22 @@ need_stdout = true
 background = false
 on_change_strategy = "kill_then_restart"
 
+[jobs.finance]
+command = ["cargo", "run", "-p", "tbd-finance", "--color", "always"]
+need_stdout = true
+background = false
+on_change_strategy = "kill_then_restart"
+
+[jobs.playground]
+command = ["cargo", "run", "-p", "tbd-playground", "--color", "always"]
+need_stdout = true
+background = false
+on_change_strategy = "kill_then_restart"
+
 [keybindings]
 e = "job:engine"
 p = "job:protocol"
+g = "job:playground"
+f = "job:finance"
 h = "job:humans"
 l = "job:ledger"

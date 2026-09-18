@@ -56,3 +56,12 @@ pub mod finance {
             include_bytes!(concat!(env!("OUT_DIR"), "/finance_descriptor.bin"));
     }
 }
+
+pub mod playground {
+    pub mod v1 {
+        tonic::include_proto!("tbd.playground.v1");
+        /// Encoded `FileDescriptorSet` for this package, for gRPC reflection.
+        pub const DESCRIPTOR_SET: &[u8] =
+            include_bytes!(concat!(env!("OUT_DIR"), "/playground_descriptor.bin"));
+    }
+}

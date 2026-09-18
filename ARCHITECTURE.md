@@ -39,6 +39,8 @@ hop; the same observability stack runs locally and in production.
 | `tbd-common` | telemetry (logs, OTLP traces, trace propagation, the shared gRPC span), Prometheus metrics with the shared metric names, shutdown, shared CLI flags, fault injection, the embedder `Runtime`, layered config | tokio, tracing, clap, opentelemetry, metrics, http (types) |
 | `tbd-proto` | code generated from `/proto` at build time via `protox` + `tonic-prost-build` | tonic, prost |
 | `tbd-engine` | `tbd.engine.v1.EngineService` implementation, health, reflection | common, proto |
+| `tbd-playground` | `tbd.playground.v1.PlaygroundService` implementation, health, reflection; scaffolded by `tbd new service`, a stub until its RPCs land | common, proto |
+| `tbd-finance` | `tbd.finance.v1.FinanceService` implementation, health, reflection; scaffolded by `tbd new service`, a stub until its RPCs land | common, proto |
 | `tbd-humans` | `tbd.humans.v1.HumansService` implementation, health, reflection; scaffolded by `tbd new service`, a stub until its RPCs land | common, proto |
 | `tbd-ledger` | the facts ledger: `store::Store` (Postgres via sqlx, or in memory), outbox drained into ClickHouse, erasure sweeper, and the thin `tbd.ledger.v1.LedgerService` over it; readiness follows the store | common, proto |
 | `tbd-protocol` | axum router: REST, SSE, WebSocket bridge, GraphQL, protocol gRPC; a registry of traced, measured gRPC backends from `[services]` in `configs/protocol`; the descriptor-driven transcoder that serves every `google.api.http`-annotated RPC over REST or SSE | common, proto |
@@ -67,6 +69,8 @@ Envoy routes, from `devops/envoy/envoy.yaml`:
 |---|---|---|
 | `/healthz`, `/readyz` (no token needed; everything else below needs a bearer JWT) | protocol | 5 s |
 | gRPC `/tbd.engine.v1.EngineService/*` | engine | none, retries on connect failure and `UNAVAILABLE` |
+| internal LB (50051) gRPC `/tbd.playground.v1.PlaygroundService/*` | playground | none, retries on connect failure and `UNAVAILABLE` |
+| internal LB (50051) gRPC `/tbd.finance.v1.FinanceService/*` | finance | none, retries on connect failure and `UNAVAILABLE` |
 | internal LB (50051) gRPC `/tbd.humans.v1.HumansService/*` | humans | none, retries on connect failure and `UNAVAILABLE` |
 | internal LB (50051) gRPC `/tbd.ledger.v1.LedgerService/*` | ledger | none, retries on connect failure and `UNAVAILABLE` |
 | internal LB (50051) gRPC `/grpc.health.v1.Health/*` with `x-tbd-backend: <name>` | that service (the protocol's backend probes; the health path is shared) | none |

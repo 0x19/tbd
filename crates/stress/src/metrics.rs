@@ -354,6 +354,23 @@ impl Metrics {
             .clear();
     }
 
+    /// Copy everything out and start again, so the next snapshot describes only
+    /// what happened since this call.
+    ///
+    /// A caller that wants "the last second" rather than "the run so far" wants
+    /// this: percentiles cannot be subtracted, so the only way to get a windowed
+    /// p99 out of a histogram is to empty it each time.
+    ///
+    /// Not atomic. The counters and the histogram are separate locks, so a
+    /// request that lands between the copy and the clear is counted in neither.
+    /// At any sane rate that is a handful of requests a day; if it ever needs to
+    /// be exact, the whole struct needs one lock rather than nine.
+    pub fn drain(&self) -> LoadSnapshot {
+        let snapshot = self.snapshot();
+        self.reset();
+        snapshot
+    }
+
     /// Copy everything out.
     pub fn snapshot(&self) -> LoadSnapshot {
         let elapsed = self

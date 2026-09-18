@@ -6,3 +6,8 @@ extend-exclude = ["target/", "Cargo.lock", "docs/design/"]
 
 [default.extend-identifiers]
 UPnP = "UPnP"
+
+[default.extend-words]
+# A merchant name as it appears on bank statements; a categorisation rule
+# must match it as spelled, not as spelled correctly.
+tabacco = "tabacco"

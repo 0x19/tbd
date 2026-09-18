@@ -1,0 +1,26 @@
+# The company site (ui/www): a Next.js static export served by Caddy.
+#   docker build -f devops/docker/Dockerfile.www -t ghcr.io/0x19/tbd-www .
+# SITE_URL is baked in at build time: it is the canonical URL and the sitemap's
+# base, and only a build whose host is the real domain asks robots to index it.
+FROM node:24-alpine AS build
+ARG SITE_URL=https://inorbit.hr
+ENV NEXT_PUBLIC_SITE_URL=$SITE_URL \
+    NEXT_TELEMETRY_DISABLED=1
+RUN corepack enable && corepack prepare pnpm@12 --activate
+WORKDIR /src
+COPY ui/www/package.json ui/www/pnpm-lock.yaml ui/www/pnpm-workspace.yaml ./
+RUN pnpm install --frozen-lockfile
+COPY ui/www/ ./
+RUN pnpm build
+
+FROM caddy:2.10-alpine
+# The published binary carries cap_net_bind_service so it can take :80. A
+# container that runs as a non-root user with no privilege escalation cannot
+# exec a file with capabilities at all, and nothing here binds a low port:
+# strip them.
+RUN apk add --no-cache libcap && setcap -r /usr/bin/caddy && apk del libcap
+# Caddy keeps its state under these; the container's root filesystem is read-only.
+ENV XDG_CONFIG_HOME=/tmp XDG_DATA_HOME=/tmp
+COPY devops/docker/www.Caddyfile /etc/caddy/Caddyfile
+COPY --from=build /src/out /srv
+EXPOSE 8080
