@@ -278,6 +278,8 @@ pub struct ToRead {
     pub received: Option<NaiveDate>,
     /// Fields were set by hand; the reader leaves them.
     pub declared: bool,
+    /// The file's name, whose own date settles a slash date.
+    pub filename: String,
 }
 
 /// What the reader needs for `id`, if the document exists.
@@ -285,13 +287,13 @@ pub struct ToRead {
 /// # Errors
 /// The database.
 pub async fn to_read(pool: &PgPool, id: Uuid) -> Result<Option<ToRead>, StoreError> {
-    let row: Option<(Uuid, Option<DateTime<Utc>>)> =
-        sqlx::query_as("select id, declared_at from finance.documents where id = $1")
+    let row: Option<(Uuid, Option<DateTime<Utc>>, Option<String>)> =
+        sqlx::query_as("select id, declared_at, filename from finance.documents where id = $1")
             .bind(id)
             .fetch_optional(pool)
             .await
             .map_err(map_err)?;
-    let Some((id, declared_at)) = row else {
+    let Some((id, declared_at, filename)) = row else {
         return Ok(None);
     };
     let source = sources_of(pool, &[id]).await?.into_iter().next();
@@ -319,6 +321,7 @@ pub async fn to_read(pool: &PgPool, id: Uuid) -> Result<Option<ToRead>, StoreErr
         sender,
         received: source.and_then(|s| s.received_at).map(|t| t.date_naive()),
         declared: declared_at.is_some(),
+        filename: filename.unwrap_or_default(),
     }))
 }
 

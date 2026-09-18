@@ -296,6 +296,12 @@ pub fn score(tx: &TxFacts, doc: &DocFacts) -> Option<(u8, String)> {
         } else if days <= 10 {
             points += 5;
             why.push(format!("{days} days apart"));
+        } else {
+            // Last month's invoice for this month's charge of the same
+            // amount: a subscription, and the wrong receipt. Offered, not
+            // linked.
+            points = points.saturating_sub(25);
+            why.push(format!("{days} days apart"));
         }
     }
     (points >= SUGGEST).then(|| (points, why.join(" · ")))
@@ -536,6 +542,14 @@ mod tests {
         };
         let (points, _) = score(&t, &other).unwrap();
         assert!((SUGGEST..LINK).contains(&points), "{points}");
+        // Same vendor, same amount, last month's invoice: a subscription's
+        // previous receipt. Offered, never linked.
+        let last_month = DocFacts {
+            doc_date: Some(d("2026-07-30")),
+            ..exact.clone()
+        };
+        let (points, why) = score(&t, &last_month).unwrap();
+        assert!((SUGGEST..LINK).contains(&points), "{points}: {why}");
         // Nothing in common: not even a suggestion.
         let stranger = DocFacts {
             id: Uuid::new_v4(),

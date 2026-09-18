@@ -59,13 +59,21 @@ pub struct Fields {
 
 /// Read the fields from `text`, helped by the mail it came in: `sender` as
 /// the mailbox gave it (`Name <addr>` or `addr`), `received` for a date of
-/// last resort.
+/// last resort, and `filename`, whose own date (`Hetzner_2026-08-11_…`)
+/// settles which way round a slash date is written.
 #[must_use]
-pub fn read(text: &str, sender: &str, received: Option<NaiveDate>) -> Fields {
+pub fn read(text: &str, sender: &str, received: Option<NaiveDate>, filename: &str) -> Fields {
     let lines: Vec<&str> = text.lines().map(str::trim).collect();
+    // The anchor a slash date is read against: the file's own date, else
+    // the mail's. "11/08/2026" is August to a German biller and November
+    // to an American one; the nearer reading to the anchor wins.
+    let anchor = DATE_ISO
+        .captures(filename)
+        .and_then(|c| NaiveDate::from_ymd_opt(c[1].parse().ok()?, num(&c[2])?, num(&c[3])?))
+        .or(received);
     Fields {
         vendor: vendor(&lines, sender),
-        date: date(&lines).or_else(|| received.map(|d| (d, By::Received))),
+        date: date(&lines, anchor).or_else(|| received.map(|d| (d, By::Received))),
         amount: amount(&lines),
         invoice_no: invoice_no(&lines),
     }
@@ -270,7 +278,7 @@ const DATE_LABELS: &[&str] = &[
     "date ",
 ];
 
-fn date(lines: &[&str]) -> Option<(NaiveDate, By)> {
+fn date(lines: &[&str], anchor: Option<NaiveDate>) -> Option<(NaiveDate, By)> {
     for (i, line) in lines.iter().enumerate() {
         let lower = line.to_ascii_lowercase();
         if lower.contains("due") || lower.contains("dospije") || lower.contains("fällig") {
@@ -280,14 +288,46 @@ fn date(lines: &[&str]) -> Option<(NaiveDate, By)> {
             continue;
         }
         let window = &lines[i..lines.len().min(i + 3)];
-        if let Some(d) = window.iter().find_map(|l| first_date(l)) {
+        if let Some(d) = window.iter().find_map(|l| first_date_near(l, anchor)) {
             return Some((d, By::Label));
         }
     }
     lines
         .iter()
-        .find_map(|l| first_date(l))
+        .find_map(|l| first_date_near(l, anchor))
         .map(|d| (d, By::First))
+}
+
+/// The first date on the line, a slash date read the way that lands
+/// nearest `anchor`; without one, day/month for a four-digit year (the
+/// European billers) and month/day for a two-digit one (the American).
+fn first_date_near(line: &str, anchor: Option<NaiveDate>) -> Option<NaiveDate> {
+    first_date_with(line, |a, b, y| {
+        let (dm, md) = (
+            NaiveDate::from_ymd_opt(y, b, a),
+            NaiveDate::from_ymd_opt(y, a, b),
+        );
+        match (dm, md, anchor) {
+            (Some(dm), Some(md), Some(at)) => {
+                if (dm - at).num_days().abs() <= (md - at).num_days().abs() {
+                    Some(dm)
+                } else {
+                    Some(md)
+                }
+            }
+            (Some(dm), Some(md), None) => Some(if y >= 2000 && line.contains(&format!("/{y}")) {
+                dm
+            } else {
+                md
+            }),
+            (Some(d), None, _) | (None, Some(d), _) => Some(d),
+            (None, None, _) => None,
+        }
+    })
+}
+
+fn first_date(line: &str) -> Option<NaiveDate> {
+    first_date_near(line, None)
 }
 
 fn month(name: &str) -> Option<u32> {
@@ -314,7 +354,12 @@ fn num(s: &str) -> Option<u32> {
     s.parse().ok()
 }
 
-fn first_date(line: &str) -> Option<NaiveDate> {
+/// Every date form on the line; `slash` decides a `a/b/y` form, given the
+/// two numbers and the year.
+fn first_date_with(
+    line: &str,
+    slash: impl Fn(u32, u32, i32) -> Option<NaiveDate>,
+) -> Option<NaiveDate> {
     let mut found: Vec<(usize, NaiveDate)> = Vec::new();
     for c in DATE_ISO.captures_iter(line) {
         if let Some(d) = NaiveDate::from_ymd_opt(c[1].parse().ok()?, num(&c[2])?, num(&c[3])?) {
@@ -327,11 +372,11 @@ fn first_date(line: &str) -> Option<NaiveDate> {
         }
     }
     for c in DATE_US.captures_iter(line) {
-        // Month first: the slash form arrives from US billers (Medium,
-        // Stripe's "Paid on 6/10/26").
+        // The slash form is written both ways: "06/10/26" by an American
+        // biller, "11/08/2026" by a German one. The caller decides.
         let year: i32 = c[3].parse().ok()?;
         let year = if c[3].len() == 2 { 2000 + year } else { year };
-        if let Some(d) = NaiveDate::from_ymd_opt(year, num(&c[1])?, num(&c[2])?) {
+        if let Some(d) = slash(num(&c[1])?, num(&c[2])?, year) {
             found.push((c.get(0)?.start(), d));
         }
     }
@@ -599,6 +644,7 @@ mod tests {
             text,
             "Anthropic <invoice+statements@mail.anthropic.com>",
             None,
+            "",
         );
         assert_eq!(f.vendor, Some(("Anthropic".into(), By::Sender)));
         assert_eq!(f.date, Some((d(2026, 6, 25), By::Label)));
@@ -611,7 +657,7 @@ mod tests {
         let text = "Invoice\nInvoice number B3A33354-0023\nDate of issue June 29, 2026\nDate due June 29, 2026\n\
                     OpenAI OpCo, LLC\n$50.00 USD due June 29, 2026\nChatGPT Business Subscription (per seat) 2 $25.00 0% $50.00\n\
                     Subtotal $50.00\nTotal $50.00\nAmount due $50.00 USD";
-        let f = read(text, "receipts+acct_1@stripe.com", None);
+        let f = read(text, "receipts+acct_1@stripe.com", None, "");
         assert_eq!(
             f.vendor,
             Some(("OpenAI".into(), By::First)),
@@ -627,7 +673,7 @@ mod tests {
                     Invoice number: 5611703644\nVAT number: IE3668997OH\nBill to\nExample\nDetails Google Workspace\n\
                     Invoice number\n5611703644\nInvoice date\nJun 30, 2026 Total in EUR €32.40\nBilling ID\n\
                     Summary for Jun 1, 2026 - Jun 30, 2026\nSubtotal in EUR €32.40\nVAT (0%) €0.00\nTotal in EUR €32.40";
-        let f = read(text, "payments-noreply@google.com", None);
+        let f = read(text, "payments-noreply@google.com", None, "");
         assert_eq!(f.vendor.unwrap(), ("Google Cloud".into(), By::First));
         assert_eq!(f.date, Some((d(2026, 6, 30), By::Label)));
         assert_eq!(f.amount, Some((3_240, "EUR".into(), By::Label)));
@@ -641,7 +687,7 @@ mod tests {
                     Project \"Ameba\" 05/2026 € 62.99 € 62.99\nStorage 05/2026 € 6.49 € 6.49\nTotal € 69.48 € 69.48\n\
                     Tax code Tax rate Total (excl. VAT) Tax\nA7 0% € 69.48 € 0.00\nTotal € 69.48 € 0.00\n\
                     Invoice date: 11.06.2026\nDue upon receipt.";
-        let f = read(text, "Hetzner Online GmbH <billing@hetzner.com>", None);
+        let f = read(text, "Hetzner Online GmbH <billing@hetzner.com>", None, "");
         assert_eq!(f.vendor, Some(("Hetzner".into(), By::Sender)));
         assert_eq!(f.amount, Some((6_948, "EUR".into(), By::Label)));
         assert_eq!(f.date, Some((d(2026, 6, 11), By::Label)));
@@ -653,7 +699,7 @@ mod tests {
         let text = "7/30/26, 11:02 AM Medium\nInvoice 930d0222020d\nPayment date: 06/10/26 · Status: Paid in full\n\
                     From To\nA Medium Corporation Example d.o.o.\nDescription Price\n\
                     Medium Monthly Membership (06/10/26 - 07/10/26) $5.00\nTotal $5.00 USD\nTotal paid $5.00 USD";
-        let f = read(text, "Medium <noreply@medium.com>", None);
+        let f = read(text, "Medium <noreply@medium.com>", None, "");
         assert_eq!(f.vendor, Some(("Medium".into(), By::Sender)));
         assert_eq!(
             f.date,
@@ -669,7 +715,7 @@ mod tests {
         let text = "Invoice Number / Broj računa 9-1-1-2026\nDate and time / Datum i vrijeme: 31.08.2026. 13:55\n\
                     Due date / Rok dospijeća: 15.09.2026\nExample d.o.o.\n\
                     Sub Total / Ukupno 14,500.82\nVAT (PDV) 0,00\nTotal Due (€) / 14,500.82\nUkupno za platiti (€)";
-        let f = read(text, "", Some(d(2026, 9, 1)));
+        let f = read(text, "", Some(d(2026, 9, 1)), "");
         assert_eq!(f.invoice_no.unwrap().0, "9-1-1-2026");
         assert_eq!(f.date, Some((d(2026, 8, 31), By::Label)));
         // "Total Due (€) / 14,500.82": the mark comes before the figure.
@@ -682,6 +728,7 @@ mod tests {
             "Račun / Invoice 9-1-1-2026\nTotal due / Za platiti 14,500.82 EUR",
             "",
             None,
+            "",
         );
         assert_eq!(f.invoice_no.unwrap().0, "9-1-1-2026");
         assert_eq!(f.amount, Some((1_450_082, "EUR".into(), By::Label)));
@@ -693,12 +740,48 @@ mod tests {
             "Thanks for your order\nPaid €12.50 by card",
             "shop@example.hr",
             Some(d(2026, 1, 2)),
+            "",
         );
         assert_eq!(f.amount, Some((1_250, "EUR".into(), By::First)));
         assert_eq!(f.date, Some((d(2026, 1, 2), By::Received)));
         assert_eq!(f.vendor, Some(("Example".into(), By::Sender)));
         assert_eq!(f.invoice_no, None);
-        assert_eq!(read("", "", None), Fields::default());
+        assert_eq!(read("", "", None, ""), Fields::default());
+    }
+
+    #[test]
+    fn a_slash_date_is_read_the_way_the_file_or_the_mail_says() {
+        // Hetzner writes day/month; the file name carries the ISO date.
+        let text =
+            "Hetzner Online GmbH\nInvoice 086001061910\nInvoice date: 11/08/2026\nTotal € 69.48";
+        let f = read(
+            text,
+            "billing@hetzner.com",
+            None,
+            "Hetzner_2026-08-11_086001061910.pdf",
+        );
+        assert_eq!(f.date, Some((d(2026, 8, 11), By::Label)));
+        // Without a file date, the mail's receipt time decides.
+        let f = read(
+            text,
+            "billing@hetzner.com",
+            Some(d(2026, 8, 12)),
+            "invoice.pdf",
+        );
+        assert_eq!(f.date, Some((d(2026, 8, 11), By::Label)));
+        // Without either: a four-digit year reads day/month, a two-digit one month/day.
+        assert_eq!(
+            read(text, "", None, "").date,
+            Some((d(2026, 8, 11), By::Label))
+        );
+        let us = "Payment date: 06/10/26 · Status: Paid";
+        assert_eq!(
+            read(us, "", None, "").date,
+            Some((d(2026, 6, 10), By::Label))
+        );
+        // An unambiguous one is itself whatever the anchor says.
+        let f = read("Invoice date: 25/08/2026", "", Some(d(2026, 1, 1)), "");
+        assert_eq!(f.date, Some((d(2026, 8, 25), By::Label)));
     }
 
     #[test]

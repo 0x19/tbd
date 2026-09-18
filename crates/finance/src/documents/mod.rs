@@ -32,11 +32,11 @@ pub async fn read(pool: &PgPool, id: Uuid) -> Result<(), StoreError> {
     };
     let found = text
         .as_deref()
-        .map(|t| fields::read(t, &to_read.sender, to_read.received))
+        .map(|t| fields::read(t, &to_read.sender, to_read.received, &to_read.filename))
         .unwrap_or_default();
     // With no text there is still the mail: who sent it, and when.
     let found = if text.is_none() {
-        fields::read("", &to_read.sender, to_read.received)
+        fields::read("", &to_read.sender, to_read.received, &to_read.filename)
     } else {
         found
     };
