@@ -19,7 +19,12 @@ same conventions; read `ui/chaos/CLAUDE.md` for what is the kit's and what is ou
 - **The scope is the grant.** `Providers` fetches `ListParties`; the personal/business/
   combined toggle (`scope-toggle.tsx`, the sidebar footer, ⌘K) chooses among _those_.
   No page ever holds a party id the server did not list.
-- Pages: `/` (overview: in vs spent by month, a month's categories), `/transactions/`
+- Pages: `/` (overview: one period -- month, quarter or year, `PeriodControl` -- and every
+  widget in `src/components/dashboard/` follows it: stats with the previous period, money
+  in vs spent with the period lit and a year-over-year tab, a category donut, per-month
+  minis, accounts with sync health, invoices, receipts, recent rows, and a year table.
+  All of it is client-side slices of one 24-month `MonthlySummary` plus the list calls;
+  the period maths are pure functions in `src/lib/summary.ts`), `/transactions/`
   (filters in the URL, inline recategorise = `DeclareCategory`; a row opens
   `transaction-sheet.tsx`, which fetches `GetTransaction` for the bank's record and the
   rule that claimed it, and "Make a rule from this" prefills `rule-dialog.tsx`; the
