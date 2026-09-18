@@ -197,26 +197,44 @@ pub async fn serve_with(
         // call, and saying so once at start beats a worker that wakes every
         // fifteen minutes to fail.
         if config.provider.configured() {
-            let provider = banking::from_config(&config.provider)
-                .map_err(|e| ServeError::Provider(e.to_string()))?;
-            let syncer = sync::Syncer::new(
-                pool.clone(),
-                std::sync::Arc::new(provider),
-                config.sync.clone(),
+            let provider: std::sync::Arc<dyn banking::Provider> = std::sync::Arc::new(
+                banking::from_config(&config.provider)
+                    .map_err(|e| ServeError::Provider(e.to_string()))?,
             );
+            let syncer = sync::Syncer::new(pool.clone(), provider.clone(), config.sync.clone());
             let cancel = tokio_util::sync::CancellationToken::new();
             let worker = tokio::spawn(syncer.run(cancel.clone()));
             tracing::info!(
                 interval_secs = config.sync.interval_secs,
                 "sync worker started"
             );
-            let service = Finance::with_pool(config.ping.clone(), runtime, pool);
+            // The same provider the worker uses, attached to the service so
+            // RefreshAccount and the connect RPCs have a bank to talk to.
+            let service = Finance::with_pool(config.ping.clone(), runtime, pool)
+                .with_bank(
+                    provider,
+                    config.sync.clone(),
+                    config.provider.redirect_url.clone(),
+                )
+                .with_connectors(config.connectors.clone())
+                .map_err(|e| ServeError::Provider(e.to_string()))?;
+            tracing::info!(
+                bank = true,
+                connectors = config.connectors.configured(),
+                gmail = !config.connectors.google_client_id.is_empty(),
+                "service attachments"
+            );
             let result = serve_built(listener, &config, service, shutdown).await;
             cancel.cancel();
             let _ = worker.await;
             return result;
         }
-        tracing::info!("no provider configured; sync worker not started");
+        tracing::info!(
+            bank = false,
+            connectors = config.connectors.configured(),
+            gmail = !config.connectors.google_client_id.is_empty(),
+            "no provider configured; sync worker not started"
+        );
         Finance::with_pool(config.ping.clone(), runtime, pool)
             .with_connectors(config.connectors.clone())
             .map_err(|e| ServeError::Provider(e.to_string()))?
