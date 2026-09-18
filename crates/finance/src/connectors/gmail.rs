@@ -83,13 +83,55 @@ impl Gmail {
             .ok_or_else(|| ConnectorError::Provider(format!("token endpoint answered {status}")))
     }
 
+    /// Every message id the query matches, newest first, across all of
+    /// Gmail's pages.
+    async fn list_ids(
+        &self,
+        token: &str,
+        q: &str,
+        throttle: &Pace,
+    ) -> Result<Vec<String>, ConnectorError> {
+        let mut ids = Vec::new();
+        let mut page: Option<String> = None;
+        loop {
+            let mut url = reqwest::Url::parse(&format!("{API}/messages"))
+                .map_err(|e| ConnectorError::Provider(e.to_string()))?;
+            url.query_pairs_mut()
+                .append_pair("q", q)
+                .append_pair("maxResults", "100");
+            if let Some(p) = &page {
+                url.query_pairs_mut().append_pair("pageToken", p);
+            }
+            let list = self.get(token, url.as_str(), throttle).await?;
+            for m in list
+                .get("messages")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+            {
+                if let Some(id) = m.get("id").and_then(Value::as_str) {
+                    ids.push(id.to_owned());
+                }
+            }
+            page = list
+                .get("nextPageToken")
+                .and_then(Value::as_str)
+                .map(str::to_owned);
+            if page.is_none() {
+                break;
+            }
+        }
+        Ok(ids)
+    }
+
     /// One authenticated GET, with Google's transient refusals retried.
     /// Gmail says "slow down" as a 403 with a reason, not a 429, so the
     /// reason decides; a 403 for a missing scope is a link problem instead,
-    /// and is not retried.
-    async fn get(&self, token: &str, url: &str) -> Result<Value, ConnectorError> {
-        let mut wait = std::time::Duration::from_secs(1);
-        for attempt in 0..RETRIES {
+    /// and is not retried. `pace` is the gap kept before each request; a
+    /// quota refusal widens it for the rest of the pull.
+    async fn get(&self, token: &str, url: &str, pace: &Pace) -> Result<Value, ConnectorError> {
+        for (attempt, wait) in RETRY_WAITS.iter().enumerate() {
+            pace.hold().await;
             let resp = self
                 .http
                 .get(url)
@@ -106,14 +148,20 @@ impl Gmail {
             }
             let body = resp.text().await.unwrap_or_default();
             match classify(status, &body) {
-                Refusal::Transient(why) if attempt + 1 < RETRIES => {
-                    tracing::debug!(%status, why, ?wait, "gmail: transient, retrying");
-                    tokio::time::sleep(wait).await;
-                    wait *= 2;
+                Refusal::Transient(why) if attempt + 1 < RETRY_WAITS.len() => {
+                    // A per-minute quota clears when the minute does; the
+                    // later waits are a full one. And the pull slows down,
+                    // so the next minute is not spent the same way.
+                    if why.contains("ateLimitExceeded") {
+                        pace.slower();
+                    }
+                    tracing::info!(%status, why, wait_secs = wait, gap_ms = pace.gap_ms(), "gmail: transient, retrying");
+                    tokio::time::sleep(std::time::Duration::from_secs(*wait)).await;
                 }
                 Refusal::Transient(why) => {
                     return Err(ConnectorError::Provider(format!(
-                        "gmail {status} after {RETRIES} attempts: {why}"
+                        "gmail {status} after {} attempts: {why}",
+                        RETRY_WAITS.len()
                     )));
                 }
                 Refusal::Unlinked(why) => return Err(ConnectorError::Unlinked(why)),
@@ -124,8 +172,41 @@ impl Gmail {
     }
 }
 
-/// Attempts at one request before its refusal stands.
-const RETRIES: u32 = 5;
+/// Seconds waited before each retry. Three minutes and change in all, which
+/// spans two rollovers of Google's per-minute quota.
+const RETRY_WAITS: [u64; 7] = [0, 2, 5, 15, 30, 60, 60];
+
+/// The gap kept before each request of one pull. Starts at none, since the
+/// quota is unknown and most mailboxes never hit it; doubles on every quota
+/// refusal, from one second, up to fifteen. Never narrows within a pull: a
+/// project whose quota was hit once will be hit again at the old rate.
+#[derive(Debug, Default)]
+struct Pace {
+    gap_ms: std::sync::atomic::AtomicU64,
+}
+
+impl Pace {
+    const FIRST_MS: u64 = 1000;
+    const MAX_MS: u64 = 15_000;
+
+    fn gap_ms(&self) -> u64 {
+        self.gap_ms.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    async fn hold(&self) {
+        let gap = self.gap_ms();
+        if gap > 0 {
+            tokio::time::sleep(std::time::Duration::from_millis(gap)).await;
+        }
+    }
+
+    fn slower(&self) {
+        let gap = self.gap_ms();
+        let next = (gap * 2).clamp(Self::FIRST_MS, Self::MAX_MS);
+        self.gap_ms
+            .store(next, std::sync::atomic::Ordering::Relaxed);
+    }
+}
 
 /// What a non-2xx answer from Google means for us.
 #[derive(Debug, PartialEq, Eq)]
@@ -300,7 +381,7 @@ impl Connector for Gmail {
             .get("access_token")
             .and_then(Value::as_str)
             .unwrap_or_default();
-        let who = self.get(access, USERINFO_URL).await?;
+        let who = self.get(access, USERINFO_URL, &Pace::default()).await?;
         let email = who
             .get("email")
             .and_then(Value::as_str)
@@ -320,7 +401,9 @@ impl Connector for Gmail {
 
     async fn test(&self, credentials: &Value) -> Result<String, ConnectorError> {
         let token = self.access_token(credentials).await?;
-        let profile = self.get(&token, &format!("{API}/profile")).await?;
+        let profile = self
+            .get(&token, &format!("{API}/profile"), &Pace::default())
+            .await?;
         Ok(format!(
             "{} · {} messages",
             profile
@@ -343,6 +426,7 @@ impl Connector for Gmail {
         sink: tokio::sync::mpsc::Sender<Found>,
     ) -> Result<Reach, ConnectorError> {
         let token = self.access_token(credentials).await?;
+        let throttle = Pace::default();
         let query = config
             .get("query")
             .and_then(Value::as_str)
@@ -350,36 +434,7 @@ impl Connector for Gmail {
             .map_or_else(|| "has:attachment filename:pdf".to_owned(), str::to_owned);
         let q = format!("{query} after:{}", since.format("%Y/%m/%d"));
 
-        let mut ids = Vec::new();
-        let mut page: Option<String> = None;
-        loop {
-            let mut url = reqwest::Url::parse(&format!("{API}/messages"))
-                .map_err(|e| ConnectorError::Provider(e.to_string()))?;
-            url.query_pairs_mut()
-                .append_pair("q", &q)
-                .append_pair("maxResults", "100");
-            if let Some(p) = &page {
-                url.query_pairs_mut().append_pair("pageToken", p);
-            }
-            let list = self.get(&token, url.as_str()).await?;
-            for m in list
-                .get("messages")
-                .and_then(Value::as_array)
-                .into_iter()
-                .flatten()
-            {
-                if let Some(id) = m.get("id").and_then(Value::as_str) {
-                    ids.push(id.to_owned());
-                }
-            }
-            page = list
-                .get("nextPageToken")
-                .and_then(Value::as_str)
-                .map(str::to_owned);
-            if page.is_none() {
-                break;
-            }
-        }
+        let ids = self.list_ids(&token, &q, &throttle).await?;
 
         // Listing is cheap and complete; fetching is what is capped. Only
         // messages never pulled count against the cap, so a mailbox drains
@@ -392,7 +447,11 @@ impl Connector for Gmail {
         };
         for id in unseen.into_iter().take(MAX_MESSAGES) {
             let message = self
-                .get(&token, &format!("{API}/messages/{id}?format=full"))
+                .get(
+                    &token,
+                    &format!("{API}/messages/{id}?format=full"),
+                    &throttle,
+                )
                 .await?;
             let subject = header(&message, "Subject").to_owned();
             let sender = header(&message, "From").to_owned();
@@ -416,7 +475,11 @@ impl Connector for Gmail {
                     continue;
                 };
                 let blob = self
-                    .get(&token, &format!("{API}/messages/{id}/attachments/{att}"))
+                    .get(
+                        &token,
+                        &format!("{API}/messages/{id}/attachments/{att}"),
+                        &throttle,
+                    )
                     .await?;
                 let Some(data) = blob.get("data").and_then(Value::as_str) else {
                     continue;
@@ -497,6 +560,24 @@ mod tests {
             classify(reqwest::StatusCode::FORBIDDEN, &newer),
             Refusal::Unlinked(_)
         ));
+    }
+
+    #[test]
+    fn a_pace_only_widens_and_stays_bounded() {
+        let throttle = Pace::default();
+        assert_eq!(throttle.gap_ms(), 0, "nothing until Google complains");
+        throttle.slower();
+        assert_eq!(throttle.gap_ms(), 1000);
+        throttle.slower();
+        assert_eq!(throttle.gap_ms(), 2000);
+        for _ in 0..10 {
+            throttle.slower();
+        }
+        assert_eq!(throttle.gap_ms(), 15_000);
+        assert!(
+            RETRY_WAITS.iter().sum::<u64>() > 120,
+            "the waits span two quota minutes"
+        );
     }
 
     #[test]
