@@ -11,6 +11,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import { api } from "@/lib/api/client";
 import { describe, useFetch } from "@/lib/api/hooks";
 import type { Account } from "@/lib/api/schema";
@@ -49,6 +50,23 @@ export default function AccountsPage() {
 
 function AccountCard({ a, onChanged }: { a: Account; onChanged: () => void }) {
   const [busy, setBusy] = useState(false);
+  const [toggling, setToggling] = useState(false);
+  const setSync = async (enabled: boolean) => {
+    setToggling(true);
+    try {
+      await api.setAccountSync(a.id, enabled);
+      toast.success(
+        enabled
+          ? "Scheduled fetches on: three a day, eight hours apart."
+          : "Scheduled fetches off; Fetch now still works.",
+      );
+      onChanged();
+    } catch (e) {
+      toast.error(describe(e));
+    } finally {
+      setToggling(false);
+    }
+  };
   const closing = a.balances.find((b) => b.balance_type === "CLBD") ?? a.balances[0];
   const stale = a.last_synced_at ? Date.now() - new Date(a.last_synced_at).getTime() > 9 * 3600_000 : true;
   const backoffUntil = a.sync_backoff_until ? new Date(a.sync_backoff_until) : null;
@@ -59,7 +77,9 @@ function AccountCard({ a, onChanged }: { a: Account; onChanged: () => void }) {
     try {
       const r = await api.refresh(a.id);
       if (r.outcome === "ok")
-        toast.success(`Fetched: ${r.inserted} new, ${r.booked} booked, ${r.duplicates} already known.`);
+        toast.success(
+          `Fetched${r.attended ? " as you, not counted by the bank" : ""}: ${r.inserted} new, ${r.booked} booked, ${r.duplicates} already known.`,
+        );
       else if (r.outcome === "skipped" && r.skipped === "backing_off" && backoffUntil)
         toast.warning(`The bank asked us to wait: next fetch possible at ${hhmm(backoffUntil)}.`);
       else if (r.outcome === "skipped" && r.skipped === "budget_spent")
@@ -119,24 +139,20 @@ function AccountCard({ a, onChanged }: { a: Account; onChanged: () => void }) {
           size="sm"
           variant="outline"
           onClick={() => void refresh()}
-          disabled={busy || !a.connection_id || backingOff || a.sync_budget_used >= 4}
-          title={
-            backingOff && backoffUntil
-              ? `The bank asked us to wait until ${hhmm(backoffUntil)}`
-              : a.sync_budget_used >= 4
-                ? "Today's four fetches are spent"
-                : undefined
-          }
+          disabled={busy || !a.connection_id}
+          title="Fetched as you: the bank does not count a fetch you ask for against the daily four"
         >
-          <RefreshCw className={busy ? "animate-spin" : undefined} />{" "}
-          {busy
-            ? "Fetching…"
-            : backingOff && backoffUntil
-              ? `Wait until ${hhmm(backoffUntil)}`
-              : a.sync_budget_used >= 4
-                ? "Spent for today"
-                : "Fetch now"}
+          <RefreshCw className={busy ? "animate-spin" : undefined} /> {busy ? "Fetching…" : "Fetch now"}
         </Button>
+        <label className="text-muted-foreground flex items-center gap-2 text-xs">
+          <Switch
+            checked={a.sync_enabled}
+            disabled={toggling}
+            onCheckedChange={(v) => void setSync(v)}
+            aria-label="Fetch on the schedule"
+          />
+          Scheduled fetches {a.sync_enabled ? "on" : "off"}
+        </label>
       </CardContent>
     </Card>
   );

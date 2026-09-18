@@ -93,7 +93,10 @@ export const RefreshAccountResponse = z.object({
   inserted: z.number(),
   booked: z.number(),
   duplicates: z.number(),
+  // The call carried your address, so the bank did not count it.
+  attended: z.boolean(),
 });
+export const SetAccountSyncResponse = z.object({ account: Account.nullable().optional() });
 export type RefreshAccountResponse = z.infer<typeof RefreshAccountResponse>;
 
 export const Category = z.object({

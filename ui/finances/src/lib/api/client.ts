@@ -163,6 +163,11 @@ export const api = {
     call(ListAccountsResponse, `/v1/finance/accounts${query({ party_ids })}`),
   refresh: (account_id: string) =>
     call(RefreshAccountResponse, "/v1/finance/accounts/refresh", { method: "POST", json: { account_id } }),
+  setAccountSync: (account_id: string, enabled: boolean) =>
+    call(SetAccountSyncResponse, "/v1/finance/accounts/sync", {
+      method: "POST",
+      json: { account_id, enabled },
+    }),
   categories: (party_ids: string[]) =>
     call(ListCategoriesResponse, `/v1/finance/categories${query({ party_ids })}`),
   declare: (transaction_id: string, category_id: string) =>
