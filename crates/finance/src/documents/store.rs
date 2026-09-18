@@ -295,12 +295,28 @@ pub async fn to_read(pool: &PgPool, id: Uuid) -> Result<Option<ToRead>, StoreErr
         return Ok(None);
     };
     let source = sources_of(pool, &[id]).await?.into_iter().next();
+    // A receipt forwarded from the mailbox's own address names no supplier:
+    // the sender is dropped, and the text or the domain decides.
+    let own: Option<(Option<String>,)> = match source.as_ref().and_then(|s| s.connector_id) {
+        Some(c) => sqlx::query_as("select external_id from finance.connectors where id = $1")
+            .bind(c)
+            .fetch_optional(pool)
+            .await
+            .map_err(map_err)?,
+        None => None,
+    };
+    let own = own
+        .and_then(|(e,)| e)
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let sender = source
+        .as_ref()
+        .map(|s| s.sender.clone())
+        .filter(|s| own.is_empty() || !s.to_ascii_lowercase().contains(&own))
+        .unwrap_or_default();
     Ok(Some(ToRead {
         id,
-        sender: source
-            .as_ref()
-            .map(|s| s.sender.clone())
-            .unwrap_or_default(),
+        sender,
         received: source.and_then(|s| s.received_at).map(|t| t.date_naive()),
         declared: declared_at.is_some(),
     }))
