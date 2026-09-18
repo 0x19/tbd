@@ -108,6 +108,9 @@ services:
       FINANCE_DATABASE_URL: "postgres://ledger:{{ vault_ledger_postgres_password }}@ledger-postgres:5432/tbd?sslmode=disable"
       FINANCE_EB_APPLICATION_ID: "{{ vault_finance_eb_application_id | default('') }}"
       FINANCE_EB_PRIVATE_KEY: "{{ vault_finance_eb_private_key | default('') }}"
+      FINANCE_CONNECTOR_KEY: "{{ vault_finance_connector_key | default('') }}"
+      FINANCE_GOOGLE_CLIENT_ID: "{{ vault_finance_google_client_id | default('') }}"
+      FINANCE_GOOGLE_CLIENT_SECRET: "{{ vault_finance_google_client_secret | default('') }}"
       OTEL_EXPORTER_OTLP_ENDPOINT: "{{ otlp_endpoint | default('') }}"
       PYROSCOPE_SERVER_ADDRESS: "{{ pyroscope_server | default('') }}"
     restart: unless-stopped

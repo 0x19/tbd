@@ -34,6 +34,37 @@ pub struct Config {
     /// `[sync]`
     #[serde(default)]
     pub sync: Sync,
+    /// `[connectors]`
+    #[serde(default)]
+    pub connectors: Connectors,
+}
+
+/// `[connectors]`: linked external accounts (mailboxes, vendor portals).
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Connectors {
+    /// Base64 of 32 bytes; seals every stored credential. Environment only
+    /// (`FINANCE_CONNECTOR_KEY`). Empty means connectors cannot be linked.
+    #[serde(skip_serializing, default)]
+    pub key: String,
+    /// Google OAuth client for the Gmail kind. Environment only.
+    #[serde(skip_serializing, default)]
+    pub google_client_id: String,
+    /// Its secret. Environment only.
+    #[serde(skip_serializing, default)]
+    pub google_client_secret: String,
+    /// Where a provider sends the browser back: the finance UI host's
+    /// `/connectors/callback/`, registered with each provider.
+    #[serde(default)]
+    pub redirect_url: String,
+}
+
+impl Connectors {
+    /// Whether credentials can be sealed at all.
+    #[must_use]
+    pub fn configured(&self) -> bool {
+        !self.key.is_empty()
+    }
 }
 
 /// `[provider]`: the open-banking API.
@@ -286,6 +317,15 @@ pub struct Overrides {
     /// Provider base URL. Default: `[provider] base_url`.
     #[arg(long, env = "FINANCE_EB_BASE_URL")]
     pub eb_base_url: Option<String>,
+    /// Key sealing stored connector credentials, base64 of 32 bytes. Never echoed.
+    #[arg(long, env = "FINANCE_CONNECTOR_KEY", hide_env_values = true)]
+    pub connector_key: Option<String>,
+    /// Google OAuth client id for the Gmail connector.
+    #[arg(long, env = "FINANCE_GOOGLE_CLIENT_ID")]
+    pub google_client_id: Option<String>,
+    /// Google OAuth client secret. Never echoed.
+    #[arg(long, env = "FINANCE_GOOGLE_CLIENT_SECRET", hide_env_values = true)]
+    pub google_client_secret: Option<String>,
 }
 
 impl Overrides {
@@ -311,6 +351,15 @@ impl Overrides {
         }
         if let Some(v) = &self.eb_base_url {
             config.provider.base_url.clone_from(v);
+        }
+        if let Some(v) = &self.connector_key {
+            config.connectors.key.clone_from(v);
+        }
+        if let Some(v) = &self.google_client_id {
+            config.connectors.google_client_id.clone_from(v);
+        }
+        if let Some(v) = &self.google_client_secret {
+            config.connectors.google_client_secret.clone_from(v);
         }
     }
 }

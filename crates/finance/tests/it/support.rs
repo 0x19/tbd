@@ -112,6 +112,63 @@ pub async fn start_with_store() -> (Server, PgPool) {
     )
 }
 
+/// Like `start_with_store`, with a sealing key and the given connector kinds.
+pub async fn start_with_kinds(kinds: tbd_finance::connectors::KindsFactory) -> (Server, PgPool) {
+    let (admin_url, container) = admin_url().await;
+    let admin = PgPool::connect(&admin_url).await.unwrap();
+    let database = format!("finance_test_{}", uuid::Uuid::now_v7().simple());
+    sqlx::query(sqlx::AssertSqlSafe(format!("create database {database}")))
+        .execute(&admin)
+        .await
+        .unwrap();
+    drop(admin);
+
+    // The service takes a URL from config, not a pool, so the database name
+    // goes into the URL rather than into PgConnectOptions.
+    let url = {
+        let mut u = url::Url::parse(&admin_url).unwrap();
+        u.set_path(&database);
+        u.to_string()
+    };
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(8)
+        .connect(&url)
+        .await
+        .unwrap();
+    tbd_db::migrate(&pool).await.unwrap();
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../configs/finance");
+    let (mut config, _) = Config::load(&dir, "local").unwrap();
+    config.server.listen = addr;
+    config.metrics.listen = None;
+    config.store.url = url;
+    config.connectors.key =
+        base64::Engine::encode(&base64::engine::general_purpose::STANDARD, [9u8; 32]);
+    config.connectors.redirect_url = "https://finance.test/connectors/callback".into();
+    let runtime = Runtime::default();
+    let rt = runtime.clone();
+    let (stop, stopped) = oneshot::channel();
+    tokio::spawn(async move {
+        tbd_finance::serve_with_kinds(listener, config, rt, kinds, async {
+            let _ = stopped.await;
+        })
+        .await
+        .unwrap();
+    });
+
+    (
+        Server {
+            addr,
+            runtime,
+            _stop: stop,
+            _container: container,
+        },
+        pool,
+    )
+}
+
 /// Like `start_with_store`, with a bank attached (the `Mock`, in tests) so the
 /// connection and refresh RPCs can be driven end to end.
 pub async fn start_with_bank(

@@ -615,6 +615,26 @@ else
 fi
 """
 
+[tasks."finance:connector-secrets"]
+description = "Create the finance-connectors Secret in tbd: a fresh sealing key for stored connector credentials, and the Google OAuth client for Gmail when given. Delete the Secret to rotate."
+usage = '''
+arg "[google_client_id]" help="Google OAuth client id (Web application), redirect https://finance.<domain>/connectors/callback"
+arg "[google_client_secret]" help="its secret"
+'''
+run = """
+kubectl apply -f devops/k8s/base/namespace.yaml >/dev/null
+if kubectl -n tbd get secret finance-connectors >/dev/null 2>&1; then
+  echo "finance-connectors exists; leaving it (delete it to rotate -- every linked connector then has to be linked again)"
+  exit 0
+fi
+key=$(openssl rand -base64 32)
+kubectl -n tbd create secret generic finance-connectors \
+  --from-literal=key="$key" \
+  --from-literal=google-client-id="${usage_google_client_id:-}" \
+  --from-literal=google-client-secret="${usage_google_client_secret:-}"
+echo "finance-connectors created"
+"""
+
 [tasks."ledger:deploy"]
 description = "Apply the ledger's databases (Postgres + pgvector, ClickHouse) to the tbd namespace and wait for them"
 depends = ["ledger:secrets"]

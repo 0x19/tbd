@@ -656,6 +656,530 @@
         }
       }
     },
+    "/v1/finance/connectors": {
+      "get": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/ListConnectors",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/ListConnectors` on the `finance` backend.",
+        "operationId": "FinanceService.ListConnectors",
+        "parameters": [
+          {
+            "name": "party_ids",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "explode": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.ListConnectorsResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.ListConnectorsResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/StartConnector",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/StartConnector` on the `finance` backend.",
+        "operationId": "FinanceService.StartConnector",
+        "requestBody": {
+          "description": "`tbd.finance.v1.StartConnectorRequest`; path variables override their fields",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/tbd.finance.v1.StartConnectorRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.StartConnectorResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.StartConnectorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/finance/connectors/complete": {
+      "post": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/CompleteConnector",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/CompleteConnector` on the `finance` backend.",
+        "operationId": "FinanceService.CompleteConnector",
+        "requestBody": {
+          "description": "`tbd.finance.v1.CompleteConnectorRequest`; path variables override their fields",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/tbd.finance.v1.CompleteConnectorRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.CompleteConnectorResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.CompleteConnectorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/finance/connectors/kinds": {
+      "get": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/ListConnectorKinds",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/ListConnectorKinds` on the `finance` backend.",
+        "operationId": "FinanceService.ListConnectorKinds",
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.ListConnectorKindsResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.ListConnectorKindsResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/finance/connectors/{id}/configure": {
+      "post": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/ConfigureConnector",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/ConfigureConnector` on the `finance` backend.",
+        "operationId": "FinanceService.ConfigureConnector",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "`tbd.finance.v1.ConfigureConnectorRequest`; path variables override their fields",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/tbd.finance.v1.ConfigureConnectorRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.ConfigureConnectorResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.ConfigureConnectorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/finance/connectors/{id}/delete": {
+      "post": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/DeleteConnector",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/DeleteConnector` on the `finance` backend.",
+        "operationId": "FinanceService.DeleteConnector",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "`tbd.finance.v1.DeleteConnectorRequest`; path variables override their fields",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/tbd.finance.v1.DeleteConnectorRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.DeleteConnectorResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.DeleteConnectorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/finance/connectors/{id}/runs": {
+      "get": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/ListConnectorRuns",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/ListConnectorRuns` on the `finance` backend.",
+        "operationId": "FinanceService.ListConnectorRuns",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.ListConnectorRunsResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.ListConnectorRunsResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/finance/connectors/{id}/sync": {
+      "post": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/SyncConnector",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/SyncConnector` on the `finance` backend.",
+        "operationId": "FinanceService.SyncConnector",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "`tbd.finance.v1.SyncConnectorRequest`; path variables override their fields",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/tbd.finance.v1.SyncConnectorRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.SyncConnectorResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.SyncConnectorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/finance/connectors/{id}/test": {
+      "post": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/TestConnector",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/TestConnector` on the `finance` backend.",
+        "operationId": "FinanceService.TestConnector",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "`tbd.finance.v1.TestConnectorRequest`; path variables override their fields",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/tbd.finance.v1.TestConnectorRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.TestConnectorResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.TestConnectorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/finance/documents": {
+      "get": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/ListDocuments",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/ListDocuments` on the `finance` backend.",
+        "operationId": "FinanceService.ListDocuments",
+        "parameters": [
+          {
+            "name": "party_ids",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "explode": true
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.ListDocumentsResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.ListDocumentsResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/finance/documents/{id}": {
+      "get": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/GetDocument",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/GetDocument` on the `finance` backend.",
+        "operationId": "FinanceService.GetDocument",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.GetDocumentResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.GetDocumentResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/finance/invoices": {
       "get": {
         "tags": [
@@ -2827,6 +3351,48 @@
           }
         }
       },
+      "tbd.finance.v1.CompleteConnectorRequest": {
+        "type": "object",
+        "description": "`tbd.finance.v1.CompleteConnectorRequest`",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.finance.v1.CompleteConnectorResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.CompleteConnectorResponse`",
+        "properties": {
+          "connector": {
+            "$ref": "#/components/schemas/tbd.finance.v1.Connector"
+          }
+        }
+      },
+      "tbd.finance.v1.ConfigureConnectorRequest": {
+        "type": "object",
+        "description": "`tbd.finance.v1.ConfigureConnectorRequest`",
+        "properties": {
+          "config": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.finance.v1.ConfigureConnectorResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.ConfigureConnectorResponse`",
+        "properties": {
+          "connector": {
+            "$ref": "#/components/schemas/tbd.finance.v1.Connector"
+          }
+        }
+      },
       "tbd.finance.v1.Connection": {
         "type": "object",
         "description": "`tbd.finance.v1.Connection`",
@@ -2857,6 +3423,111 @@
             "type": "string"
           },
           "valid_until": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.finance.v1.Connector": {
+        "type": "object",
+        "description": "`tbd.finance.v1.Connector`",
+        "properties": {
+          "config": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "external_id": {
+            "type": "string"
+          },
+          "failure": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "last_sync_at": {
+            "type": "string"
+          },
+          "last_sync_error": {
+            "type": "string"
+          },
+          "last_sync_status": {
+            "type": "string"
+          },
+          "linked_at": {
+            "type": "string"
+          },
+          "party_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.finance.v1.ConnectorKind": {
+        "type": "object",
+        "description": "`tbd.finance.v1.ConnectorKind`",
+        "properties": {
+          "auth": {
+            "type": "string"
+          },
+          "configured": {
+            "type": "boolean"
+          },
+          "consent_note": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.finance.v1.ConnectorRun": {
+        "type": "object",
+        "description": "`tbd.finance.v1.ConnectorRun`",
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "finished_at": {
+            "type": "string"
+          },
+          "found": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "id": {
+            "type": "string"
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "skipped": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "started_at": {
+            "type": "string"
+          },
+          "stored": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "trigger": {
             "type": "string"
           }
         }
@@ -2900,6 +3571,19 @@
           }
         }
       },
+      "tbd.finance.v1.DeleteConnectorRequest": {
+        "type": "object",
+        "description": "`tbd.finance.v1.DeleteConnectorRequest`",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.finance.v1.DeleteConnectorResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.DeleteConnectorResponse`"
+      },
       "tbd.finance.v1.DeleteLineTemplateRequest": {
         "type": "object",
         "description": "`tbd.finance.v1.DeleteLineTemplateRequest`",
@@ -2915,6 +3599,89 @@
       "tbd.finance.v1.DeleteLineTemplateResponse": {
         "type": "object",
         "description": "`tbd.finance.v1.DeleteLineTemplateResponse`"
+      },
+      "tbd.finance.v1.Document": {
+        "type": "object",
+        "description": "`tbd.finance.v1.Document`",
+        "properties": {
+          "content_type": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "doc_date": {
+            "type": "string"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "party_id": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "size_bytes": {
+            "type": "string",
+            "format": "int64"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/tbd.finance.v1.DocumentSource"
+            }
+          },
+          "total_minor": {
+            "type": "string"
+          },
+          "vendor": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.finance.v1.DocumentSource": {
+        "type": "object",
+        "description": "`tbd.finance.v1.DocumentSource`",
+        "properties": {
+          "connector_id": {
+            "type": "string"
+          },
+          "external_ref": {
+            "type": "string"
+          },
+          "received_at": {
+            "type": "string"
+          },
+          "sender": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.finance.v1.GetDocumentResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.GetDocumentResponse`",
+        "properties": {
+          "bytes": {
+            "type": "string",
+            "format": "byte"
+          },
+          "document": {
+            "$ref": "#/components/schemas/tbd.finance.v1.Document"
+          }
+        }
       },
       "tbd.finance.v1.GetInvoiceDocumentResponse": {
         "type": "object",
@@ -3211,6 +3978,54 @@
           }
         }
       },
+      "tbd.finance.v1.ListConnectorKindsResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.ListConnectorKindsResponse`",
+        "properties": {
+          "kinds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/tbd.finance.v1.ConnectorKind"
+            }
+          }
+        }
+      },
+      "tbd.finance.v1.ListConnectorRunsResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.ListConnectorRunsResponse`",
+        "properties": {
+          "runs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/tbd.finance.v1.ConnectorRun"
+            }
+          }
+        }
+      },
+      "tbd.finance.v1.ListConnectorsResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.ListConnectorsResponse`",
+        "properties": {
+          "connectors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/tbd.finance.v1.Connector"
+            }
+          }
+        }
+      },
+      "tbd.finance.v1.ListDocumentsResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.ListDocumentsResponse`",
+        "properties": {
+          "documents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/tbd.finance.v1.Document"
+            }
+          }
+        }
+      },
       "tbd.finance.v1.ListInvoicesResponse": {
         "type": "object",
         "description": "`tbd.finance.v1.ListInvoicesResponse`",
@@ -3460,6 +4275,30 @@
           }
         }
       },
+      "tbd.finance.v1.StartConnectorRequest": {
+        "type": "object",
+        "description": "`tbd.finance.v1.StartConnectorRequest`",
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "party_id": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.finance.v1.StartConnectorResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.StartConnectorResponse`",
+        "properties": {
+          "connector_id": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        }
+      },
       "tbd.finance.v1.SummaryRow": {
         "type": "object",
         "description": "`tbd.finance.v1.SummaryRow`",
@@ -3492,6 +4331,51 @@
           "total_minor": {
             "type": "string",
             "format": "int64"
+          }
+        }
+      },
+      "tbd.finance.v1.SyncConnectorRequest": {
+        "type": "object",
+        "description": "`tbd.finance.v1.SyncConnectorRequest`",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.finance.v1.SyncConnectorResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.SyncConnectorResponse`",
+        "properties": {
+          "found": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "skipped": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "stored": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "tbd.finance.v1.TestConnectorRequest": {
+        "type": "object",
+        "description": "`tbd.finance.v1.TestConnectorRequest`",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.finance.v1.TestConnectorResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.TestConnectorResponse`",
+        "properties": {
+          "status": {
+            "type": "string"
           }
         }
       },

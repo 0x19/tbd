@@ -65,3 +65,13 @@ initial_history_days = 90
 reconsent_lead_days = 14
 # Backoff after a 429 with no Retry-After, seconds (6h, as documented).
 default_backoff_secs = 21600
+
+[connectors]
+# Linked external accounts: mailboxes today, vendor portals later. The key
+# that seals their credentials and the Google OAuth client live only in the
+# environment (FINANCE_CONNECTOR_KEY, FINANCE_GOOGLE_CLIENT_ID,
+# FINANCE_GOOGLE_CLIENT_SECRET), never here. Without the key nothing can be
+# linked. The redirect URL is registered with each provider and must be on
+# the finance UI host, where the page completes the link as the signed-in
+# person.
+redirect_url = "https://finance.proximity.is/connectors/callback"

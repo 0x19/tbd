@@ -206,6 +206,206 @@ service FinanceService {
       body: "*"
     };
   }
+  // ---- connectors: linked external accounts documents are pulled from ----
+
+  // Every kind the service knows, whether or not it is configured.
+  rpc ListConnectorKinds(ListConnectorKindsRequest) returns (ListConnectorKindsResponse) {
+    option (google.api.http) = {get: "/v1/finance/connectors/kinds"};
+  }
+  rpc ListConnectors(ListConnectorsRequest) returns (ListConnectorsResponse) {
+    option (google.api.http) = {get: "/v1/finance/connectors"};
+  }
+  // Begin a link: the URL to send the person to.
+  rpc StartConnector(StartConnectorRequest) returns (StartConnectorResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/connectors"
+      body: "*"
+    };
+  }
+  // Finish with what the provider's redirect carried. The code is in the
+  // body; a state that is not the caller's is NOT_FOUND.
+  rpc CompleteConnector(CompleteConnectorRequest) returns (CompleteConnectorResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/connectors/complete"
+      body: "*"
+    };
+  }
+  // Prove the link still works.
+  rpc TestConnector(TestConnectorRequest) returns (TestConnectorResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/connectors/{id}/test"
+      body: "*"
+    };
+  }
+  // Pull new documents now.
+  rpc SyncConnector(SyncConnectorRequest) returns (SyncConnectorResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/connectors/{id}/sync"
+      body: "*"
+    };
+  }
+  // Change the non-secret settings (the query).
+  rpc ConfigureConnector(ConfigureConnectorRequest) returns (ConfigureConnectorResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/connectors/{id}/configure"
+      body: "*"
+    };
+  }
+  rpc DeleteConnector(DeleteConnectorRequest) returns (DeleteConnectorResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/connectors/{id}/delete"
+      body: "*"
+    };
+  }
+  rpc ListConnectorRuns(ListConnectorRunsRequest) returns (ListConnectorRunsResponse) {
+    option (google.api.http) = {get: "/v1/finance/connectors/{id}/runs"};
+  }
+  // Receipts and other pulled documents, newest first.
+  rpc ListDocuments(ListDocumentsRequest) returns (ListDocumentsResponse) {
+    option (google.api.http) = {get: "/v1/finance/documents"};
+  }
+  rpc GetDocument(GetDocumentRequest) returns (GetDocumentResponse) {
+    option (google.api.http) = {get: "/v1/finance/documents/{id}"};
+  }
+}
+
+message ConnectorKind {
+  string name = 1;
+  string label = 2;
+  string description = 3;
+  // oauth or token.
+  string auth = 4;
+  string consent_note = 5;
+  bool configured = 6;
+}
+message ListConnectorKindsRequest {}
+message ListConnectorKindsResponse {
+  repeated ConnectorKind kinds = 1;
+}
+
+message Connector {
+  string id = 1;
+  string party_id = 2;
+  string kind = 3;
+  string label = 4;
+  // pending, linked, expired, failed, disabled.
+  string status = 5;
+  // The kind's non-secret settings, as JSON text.
+  string config = 6;
+  string external_id = 7;
+  string linked_at = 8;
+  string last_sync_at = 9;
+  string last_sync_status = 10;
+  string last_sync_error = 11;
+  string failure = 12;
+  string created_at = 13;
+}
+message ListConnectorsRequest {
+  repeated string party_ids = 1;
+}
+message ListConnectorsResponse {
+  repeated Connector connectors = 1;
+}
+message StartConnectorRequest {
+  string party_id = 1;
+  string kind = 2;
+}
+message StartConnectorResponse {
+  string connector_id = 1;
+  string url = 2;
+}
+message CompleteConnectorRequest {
+  string state = 1;
+  string code = 2;
+}
+message CompleteConnectorResponse {
+  Connector connector = 1;
+}
+message TestConnectorRequest {
+  string id = 1;
+}
+message TestConnectorResponse {
+  string status = 1;
+}
+message SyncConnectorRequest {
+  string id = 1;
+}
+message SyncConnectorResponse {
+  uint32 found = 1;
+  uint32 stored = 2;
+  uint32 skipped = 3;
+}
+message ConfigureConnectorRequest {
+  string id = 1;
+  // JSON text.
+  string config = 2;
+}
+message ConfigureConnectorResponse {
+  Connector connector = 1;
+}
+message DeleteConnectorRequest {
+  string id = 1;
+}
+message DeleteConnectorResponse {}
+message ConnectorRun {
+  string id = 1;
+  string started_at = 2;
+  string finished_at = 3;
+  string trigger = 4;
+  string outcome = 5;
+  uint32 found = 6;
+  uint32 stored = 7;
+  uint32 skipped = 8;
+  string error = 9;
+}
+message ListConnectorRunsRequest {
+  string id = 1;
+}
+message ListConnectorRunsResponse {
+  repeated ConnectorRun runs = 1;
+}
+
+message Document {
+  string id = 1;
+  string party_id = 2;
+  // invoice or receipt.
+  string kind = 3;
+  string filename = 4;
+  string content_type = 5;
+  int64 size_bytes = 6;
+  string sha256 = 7;
+  string vendor = 8;
+  string doc_date = 9;
+  // Empty when unknown.
+  string total_minor = 10;
+  string currency = 11;
+  string created_at = 12;
+  // Where it came from.
+  repeated DocumentSource sources = 13;
+}
+message DocumentSource {
+  string connector_id = 1;
+  string external_ref = 2;
+  string subject = 3;
+  string sender = 4;
+  string received_at = 5;
+}
+message ListDocumentsRequest {
+  repeated string party_ids = 1;
+  // receipt, invoice, or empty for any.
+  string kind = 2;
+  uint32 limit = 3;
+  uint32 offset = 4;
+}
+message ListDocumentsResponse {
+  repeated Document documents = 1;
+}
+message GetDocumentRequest {
+  string id = 1;
+}
+message GetDocumentResponse {
+  Document document = 1;
+  bytes bytes = 2;
 }
 
 message LineTemplate {

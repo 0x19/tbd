@@ -147,7 +147,7 @@ fn template_proto(t: TemplateRow) -> LineTemplate {
 }
 
 impl Finance {
-    async fn invoice_context(
+    pub(crate) async fn invoice_context(
         &self,
         route: &'static str,
         request: &Request<impl Sized>,

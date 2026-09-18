@@ -7,6 +7,7 @@ mod access;
 mod banking;
 mod categorise;
 mod connect;
+mod connectors;
 mod import;
 mod invoices;
 mod rpc;

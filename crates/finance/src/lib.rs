@@ -7,10 +7,12 @@
 pub mod banking;
 pub mod categorise;
 pub mod config;
+pub mod connectors;
 pub mod import;
 pub mod invoice;
 pub mod money;
 mod service;
+mod service_connectors;
 mod service_invoices;
 pub mod store;
 pub mod sync;
@@ -122,11 +124,40 @@ pub async fn serve_with_bank(
         ..tbd_db::PgOptions::default()
     })
     .map_err(|e| ServeError::Store(e.to_string()))?;
-    let service = Finance::with_pool(config.ping.clone(), runtime, pool).with_bank(
-        provider,
-        config.sync.clone(),
-        config.provider.redirect_url.clone(),
-    );
+    let service = Finance::with_pool(config.ping.clone(), runtime, pool)
+        .with_bank(
+            provider,
+            config.sync.clone(),
+            config.provider.redirect_url.clone(),
+        )
+        .with_connectors(config.connectors.clone())
+        .map_err(|e| ServeError::Provider(e.to_string()))?;
+    serve_built(listener, &config, service, shutdown).await
+}
+
+/// Serve a Postgres-backed service with connector kinds supplied by the
+/// caller and a sealing key from `config`. Tests inject a mock kind so the
+/// link, sync and refusal paths run end to end without a provider.
+///
+/// # Errors
+/// The store URL does not parse, the key is unusable, or the server fails.
+pub async fn serve_with_kinds(
+    listener: TcpListener,
+    config: Config,
+    runtime: Runtime,
+    kinds: connectors::KindsFactory,
+    shutdown: impl Future<Output = ()> + Send + 'static,
+) -> Result<(), ServeError> {
+    let pool = tbd_db::connect_lazy(&tbd_db::PgOptions {
+        url: config.store.url.clone(),
+        max_connections: config.store.max_connections,
+        ..tbd_db::PgOptions::default()
+    })
+    .map_err(|e| ServeError::Store(e.to_string()))?;
+    let service = Finance::with_pool(config.ping.clone(), runtime, pool)
+        .with_connectors(config.connectors.clone())
+        .map_err(|e| ServeError::Provider(e.to_string()))?
+        .with_connector_kinds(kinds);
     serve_built(listener, &config, service, shutdown).await
 }
 
@@ -187,6 +218,8 @@ pub async fn serve_with(
         }
         tracing::info!("no provider configured; sync worker not started");
         Finance::with_pool(config.ping.clone(), runtime, pool)
+            .with_connectors(config.connectors.clone())
+            .map_err(|e| ServeError::Provider(e.to_string()))?
     };
     serve_built(listener, &config, service, shutdown).await
 }

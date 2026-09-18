@@ -165,6 +165,9 @@ services:
       # Bank credentials from .env; empty keeps the sync worker off.
       FINANCE_EB_APPLICATION_ID: ${FINANCE_EB_APPLICATION_ID:-}
       FINANCE_EB_PRIVATE_KEY: ${FINANCE_EB_PRIVATE_KEY:-}
+      FINANCE_CONNECTOR_KEY: ${FINANCE_CONNECTOR_KEY:-}
+      FINANCE_GOOGLE_CLIENT_ID: ${FINANCE_GOOGLE_CLIENT_ID:-}
+      FINANCE_GOOGLE_CLIENT_SECRET: ${FINANCE_GOOGLE_CLIENT_SECRET:-}
     ports:
       - "9468:9464"
     restart: unless-stopped

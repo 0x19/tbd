@@ -16,20 +16,26 @@ use tbd_db::{Access, DbError};
 use tbd_proto::finance::v1::{
     Account, ApproveInvoiceRequest, ApproveInvoiceResponse, Balance, CancelInvoiceRequest,
     CancelInvoiceResponse, Category, CompleteConnectionRequest, CompleteConnectionResponse,
-    Connection, CreateInvoiceRequest, CreateInvoiceResponse, DeclareCategoryRequest,
-    DeclareCategoryResponse, DeleteLineTemplateRequest, DeleteLineTemplateResponse,
-    GetInvoiceDocumentRequest, GetInvoiceDocumentResponse, GetInvoiceRequest, GetInvoiceResponse,
-    GetIssuerRequest, GetIssuerResponse, ListAccountsRequest, ListAccountsResponse,
-    ListCategoriesRequest, ListCategoriesResponse, ListClientsRequest, ListClientsResponse,
-    ListConnectionsRequest, ListConnectionsResponse, ListInvoicesRequest, ListInvoicesResponse,
-    ListLineTemplatesRequest, ListLineTemplatesResponse, ListPartiesRequest, ListPartiesResponse,
-    ListRulesRequest, ListRulesResponse, ListTransactionsRequest, ListTransactionsResponse,
-    MonthlySummaryRequest, MonthlySummaryResponse, Party, PingRequest, PingResponse,
-    PreviewInvoiceRequest, PreviewInvoiceResponse, RefreshAccountRequest, RefreshAccountResponse,
-    Rule, StartConnectionRequest, StartConnectionResponse, SummaryRow, Transaction,
-    UpdateInvoiceRequest, UpdateInvoiceResponse, UpsertClientRequest, UpsertClientResponse,
-    UpsertIssuerRequest, UpsertIssuerResponse, UpsertLineTemplateRequest,
-    UpsertLineTemplateResponse, UpsertRuleRequest, UpsertRuleResponse,
+    CompleteConnectorRequest, CompleteConnectorResponse, ConfigureConnectorRequest,
+    ConfigureConnectorResponse, Connection, CreateInvoiceRequest, CreateInvoiceResponse,
+    DeclareCategoryRequest, DeclareCategoryResponse, DeleteConnectorRequest,
+    DeleteConnectorResponse, DeleteLineTemplateRequest, DeleteLineTemplateResponse,
+    GetDocumentRequest, GetDocumentResponse, GetInvoiceDocumentRequest, GetInvoiceDocumentResponse,
+    GetInvoiceRequest, GetInvoiceResponse, GetIssuerRequest, GetIssuerResponse,
+    ListAccountsRequest, ListAccountsResponse, ListCategoriesRequest, ListCategoriesResponse,
+    ListClientsRequest, ListClientsResponse, ListConnectionsRequest, ListConnectionsResponse,
+    ListConnectorKindsRequest, ListConnectorKindsResponse, ListConnectorRunsRequest,
+    ListConnectorRunsResponse, ListConnectorsRequest, ListConnectorsResponse, ListDocumentsRequest,
+    ListDocumentsResponse, ListInvoicesRequest, ListInvoicesResponse, ListLineTemplatesRequest,
+    ListLineTemplatesResponse, ListPartiesRequest, ListPartiesResponse, ListRulesRequest,
+    ListRulesResponse, ListTransactionsRequest, ListTransactionsResponse, MonthlySummaryRequest,
+    MonthlySummaryResponse, Party, PingRequest, PingResponse, PreviewInvoiceRequest,
+    PreviewInvoiceResponse, RefreshAccountRequest, RefreshAccountResponse, Rule,
+    StartConnectionRequest, StartConnectionResponse, StartConnectorRequest, StartConnectorResponse,
+    SummaryRow, SyncConnectorRequest, SyncConnectorResponse, TestConnectorRequest,
+    TestConnectorResponse, Transaction, UpdateInvoiceRequest, UpdateInvoiceResponse,
+    UpsertClientRequest, UpsertClientResponse, UpsertIssuerRequest, UpsertIssuerResponse,
+    UpsertLineTemplateRequest, UpsertLineTemplateResponse, UpsertRuleRequest, UpsertRuleResponse,
     finance_service_server::FinanceService,
 };
 use tonic::{Code, Request, Response, Status};
@@ -46,7 +52,7 @@ use crate::{
 };
 
 /// The service. Cheap to clone; holds its configuration section and shared handles.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Finance {
     ping: Ping,
     runtime: Runtime,
@@ -66,6 +72,21 @@ pub struct Finance {
     provider: Option<Arc<dyn Provider>>,
     sync: SyncConfig,
     redirect_url: String,
+    /// `[connectors]`, and the sealer built from its key.
+    pub(crate) connectors: crate::config::Connectors,
+    pub(crate) sealer: Option<Arc<crate::connectors::crypto::Sealer>>,
+    /// Kinds to use instead of the registry -- tests inject a mock kind.
+    pub(crate) connector_kinds: Option<crate::connectors::KindsFactory>,
+}
+
+impl std::fmt::Debug for Finance {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Finance")
+            .field("store", &self.store.as_ref().map(|s| s.kind()))
+            .field("bank", &self.provider.as_ref().map(|p| p.name()))
+            .field("sealer", &self.sealer.is_some())
+            .finish_non_exhaustive()
+    }
 }
 
 impl Finance {
@@ -85,6 +106,9 @@ impl Finance {
             provider: None,
             sync: SyncConfig::default(),
             redirect_url: String::new(),
+            connectors: crate::config::Connectors::default(),
+            sealer: None,
+            connector_kinds: None,
         }
     }
 
@@ -100,6 +124,9 @@ impl Finance {
             provider: None,
             sync: SyncConfig::default(),
             redirect_url: String::new(),
+            connectors: crate::config::Connectors::default(),
+            sealer: None,
+            connector_kinds: None,
         }
     }
 
@@ -124,12 +151,41 @@ impl Finance {
             provider: None,
             sync: SyncConfig::default(),
             redirect_url: String::new(),
+            connectors: crate::config::Connectors::default(),
+            sealer: None,
+            connector_kinds: None,
         }
         .with_grants(grants)
     }
 
     fn with_grants(mut self, grants: Vec<(String, Vec<Uuid>)>) -> Self {
         self.grants = grants;
+        self
+    }
+
+    /// Attach the connector configuration; the sealer is built from its key.
+    ///
+    /// # Errors
+    /// The key is not 32 bytes of base64.
+    pub fn with_connectors(
+        mut self,
+        connectors: crate::config::Connectors,
+    ) -> Result<Self, crate::connectors::crypto::CryptoError> {
+        self.sealer = if connectors.key.is_empty() {
+            None
+        } else {
+            Some(Arc::new(crate::connectors::crypto::Sealer::from_base64(
+                &connectors.key,
+            )?))
+        };
+        self.connectors = connectors;
+        Ok(self)
+    }
+
+    /// Use these kinds instead of the registry. Tests.
+    #[must_use]
+    pub fn with_connector_kinds(mut self, kinds: crate::connectors::KindsFactory) -> Self {
+        self.connector_kinds = Some(kinds);
         self
     }
 
@@ -196,7 +252,7 @@ impl Finance {
     /// With a database this reads real grants. Without one -- a chaos stack --
     /// it uses the grants the stack was built with, keyed by subject. Either
     /// way the set comes from the verified subject and never from the request.
-    async fn access(&self, request: &Request<impl Sized>) -> Result<Access, Status> {
+    pub(crate) async fn access(&self, request: &Request<impl Sized>) -> Result<Access, Status> {
         let principal = Self::principal(request)?;
         if let Some(pool) = &self.pool {
             return Access::resolve(pool, &principal.sub, None, "")
@@ -899,6 +955,73 @@ impl FinanceService for Finance {
         r: Request<DeleteLineTemplateRequest>,
     ) -> Result<Response<DeleteLineTemplateResponse>, Status> {
         self.rpc_delete_line_template(r).await
+    }
+
+    async fn list_connector_kinds(
+        &self,
+        r: Request<ListConnectorKindsRequest>,
+    ) -> Result<Response<ListConnectorKindsResponse>, Status> {
+        self.rpc_list_connector_kinds(r).await
+    }
+    async fn list_connectors(
+        &self,
+        r: Request<ListConnectorsRequest>,
+    ) -> Result<Response<ListConnectorsResponse>, Status> {
+        self.rpc_list_connectors(r).await
+    }
+    async fn start_connector(
+        &self,
+        r: Request<StartConnectorRequest>,
+    ) -> Result<Response<StartConnectorResponse>, Status> {
+        self.rpc_start_connector(r).await
+    }
+    async fn complete_connector(
+        &self,
+        r: Request<CompleteConnectorRequest>,
+    ) -> Result<Response<CompleteConnectorResponse>, Status> {
+        self.rpc_complete_connector(r).await
+    }
+    async fn test_connector(
+        &self,
+        r: Request<TestConnectorRequest>,
+    ) -> Result<Response<TestConnectorResponse>, Status> {
+        self.rpc_test_connector(r).await
+    }
+    async fn sync_connector(
+        &self,
+        r: Request<SyncConnectorRequest>,
+    ) -> Result<Response<SyncConnectorResponse>, Status> {
+        self.rpc_sync_connector(r).await
+    }
+    async fn configure_connector(
+        &self,
+        r: Request<ConfigureConnectorRequest>,
+    ) -> Result<Response<ConfigureConnectorResponse>, Status> {
+        self.rpc_configure_connector(r).await
+    }
+    async fn delete_connector(
+        &self,
+        r: Request<DeleteConnectorRequest>,
+    ) -> Result<Response<DeleteConnectorResponse>, Status> {
+        self.rpc_delete_connector(r).await
+    }
+    async fn list_connector_runs(
+        &self,
+        r: Request<ListConnectorRunsRequest>,
+    ) -> Result<Response<ListConnectorRunsResponse>, Status> {
+        self.rpc_list_connector_runs(r).await
+    }
+    async fn list_documents(
+        &self,
+        r: Request<ListDocumentsRequest>,
+    ) -> Result<Response<ListDocumentsResponse>, Status> {
+        self.rpc_list_documents(r).await
+    }
+    async fn get_document(
+        &self,
+        r: Request<GetDocumentRequest>,
+    ) -> Result<Response<GetDocumentResponse>, Status> {
+        self.rpc_get_document(r).await
     }
 }
 
