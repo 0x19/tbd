@@ -127,6 +127,12 @@ function InvoiceView() {
   }, [inv?.id, inv?.updated_at]);
 
   const editable = inv?.status === "draft";
+  // Every edit is saved and re-rendered after a short pause, so the preview
+  // is always the draft as it is now, and Approve is never one click away
+  // from a stale one. `seq` drops responses that were overtaken by a newer
+  // edit.
+  const [seq, setSeq] = useState(0);
+  const [autoState, setAutoState] = useState<"idle" | "pending" | "rendering">("idle");
   const edit =
     <T,>(setter: (v: T) => void) =>
     (v: T) => {
@@ -183,6 +189,49 @@ function InvoiceView() {
       setBusy("");
     }
   };
+
+  // Auto-preview: 900 ms after the last edit, save then render; a draft
+  // that loads with lines is rendered once on arrival.
+  useEffect(() => {
+    if (!inv || !editable) return;
+    if (!dirty && preview) return;
+    // The save inside a pending render flips `dirty` off; that is not a new
+    // edit, so it must not start a second render.
+    if (!dirty && autoState !== "idle") return;
+    if (lines.length === 0) return;
+    const mine = seq + 1;
+    setSeq(mine);
+    setAutoState("pending");
+    const timer = setTimeout(
+      async () => {
+        let current: Invoice | null = inv;
+        if (dirty) {
+          current = await save();
+          if (!current) {
+            setAutoState("idle");
+            return;
+          }
+        }
+        setAutoState("rendering");
+        try {
+          const p = await api.previewInvoice(current.id);
+          setSeq((latest) => {
+            if (latest === mine) {
+              setPreview({ url: pdfUrl(p.pdf), hash: p.content_hash, number: p.number, at: Date.now() });
+            }
+            return latest;
+          });
+        } catch (e) {
+          toast.error(describe(e));
+        } finally {
+          setAutoState("idle");
+        }
+      },
+      dirty ? 900 : 0,
+    );
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inv?.id, editable, dirty, delivery, due, place, note, lines]);
 
   const approve = async () => {
     if (!inv || !preview) return;
@@ -466,7 +515,7 @@ function InvoiceView() {
                     ? dirty
                       ? "The draft changed since this preview; preview again before approving."
                       : "Approve exactly this. The hash of what you see is what gets approved."
-                    : "Preview renders the draft with the number it would take."}
+                    : "The draft renders itself after every change, with the number it would take."}
               </CardDescription>
             </div>
             {docUrl || preview ? (
@@ -502,7 +551,11 @@ function InvoiceView() {
               />
             ) : (
               <div className="bg-muted/40 text-muted-foreground flex h-[70vh] items-center justify-center rounded-md border border-dashed text-sm">
-                Nothing rendered yet.
+                {autoState !== "idle"
+                  ? "Rendering…"
+                  : lines.length
+                    ? "Nothing rendered yet."
+                    : "Add a line and the preview renders itself."}
               </div>
             )}
           </CardContent>
