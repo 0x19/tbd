@@ -47,11 +47,17 @@ The finance service. gRPC only. Scaffolded by `tbd new service` (docs/tbd/README
   returns it; the pull runs on a detached task (`store::begin_sync` / `run_sync`),
   because a mailbox takes minutes and the internal Envoy route gives a unary call
   five seconds -- a handler that pulls inline is cancelled mid-way and its run never
-  finishes. A kind pulls in capped rounds and says whether it reached the present;
-  a run that did not is `partial` and leaves the watermark alone. One run per
-  connector at a time; one older than 30 minutes and unfinished is closed as
-  interrupted. `service_connectors.rs` holds the RPCs. Tests inject a mock kind
-  through `serve_with_kinds`.
+  finishes. A kind sends each document into a channel as it fetches it and the store
+  drains the other end, counting on the run row per document, so the run is the
+  progress. A kind pulls in capped rounds and says whether it reached the present; a
+  run that did not is `partial` and leaves the watermark alone. One run per connector
+  at a time; `serve_with` closes every run a predecessor left open at start, and one
+  older than 30 minutes is closed when the next opens. `WatchConnectors` streams the
+  view's connectors with their latest run, then every change (a one-second diff of
+  the store per watcher) -- the page draws from it and never polls while it is up.
+  `ConfigureConnector` may move a connector to another party in the grant, taking
+  the documents only it pulled. `service_connectors.rs` holds the RPCs. Tests inject
+  a mock kind through `serve_with_kinds`.
 - `categorise.rs` + `seeds/rules.sql`: a pass clears every `inferred` categorisation and
   reapplies rules in priority order; `declared` always survives. The seed is idempotent on
   `(party_id, name)`; a rule joins to its category by slug and a typo drops it silently,

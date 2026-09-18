@@ -256,6 +256,49 @@
         }
       }
     },
+    "/v1/finance/accounts/sync": {
+      "post": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/SetAccountSync",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/SetAccountSync` on the `finance` backend.",
+        "operationId": "FinanceService.SetAccountSync",
+        "requestBody": {
+          "description": "`tbd.finance.v1.SetAccountSyncRequest`; path variables override their fields",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/tbd.finance.v1.SetAccountSyncRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.SetAccountSyncResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.SetAccountSyncResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/finance/categories": {
       "get": {
         "tags": [
@@ -766,6 +809,49 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/tbd.finance.v1.CompleteConnectorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/finance/connectors/events": {
+      "get": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/WatchConnectors",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/WatchConnectors` on the `finance` backend.",
+        "operationId": "FinanceService.WatchConnectors",
+        "parameters": [
+          {
+            "name": "party_ids",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "explode": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A stream of `tbd.finance.v1.WatchConnectorsResponse` events, one JSON object per `data:`; a failure is an `error` event carrying `Problem`",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.WatchConnectorsResponse"
                 }
               }
             }
@@ -3381,6 +3467,12 @@
           },
           "id": {
             "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "party_id": {
+            "type": "string"
           }
         }
       },
@@ -4181,6 +4273,9 @@
         "type": "object",
         "description": "`tbd.finance.v1.RefreshAccountResponse`",
         "properties": {
+          "attended": {
+            "type": "boolean"
+          },
           "booked": {
             "type": "integer",
             "format": "int32"
@@ -4242,6 +4337,27 @@
           "priority": {
             "type": "integer",
             "format": "int32"
+          }
+        }
+      },
+      "tbd.finance.v1.SetAccountSyncRequest": {
+        "type": "object",
+        "description": "`tbd.finance.v1.SetAccountSyncRequest`",
+        "properties": {
+          "account_id": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "tbd.finance.v1.SetAccountSyncResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.SetAccountSyncResponse`",
+        "properties": {
+          "account": {
+            "$ref": "#/components/schemas/tbd.finance.v1.Account"
           }
         }
       },
@@ -4573,6 +4689,21 @@
           "unmatched": {
             "type": "integer",
             "format": "int32"
+          }
+        }
+      },
+      "tbd.finance.v1.WatchConnectorsResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.WatchConnectorsResponse`",
+        "properties": {
+          "connector": {
+            "$ref": "#/components/schemas/tbd.finance.v1.Connector"
+          },
+          "deleted": {
+            "type": "boolean"
+          },
+          "run": {
+            "$ref": "#/components/schemas/tbd.finance.v1.ConnectorRun"
           }
         }
       },

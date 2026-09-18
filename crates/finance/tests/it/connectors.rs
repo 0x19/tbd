@@ -12,12 +12,13 @@ use serde_json::{Value, json};
 use sqlx::PgPool;
 use tbd_db::{Capability, PartyId, UserId, create_org, ensure_user, grant};
 use tbd_finance::connectors::{
-    Auth, AuthContext, Connector, ConnectorError, Found, Kind, Linked, Pull,
+    Auth, AuthContext, Connector, ConnectorError, Found, Kind, Linked, Reach,
 };
 use tbd_proto::finance::v1::{
-    CompleteConnectorRequest, ListConnectorKindsRequest, ListConnectorRunsRequest,
-    ListConnectorsRequest, ListDocumentsRequest, StartConnectorRequest, SyncConnectorRequest,
-    TestConnectorRequest,
+    CompleteConnectorRequest, ConfigureConnectorRequest, DeleteConnectorRequest,
+    ListConnectorKindsRequest, ListConnectorRunsRequest, ListConnectorsRequest,
+    ListDocumentsRequest, StartConnectorRequest, SyncConnectorRequest, TestConnectorRequest,
+    WatchConnectorsRequest, WatchConnectorsResponse,
 };
 use tonic::{Code, Request, metadata::MetadataValue};
 use uuid::Uuid;
@@ -89,7 +90,8 @@ impl Connector for MockKind {
         _config: &Value,
         _since: DateTime<Utc>,
         seen: &(dyn for<'a> Fn(&'a str) -> bool + Sync),
-    ) -> Result<Pull, ConnectorError> {
+        sink: tokio::sync::mpsc::Sender<Found>,
+    ) -> Result<Reach, ConnectorError> {
         *self.pulls.lock().unwrap() += 1;
         let receipt = |id: &str, name: &str, body: &str| Found {
             external_ref: format!("{id}:{name}"),
@@ -110,10 +112,12 @@ impl Connector for MockKind {
             // The same bytes from a second message: one document, two sources.
             out.push(receipt("m3", "Cloudflare-again.pdf", "%PDF-cloudflare"));
         }
-        Ok(Pull {
-            found: out,
-            complete: true,
-        })
+        for f in out {
+            sink.send(f)
+                .await
+                .map_err(|_| ConnectorError::Provider("sink closed".into()))?;
+        }
+        Ok(Reach::Complete)
     }
 }
 
@@ -443,4 +447,204 @@ async fn a_revoked_link_is_marked_expired_by_test() {
             .await
             .unwrap();
     assert_eq!(status, "expired");
+}
+
+/// The next event on the watch stream, or a clear failure within ten seconds.
+async fn next_event(
+    events: &mut tonic::Streaming<WatchConnectorsResponse>,
+) -> WatchConnectorsResponse {
+    tokio::time::timeout(std::time::Duration::from_secs(10), events.message())
+        .await
+        .expect("an event within ten seconds")
+        .unwrap()
+        .expect("the stream stays open")
+}
+
+#[tokio::test]
+async fn watch_streams_the_snapshot_then_the_run_as_it_moves() {
+    let (factory, _) = kinds(false);
+    let (server, pool) = start_with_kinds(factory).await;
+    let (_, company) = seed(&pool).await;
+    let linked = link(&server, company).await;
+    let mut c = server.client().await;
+
+    let mut events = c
+        .watch_connectors(as_caller(OWNER, WatchConnectorsRequest::default()))
+        .await
+        .unwrap()
+        .into_inner();
+    let first = next_event(&mut events).await;
+    assert_eq!(
+        first.connector.unwrap().id,
+        linked.id,
+        "the snapshot: the one connector"
+    );
+    assert!(first.run.is_none(), "never synced");
+
+    c.sync_connector(as_caller(
+        OWNER,
+        SyncConnectorRequest {
+            id: linked.id.clone(),
+        },
+    ))
+    .await
+    .unwrap();
+    // The run opens, moves, and ends: the stream carries it without a
+    // request from this side.
+    let mut decided = None;
+    for _ in 0..20 {
+        let ev = next_event(&mut events).await;
+        assert!(!ev.deleted);
+        if let Some(run) = ev.run
+            && !run.outcome.is_empty()
+        {
+            decided = Some(run);
+            break;
+        }
+    }
+    let run = decided.expect("the run's outcome arrives on the stream");
+    assert_eq!(
+        (run.outcome.as_str(), run.found, run.stored, run.skipped),
+        ("ok", 3, 2, 1)
+    );
+
+    c.delete_connector(as_caller(
+        OWNER,
+        DeleteConnectorRequest {
+            id: linked.id.clone(),
+        },
+    ))
+    .await
+    .unwrap();
+    let gone = next_event(&mut events).await;
+    assert!(gone.deleted, "a removal is announced");
+    assert_eq!(gone.connector.unwrap().id, linked.id);
+}
+
+#[tokio::test]
+async fn a_run_left_open_by_a_restart_blocks_until_swept() {
+    let (factory, _) = kinds(false);
+    let (server, pool) = start_with_kinds(factory).await;
+    let (_, company) = seed(&pool).await;
+    let linked = link(&server, company).await;
+    let mut c = server.client().await;
+
+    // What a crash mid-pull leaves behind: a fresh run with no outcome.
+    sqlx::query(
+        "insert into finance.connector_runs (id, connector_id, trigger) values ($1, $2, 'manual')",
+    )
+    .bind(Uuid::new_v4())
+    .bind(Uuid::parse_str(&linked.id).unwrap())
+    .execute(&pool)
+    .await
+    .unwrap();
+    let refused = c
+        .sync_connector(as_caller(
+            OWNER,
+            SyncConnectorRequest {
+                id: linked.id.clone(),
+            },
+        ))
+        .await
+        .unwrap_err();
+    assert_eq!(refused.code(), Code::FailedPrecondition);
+    assert!(
+        refused.message().contains("syncing"),
+        "{}",
+        refused.message()
+    );
+
+    // The start-up sweep.
+    assert_eq!(
+        tbd_finance::connectors::store::close_orphans(&pool)
+            .await
+            .unwrap(),
+        1
+    );
+    let run = sync_and_wait(&mut c, &linked.id).await;
+    assert_eq!(run.outcome, "ok");
+    let runs = c
+        .list_connector_runs(as_caller(
+            OWNER,
+            ListConnectorRunsRequest {
+                id: linked.id.clone(),
+            },
+        ))
+        .await
+        .unwrap()
+        .into_inner()
+        .runs;
+    assert_eq!(runs.len(), 2);
+    assert_eq!(runs[1].error, "interrupted by restart");
+}
+
+#[tokio::test]
+async fn configure_moves_a_connector_and_the_documents_only_it_pulled() {
+    let (factory, _) = kinds(false);
+    let (server, pool) = start_with_kinds(factory).await;
+    let (person, company) = seed(&pool).await;
+    let linked = link(&server, company).await;
+    let mut c = server.client().await;
+    sync_and_wait(&mut c, &linked.id).await;
+
+    // A party outside the grant does not exist, as far as the caller knows.
+    let refused = c
+        .configure_connector(as_caller(
+            OWNER,
+            ConfigureConnectorRequest {
+                id: linked.id.clone(),
+                party_id: Uuid::new_v4().to_string(),
+                ..ConfigureConnectorRequest::default()
+            },
+        ))
+        .await
+        .unwrap_err();
+    assert_eq!(refused.code(), Code::NotFound);
+
+    let moved = c
+        .configure_connector(as_caller(
+            OWNER,
+            ConfigureConnectorRequest {
+                id: linked.id.clone(),
+                party_id: person.to_string(),
+                label: "personal box".into(),
+                ..ConfigureConnectorRequest::default()
+            },
+        ))
+        .await
+        .unwrap()
+        .into_inner()
+        .connector
+        .unwrap();
+    assert_eq!(moved.party_id, person.to_string());
+    assert_eq!(moved.label, "personal box");
+    let docs = |party: Uuid| {
+        let mut c = c.clone();
+        async move {
+            c.list_documents(as_caller(
+                OWNER,
+                ListDocumentsRequest {
+                    kind: "receipt".into(),
+                    party_ids: vec![party.to_string()],
+                    ..ListDocumentsRequest::default()
+                },
+            ))
+            .await
+            .unwrap()
+            .into_inner()
+            .documents
+            .len()
+        }
+    };
+    assert_eq!(docs(person).await, 2, "its receipts went with it");
+    assert_eq!(docs(company).await, 0);
+    // The reader was granted the company only: the connector is gone from
+    // their view, not forbidden.
+    let mine = c
+        .list_connectors(as_caller(READER, ListConnectorsRequest::default()))
+        .await
+        .unwrap()
+        .into_inner()
+        .connectors;
+    assert!(mine.is_empty());
 }

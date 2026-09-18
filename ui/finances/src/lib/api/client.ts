@@ -33,6 +33,7 @@ import {
   MonthlySummaryResponse,
   PreviewInvoiceResponse,
   RefreshAccountResponse,
+  SetAccountSyncResponse,
   StartConnectionResponse,
   StartConnectorResponse,
   SyncConnectorResponse,
@@ -245,11 +246,14 @@ export const api = {
     call(TestConnectorResponse, `/v1/finance/connectors/${id}/test`, { method: "POST", json: {} }),
   syncConnector: (id: string) =>
     call(SyncConnectorResponse, `/v1/finance/connectors/${id}/sync`, { method: "POST", json: {} }),
-  configureConnector: (id: string, config: string) =>
-    call(ConnectorResponse, `/v1/finance/connectors/${id}/configure`, { method: "POST", json: { config } }),
+  configureConnector: (id: string, change: { config?: string; party_id?: string; label?: string }) =>
+    call(ConnectorResponse, `/v1/finance/connectors/${id}/configure`, { method: "POST", json: change }),
   deleteConnector: (id: string) =>
     call(z.object({}), `/v1/finance/connectors/${id}/delete`, { method: "POST", json: {} }),
   connectorRuns: (id: string) => call(ListConnectorRunsResponse, `/v1/finance/connectors/${id}/runs`),
+  /** The connectors feed: an SSE URL for `useEvents`. */
+  connectorEventsUrl: (party_ids: string[]) =>
+    `${apiBase()}/v1/finance/connectors/events${query({ party_ids })}`,
   documents: (party_ids: string[], kind = "", limit = 100, offset = 0) =>
     call(ListDocumentsResponse, `/v1/finance/documents${query({ party_ids, kind, limit, offset })}`),
   document: (id: string) => call(GetDocumentResponse, `/v1/finance/documents/${id}`),

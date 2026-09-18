@@ -224,6 +224,12 @@ service FinanceService {
   rpc ListConnectors(ListConnectorsRequest) returns (ListConnectorsResponse) {
     option (google.api.http) = {get: "/v1/finance/connectors"};
   }
+  // Every connector in view with its latest run, then each one again
+  // whenever it changes: a pull's progress, its outcome, a relink, a
+  // removal. The page draws from this instead of polling.
+  rpc WatchConnectors(WatchConnectorsRequest) returns (stream WatchConnectorsResponse) {
+    option (google.api.http) = {get: "/v1/finance/connectors/events"};
+  }
   // Begin a link: the URL to send the person to.
   rpc StartConnector(StartConnectorRequest) returns (StartConnectorResponse) {
     option (google.api.http) = {
@@ -347,8 +353,13 @@ message SyncConnectorResponse {
 }
 message ConfigureConnectorRequest {
   string id = 1;
-  // JSON text.
+  // JSON text. Empty: unchanged.
   string config = 2;
+  // Move the connector, and the documents only it pulled, to another party
+  // in the caller's grant. Empty: unchanged.
+  string party_id = 3;
+  // Empty: unchanged.
+  string label = 4;
 }
 message ConfigureConnectorResponse {
   Connector connector = 1;
@@ -367,6 +378,16 @@ message ConnectorRun {
   uint32 stored = 7;
   uint32 skipped = 8;
   string error = 9;
+}
+message WatchConnectorsRequest {
+  repeated string party_ids = 1;
+}
+message WatchConnectorsResponse {
+  Connector connector = 1;
+  // The latest run, if any; `outcome` empty while it pulls.
+  ConnectorRun run = 2;
+  // The connector was removed; only `connector.id` is meaningful.
+  bool deleted = 3;
 }
 message ListConnectorRunsRequest {
   string id = 1;

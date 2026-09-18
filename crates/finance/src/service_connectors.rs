@@ -8,8 +8,10 @@ use tbd_proto::finance::v1::{
     ListConnectorKindsRequest, ListConnectorKindsResponse, ListConnectorRunsRequest,
     ListConnectorRunsResponse, ListConnectorsRequest, ListConnectorsResponse, ListDocumentsRequest,
     ListDocumentsResponse, StartConnectorRequest, StartConnectorResponse, SyncConnectorRequest,
-    SyncConnectorResponse, TestConnectorRequest, TestConnectorResponse,
+    SyncConnectorResponse, TestConnectorRequest, TestConnectorResponse, WatchConnectorsRequest,
+    WatchConnectorsResponse,
 };
+use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
 
@@ -333,25 +335,103 @@ impl Finance {
     ) -> Result<Response<ConfigureConnectorResponse>, Status> {
         let req = request.get_ref().clone();
         let id = uuid(&req.id, "id")?;
-        let config: serde_json::Value = if req.config.trim().is_empty() {
-            serde_json::json!({})
-        } else {
-            serde_json::from_str(&req.config)
-                .map_err(|e| Status::invalid_argument(format!("config: {e}")))?
-        };
-        if !config.is_object() {
-            return Err(Status::invalid_argument("config: want a JSON object"));
+        let mut change = store::Change::default();
+        if !req.config.trim().is_empty() {
+            let config: serde_json::Value = serde_json::from_str(&req.config)
+                .map_err(|e| Status::invalid_argument(format!("config: {e}")))?;
+            if !config.is_object() {
+                return Err(Status::invalid_argument("config: want a JSON object"));
+            }
+            change.config = Some(config);
+        }
+        if !req.party_id.is_empty() {
+            change.party = Some(uuid(&req.party_id, "party_id")?);
+        }
+        if !req.label.trim().is_empty() {
+            change.label = Some(req.label.trim().to_owned());
         }
         let (mut timer, pool, access, _) = self
             .invoice_context("FinanceService/ConfigureConnector", &request, &[])
             .await?;
-        let r =
-            store::configure(pool, &access, id, config)
-                .await
-                .map(|c| ConfigureConnectorResponse {
-                    connector: Some(connector_proto(c)),
-                });
+        let r = store::configure(pool, &access, id, &change).await.map(|c| {
+            ConfigureConnectorResponse {
+                connector: Some(connector_proto(c)),
+            }
+        });
         self.done_c(&mut timer, r)
+    }
+
+    /// The connectors in view, then every change to one: a diff of the
+    /// store taken once a second while the client listens. Polling the
+    /// database here rather than from each browser keeps one query per
+    /// watcher, and the run row is where progress is written, so this is
+    /// what a pull looks like from outside.
+    pub(crate) async fn rpc_watch_connectors(
+        &self,
+        request: Request<WatchConnectorsRequest>,
+    ) -> Result<Response<ReceiverStream<Result<WatchConnectorsResponse, Status>>>, Status> {
+        let party_ids = request.get_ref().party_ids.clone();
+        let (timer, pool, _, view) = self
+            .invoice_context("FinanceService/WatchConnectors", &request, &party_ids)
+            .await?;
+        let pool = pool.clone();
+        let (tx, rx) = tokio::sync::mpsc::channel(16);
+        tokio::spawn(async move {
+            let _timer = timer;
+            let guard = tbd_common::metrics::StreamGuard::open("watch_connectors");
+            let mut last: std::collections::HashMap<Uuid, (ConnectorRow, Option<RunRow>)> =
+                std::collections::HashMap::new();
+            let mut tick = tokio::time::interval(std::time::Duration::from_secs(1));
+            loop {
+                tick.tick().await;
+                let now = match store::snapshot(&pool, &view).await {
+                    Ok(s) => s,
+                    Err(e) => {
+                        let _ = tx.send(Err(connector_status(e))).await;
+                        return;
+                    }
+                };
+                let mut seen = std::collections::HashSet::new();
+                for (c, run) in now {
+                    seen.insert(c.id);
+                    if last
+                        .get(&c.id)
+                        .is_some_and(|(pc, pr)| *pc == c && *pr == run)
+                    {
+                        continue;
+                    }
+                    let event = WatchConnectorsResponse {
+                        connector: Some(connector_proto(c.clone())),
+                        run: run.clone().map(run_proto),
+                        deleted: false,
+                    };
+                    last.insert(c.id, (c, run));
+                    if tx.send(Ok(event)).await.is_err() {
+                        return;
+                    }
+                    guard.item("out");
+                }
+                let gone: Vec<Uuid> = last
+                    .keys()
+                    .filter(|id| !seen.contains(id))
+                    .copied()
+                    .collect();
+                for id in gone {
+                    if let Some((c, _)) = last.remove(&id) {
+                        let event = WatchConnectorsResponse {
+                            connector: Some(connector_proto(c)),
+                            run: None,
+                            deleted: true,
+                        };
+                        if tx.send(Ok(event)).await.is_err() {
+                            return;
+                        }
+                        guard.item("out");
+                    }
+                }
+            }
+        });
+        Ok(Response::new(ReceiverStream::new(rx)))
     }
 
     pub(crate) async fn rpc_delete_connector(

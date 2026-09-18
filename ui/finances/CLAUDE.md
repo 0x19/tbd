@@ -25,7 +25,15 @@ same conventions; read `ui/chaos/CLAUDE.md` for what is the kit's and what is ou
   `/accounts/` (balances, sync state, "Fetch now" = `RefreshAccount`), `/connections/`
   (`StartConnection` sends the browser to the bank), `/connect/callback/` (the
   registered redirect: reads `state`+`code` from its URL, POSTs `CompleteConnection`,
-  then scrubs the URL), `/invoices/` (says it is not built).
+  then scrubs the URL), `/invoices/` (drafts, preview, approve, PDF), `/connectors/`
+  (one flat list drawn from the `WatchConnectors` SSE feed via `useEvents`: a pull's
+  progress and outcome, a relink, a removal arrive as events; `useFetch` polls only
+  while the feed is down. Link a mailbox chooses the party; the row's party select
+  moves it through `ConfigureConnector`), `/connectors/callback/`, `/documents/`.
+- Streams: `useEvents(url, schema, onEvent)` in `hooks.ts` wraps `EventSource` with
+  credentials; every `data:` frame is one JSON message. Envoy keeps `/v1/**/events`
+  open on the finance host. EventSource cannot send the dev bearer token, so in
+  development the feed shows "Polling" and the list refreshes on a timer.
 - Static export, no `basePath`, `trailingSlash: true`; detail-less by design so far.
   `pnpm dev` is on 3004.
 - Checks: `mise run ui:finances:check` (prettier, eslint, tsc) is part of `mise run ci`;

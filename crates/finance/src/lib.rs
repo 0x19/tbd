@@ -192,6 +192,19 @@ pub async fn serve_with(
         })
         .map_err(|e| ServeError::Store(e.to_string()))?;
 
+        // A connector run this process's predecessor left open belongs to
+        // nobody now; closed here, so a restart never leaves a mailbox
+        // "syncing" with nothing pulling it. Lazy pool: done in the
+        // background so an unreachable database still lets us listen.
+        let sweep = pool.clone();
+        tokio::spawn(async move {
+            match connectors::store::close_orphans(&sweep).await {
+                Ok(0) => {}
+                Ok(n) => tracing::info!(runs = n, "closed connector runs left open by a restart"),
+                Err(e) => tracing::warn!(error = %e, "could not close orphaned connector runs"),
+            }
+        });
+
         // The sync worker runs beside the server, on the same pool, only
         // when a bank is configured. Without credentials there is nothing to
         // call, and saying so once at start beats a worker that wakes every

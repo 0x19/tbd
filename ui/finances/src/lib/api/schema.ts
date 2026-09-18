@@ -337,8 +337,15 @@ export const ConnectorRun = z.object({
   error: z.string(),
 });
 export type ConnectorRun = z.infer<typeof ConnectorRun>;
-// The run just opened; the pull is detached, so poll connectorRuns for its outcome.
+// The run just opened; the pull is detached. Its progress and outcome arrive on the
+// connectors feed (WatchConnectors).
 export const SyncConnectorResponse = z.object({ run: ConnectorRun });
+export const WatchConnectorsResponse = z.object({
+  connector: Connector,
+  run: ConnectorRun.nullable().optional(),
+  deleted: z.boolean(),
+});
+export type WatchConnectorsResponse = z.infer<typeof WatchConnectorsResponse>;
 export const ListConnectorRunsResponse = z.object({ runs: z.array(ConnectorRun) });
 
 export const DocumentSource = z.object({

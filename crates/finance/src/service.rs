@@ -18,7 +18,6 @@ use tbd_proto::finance::v1::{
     Account, ApproveInvoiceRequest, ApproveInvoiceResponse, Balance, CancelInvoiceRequest,
     CancelInvoiceResponse, Category, CompleteConnectionRequest, CompleteConnectionResponse,
     CompleteConnectorRequest, CompleteConnectorResponse, ConfigureConnectorRequest,
-    WatchConnectorsRequest, WatchConnectorsResponse,
     ConfigureConnectorResponse, Connection, CreateInvoiceRequest, CreateInvoiceResponse,
     DeclareCategoryRequest, DeclareCategoryResponse, DeleteConnectorRequest,
     DeleteConnectorResponse, DeleteLineTemplateRequest, DeleteLineTemplateResponse,
@@ -38,8 +37,8 @@ use tbd_proto::finance::v1::{
     SyncConnectorResponse, TestConnectorRequest, TestConnectorResponse, Transaction,
     UpdateInvoiceRequest, UpdateInvoiceResponse, UpsertClientRequest, UpsertClientResponse,
     UpsertIssuerRequest, UpsertIssuerResponse, UpsertLineTemplateRequest,
-    UpsertLineTemplateResponse, UpsertRuleRequest, UpsertRuleResponse,
-    finance_service_server::FinanceService,
+    UpsertLineTemplateResponse, UpsertRuleRequest, UpsertRuleResponse, WatchConnectorsRequest,
+    WatchConnectorsResponse, finance_service_server::FinanceService,
 };
 use tonic::{Code, Request, Response, Status};
 use uuid::Uuid;
@@ -980,7 +979,11 @@ impl FinanceService for Finance {
         self.rpc_list_connectors(r).await
     }
     type WatchConnectorsStream = Pin<
-        Box<dyn tokio_stream::Stream<Item = Result<WatchConnectorsResponse, Status>> + Send + 'static>,
+        Box<
+            dyn tokio_stream::Stream<Item = Result<WatchConnectorsResponse, Status>>
+                + Send
+                + 'static,
+        >,
     >;
     async fn watch_connectors(
         &self,

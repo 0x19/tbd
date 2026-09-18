@@ -11,7 +11,7 @@ use base64::{Engine, engine::general_purpose::URL_SAFE};
 use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
 
-use super::{Auth, AuthContext, Connector, ConnectorError, Found, Kind, Linked, Pull};
+use super::{Auth, AuthContext, Connector, ConnectorError, Found, Kind, Linked, Reach};
 use crate::config::Connectors as Config;
 
 const AUTH_URL: &str = "https://accounts.google.com/o/oauth2/v2/auth";
@@ -247,7 +247,8 @@ impl Connector for Gmail {
         config: &Value,
         since: DateTime<Utc>,
         seen: &(dyn for<'a> Fn(&'a str) -> bool + Sync),
-    ) -> Result<Pull, ConnectorError> {
+        sink: tokio::sync::mpsc::Sender<Found>,
+    ) -> Result<Reach, ConnectorError> {
         let token = self.access_token(credentials).await?;
         let query = config
             .get("query")
@@ -291,8 +292,11 @@ impl Connector for Gmail {
         // messages never pulled count against the cap, so a mailbox drains
         // over rounds rather than re-fetching its newest 500 forever.
         let unseen: Vec<&String> = ids.iter().filter(|id| !seen(id)).collect();
-        let complete = unseen.len() <= MAX_MESSAGES;
-        let mut found = Vec::new();
+        let reach = if unseen.len() <= MAX_MESSAGES {
+            Reach::Complete
+        } else {
+            Reach::Truncated
+        };
         for id in unseen.into_iter().take(MAX_MESSAGES) {
             let message = self
                 .get(&token, &format!("{API}/messages/{id}?format=full"))
@@ -328,7 +332,7 @@ impl Connector for Gmail {
                     .decode(data)
                     .or_else(|_| base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(data))
                     .map_err(|e| ConnectorError::Provider(format!("attachment: {e}")))?;
-                found.push(Found {
+                let found = Found {
                     external_ref: format!("{id}:{filename}"),
                     filename: filename.to_owned(),
                     content_type: "application/pdf".into(),
@@ -336,9 +340,14 @@ impl Connector for Gmail {
                     subject: subject.clone(),
                     sender: sender.clone(),
                     received_at,
-                });
+                };
+                // A closed sink is the caller done listening (its store
+                // failed, or the run was abandoned): nothing more to fetch.
+                if sink.send(found).await.is_err() {
+                    return Ok(Reach::Truncated);
+                }
             }
         }
-        Ok(Pull { found, complete })
+        Ok(reach)
     }
 }

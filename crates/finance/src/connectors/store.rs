@@ -7,7 +7,7 @@ use sqlx::PgPool;
 use tbd_db::{Access, DbError, PartyId, map_err};
 use uuid::Uuid;
 
-use super::{AuthContext, Connector, ConnectorError, Pulled, crypto::Sealer};
+use super::{AuthContext, Connector, ConnectorError, Found, Pulled, Reach, crypto::Sealer};
 
 /// Why a store call failed.
 #[derive(Debug, thiserror::Error)]
@@ -30,7 +30,7 @@ pub enum StoreError {
 }
 
 #[allow(missing_docs)]
-#[derive(Debug, Clone, sqlx::FromRow)]
+#[derive(Debug, Clone, PartialEq, Eq, sqlx::FromRow)]
 pub struct ConnectorRow {
     pub id: Uuid,
     pub party_id: Uuid,
@@ -48,7 +48,7 @@ pub struct ConnectorRow {
 }
 
 #[allow(missing_docs)]
-#[derive(Debug, Clone, sqlx::FromRow)]
+#[derive(Debug, Clone, PartialEq, Eq, sqlx::FromRow)]
 pub struct RunRow {
     pub id: Uuid,
     pub connector_id: Uuid,
@@ -419,8 +419,50 @@ pub async fn run_sync(
                 s == external_ref || s.split_once(':').is_some_and(|(m, _)| m == external_ref)
             })
         };
-        let pull = match kind.pull(&creds, &row.config, since, &seen).await {
-            Ok(p) => p,
+        // The kind fetches into one end, the store drains the other, so a
+        // document is on disk and counted while the next one is still on
+        // the wire. A store failure closes the receiver; the kind sees the
+        // closed sink and stops.
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<Found>(4);
+        let pulling = kind.pull(&creds, &row.config, since, &seen, tx);
+        let storing = async {
+            let mut counts = Pulled::default();
+            let mut failure: Option<StoreError> = None;
+            while let Some(f) = rx.recv().await {
+                if failure.is_some() {
+                    // Drain without storing, so the kind is not blocked on a
+                    // full channel while we wait for it to notice.
+                    continue;
+                }
+                match store_one(pool, row.party_id, id, &f, &seen).await {
+                    Ok(stored) => {
+                        counts.found += 1;
+                        counts.stored += usize::from(stored);
+                        counts.skipped += usize::from(!stored);
+                        if let Err(e) = progress(pool, run_id, stored).await {
+                            failure = Some(e);
+                            rx.close();
+                        }
+                    }
+                    Err(e) => {
+                        failure = Some(e);
+                        rx.close();
+                    }
+                }
+            }
+            (counts, failure)
+        };
+        let (reach, (counts, failure)) = tokio::join!(pulling, storing);
+        pulled.found += counts.found;
+        pulled.stored += counts.stored;
+        pulled.skipped += counts.skipped;
+        if let Some(e) = failure {
+            tracing::warn!(connector = %id, round, error = %e, "connector sync: storing failed");
+            finish(pool, run_id, id, Err(&e.to_string())).await?;
+            return Err(e);
+        }
+        let reach = match reach {
+            Ok(r) => r,
             Err(e) => {
                 tracing::warn!(connector = %id, kind = %row.kind, round, error = %e, "connector sync: pull failed");
                 let status = if matches!(e, ConnectorError::Unlinked(_)) {
@@ -440,25 +482,49 @@ pub async fn run_sync(
                 return Err(e.into());
             }
         };
-        let stored = match store_found(pool, row.party_id, id, &pull.found, &seen).await {
-            Ok(p) => p,
-            Err(e) => {
-                tracing::warn!(connector = %id, round, error = %e, "connector sync: storing failed");
-                finish(pool, run_id, id, Err(&e.to_string())).await?;
-                return Err(e);
-            }
-        };
-        pulled.found += stored.found;
-        pulled.stored += stored.stored;
-        pulled.skipped += stored.skipped;
-        tracing::info!(connector = %id, round, found = stored.found, stored = stored.stored, complete = pull.complete, "connector sync: round");
-        if pull.complete {
+        tracing::info!(connector = %id, round, found = counts.found, stored = counts.stored, ?reach, "connector sync: round");
+        if reach == Reach::Complete {
             complete = true;
             break;
         }
     }
     finish(pool, run_id, id, Ok((&pulled, complete))).await?;
     Ok(pulled)
+}
+
+/// Count one stored or skipped document on the run row, so a watcher sees
+/// the pull move while it is still going.
+async fn progress(pool: &PgPool, run_id: Uuid, stored: bool) -> Result<(), StoreError> {
+    sqlx::query(
+        "update finance.connector_runs
+            set found = found + 1,
+                stored = stored + case when $2 then 1 else 0 end,
+                skipped = skipped + case when $2 then 0 else 1 end
+          where id = $1",
+    )
+    .bind(run_id)
+    .bind(stored)
+    .execute(pool)
+    .await
+    .map_err(map_err)?;
+    Ok(())
+}
+
+/// Close every run that never finished. For start-up: the process that was
+/// pulling is gone, and a run it left open would block its connector for
+/// half an hour.
+///
+/// # Errors
+/// The database.
+pub async fn close_orphans(pool: &PgPool) -> Result<u64, StoreError> {
+    let done = sqlx::query(
+        "update finance.connector_runs set finished_at = now(), outcome = 'error', error = 'interrupted by restart'
+          where finished_at is null",
+    )
+    .execute(pool)
+    .await
+    .map_err(map_err)?;
+    Ok(done.rows_affected())
 }
 
 /// Every provider id this connector has stored a source for.
@@ -475,82 +541,75 @@ async fn seen_refs(
     Ok(rows.into_iter().map(|(r,)| r).collect())
 }
 
-/// Store what a pull found: new bytes become a document, known bytes gain a
-/// source, and anything seen before is skipped.
-async fn store_found(
+/// Store one thing a pull found: new bytes become a document, known bytes
+/// gain a source, and a provider id seen before is skipped. `true` when a
+/// document was stored.
+async fn store_one(
     pool: &PgPool,
     party: Uuid,
     connector: Uuid,
-    found: &[super::Found],
+    f: &Found,
     seen: &(dyn for<'a> Fn(&'a str) -> bool + Sync),
-) -> Result<Pulled, StoreError> {
-    let mut pulled = Pulled {
-        found: found.len(),
-        ..Pulled::default()
-    };
-    for f in found {
-        if seen(&f.external_ref) {
-            pulled.skipped += 1;
-            continue;
-        }
-        let mut hasher = Sha256::new();
-        hasher.update(&f.bytes);
-        let sha = format!("{:x}", hasher.finalize());
-        let mut tx = pool.begin().await.map_err(map_err)?;
-        // Same bytes seen before (the other mailbox got the same receipt):
-        // one document, another source.
-        let existing: Option<(Uuid,)> =
-            sqlx::query_as("select id from finance.documents where party_id = $1 and sha256 = $2")
-                .bind(party)
-                .bind(&sha)
-                .fetch_optional(&mut *tx)
-                .await
-                .map_err(map_err)?;
-        let document_id = if let Some((d,)) = existing {
-            pulled.skipped += 1;
-            d
-        } else {
-            let d = Uuid::new_v4();
-            sqlx::query(
-                "insert into finance.documents (id, party_id, kind, sha256, content_type, size_bytes, filename)
-                 values ($1, $2, 'receipt', $3, $4, $5, $6)",
-            )
-            .bind(d)
+) -> Result<bool, StoreError> {
+    if seen(&f.external_ref) {
+        return Ok(false);
+    }
+    let mut hasher = Sha256::new();
+    hasher.update(&f.bytes);
+    let sha = format!("{:x}", hasher.finalize());
+    let mut tx = pool.begin().await.map_err(map_err)?;
+    // Same bytes seen before (the other mailbox got the same receipt):
+    // one document, another source.
+    let existing: Option<(Uuid,)> =
+        sqlx::query_as("select id from finance.documents where party_id = $1 and sha256 = $2")
             .bind(party)
             .bind(&sha)
-            .bind(&f.content_type)
-            .bind(i64::try_from(f.bytes.len()).unwrap_or(i64::MAX))
-            .bind(&f.filename)
-            .execute(&mut *tx)
+            .fetch_optional(&mut *tx)
             .await
             .map_err(map_err)?;
-            sqlx::query("insert into finance.document_blobs (document_id, bytes) values ($1, $2)")
-                .bind(d)
-                .bind(&f.bytes)
-                .execute(&mut *tx)
-                .await
-                .map_err(map_err)?;
-            pulled.stored += 1;
-            d
-        };
+    let (document_id, stored) = if let Some((d,)) = existing {
+        (d, false)
+    } else {
+        let d = Uuid::new_v4();
         sqlx::query(
-            "insert into finance.document_sources (document_id, connector_id, external_ref, subject, sender, received_at)
-             values ($1, $2, $3, $4, $5, $6) on conflict do nothing",
+            "insert into finance.documents (id, party_id, kind, sha256, content_type, size_bytes, filename)
+             values ($1, $2, 'receipt', $3, $4, $5, $6)",
         )
-        .bind(document_id)
-        .bind(connector)
-        .bind(&f.external_ref)
-        .bind(&f.subject)
-        .bind(&f.sender)
-        .bind(f.received_at)
+        .bind(d)
+        .bind(party)
+        .bind(&sha)
+        .bind(&f.content_type)
+        .bind(i64::try_from(f.bytes.len()).unwrap_or(i64::MAX))
+        .bind(&f.filename)
         .execute(&mut *tx)
         .await
         .map_err(map_err)?;
-        tx.commit().await.map_err(map_err)?;
-    }
-    Ok(pulled)
+        sqlx::query("insert into finance.document_blobs (document_id, bytes) values ($1, $2)")
+            .bind(d)
+            .bind(&f.bytes)
+            .execute(&mut *tx)
+            .await
+            .map_err(map_err)?;
+        (d, true)
+    };
+    sqlx::query(
+        "insert into finance.document_sources (document_id, connector_id, external_ref, subject, sender, received_at)
+         values ($1, $2, $3, $4, $5, $6) on conflict do nothing",
+    )
+    .bind(document_id)
+    .bind(connector)
+    .bind(&f.external_ref)
+    .bind(&f.subject)
+    .bind(&f.sender)
+    .bind(f.received_at)
+    .execute(&mut *tx)
+    .await
+    .map_err(map_err)?;
+    tx.commit().await.map_err(map_err)?;
+    Ok(stored)
 }
 
+/// Record how a run ended, and on the connector what its last sync was.
 async fn finish(
     pool: &PgPool,
     run_id: Uuid,
@@ -631,14 +690,97 @@ pub async fn configure(
     pool: &PgPool,
     access: &Access,
     id: Uuid,
-    config: Value,
+    change: &Change,
 ) -> Result<ConnectorRow, StoreError> {
-    get(pool, access, id).await?;
-    sqlx::query("update finance.connectors set config = $2, updated_at = now() where id = $1")
+    let row = get(pool, access, id).await?;
+    let mut tx = pool.begin().await.map_err(map_err)?;
+    if let Some(config) = &change.config {
+        sqlx::query("update finance.connectors set config = $2, updated_at = now() where id = $1")
+            .bind(id)
+            .bind(config)
+            .execute(&mut *tx)
+            .await
+            .map_err(map_err)?;
+    }
+    if let Some(label) = &change.label {
+        sqlx::query("update finance.connectors set label = $2, updated_at = now() where id = $1")
+            .bind(id)
+            .bind(label)
+            .execute(&mut *tx)
+            .await
+            .map_err(map_err)?;
+    }
+    if let Some(party) = change.party
+        && party != row.party_id
+    {
+        // A party outside the grant is not found, the same as a row would be.
+        access.require(PartyId(party), "party_id")?;
+        sqlx::query(
+            "update finance.connectors set party_id = $2, updated_at = now() where id = $1",
+        )
         .bind(id)
-        .bind(config)
-        .execute(pool)
+        .bind(party)
+        .execute(&mut *tx)
         .await
         .map_err(map_err)?;
+        // Its documents go with it -- those it alone pulled. One that
+        // another connector also sourced stays where it is.
+        sqlx::query(
+            "update finance.documents d set party_id = $2
+              where d.id in (select document_id from finance.document_sources where connector_id = $1)
+                and not exists (select 1 from finance.document_sources s
+                                 where s.document_id = d.id and s.connector_id is distinct from $1)",
+        )
+        .bind(id)
+        .bind(party)
+        .execute(&mut *tx)
+        .await
+        .map_err(map_err)?;
+    }
+    tx.commit().await.map_err(map_err)?;
     get(pool, access, id).await
+}
+
+/// What `configure` may change; `None` leaves a field alone.
+#[derive(Debug, Default)]
+pub struct Change {
+    /// The kind's settings.
+    pub config: Option<Value>,
+    /// The party the connector and its documents belong to.
+    pub party: Option<Uuid>,
+    /// The display label.
+    pub label: Option<String>,
+}
+
+/// Every connector in the view with its latest run, for the watch stream
+/// and its diff.
+///
+/// # Errors
+/// The database.
+pub async fn snapshot(
+    pool: &PgPool,
+    view: &Access,
+) -> Result<Vec<(ConnectorRow, Option<RunRow>)>, StoreError> {
+    let connectors = list(pool, view).await?;
+    if connectors.is_empty() {
+        return Ok(Vec::new());
+    }
+    let ids: Vec<Uuid> = connectors.iter().map(|c| c.id).collect();
+    let runs: Vec<RunRow> = sqlx::query_as(
+        "select distinct on (connector_id)
+                id, connector_id, started_at, finished_at, trigger, outcome, found, stored, skipped, error
+           from finance.connector_runs where connector_id = any($1)
+          order by connector_id, started_at desc",
+    )
+    .bind(&ids)
+    .fetch_all(pool)
+    .await
+    .map_err(map_err)?;
+    Ok(connectors
+        .into_iter()
+        .map(|c| {
+            let run = runs.iter().find(|r| r.connector_id == c.id).cloned();
+            (c, run)
+        })
+        .collect())
 }

@@ -11,7 +11,12 @@ const SOLID = "border-transparent bg-foreground text-background";
 /** A sync outcome or a connection status as a chip, the way the kit does them. */
 const STYLE: Record<string, string> = {
   ok: GOOD,
+  linked: GOOD,
   authorized: GOOD,
+  running: WARN,
+  syncing: WARN,
+  partial: WARN,
+  interrupted: MUTED,
   booked: GOOD,
   declared: SOLID,
   inferred: MUTED,

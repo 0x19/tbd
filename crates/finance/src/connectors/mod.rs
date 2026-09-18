@@ -131,27 +131,29 @@ pub trait Connector: Send + Sync + std::fmt::Debug {
     /// Prove the credential still works, cheaply. Returns a one-line status.
     async fn test(&self, credentials: &serde_json::Value) -> Result<String, ConnectorError>;
 
-    /// Everything new since `since`, as documents. `seen` says whether a
-    /// provider id was pulled before, so the provider is not asked for bytes
-    /// it already gave. A kind that stops short of everything new says so
-    /// with `complete = false`; the caller pulls again with the new ids seen.
+    /// Everything new since `since`, as documents, sent into `sink` one at a
+    /// time as they are fetched so the caller can store and count them while
+    /// the pull is still going. `seen` says whether a provider id was pulled
+    /// before, so the provider is not asked for bytes it already gave. A kind
+    /// with a per-round cap that hit it returns [`Reach::Truncated`]; the
+    /// caller pulls again with the new ids seen.
     async fn pull(
         &self,
         credentials: &serde_json::Value,
         config: &serde_json::Value,
         since: DateTime<Utc>,
         seen: &(dyn for<'a> Fn(&'a str) -> bool + Sync),
-    ) -> Result<Pull, ConnectorError>;
+        sink: tokio::sync::mpsc::Sender<Found>,
+    ) -> Result<Reach, ConnectorError>;
 }
 
-/// One round of a pull.
-#[derive(Debug, Default)]
-pub struct Pull {
-    /// What was fetched this round.
-    pub found: Vec<Found>,
-    /// Whether that was everything new. A kind with a per-round cap
-    /// returns `false` when it hit it.
-    pub complete: bool,
+/// How far one round of a pull got.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Reach {
+    /// Everything new was sent.
+    Complete,
+    /// The round's cap was hit; more remains.
+    Truncated,
 }
 
 /// A source of kinds: the registry, or what a test injects.
