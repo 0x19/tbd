@@ -226,6 +226,7 @@ export const InvoiceLine = z.object({
   quantity_milli: Minor,
   unit_price_minor: Minor,
   amount_minor: Minor,
+  template_id: z.string(),
 });
 export type InvoiceLine = z.infer<typeof InvoiceLine>;
 
@@ -270,3 +271,19 @@ export const InvoiceDocumentResponse = z.object({
   pdf: z.string(),
   number: z.string(),
 });
+
+export const LineTemplate = z.object({
+  id: z.string(),
+  client_id: z.string(),
+  position: z.number(),
+  description: z.string(),
+  // fixed | variable | optional
+  mode: z.string(),
+  quantity_milli: Minor,
+  unit_price_minor: Minor,
+  enabled: z.boolean(),
+});
+export type LineTemplate = z.infer<typeof LineTemplate>;
+export const ListLineTemplatesResponse = z.object({ templates: z.array(LineTemplate) });
+export const UpsertLineTemplateResponse = z.object({ template: LineTemplate.nullable().optional() });
+export const DeleteLineTemplateResponse = z.object({});

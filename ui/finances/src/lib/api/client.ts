@@ -7,16 +7,19 @@ import {
   type ClientProfile,
   CompleteConnectionResponse,
   DeclareCategoryResponse,
+  DeleteLineTemplateResponse,
   GetIssuerResponse,
   InvoiceDocumentResponse,
   type InvoiceLine,
   InvoiceResponse,
   type IssuerProfile,
+  type LineTemplate,
   ListAccountsResponse,
   ListCategoriesResponse,
   ListClientsResponse,
   ListConnectionsResponse,
   ListInvoicesResponse,
+  ListLineTemplatesResponse,
   ListPartiesResponse,
   ListRulesResponse,
   ListTransactionsResponse,
@@ -27,6 +30,7 @@ import {
   StartConnectionResponse,
   UpsertClientResponse,
   UpsertIssuerResponse,
+  UpsertLineTemplateResponse,
   type UpsertRule,
   UpsertRuleResponse,
 } from "./schema";
@@ -202,6 +206,18 @@ export const api = {
   cancelInvoice: (id: string, reason: string) =>
     call(InvoiceResponse, `/v1/finance/invoices/${id}/cancel`, { method: "POST", json: { reason } }),
   invoiceDocument: (id: string) => call(InvoiceDocumentResponse, `/v1/finance/invoices/${id}/document`),
+  lineTemplates: (client_id: string) =>
+    call(ListLineTemplatesResponse, `/v1/finance/clients/${client_id}/lines`),
+  upsertLineTemplate: (client_id: string, template: LineTemplate) =>
+    call(UpsertLineTemplateResponse, `/v1/finance/clients/${client_id}/lines`, {
+      method: "POST",
+      json: { template },
+    }),
+  deleteLineTemplate: (client_id: string, id: string) =>
+    call(DeleteLineTemplateResponse, `/v1/finance/clients/${client_id}/lines/delete`, {
+      method: "POST",
+      json: { id },
+    }),
 };
 
 /** A base64 PDF from the API as an object URL for an <iframe> or a download. */

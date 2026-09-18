@@ -18,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api/client";
 import { describe, useFetch } from "@/lib/api/hooks";
-import type { ClientProfile, IssuerProfile } from "@/lib/api/schema";
+import type { ClientProfile, IssuerProfile, LineTemplate } from "@/lib/api/schema";
 
 const EMPTY_ISSUER = (party_id: string): IssuerProfile => ({
   party_id,
@@ -260,6 +260,7 @@ function ClientsCard({ party }: { party: string }) {
                 Cancel
               </Button>
             </div>
+            {editing.id ? <TemplatesEditor client={editing.id} /> : null}
           </div>
         ) : null}
       </CardContent>
@@ -284,6 +285,153 @@ function F({
     <div className={className}>
       <Label className="text-muted-foreground mb-1.5 block text-xs">{label}</Label>
       <Input value={v} onChange={(e) => on(e.target.value)} className={mono ? "font-mono" : undefined} />
+    </div>
+  );
+}
+
+const MODES = [
+  ["fixed", "Fixed — on every draft with this price"],
+  ["variable", "Variable — on every draft, price asked each month"],
+  ["optional", "Optional — offered, off until chosen"],
+] as const;
+
+/** The rows a draft for this client starts from. */
+function TemplatesEditor({ client }: { client: string }) {
+  const loaded = useFetch(() => api.lineTemplates(client), 0, [client]);
+  const [rows, setRows] = useState<LineTemplate[]>([]);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    setRows(loaded.data?.templates ?? []);
+  }, [loaded.data]);
+  const blank = (): LineTemplate => ({
+    id: "",
+    client_id: client,
+    position: rows.length + 1,
+    description: "",
+    mode: "fixed",
+    quantity_milli: "1000",
+    unit_price_minor: "0",
+    enabled: true,
+  });
+  const set = (i: number, patch: Partial<LineTemplate>) =>
+    setRows(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  const save = async (t: LineTemplate) => {
+    setBusy(true);
+    try {
+      await api.upsertLineTemplate(client, t);
+      toast.success("Template saved.");
+      loaded.reload();
+    } catch (e) {
+      toast.error(describe(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const remove = async (t: LineTemplate, i: number) => {
+    if (!t.id) return setRows(rows.filter((_, j) => j !== i));
+    setBusy(true);
+    try {
+      await api.deleteLineTemplate(client, t.id);
+      loaded.reload();
+    } catch (e) {
+      toast.error(describe(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="sm:col-span-2">
+      <div className="mb-2 flex items-center justify-between">
+        <div>
+          <Label className="text-xs font-medium">Line templates</Label>
+          <p className="text-muted-foreground text-xs">
+            What a new draft for this client starts with, in order.
+          </p>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => setRows([...rows, blank()])}>
+          <Plus /> Row
+        </Button>
+      </div>
+      <div className="space-y-2">
+        {rows.map((t, i) => (
+          <div
+            key={t.id || `new-${i}`}
+            className="grid gap-2 rounded-md border p-2 sm:grid-cols-[3rem_1fr_11rem_6rem_8rem_auto]"
+          >
+            <Input
+              value={String(t.position)}
+              inputMode="numeric"
+              className="font-mono"
+              onChange={(e) => set(i, { position: Number(e.target.value) || 0 })}
+            />
+            <Textarea
+              rows={2}
+              value={t.description}
+              className="min-h-9 text-sm"
+              placeholder="Description as printed"
+              onChange={(e) => set(i, { description: e.target.value })}
+            />
+            <Select value={t.mode} onValueChange={(v) => set(i, { mode: v })}>
+              <SelectTrigger className="text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {MODES.map(([v, label]) => (
+                  <SelectItem key={v} value={v}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Input
+              value={(Number(t.quantity_milli) / 1000).toString()}
+              inputMode="decimal"
+              className="text-right font-mono"
+              title="Quantity"
+              onChange={(e) =>
+                set(i, {
+                  quantity_milli: String(Math.round(Number(e.target.value.replace(",", ".")) * 1000) || 1000),
+                })
+              }
+            />
+            <Input
+              value={(Number(t.unit_price_minor) / 100).toFixed(2)}
+              inputMode="decimal"
+              className="text-right font-mono"
+              title={t.mode === "variable" ? "Only used when there is no previous invoice" : "Unit price"}
+              onChange={(e) =>
+                set(i, {
+                  unit_price_minor: String(Math.round(Number(e.target.value.replace(",", ".")) * 100) || 0),
+                })
+              }
+            />
+            <div className="flex gap-1">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={busy || !t.description.trim()}
+                onClick={() => void save(t)}
+              >
+                Save
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={busy}
+                onClick={() => void remove(t, i)}
+                aria-label="Remove"
+              >
+                ×
+              </Button>
+            </div>
+          </div>
+        ))}
+        {rows.length === 0 ? (
+          <p className="text-muted-foreground text-xs">
+            No templates: a draft starts from the last invoice to this client.
+          </p>
+        ) : null}
+      </div>
     </div>
   );
 }

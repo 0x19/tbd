@@ -20,7 +20,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { api, pdfUrl } from "@/lib/api/client";
 import { describe, useFetch } from "@/lib/api/hooks";
-import type { Invoice, InvoiceLine } from "@/lib/api/schema";
+import type { Invoice, InvoiceLine, LineTemplate } from "@/lib/api/schema";
 import { money, when } from "@/lib/format";
 
 export default function InvoicePage() {
@@ -32,13 +32,23 @@ export default function InvoicePage() {
 }
 
 /** Editable line, in the units a person types: "1.5" and "13750.00". */
-type EditLine = { description: string; quantity: string; unit_price: string };
+type EditLine = { description: string; quantity: string; unit_price: string; template_id: string };
 
 function toEdit(l: InvoiceLine): EditLine {
   return {
     description: l.description,
     quantity: (Number(l.quantity_milli) / 1000).toString(),
     unit_price: (Number(l.unit_price_minor) / 100).toFixed(2),
+    template_id: l.template_id,
+  };
+}
+
+function fromTemplate(t: LineTemplate): EditLine {
+  return {
+    description: t.description,
+    quantity: (Number(t.quantity_milli) / 1000).toString(),
+    unit_price: (Number(t.unit_price_minor) / 100).toFixed(2),
+    template_id: t.id,
   };
 }
 
@@ -64,6 +74,7 @@ function toApiLines(lines: EditLine[]): InvoiceLine[] {
     quantity_milli: toMinor(l.quantity, 3),
     unit_price_minor: toMinor(l.unit_price, 2),
     amount_minor: "0",
+    template_id: l.template_id,
   }));
 }
 
@@ -71,6 +82,18 @@ function InvoiceView() {
   const id = useSearchParams().get("id") ?? "";
   const loaded = useFetch(() => api.invoice(id), 0, [id]);
   const inv = loaded.data?.invoice ?? null;
+  const templates = useFetch(
+    () =>
+      inv?.client_id
+        ? api.lineTemplates(inv.client_id)
+        : Promise.resolve({ templates: [] as LineTemplate[] }),
+    0,
+    [inv?.client_id],
+  );
+  const templateById = useMemo(
+    () => new Map((templates.data?.templates ?? []).map((t) => [t.id, t])),
+    [templates.data],
+  );
   const [delivery, setDelivery] = useState("");
   const [due, setDue] = useState("");
   const [place, setPlace] = useState("");
@@ -303,7 +326,10 @@ function InvoiceView() {
                   variant="outline"
                   size="sm"
                   onClick={() =>
-                    edit(setLines)([...lines, { description: "", quantity: "1", unit_price: "0.00" }])
+                    edit(setLines)([
+                      ...lines,
+                      { description: "", quantity: "1", unit_price: "0.00", template_id: "" },
+                    ])
                   }
                 >
                   <Plus /> Line
@@ -311,6 +337,29 @@ function InvoiceView() {
               ) : null}
             </CardHeader>
             <CardContent className="space-y-2">
+              {editable &&
+              (templates.data?.templates ?? []).some(
+                (t) => t.enabled && !lines.some((l) => l.template_id === t.id),
+              ) ? (
+                <div className="flex flex-wrap items-center gap-1.5 pb-1">
+                  <span className="text-muted-foreground text-xs">Add from template:</span>
+                  {(templates.data?.templates ?? [])
+                    .filter((t) => t.enabled && !lines.some((l) => l.template_id === t.id))
+                    .map((t) => (
+                      <Button
+                        key={t.id}
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={() => edit(setLines)([...lines, fromTemplate(t)])}
+                      >
+                        <Plus />{" "}
+                        {t.description.length > 40 ? `${t.description.slice(0, 40)}…` : t.description}
+                        <span className="text-muted-foreground ml-1">{t.mode}</span>
+                      </Button>
+                    ))}
+                </div>
+              ) : null}
               <div className="text-muted-foreground grid grid-cols-[1fr_5rem_8rem_8rem_2rem] gap-2 px-1 text-xs">
                 <span>Description</span>
                 <span className="text-right">Qty</span>
@@ -349,7 +398,16 @@ function InvoiceView() {
                       value={l.unit_price}
                       disabled={!editable}
                       inputMode="decimal"
-                      className="text-right font-mono"
+                      title={
+                        templateById.get(l.template_id)?.mode === "variable"
+                          ? "Variable row: pre-filled from last month; set this month's price"
+                          : undefined
+                      }
+                      className={
+                        templateById.get(l.template_id)?.mode === "variable" && editable
+                          ? "border-amber-400/70 text-right font-mono focus-visible:ring-amber-400/40"
+                          : "text-right font-mono"
+                      }
                       onChange={(e) =>
                         edit(setLines)(
                           lines.map((x, j) => (j === i ? { ...x, unit_price: e.target.value } : x)),
