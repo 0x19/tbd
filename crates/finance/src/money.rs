@@ -378,11 +378,16 @@ pub async fn upsert_rule(
             reason: "want CRDT or DBIT".into(),
         });
     }
-    let normalise = |v: &Option<String>| {
+    // Trimmed only: the statement below runs the pattern through
+    // `finance.normalise`, the same function the pass applies to the row, so
+    // the two agree on punctuation. The Rust normaliser turns `NAME-CHEAP`
+    // into `NAME CHEAP`, which the SQL side never produces, and a rule made
+    // in the UI would have matched nothing. Anchors `^` and `$` survive both.
+    let trimmed = |v: &Option<String>| {
         v.as_deref()
             .map(str::trim)
             .filter(|s| !s.is_empty())
-            .map(crate::import::normalise)
+            .map(str::to_owned)
     };
     let id = if let Some(id) = input.id {
         // Changing a rule the caller may not see is not-found, like reading it.
@@ -403,7 +408,7 @@ pub async fn upsert_rule(
             (id, party_id, priority, name, category_id, match_counterparty_like,
              match_counterparty_iban, match_remittance_like, match_currency,
              match_credit_debit, enabled)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         values ($1, $2, $3, $4, $5, finance.normalise($6), $7, finance.normalise($8), $9, $10, $11)
          on conflict (id) do update
             set priority = excluded.priority, name = excluded.name,
                 category_id = excluded.category_id,
@@ -419,7 +424,7 @@ pub async fn upsert_rule(
     .bind(input.priority)
     .bind(input.name.trim())
     .bind(input.category_id)
-    .bind(normalise(&input.match_counterparty_like))
+    .bind(trimmed(&input.match_counterparty_like))
     .bind(
         input
             .match_counterparty_iban
@@ -427,7 +432,7 @@ pub async fn upsert_rule(
             .map(str::trim)
             .filter(|s| !s.is_empty()),
     )
-    .bind(normalise(&input.match_remittance_like))
+    .bind(trimmed(&input.match_remittance_like))
     .bind(
         input
             .match_currency

@@ -27,6 +27,19 @@ export function normalise(s: string): string {
   return s.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D").toUpperCase();
 }
 
+/** The pass's match: a substring, unless `^` pins it to the start or `$` to the end. */
+export function matchesPattern(pattern: string, value: string): boolean {
+  const p = normalise(pattern.trim());
+  const v = normalise(value);
+  const start = p.startsWith("^");
+  const end = p.endsWith("$");
+  const core = p.replace(/^\^/, "").replace(/\$$/, "");
+  if (start && end) return v === core;
+  if (start) return v.startsWith(core);
+  if (end) return v.endsWith(core);
+  return v.includes(core);
+}
+
 /** A rule name from a counterparty: `DUBRAVICA-AUTOBUSNI KO` → `dubravica`. */
 export function suggestName(counterparty: string): string {
   const first = normalise(counterparty)
@@ -70,7 +83,8 @@ export function RuleDialog({
   // What the text conditions would claim, from the newest rows mentioning
   // them. Approximate on purpose: the pass is the truth, and it runs on save.
   useEffect(() => {
-    const needle = cp.trim() || rem.trim();
+    // The server searches for a substring; the anchors are ours to apply.
+    const needle = (cp.trim() || rem.trim()).replace(/^\^/, "").replace(/\$$/, "");
     if (!needle || !party) {
       setPreview(null);
       return;
@@ -79,12 +93,10 @@ export function RuleDialog({
       void api
         .transactions({ party_ids: [party], limit: 100, search: needle })
         .then((r) => {
-          const ncp = normalise(cp.trim());
-          const nrem = normalise(rem.trim());
           const hits = r.transactions.filter(
             (t) =>
-              (!ncp || normalise(t.counterparty_name).includes(ncp)) &&
-              (!nrem || normalise(t.remittance).includes(nrem)) &&
+              (!cp.trim() || matchesPattern(cp, t.counterparty_name)) &&
+              (!rem.trim() || matchesPattern(rem, t.remittance)) &&
               (!iban.trim() || t.counterparty_iban === iban.trim()) &&
               (!ccy || t.currency === ccy) &&
               (!cd || (cd === "DBIT") === t.amount_minor.startsWith("-")),
@@ -131,7 +143,8 @@ export function RuleDialog({
           <DialogTitle>{rule ? "Edit rule" : "New rule"}</DialogTitle>
           <DialogDescription>
             Every condition is optional; those set must all match. Text matches are case-insensitive and
-            ignore Croatian diacritics. Lower priority numbers win.
+            ignore Croatian diacritics; a leading ^ pins the text to the start, a trailing $ to the end. Lower
+            priority numbers win.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4">

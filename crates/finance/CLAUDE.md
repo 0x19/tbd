@@ -72,7 +72,12 @@ The finance service. gRPC only. Scaffolded by `tbd new service` (docs/tbd/README
   as it is stored, on every unread one at start-up (`backfill`, after the run sweep), and
   on `ExtractDocument`. `service_documents.rs` holds the RPCs.
 - `categorise.rs` + `seeds/rules.sql`: a pass clears every `inferred` categorisation and
-  reapplies rules in priority order; `declared` always survives. `money::upsert_category`
+  reapplies rules in priority order; `declared` always survives. A text condition is a
+  substring unless anchored (`^INA ` pins the start, ` BAR$` the end): unanchored `INA `
+  claimed Lesnina, Perutnina, Fina and every "trgovina". Patterns are normalised by
+  `finance.normalise` on the way in (`money::upsert_rule`), the same function the pass
+  applies to the row, so punctuation agrees -- the Rust `import::normalise` turns
+  `NAME-CHEAP` into `NAME CHEAP` and must not be used for patterns. `money::upsert_category`
   makes categories from the UI (slug from the name, kept on rename; archiving disables the
   rules pointing at it and reruns the pass). `GetTransaction` is the one read that carries
   the bank's raw record. The seed is idempotent on

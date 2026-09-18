@@ -629,3 +629,49 @@ async fn a_category_is_created_slugged_and_archiving_it_disables_its_rules() {
         .categories;
     assert!(cats.iter().any(|c| c.id == made.id && c.archived));
 }
+
+#[tokio::test]
+async fn a_rule_made_over_the_api_keeps_the_punctuation_the_bank_writes() {
+    let (server, pool) = start_with_store().await;
+    let w = seed(&pool).await;
+    let mut client = server.client().await;
+    sqlx::query(
+        "insert into finance.bank_transactions
+            (id, party_id, account_id, status, dedup_key, amount_minor, currency,
+             credit_debit, booking_date, counterparty_name, remittance)
+         values ($1, $2, $3, 'booked', $4, -1674, 'EUR', 'DBIT', date '2026-09-11', 'NAME-CHEAP.COM* 3MVGXB', 'domain')",
+    )
+    .bind(Uuid::new_v4())
+    .bind(w.company)
+    .bind(w.company_account)
+    .bind(b"dedup-namecheap".to_vec())
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let done = client
+        .upsert_rule(as_caller(
+            OWNER,
+            UpsertRuleRequest {
+                party_id: w.company.to_string(),
+                priority: 10,
+                name: "namecheap".into(),
+                category_id: w.company_category.to_string(),
+                match_counterparty_like: " name-čheap ".into(),
+                enabled: true,
+                ..UpsertRuleRequest::default()
+            },
+        ))
+        .await
+        .unwrap()
+        .into_inner();
+    let r = done.rule.unwrap();
+    assert_eq!(
+        r.match_counterparty_like, "NAME-CHEAP",
+        "trimmed, upper, diacritics gone, hyphen kept"
+    );
+    assert_eq!(
+        r.hits, 1,
+        "and it claims the row the bank wrote with the hyphen"
+    );
+}

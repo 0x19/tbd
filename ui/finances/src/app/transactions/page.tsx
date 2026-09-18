@@ -10,7 +10,7 @@ import { PageTitle } from "@/components/kit";
 import { RuleDialog, suggestName } from "@/components/rule-dialog";
 import { ScopeToggle } from "@/components/scope-toggle";
 import { StatusBadge } from "@/components/status-badge";
-import { cleanRemittance,TransactionSheet } from "@/components/transaction-sheet";
+import { cleanRemittance, TransactionSheet } from "@/components/transaction-sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";

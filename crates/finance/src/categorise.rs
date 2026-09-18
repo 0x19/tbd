@@ -108,14 +108,22 @@ pub async fn apply_rules(pool: &PgPool, party_id: Uuid) -> Result<Applied, DbErr
                -- Normalised on both sides: the real data spells the same payee
                -- `DRŽAVNI PRORAČUN` and `DRZAVNI PRORACUN`, and a rule that
                -- matched only one would silently miss half the rows.
+               -- A pattern is a substring unless anchored: a leading `^` pins
+               -- it to the start, a trailing `$` to the end. `INA ` alone
+               -- claimed LESNINA, PERUTNINA, FINA and every TRGOVINA; `^INA `
+               -- claims the fuel stations.
                and (r.match_counterparty_like is null
                     or finance.normalise(coalesce(t.counterparty_name, ''))
-                       like '%' || r.match_counterparty_like || '%')
+                       like case when left(r.match_counterparty_like, 1) = '^' then '' else '%' end
+                            || rtrim(ltrim(r.match_counterparty_like, '^'), '$')
+                            || case when right(r.match_counterparty_like, 1) = '$' then '' else '%' end)
                and (r.match_counterparty_iban is null
                     or t.counterparty_iban = r.match_counterparty_iban)
                and (r.match_remittance_like is null
                     or finance.normalise(coalesce(t.remittance, ''))
-                       like '%' || r.match_remittance_like || '%')
+                       like case when left(r.match_remittance_like, 1) = '^' then '' else '%' end
+                            || rtrim(ltrim(r.match_remittance_like, '^'), '$')
+                            || case when right(r.match_remittance_like, 1) = '$' then '' else '%' end)
                and (r.match_currency is null or t.currency = r.match_currency)
                and (r.match_credit_debit is null or t.credit_debit = r.match_credit_debit)
                and (r.match_amount_min_minor is null or t.amount_minor >= r.match_amount_min_minor)

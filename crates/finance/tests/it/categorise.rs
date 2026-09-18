@@ -311,3 +311,47 @@ async fn a_rule_matches_a_payee_however_the_bank_spelled_it() {
     );
     assert_eq!(report.unmatched, 0);
 }
+
+#[tokio::test]
+async fn an_anchored_pattern_claims_only_at_that_edge() {
+    let (_s, pool) = start_with_store().await;
+    let owner = ensure_user(&pool, "cat-anchor", None, "O").await.unwrap();
+    let acct = account(&pool, owner.0, Some("HR1")).await;
+    let fuel = category(&pool, owner.0, "fuel", "expense").await;
+    let dining = category(&pool, owner.0, "dining", "expense").await;
+    rule(&pool, owner.0, 10, "^INA ", fuel).await;
+    rule(&pool, owner.0, 20, " BAR$", dining).await;
+    let station = txn(&pool, owner.0, acct, "INA RIJEKA SKURINJE Rijeka", -6_000).await;
+    let furniture = txn(&pool, owner.0, acct, "LESNINA H PC RIJEKA", -30_000).await;
+    let bar = txn(&pool, owner.0, acct, "AQUA BAR", -800).await;
+    let person = txn(&pool, owner.0, acct, "JOSIP BARNJAK", -30_000).await;
+
+    apply_rules(&pool, owner.0).await.unwrap();
+    assert_eq!(
+        assigned(&pool, station).await,
+        Some(fuel),
+        "starts with INA"
+    );
+    assert_eq!(
+        assigned(&pool, furniture).await,
+        None,
+        "LESNINA contains INA but does not start with it"
+    );
+    assert_eq!(assigned(&pool, bar).await, Some(dining), "ends with BAR");
+    assert_eq!(
+        assigned(&pool, person).await,
+        None,
+        "BARNJAK contains BAR but does not end with it"
+    );
+}
+
+async fn assigned(pool: &PgPool, id: Uuid) -> Option<Uuid> {
+    sqlx::query_as::<_, (Option<Uuid>,)>(
+        "select category_id from finance.bank_transactions where id = $1",
+    )
+    .bind(id)
+    .fetch_one(pool)
+    .await
+    .unwrap()
+    .0
+}
