@@ -63,7 +63,7 @@ function Callback() {
     return () => {
       cancelled = true;
     };
-  }, [state, code, providerError]);
+  }, [state, code, providerError, router]);
 
   return (
     <>
