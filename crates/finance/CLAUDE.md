@@ -37,6 +37,14 @@ The finance service. gRPC only. Scaffolded by `tbd new service` (docs/tbd/README
   and date pinned, so a render is a pure function of the document). The approval
   names the preview's content hash; a changed draft is FAILED_PRECONDITION. See
   `docs/finance/invoice.md`. `service_invoices.rs` holds the RPCs.
+- `connectors/`: linked external accounts documents are pulled from (mailboxes today,
+  portals later). `mod.rs` is the registry and the `Connector` trait -- adding a kind is
+  one file and one line; the UI reads the registry. Credentials are sealed at rest
+  (`crypto.rs`, ChaCha20-Poly1305 under `FINANCE_CONNECTOR_KEY`, bound to the row id) and
+  only `store.rs` opens them, per call. `gmail.rs` links through Google OAuth (read-only
+  scope) and keeps PDF attachments; a pulled message is never pulled twice, identical
+  bytes are one document with several sources. `service_connectors.rs` holds the RPCs.
+  Tests inject a mock kind through `serve_with_kinds`.
 - `categorise.rs` + `seeds/rules.sql`: a pass clears every `inferred` categorisation and
   reapplies rules in priority order; `declared` always survives. The seed is idempotent on
   `(party_id, name)`; a rule joins to its category by slug and a typo drops it silently,

@@ -84,7 +84,10 @@ tags. See `docs/ci.md`.
   <application_id> <key_path>`. The bank keys are `optional: true` on the Deployment:
   without them the service serves reads and the sync worker does not start. Compose
   reads the same from `.env`; the ansible template from the vault. The key never
-  lives in a file in this repo.
+  lives in a file in this repo. Connectors (Gmail and later kinds) read
+  `FINANCE_CONNECTOR_KEY` (seals stored credentials; deleting it orphans every link) and
+  the Google OAuth client from the `finance-connectors` Secret, made by
+  `mise run finance:connector-secrets [client_id] [client_secret]`; all optional.
 - `edge/` is the only thing that faces the internet from a home/office deployment. Caddy
   terminates TLS and forwards to Envoy's edge on the host port (18080 for the local
   cluster). gRPC is matched on `Content-Type: application/grpc*` and gets the h2c
