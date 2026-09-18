@@ -592,6 +592,7 @@ function InvoiceView() {
       <Dialog open={full} onOpenChange={setFull}>
         <DialogContent
           className="flex h-[94vh] w-[96vw] max-w-[96vw] flex-col gap-0 p-0 sm:max-w-[96vw]"
+          showCloseButton={false}
           onEscapeKeyDown={() => setFull(false)}
         >
           <div className="flex items-center justify-between border-b px-4 py-2">
