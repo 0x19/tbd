@@ -54,11 +54,18 @@ pub fn text_sync(bytes: &[u8]) -> Result<String, PdfError> {
 }
 
 /// Collapse the reader's spacing: runs of blanks to one, blank lines to one.
+/// Control characters go: a PDF's text layer can carry NUL and the like,
+/// and Postgres refuses a NUL in `text`.
 fn tidy(raw: &str) -> String {
     let mut out = String::with_capacity(raw.len());
     let mut blank = 0;
     for line in raw.lines() {
-        let line = line.split_whitespace().collect::<Vec<_>>().join(" ");
+        let line = line
+            .split_whitespace()
+            .map(|w| w.chars().filter(|c| !c.is_control()).collect::<String>())
+            .filter(|w| !w.is_empty())
+            .collect::<Vec<_>>()
+            .join(" ");
         if line.is_empty() {
             blank += 1;
             if blank > 1 {
@@ -96,7 +103,8 @@ mod tests {
     }
 
     #[test]
-    fn tidy_collapses_spacing() {
+    fn tidy_collapses_spacing_and_drops_control_bytes() {
         assert_eq!(tidy("a   b \n\n\n c\n"), "a b\n\nc");
+        assert_eq!(tidy("to\u{0}tal \u{1}12.00\u{0}"), "total 12.00");
     }
 }

@@ -69,14 +69,27 @@ pub async fn read(pool: &PgPool, id: Uuid) -> Result<(), StoreError> {
 /// The database.
 pub async fn backfill(pool: &PgPool) -> Result<usize, StoreError> {
     let mut done = 0;
+    let mut failed = std::collections::HashSet::new();
     loop {
-        let batch = store::unread(pool, 50).await?;
+        // A document whose read failed on the database side (not the
+        // reader's: that is recorded and counts as read) stays unread and
+        // would come back every batch; it is skipped for this run.
+        let batch: Vec<Uuid> = store::unread(pool, 50)
+            .await?
+            .into_iter()
+            .filter(|id| !failed.contains(id))
+            .collect();
         if batch.is_empty() {
             return Ok(done);
         }
         for id in batch {
-            read(pool, id).await?;
-            done += 1;
+            match read(pool, id).await {
+                Ok(()) => done += 1,
+                Err(e) => {
+                    tracing::warn!(document = %id, error = %e, "backfill: document not read");
+                    failed.insert(id);
+                }
+            }
         }
     }
 }
