@@ -261,9 +261,9 @@ pub fn sample() -> InvoiceDoc {
         },
         client: Client {
             name: "Tenderly".into(),
-            address_lines: vec!["Miloša Milojevića 7".into(), "Belgrade 11070".into()],
+            address_lines: vec!["Milutina Milankovića 7đ".into(), "Belgrade 11070".into()],
             country: "Serbia".into(),
-            tax_id: String::new(),
+            tax_id: "111802082".into(),
         },
         lines,
         subtotal_minor: subtotal,

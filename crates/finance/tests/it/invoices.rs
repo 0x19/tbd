@@ -102,7 +102,7 @@ fn client(party: Uuid) -> ClientProfile {
         id: String::new(),
         party_id: party.to_string(),
         name: "Tenderly".into(),
-        address_lines: vec!["Miloša Milojevića 7".into(), "Belgrade 11070".into()],
+        address_lines: vec!["Milutina Milankovića 7đ".into(), "Belgrade 11070".into()],
         country_code: "RS".into(),
         tax_id: String::new(),
         vat_treatment: "outside_scope_non_eu".into(),
