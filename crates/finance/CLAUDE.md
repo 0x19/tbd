@@ -44,8 +44,10 @@ The finance service. gRPC only. Scaffolded by `tbd new service` (docs/tbd/README
   one file and one line; the UI reads the registry. Credentials are sealed at rest
   (`crypto.rs`, ChaCha20-Poly1305 under `FINANCE_CONNECTOR_KEY`, bound to the row id) and
   only `store.rs` opens them, per call. `gmail.rs` links through Google OAuth (read-only
-  scope) and keeps PDF attachments; a pulled message is never pulled twice, identical
-  bytes are one document with several sources. `SyncConnector` opens a run row and
+  scope) and keeps PDF attachments; a second query (`body_query`, Gmail's own syntax)
+  finds receipt mails with nothing attached, fetches the Stripe-hosted invoice a mail names
+  (`/pdf` under the link) or prints the mail (`documents::mail`); a pulled message is never
+  pulled twice, identical bytes are one document with several sources. `SyncConnector` opens a run row and
   returns it; the pull runs on a detached task (`store::begin_sync` / `run_sync`),
   because a mailbox takes minutes and the internal Envoy route gives a unary call
   five seconds -- a handler that pulls inline is cancelled mid-way and its run never
@@ -70,7 +72,14 @@ The finance service. gRPC only. Scaffolded by `tbd new service` (docs/tbd/README
   counts and the match total from one `where`; `update` declares a person's corrections
   (`declared_at`), which `write_read` never overwrites. The reader runs on every document
   as it is stored, on every unread one at start-up (`backfill`, after the run sweep), and
-  on `ExtractDocument`. `service_documents.rs` holds the RPCs.
+  on `ExtractDocument`. The reader breaks words across glyph runs, so the number is also
+  sought with every space removed. `party.rs` decides whose a document is: a mailbox belongs
+  to a party but its mail does not, so the party comes from the account that paid (one
+  candidate party has that debit near that date), else the text (the company's name or OIB
+  beats a person's name), else the mailbox; a person's choice through `UpdateDocument` is
+  final, `extracted.party` records which, and a re-read keeps it. `mail.rs` prints a
+  receipt mail that carried no file to a PDF (the same Typst engine and fonts as the
+  invoice), so the accountant gets a page. `service_documents.rs` holds the RPCs.
 - `reconcile/`: the accountant's month. `mod.rs` is two pure rule sets with their tests
   on the real August statement: *need* (what the accountant needs from us: `eracun` for an
   HR IBAN, since domestic B2B is e-invoiced; `none` for state-budget references (HR68),
@@ -84,14 +93,6 @@ The finance service. gRPC only. Scaffolded by `tbd new service` (docs/tbd/README
   with the days), stored on the link as `code:arg|code`, sent as `Reason` for the page to
   say in its language, and spelled out in English beside it for other callers.
   `service_reconcile.rs` holds the RPCs.
-- `documents/`: what a pulled document says (`fields.rs`: vendor, date, amount, number,
-  each with how it was found; the reader breaks words across glyph runs, so the number
-  is also sought with every space removed) and whose it is (`party.rs`). A mailbox
-  belongs to a party but its mail does not: the party is decided from the account that
-  paid (one candidate party has that debit near that date), else the text (the
-  company's name or OIB beats a person's name), else the mailbox; a person's choice
-  through `UpdateDocument` is final. The candidates are the parties the mailbox's owner
-  may see. `extracted.party` records which; a re-read keeps it.
 - `categorise.rs` + `seeds/rules.sql`: a pass clears every `inferred` categorisation and
   reapplies rules in priority order; `declared` always survives. A text condition is a
   substring unless anchored (`^INA ` pins the start, ` BAR$` the end): unanchored `INA `

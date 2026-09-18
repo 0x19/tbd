@@ -23,7 +23,8 @@ use super::{Client, InvoiceDoc, Issuer, Line, VatTreatment, money, quantity};
 
 static TEMPLATE: &str = include_str!("../../assets/invoice.typ");
 static MARK: &[u8] = include_bytes!("../../assets/mark.svg");
-static FONTS: [&[u8]; 4] = [
+/// Inter, the four weights. Shared with the mail printer.
+pub(crate) static FONTS: [&[u8]; 4] = [
     include_bytes!("../../assets/fonts/Inter-Regular.otf"),
     include_bytes!("../../assets/fonts/Inter-Medium.otf"),
     include_bytes!("../../assets/fonts/Inter-SemiBold.otf"),

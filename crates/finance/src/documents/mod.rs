@@ -7,6 +7,7 @@
 //! corrections are declared and outlive any re-read.
 
 pub mod fields;
+pub mod mail;
 pub mod party;
 pub mod pdf;
 pub mod store;

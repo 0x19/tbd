@@ -3,8 +3,10 @@
 //! Google OAuth with the read-only Gmail scope and `email`, so the connector
 //! can name the mailbox it is. A pull runs the configured query (default:
 //! anything with a PDF attached, since the last pull), fetches each message,
-//! and keeps the PDF attachments. Hosted-link receipts (Stripe's "view your
-//! receipt") are a later step; they need a fetch of the link.
+//! and keeps the PDF attachments. A second query finds receipt mails with
+//! no attachment: a Stripe-hosted invoice named in the body is fetched as
+//! its PDF, and any other such mail is printed to one (`documents::mail`),
+//! because the accountant files a page, not a message.
 
 use async_trait::async_trait;
 use base64::{Engine, engine::general_purpose::URL_SAFE};
@@ -12,7 +14,7 @@ use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
 
 use super::{Auth, AuthContext, Connector, ConnectorError, Found, Kind, Linked, Reach};
-use crate::config::Connectors as Config;
+use crate::{config::Connectors as Config, documents::mail};
 
 const AUTH_URL: &str = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
@@ -311,10 +313,11 @@ impl Connector for Gmail {
         Kind {
             name: "gmail",
             label: "Gmail / Google Workspace",
-            description: "Receipts and invoices that arrive as PDF attachments.",
+            description: "Receipts and invoices: PDF attachments, Stripe-hosted invoices, and receipt mails printed to PDF.",
             auth: Auth::Oauth,
             consent_note: "Read-only access to the mailbox. Nothing is sent, moved or deleted; only \
-                           messages matching the query are read, and only their PDF attachments are kept.",
+                           messages matching the queries are read: PDF attachments are kept, and a \
+                           receipt mail without one is printed to a page.",
             configured: self.configured(),
         }
     }
@@ -504,7 +507,242 @@ impl Connector for Gmail {
                 }
             }
         }
+
+        let bodies = self
+            .pull_bodies(&token, config, since, seen, &sink, &throttle)
+            .await?;
+        Ok(if reach == Reach::Complete && bodies == Reach::Complete {
+            Reach::Complete
+        } else {
+            Reach::Truncated
+        })
+    }
+}
+
+impl Gmail {
+    /// Receipt mails with nothing attached: the message is the receipt. A
+    /// Stripe-hosted invoice named in it is fetched as its PDF; any other
+    /// is printed to one.
+    async fn pull_bodies(
+        &self,
+        token: &str,
+        config: &Value,
+        since: DateTime<Utc>,
+        seen: &(dyn for<'a> Fn(&'a str) -> bool + Sync),
+        sink: &tokio::sync::mpsc::Sender<Found>,
+        throttle: &Pace,
+    ) -> Result<Reach, ConnectorError> {
+        let mailbox = self
+            .get(token, &format!("{API}/profile"), throttle)
+            .await
+            .ok()
+            .and_then(|p| {
+                p.get("emailAddress")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned)
+            })
+            .unwrap_or_default();
+        let body_query = config
+            .get("body_query")
+            .and_then(Value::as_str)
+            .filter(|q| !q.trim().is_empty())
+            .map_or_else(|| BODY_QUERY.to_owned(), str::to_owned);
+        let q = format!("{body_query} after:{}", since.format("%Y/%m/%d"));
+        let ids = self.list_ids(token, &q, throttle).await?;
+        let unseen: Vec<&String> = ids.iter().filter(|id| !seen(id)).collect();
+        let reach = if unseen.len() <= MAX_MESSAGES {
+            Reach::Complete
+        } else {
+            Reach::Truncated
+        };
+        for id in unseen.into_iter().take(MAX_MESSAGES) {
+            let message = self
+                .get(token, &format!("{API}/messages/{id}?format=full"), throttle)
+                .await?;
+            let subject = header(&message, "Subject").to_owned();
+            let sender = header(&message, "From").to_owned();
+            let received_at = message
+                .get("internalDate")
+                .and_then(Value::as_str)
+                .and_then(|ms| ms.parse::<i64>().ok())
+                .and_then(DateTime::<Utc>::from_timestamp_millis);
+            let Some(payload) = message.get("payload") else {
+                continue;
+            };
+            let (text, html) = bodies(payload);
+            if text.trim().is_empty() && html.trim().is_empty() {
+                continue;
+            }
+            let found = self
+                .body_document(id, &subject, &sender, received_at, &mailbox, text, html)
+                .await?;
+            if sink.send(found).await.is_err() {
+                return Ok(Reach::Truncated);
+            }
+        }
         Ok(reach)
+    }
+}
+
+/// Mails that are receipts and carry no file. Gmail's `{}` is OR.
+const BODY_QUERY: &str = "-filename:pdf {subject:receipt subject:invoice subject:račun subject:racun \
+                          subject:\"payment confirmation\" subject:\"order confirmation\" \
+                          subject:purchase subject:\"your order\" subject:\"thanks for your payment\"}";
+
+/// The text and the HTML bodies of a message, decoded; either may be empty.
+fn bodies(payload: &Value) -> (String, String) {
+    let mut text = String::new();
+    let mut html = String::new();
+    for part in parts(payload) {
+        let mime = part
+            .get("mimeType")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        let Some(data) = part.pointer("/body/data").and_then(Value::as_str) else {
+            continue;
+        };
+        let bytes = URL_SAFE
+            .decode(data)
+            .or_else(|_| base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(data))
+            .unwrap_or_default();
+        let s = String::from_utf8_lossy(&bytes);
+        if mime == "text/plain" && text.is_empty() {
+            text = s.into_owned();
+        } else if mime == "text/html" && html.is_empty() {
+            html = s.into_owned();
+        }
+    }
+    (text, html)
+}
+
+/// A Stripe-hosted invoice named in a mail: `https://invoice.stripe.com/i/<acct>/<id>`.
+/// The PDF sits at `/pdf` under it, for anyone holding the link.
+fn stripe_invoice(text: &str) -> Option<String> {
+    static LINK: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
+        regex::Regex::new(r"https://invoice\.stripe\.com/i/[A-Za-z0-9_]+/[A-Za-z0-9_]+")
+            .unwrap_or_else(|e| panic!("{e}"))
+    });
+    LINK.find(text).map(|m| m.as_str().to_owned())
+}
+
+/// A file name from a subject: letters, digits and dashes, forty at most.
+fn safe_name(subject: &str) -> String {
+    let s: String = subject
+        .chars()
+        .map(|c| if c.is_alphanumeric() { c } else { '-' })
+        .collect::<String>()
+        .split('-')
+        .filter(|w| !w.is_empty())
+        .collect::<Vec<_>>()
+        .join("-");
+    let s = s.to_lowercase();
+    if s.is_empty() {
+        "mail".into()
+    } else {
+        s.chars().take(40).collect()
+    }
+}
+
+impl Gmail {
+    /// One receipt mail as a document: the Stripe invoice it names, fetched
+    /// as a PDF, or the mail itself printed to one.
+    #[allow(clippy::too_many_arguments)]
+    async fn body_document(
+        &self,
+        id: &str,
+        subject: &str,
+        sender: &str,
+        received_at: Option<DateTime<Utc>>,
+        mailbox: &str,
+        text: String,
+        html: String,
+    ) -> Result<Found, ConnectorError> {
+        // A Stripe-hosted invoice is the real document; the mail is a
+        // pointer to it.
+        let mut found = None;
+        if let Some(link) = stripe_invoice(&format!("{text}\n{html}")) {
+            match self.fetch_pdf(&format!("{link}/pdf")).await {
+                Ok(bytes) => {
+                    found = Some(Found {
+                        external_ref: format!("{id}:stripe"),
+                        filename: format!(
+                            "stripe-{}.pdf",
+                            link.rsplit('/').next().unwrap_or("invoice")
+                        ),
+                        content_type: "application/pdf".into(),
+                        bytes,
+                        subject: subject.to_owned(),
+                        sender: sender.to_owned(),
+                        received_at,
+                    });
+                }
+                Err(e) => {
+                    tracing::info!(message = %id, error = %e, "gmail: stripe invoice not fetched; printing the mail");
+                }
+            }
+        }
+        let found = if let Some(f) = found {
+            f
+        } else {
+            let body = if text.trim().is_empty() {
+                mail::html_to_text(&html)
+            } else {
+                mail::tidy(&text)
+            };
+            let printed = mail::Mail {
+                message_id: id.to_owned(),
+                mailbox: mailbox.to_owned(),
+                from: sender.to_owned(),
+                subject: subject.to_owned(),
+                received: received_at,
+                text: body,
+            };
+            let bytes = tokio::task::spawn_blocking(move || mail::print(&printed))
+                .await
+                .map_err(|e| ConnectorError::Provider(format!("print: {e}")))?
+                .map_err(|e| ConnectorError::Provider(e.to_string()))?;
+            Found {
+                external_ref: format!("{id}:mail"),
+                filename: format!(
+                    "{}-{}.pdf",
+                    received_at
+                        .map(|t| t.format("%Y-%m-%d").to_string())
+                        .unwrap_or_default(),
+                    safe_name(subject)
+                ),
+                content_type: "application/pdf".into(),
+                bytes,
+                subject: subject.to_owned(),
+                sender: sender.to_owned(),
+                received_at,
+            }
+        };
+        Ok(found)
+    }
+
+    /// A public PDF, by its link, with no token: a Stripe invoice.
+    async fn fetch_pdf(&self, url: &str) -> Result<Vec<u8>, ConnectorError> {
+        let resp = self
+            .http
+            .get(url)
+            .send()
+            .await
+            .map_err(|e| ConnectorError::Provider(e.to_string()))?;
+        if !resp.status().is_success() {
+            return Err(ConnectorError::Provider(format!(
+                "{url}: {}",
+                resp.status()
+            )));
+        }
+        let bytes = resp
+            .bytes()
+            .await
+            .map_err(|e| ConnectorError::Provider(e.to_string()))?;
+        if !bytes.starts_with(b"%PDF") {
+            return Err(ConnectorError::Provider(format!("{url}: not a pdf")));
+        }
+        Ok(bytes.to_vec())
     }
 }
 
@@ -522,6 +760,36 @@ mod tests {
             }
         })
         .to_string()
+    }
+
+    #[test]
+    fn a_stripe_invoice_link_is_found_and_a_subject_names_a_file() {
+        let mail =
+            "View your invoice: https://invoice.stripe.com/i/acct_1ABC/live_YWNjdF8x?s=em <br>";
+        assert_eq!(
+            stripe_invoice(mail).as_deref(),
+            Some("https://invoice.stripe.com/i/acct_1ABC/live_YWNjdF8x")
+        );
+        assert_eq!(stripe_invoice("no link here"), None);
+        assert_eq!(
+            safe_name("Your receipt from OpenAI, LLC #1234"),
+            "your-receipt-from-openai-llc-1234"
+        );
+        assert_eq!(safe_name("!!!"), "mail");
+    }
+
+    #[test]
+    fn bodies_are_decoded_by_part() {
+        let payload = serde_json::json!({
+            "mimeType": "multipart/alternative",
+            "parts": [
+                {"mimeType": "text/plain", "body": {"data": URL_SAFE.encode("Total $5.00")}},
+                {"mimeType": "text/html", "body": {"data": URL_SAFE.encode("<p>Total $5.00</p>")}}
+            ]
+        });
+        let (text, html) = bodies(&payload);
+        assert_eq!(text, "Total $5.00");
+        assert_eq!(html, "<p>Total $5.00</p>");
     }
 
     #[test]
