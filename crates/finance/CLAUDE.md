@@ -79,7 +79,10 @@ The finance service. gRPC only. Scaffolded by `tbd new service` (docs/tbd/README
   card was charged in, read from the remittance, then vendor token and date; `LINK` makes
   an inferred link, `SUGGEST` an offer). A person's counterparty policy or hand-made link
   overrides either; an undone inferred link stays `rejected` so the matcher does not make
-  it again. `store.rs` runs the matcher greedily, best pairs first, each side once.
+  it again. `store.rs` runs the matcher greedily, best pairs first, each side once. A
+  reason is a `Why`: a code with arguments (`card_original` with the amount, `days_apart`
+  with the days), stored on the link as `code:arg|code`, sent as `Reason` for the page to
+  say in its language, and spelled out in English beside it for other callers.
   `service_reconcile.rs` holds the RPCs.
 - `documents/`: what a pulled document says (`fields.rs`: vendor, date, amount, number,
   each with how it was found; the reader breaks words across glyph runs, so the number
