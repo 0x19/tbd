@@ -596,17 +596,46 @@ const BODY_QUERY: &str = "-filename:pdf {subject:receipt subject:invoice subject
                           from:openai.com from:medium.com from:namecheap.com from:audible from:stripe.com \
                           from:playstation from:sony from:paypal.com from:apple.com}";
 
-/// A reply or a forward is a conversation about a receipt, not one; a bot's
-/// mail is never one.
+/// Words a receipt's subject carries. A sender match alone brought every
+/// digest and newsletter Medium and Audible send; the subject decides.
+const RECEIPT_WORDS: &[&str] = &[
+    "receipt",
+    "invoice",
+    "račun",
+    "racun",
+    "payment",
+    "purchase",
+    "order",
+    "renewal",
+    "renewed",
+    "subscription",
+    "billing",
+    "charged",
+    "paid",
+    "narudžb",
+    "narudzb",
+    "uplat",
+    "plaćanj",
+    "placanj",
+];
+
+/// A receipt: its subject says so, it is not a reply or a forward (a
+/// conversation about one), and it is not a bot's.
 fn looks_like_a_receipt(subject: &str, sender: &str) -> bool {
-    let s = subject.trim_start().to_ascii_lowercase();
+    let s = subject.trim_start().to_lowercase();
     let from = sender.to_ascii_lowercase();
-    !(s.starts_with("re:")
+    if s.starts_with("re:")
         || s.starts_with("fwd:")
         || s.starts_with("fw:")
         || s.starts_with("aw:")
         || from.contains("[bot]")
-        || from.contains("notifications@github.com"))
+        || from.contains("notifications@github.com")
+        || from.contains("newsletter")
+        || from.contains("digest")
+    {
+        return false;
+    }
+    RECEIPT_WORDS.iter().any(|w| s.contains(w))
 }
 
 /// The text and the HTML bodies of a message, decoded; either may be empty.
@@ -805,6 +834,22 @@ mod tests {
         assert!(!looks_like_a_receipt(
             "purchase",
             "linear[bot] <x@linear.app>"
+        ));
+        assert!(!looks_like_a_receipt(
+            "Today's highlights",
+            "Medium Daily Digest <noreply@medium.com>"
+        ));
+        assert!(!looks_like_a_receipt(
+            "New this week",
+            "Audible <newsletters@audible.de>"
+        ));
+        assert!(looks_like_a_receipt(
+            "Thank You For Your Purchase",
+            "PlayStation <email@email.playstation.com>"
+        ));
+        assert!(looks_like_a_receipt(
+            "Namecheap Renewal Receipt",
+            "Namecheap Renewals <renewals@namecheap.com>"
         ));
     }
 
