@@ -569,6 +569,9 @@ impl Gmail {
             let Some(payload) = message.get("payload") else {
                 continue;
             };
+            if !looks_like_a_receipt(&subject, &sender) {
+                continue;
+            }
             let (text, html) = bodies(payload);
             if text.trim().is_empty() && html.trim().is_empty() {
                 continue;
@@ -584,10 +587,27 @@ impl Gmail {
     }
 }
 
-/// Mails that are receipts and carry no file. Gmail's `{}` is OR.
+/// Mails that are receipts and carry no file. Gmail's `{}` is OR: a subject
+/// that says so, or a sender known to send receipts as mail.
 const BODY_QUERY: &str = "-filename:pdf {subject:receipt subject:invoice subject:račun subject:racun \
                           subject:\"payment confirmation\" subject:\"order confirmation\" \
-                          subject:purchase subject:\"your order\" subject:\"thanks for your payment\"}";
+                          subject:purchase subject:\"your order\" subject:\"thanks for your payment\" \
+                          subject:\"payment received\" subject:\"your subscription\" \
+                          from:openai.com from:medium.com from:namecheap.com from:audible from:stripe.com \
+                          from:playstation from:sony from:paypal.com from:apple.com}";
+
+/// A reply or a forward is a conversation about a receipt, not one; a bot's
+/// mail is never one.
+fn looks_like_a_receipt(subject: &str, sender: &str) -> bool {
+    let s = subject.trim_start().to_ascii_lowercase();
+    let from = sender.to_ascii_lowercase();
+    !(s.starts_with("re:")
+        || s.starts_with("fwd:")
+        || s.starts_with("fw:")
+        || s.starts_with("aw:")
+        || from.contains("[bot]")
+        || from.contains("notifications@github.com"))
+}
 
 /// The text and the HTML bodies of a message, decoded; either may be empty.
 fn bodies(payload: &Value) -> (String, String) {
@@ -776,6 +796,16 @@ mod tests {
             "your-receipt-from-openai-llc-1234"
         );
         assert_eq!(safe_name("!!!"), "mail");
+        assert!(looks_like_a_receipt(
+            "Your receipt from OpenAI",
+            "OpenAI <noreply@openai.com>"
+        ));
+        assert!(!looks_like_a_receipt("Re: invoice 12", "Someone <a@b.hr>"));
+        assert!(!looks_like_a_receipt("Fwd: račun", "Someone <a@b.hr>"));
+        assert!(!looks_like_a_receipt(
+            "purchase",
+            "linear[bot] <x@linear.app>"
+        ));
     }
 
     #[test]
