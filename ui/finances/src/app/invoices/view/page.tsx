@@ -544,13 +544,32 @@ function InvoiceView() {
           </CardHeader>
           <CardContent>
             {docUrl || preview ? (
-              <iframe
-                title="invoice"
-                src={`${docUrl ?? preview!.url}#toolbar=0&view=FitH`}
-                className="bg-muted h-[70vh] w-full rounded-md border"
-              />
+              <div className="group relative aspect-[1/1.3] w-full">
+                <iframe
+                  title="invoice"
+                  src={`${docUrl ?? preview!.url}#toolbar=0&view=Fit`}
+                  className="bg-muted h-full w-full rounded-md border"
+                />
+                {/* An iframe keeps clicks to itself; this layer takes them and
+                    opens the full-size view, with the cursor saying so. */}
+                <button
+                  type="button"
+                  aria-label="Open full size"
+                  onClick={() => setFull(true)}
+                  className="hover:bg-foreground/[0.03] absolute inset-0 z-10 cursor-zoom-in rounded-md bg-transparent transition-colors"
+                >
+                  <span className="bg-background/90 text-muted-foreground pointer-events-none absolute right-2 bottom-2 rounded-md border px-2 py-1 text-xs opacity-0 transition-opacity group-hover:opacity-100">
+                    Click to enlarge
+                  </span>
+                </button>
+                {autoState !== "idle" ? (
+                  <span className="bg-background/90 text-muted-foreground absolute top-2 left-2 z-20 rounded-md border px-2 py-1 text-xs">
+                    {autoState === "pending" ? "Re-rendering soon…" : "Rendering…"}
+                  </span>
+                ) : null}
+              </div>
             ) : (
-              <div className="bg-muted/40 text-muted-foreground flex h-[70vh] items-center justify-center rounded-md border border-dashed text-sm">
+              <div className="bg-muted/40 text-muted-foreground flex aspect-[1/1.3] w-full items-center justify-center rounded-md border border-dashed text-sm">
                 {autoState !== "idle"
                   ? "Rendering…"
                   : lines.length
