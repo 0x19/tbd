@@ -159,8 +159,19 @@ function ConnectorCard({
             disabled={busy !== "" || c.status !== "linked"}
             onClick={() =>
               void act("sync", async () => {
-                const r = await api.syncConnector(c.id);
-                return `Found ${r.found}, stored ${r.stored} new, ${r.skipped} already known.`;
+                // The call opens a run and returns; the mailbox is pulled
+                // behind it. Watch the run until it is decided.
+                const { run } = await api.syncConnector(c.id);
+                setShowRuns(true);
+                for (;;) {
+                  await new Promise((r) => setTimeout(r, 2000));
+                  const { runs: latest } = await api.connectorRuns(c.id);
+                  const done = latest.find((r: ConnectorRun) => r.id === run.id && r.outcome !== "");
+                  if (!done) continue;
+                  if (done.outcome === "error") throw new Error(done.error || "sync failed");
+                  const more = done.outcome === "partial" ? " More remains; pull again." : "";
+                  return `Found ${done.found}, stored ${done.stored} new, ${done.skipped} already known.${more}`;
+                }
               })
             }
           >

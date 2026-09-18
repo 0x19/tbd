@@ -4347,17 +4347,8 @@
         "type": "object",
         "description": "`tbd.finance.v1.SyncConnectorResponse`",
         "properties": {
-          "found": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "skipped": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "stored": {
-            "type": "integer",
-            "format": "int32"
+          "run": {
+            "$ref": "#/components/schemas/tbd.finance.v1.ConnectorRun"
           }
         }
       },

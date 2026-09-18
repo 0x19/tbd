@@ -11,10 +11,13 @@ use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
 use sqlx::PgPool;
 use tbd_db::{Capability, PartyId, UserId, create_org, ensure_user, grant};
-use tbd_finance::connectors::{Auth, AuthContext, Connector, ConnectorError, Found, Kind, Linked};
+use tbd_finance::connectors::{
+    Auth, AuthContext, Connector, ConnectorError, Found, Kind, Linked, Pull,
+};
 use tbd_proto::finance::v1::{
-    CompleteConnectorRequest, ListConnectorKindsRequest, ListConnectorsRequest,
-    ListDocumentsRequest, StartConnectorRequest, SyncConnectorRequest, TestConnectorRequest,
+    CompleteConnectorRequest, ListConnectorKindsRequest, ListConnectorRunsRequest,
+    ListConnectorsRequest, ListDocumentsRequest, StartConnectorRequest, SyncConnectorRequest,
+    TestConnectorRequest,
 };
 use tonic::{Code, Request, metadata::MetadataValue};
 use uuid::Uuid;
@@ -86,7 +89,7 @@ impl Connector for MockKind {
         _config: &Value,
         _since: DateTime<Utc>,
         seen: &(dyn for<'a> Fn(&'a str) -> bool + Sync),
-    ) -> Result<(Vec<Found>, Option<Value>), ConnectorError> {
+    ) -> Result<Pull, ConnectorError> {
         *self.pulls.lock().unwrap() += 1;
         let receipt = |id: &str, name: &str, body: &str| Found {
             external_ref: format!("{id}:{name}"),
@@ -107,8 +110,48 @@ impl Connector for MockKind {
             // The same bytes from a second message: one document, two sources.
             out.push(receipt("m3", "Cloudflare-again.pdf", "%PDF-cloudflare"));
         }
-        Ok((out, None))
+        Ok(Pull {
+            found: out,
+            complete: true,
+        })
     }
+}
+
+/// Start a sync and poll its run to the end. The call returns as soon as the
+/// run is open, because the pull is detached from it.
+async fn sync_and_wait(
+    c: &mut tbd_proto::finance::v1::finance_service_client::FinanceServiceClient<
+        tonic::transport::Channel,
+    >,
+    id: &str,
+) -> tbd_proto::finance::v1::ConnectorRun {
+    let started = c
+        .sync_connector(as_caller(OWNER, SyncConnectorRequest { id: id.to_owned() }))
+        .await
+        .unwrap()
+        .into_inner()
+        .run
+        .unwrap();
+    assert_eq!(started.outcome, "", "a run is open, not decided");
+    for _ in 0..200 {
+        let runs = c
+            .list_connector_runs(as_caller(
+                OWNER,
+                ListConnectorRunsRequest { id: id.to_owned() },
+            ))
+            .await
+            .unwrap()
+            .into_inner()
+            .runs;
+        if let Some(run) = runs
+            .iter()
+            .find(|r| r.id == started.id && !r.outcome.is_empty())
+        {
+            return run.clone();
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+    }
+    panic!("run {} never finished", started.id);
 }
 
 async fn seed(pool: &PgPool) -> (Uuid, Uuid) {
@@ -315,31 +358,14 @@ async fn sync_stores_receipts_once_and_the_same_bytes_become_one_document() {
         .status;
     assert!(status.contains("2 messages"));
 
-    let first = c
-        .sync_connector(as_caller(
-            OWNER,
-            SyncConnectorRequest {
-                id: linked.id.clone(),
-            },
-        ))
-        .await
-        .unwrap()
-        .into_inner();
+    let first = sync_and_wait(&mut c, &linked.id).await;
     assert_eq!(
         (first.found, first.stored, first.skipped),
         (3, 2, 1),
         "three attachments, two distinct documents"
     );
-    let again = c
-        .sync_connector(as_caller(
-            OWNER,
-            SyncConnectorRequest {
-                id: linked.id.clone(),
-            },
-        ))
-        .await
-        .unwrap()
-        .into_inner();
+    assert_eq!(first.outcome, "ok");
+    let again = sync_and_wait(&mut c, &linked.id).await;
     assert_eq!(again.stored, 0, "nothing pulled twice");
     assert_eq!(*pulls.lock().unwrap(), 2);
 

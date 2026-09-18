@@ -17,7 +17,7 @@ same conventions; read `ui/chaos/CLAUDE.md` for what is the kit's and what is ou
   `BigInt` in `src/lib/summary.ts`; `money()` formats digits, `chartValue()` converts
   for an axis only.
 - **The scope is the grant.** `Providers` fetches `ListParties`; the personal/business/
-  combined toggle (`scope-toggle.tsx`, the sidebar footer, ⌘K) chooses among *those*.
+  combined toggle (`scope-toggle.tsx`, the sidebar footer, ⌘K) chooses among _those_.
   No page ever holds a party id the server did not list.
 - Pages: `/` (overview: in vs spent by month, a month's categories), `/transactions/`
   (filters in the URL, inline recategorise = `DeclareCategory`), `/categories/` (rules

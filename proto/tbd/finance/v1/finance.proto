@@ -330,10 +330,11 @@ message TestConnectorResponse {
 message SyncConnectorRequest {
   string id = 1;
 }
+// The run just opened, `outcome` empty while it pulls. A mailbox takes
+// minutes and a call has seconds, so the pull runs detached; poll
+// ListConnectorRuns for the outcome.
 message SyncConnectorResponse {
-  uint32 found = 1;
-  uint32 stored = 2;
-  uint32 skipped = 3;
+  ConnectorRun run = 1;
 }
 message ConfigureConnectorRequest {
   string id = 1;

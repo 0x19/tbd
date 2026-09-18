@@ -11,7 +11,7 @@ use base64::{Engine, engine::general_purpose::URL_SAFE};
 use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
 
-use super::{Auth, AuthContext, Connector, ConnectorError, Found, Kind, Linked};
+use super::{Auth, AuthContext, Connector, ConnectorError, Found, Kind, Linked, Pull};
 use crate::config::Connectors as Config;
 
 const AUTH_URL: &str = "https://accounts.google.com/o/oauth2/v2/auth";
@@ -21,7 +21,10 @@ const API: &str = "https://gmail.googleapis.com/gmail/v1/users/me";
 const SCOPES: &str = "https://www.googleapis.com/auth/gmail.readonly email";
 /// Never more than this per pull; a first pull of a busy mailbox is paged
 /// over several runs rather than held open for minutes.
-const MAX_MESSAGES: usize = 200;
+/// Messages fetched per round. A round runs detached from the RPC, so the
+/// cap bounds one run's Gmail quota, not a request timeout; a mailbox with
+/// more says `complete = false` and the caller comes round again.
+const MAX_MESSAGES: usize = 500;
 
 /// The kind.
 #[derive(Debug, Clone)]
@@ -244,7 +247,7 @@ impl Connector for Gmail {
         config: &Value,
         since: DateTime<Utc>,
         seen: &(dyn for<'a> Fn(&'a str) -> bool + Sync),
-    ) -> Result<(Vec<Found>, Option<Value>), ConnectorError> {
+    ) -> Result<Pull, ConnectorError> {
         let token = self.access_token(credentials).await?;
         let query = config
             .get("query")
@@ -279,16 +282,18 @@ impl Connector for Gmail {
                 .get("nextPageToken")
                 .and_then(Value::as_str)
                 .map(str::to_owned);
-            if page.is_none() || ids.len() >= MAX_MESSAGES {
+            if page.is_none() {
                 break;
             }
         }
 
+        // Listing is cheap and complete; fetching is what is capped. Only
+        // messages never pulled count against the cap, so a mailbox drains
+        // over rounds rather than re-fetching its newest 500 forever.
+        let unseen: Vec<&String> = ids.iter().filter(|id| !seen(id)).collect();
+        let complete = unseen.len() <= MAX_MESSAGES;
         let mut found = Vec::new();
-        for id in ids.iter().take(MAX_MESSAGES) {
-            if seen(id) {
-                continue;
-            }
+        for id in unseen.into_iter().take(MAX_MESSAGES) {
             let message = self
                 .get(&token, &format!("{API}/messages/{id}?format=full"))
                 .await?;
@@ -334,6 +339,6 @@ impl Connector for Gmail {
                 });
             }
         }
-        Ok((found, None))
+        Ok(Pull { found, complete })
     }
 }

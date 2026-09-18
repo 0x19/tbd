@@ -145,8 +145,8 @@ impl Finance {
         }
     }
 
-    fn sealer(&self) -> Result<&connectors::crypto::Sealer, Status> {
-        self.sealer.as_deref().ok_or_else(|| {
+    fn sealer(&self) -> Result<std::sync::Arc<connectors::crypto::Sealer>, Status> {
+        self.sealer.clone().ok_or_else(|| {
             Status::failed_precondition("no FINANCE_CONNECTOR_KEY: connectors cannot be linked")
         })
     }
@@ -263,7 +263,7 @@ impl Finance {
         let r = store::complete(
             pool,
             &access,
-            sealer,
+            &sealer,
             &kinds,
             &self.connectors.redirect_url,
             &req.state,
@@ -289,7 +289,7 @@ impl Finance {
             Err(s) => return Err(self.reject(&mut timer, s)),
         };
         let kinds = self.kinds();
-        let r = store::test(pool, &access, sealer, &kinds, id)
+        let r = store::test(pool, &access, &sealer, &kinds, id)
             .await
             .map(|status| TestConnectorResponse { status });
         self.done_c(&mut timer, r)
@@ -308,13 +308,22 @@ impl Finance {
             Err(s) => return Err(self.reject(&mut timer, s)),
         };
         let kinds = self.kinds();
-        let r = store::sync(pool, &access, sealer, &kinds, id, "manual")
-            .await
-            .map(|p| SyncConnectorResponse {
-                found: u32::try_from(p.found).unwrap_or(u32::MAX),
-                stored: u32::try_from(p.stored).unwrap_or(u32::MAX),
-                skipped: u32::try_from(p.skipped).unwrap_or(u32::MAX),
-            });
+        let r = match store::begin_sync(pool, &access, &kinds, id, "manual").await {
+            Ok(started) => {
+                // Detached: the pull outlives this call. The run row is the
+                // handle; a dropped response cannot leave it unfinished, and
+                // `run_sync` records every failure before returning it.
+                let pool = pool.clone();
+                let run = started.run.clone();
+                tokio::spawn(async move {
+                    let _ = store::run_sync(&pool, &sealer, &kinds, &started).await;
+                });
+                Ok(SyncConnectorResponse {
+                    run: Some(run_proto(run)),
+                })
+            }
+            Err(e) => Err(e),
+        };
         self.done_c(&mut timer, r)
     }
 

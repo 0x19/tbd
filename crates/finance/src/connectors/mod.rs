@@ -133,14 +133,25 @@ pub trait Connector: Send + Sync + std::fmt::Debug {
 
     /// Everything new since `since`, as documents. `seen` says whether a
     /// provider id was pulled before, so the provider is not asked for bytes
-    /// it already gave.
+    /// it already gave. A kind that stops short of everything new says so
+    /// with `complete = false`; the caller pulls again with the new ids seen.
     async fn pull(
         &self,
         credentials: &serde_json::Value,
         config: &serde_json::Value,
         since: DateTime<Utc>,
         seen: &(dyn for<'a> Fn(&'a str) -> bool + Sync),
-    ) -> Result<(Vec<Found>, Option<serde_json::Value>), ConnectorError>;
+    ) -> Result<Pull, ConnectorError>;
+}
+
+/// One round of a pull.
+#[derive(Debug, Default)]
+pub struct Pull {
+    /// What was fetched this round.
+    pub found: Vec<Found>,
+    /// Whether that was everything new. A kind with a per-round cap
+    /// returns `false` when it hit it.
+    pub complete: bool,
 }
 
 /// A source of kinds: the registry, or what a test injects.

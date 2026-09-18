@@ -321,7 +321,7 @@ export const ListConnectorsResponse = z.object({ connectors: z.array(Connector) 
 export const StartConnectorResponse = z.object({ connector_id: z.string(), url: z.string() });
 export const ConnectorResponse = z.object({ connector: Connector.nullable().optional() });
 export const TestConnectorResponse = z.object({ status: z.string() });
-export const SyncConnectorResponse = z.object({ found: z.number(), stored: z.number(), skipped: z.number() });
+
 export const ConnectorRun = z.object({
   id: z.string(),
   started_at: z.string(),
@@ -334,6 +334,8 @@ export const ConnectorRun = z.object({
   error: z.string(),
 });
 export type ConnectorRun = z.infer<typeof ConnectorRun>;
+// The run just opened; the pull is detached, so poll connectorRuns for its outcome.
+export const SyncConnectorResponse = z.object({ run: ConnectorRun });
 export const ListConnectorRunsResponse = z.object({ runs: z.array(ConnectorRun) });
 
 export const DocumentSource = z.object({

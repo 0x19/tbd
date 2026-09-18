@@ -43,8 +43,15 @@ The finance service. gRPC only. Scaffolded by `tbd new service` (docs/tbd/README
   (`crypto.rs`, ChaCha20-Poly1305 under `FINANCE_CONNECTOR_KEY`, bound to the row id) and
   only `store.rs` opens them, per call. `gmail.rs` links through Google OAuth (read-only
   scope) and keeps PDF attachments; a pulled message is never pulled twice, identical
-  bytes are one document with several sources. `service_connectors.rs` holds the RPCs.
-  Tests inject a mock kind through `serve_with_kinds`.
+  bytes are one document with several sources. `SyncConnector` opens a run row and
+  returns it; the pull runs on a detached task (`store::begin_sync` / `run_sync`),
+  because a mailbox takes minutes and the internal Envoy route gives a unary call
+  five seconds -- a handler that pulls inline is cancelled mid-way and its run never
+  finishes. A kind pulls in capped rounds and says whether it reached the present;
+  a run that did not is `partial` and leaves the watermark alone. One run per
+  connector at a time; one older than 30 minutes and unfinished is closed as
+  interrupted. `service_connectors.rs` holds the RPCs. Tests inject a mock kind
+  through `serve_with_kinds`.
 - `categorise.rs` + `seeds/rules.sql`: a pass clears every `inferred` categorisation and
   reapplies rules in priority order; `declared` always survives. The seed is idempotent on
   `(party_id, name)`; a rule joins to its category by slug and a typo drops it silently,

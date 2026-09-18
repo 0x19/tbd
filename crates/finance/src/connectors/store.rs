@@ -293,37 +293,101 @@ pub async fn test(
     }
 }
 
-/// Pull new documents and store them. Idempotent: a provider id seen before
-/// is skipped, and identical bytes are one document.
+/// A run that `begin_sync` opened and `run_sync` will finish.
+#[derive(Debug, Clone)]
+pub struct Started {
+    /// The run row, already inserted, `outcome` still null.
+    pub run: RunRow,
+    /// The connector as it was when the run opened.
+    pub connector: ConnectorRow,
+}
+
+/// Rounds a run makes before giving up on draining a large mailbox in one
+/// go. A kind's per-round cap times this bounds one run's provider quota.
+const MAX_ROUNDS: usize = 10;
+
+/// A run older than this that never finished belonged to a process that is
+/// gone: it is closed as interrupted, and a new run may open.
+const STALE_RUN_MINUTES: i32 = 30;
+
+/// Open a sync run: check the connector is linked and idle, and record the
+/// run. The pull itself is `run_sync`, which the caller detaches, because a
+/// mailbox takes minutes and a unary call has seconds.
 ///
 /// # Errors
-/// Not in the view; the provider; the database.
-pub async fn sync(
+/// Not in the view; not linked; a run already under way (`State("syncing")`);
+/// the database.
+pub async fn begin_sync(
     pool: &PgPool,
     access: &Access,
-    sealer: &Sealer,
     kinds: &[Box<dyn Connector>],
     id: Uuid,
     trigger: &str,
-) -> Result<Pulled, StoreError> {
-    let row = get(pool, access, id).await?;
-    if row.status != "linked" {
-        return Err(StoreError::State(row.status));
+) -> Result<Started, StoreError> {
+    let connector = get(pool, access, id).await?;
+    if connector.status != "linked" {
+        return Err(StoreError::State(connector.status));
     }
+    if !kinds.iter().any(|k| k.kind().name == connector.kind) {
+        return Err(StoreError::UnknownKind(connector.kind.clone()));
+    }
+    // A run whose process died mid-pull would otherwise block the
+    // connector forever; one that is recent is presumed still pulling.
+    sqlx::query(
+        "update finance.connector_runs set finished_at = now(), outcome = 'error', error = 'interrupted'
+          where connector_id = $1 and finished_at is null
+            and started_at < now() - make_interval(mins => $2)",
+    )
+    .bind(id)
+    .bind(STALE_RUN_MINUTES)
+    .execute(pool)
+    .await
+    .map_err(map_err)?;
+    let running: Option<(Uuid,)> = sqlx::query_as(
+        "select id from finance.connector_runs where connector_id = $1 and finished_at is null limit 1",
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await
+    .map_err(map_err)?;
+    if running.is_some() {
+        return Err(StoreError::State("syncing".into()));
+    }
+    let run = sqlx::query_as::<_, RunRow>(
+        "insert into finance.connector_runs (id, connector_id, trigger) values ($1, $2, $3)
+          returning id, connector_id, started_at, finished_at, trigger, outcome, found, stored, skipped, error",
+    )
+    .bind(Uuid::new_v4())
+    .bind(id)
+    .bind(trigger)
+    .fetch_one(pool)
+    .await
+    .map_err(map_err)?;
+    Ok(Started { run, connector })
+}
+
+/// Pull new documents and store them, finishing the run either way.
+/// Idempotent: a provider id seen before is skipped, and identical bytes are
+/// one document. Runs until the kind says it has everything new, or
+/// `MAX_ROUNDS`, after which the run is `partial` and the next one
+/// continues where it stopped.
+///
+/// # Errors
+/// The credentials, the provider, or the database. The run row records the
+/// same error before it is returned.
+pub async fn run_sync(
+    pool: &PgPool,
+    sealer: &Sealer,
+    kinds: &[Box<dyn Connector>],
+    started: &Started,
+) -> Result<Pulled, StoreError> {
+    let row = &started.connector;
+    let id = row.id;
+    let run_id = started.run.id;
     let kind = kinds
         .iter()
         .find(|k| k.kind().name == row.kind)
         .ok_or_else(|| StoreError::UnknownKind(row.kind.clone()))?;
-    let run_id = Uuid::new_v4();
-    sqlx::query(
-        "insert into finance.connector_runs (id, connector_id, trigger) values ($1, $2, $3)",
-    )
-    .bind(run_id)
-    .bind(id)
-    .bind(trigger)
-    .execute(pool)
-    .await
-    .map_err(map_err)?;
 
     // Since the last successful sync, a week back for late arrivals; a first
     // pull reaches back a year.
@@ -335,21 +399,6 @@ pub async fn sync(
                 .checked_sub_days(Days::new(365))
                 .unwrap_or_else(Utc::now)
         });
-    let seen_refs: Vec<(String,)> =
-        sqlx::query_as("select external_ref from finance.document_sources where connector_id = $1")
-            .bind(id)
-            .fetch_all(pool)
-            .await
-            .map_err(map_err)?;
-    let seen_set: std::collections::HashSet<String> = seen_refs.into_iter().map(|(r,)| r).collect();
-    let seen = |external_ref: &str| {
-        // Attachments are keyed `<message>:<file>`; the message alone says
-        // whether it was pulled at all.
-        seen_set
-            .iter()
-            .any(|s| s == external_ref || s.split_once(':').is_some_and(|(m, _)| m == external_ref))
-    };
-
     let creds = match credentials(pool, sealer, id).await {
         Ok(c) => c,
         Err(e) => {
@@ -358,38 +407,72 @@ pub async fn sync(
             return Err(e);
         }
     };
-    let (found, _) = match kind.pull(&creds, &row.config, since, &seen).await {
-        Ok(f) => f,
-        Err(e) => {
-            tracing::warn!(connector = %id, kind = %row.kind, error = %e, "connector sync: pull failed");
-            let status = if matches!(e, ConnectorError::Unlinked(_)) {
-                "expired"
-            } else {
-                "linked"
-            };
-            sqlx::query(
-                "update finance.connectors set status = $2, updated_at = now() where id = $1",
-            )
+
+    let mut pulled = Pulled::default();
+    let mut complete = false;
+    for round in 0..MAX_ROUNDS {
+        let seen_set = seen_refs(pool, id).await?;
+        let seen = |external_ref: &str| {
+            // Attachments are keyed `<message>:<file>`; the message alone says
+            // whether it was pulled at all.
+            seen_set.iter().any(|s| {
+                s == external_ref || s.split_once(':').is_some_and(|(m, _)| m == external_ref)
+            })
+        };
+        let pull = match kind.pull(&creds, &row.config, since, &seen).await {
+            Ok(p) => p,
+            Err(e) => {
+                tracing::warn!(connector = %id, kind = %row.kind, round, error = %e, "connector sync: pull failed");
+                let status = if matches!(e, ConnectorError::Unlinked(_)) {
+                    "expired"
+                } else {
+                    "linked"
+                };
+                sqlx::query(
+                    "update finance.connectors set status = $2, updated_at = now() where id = $1",
+                )
+                .bind(id)
+                .bind(status)
+                .execute(pool)
+                .await
+                .map_err(map_err)?;
+                finish(pool, run_id, id, Err(&e.to_string())).await?;
+                return Err(e.into());
+            }
+        };
+        let stored = match store_found(pool, row.party_id, id, &pull.found, &seen).await {
+            Ok(p) => p,
+            Err(e) => {
+                tracing::warn!(connector = %id, round, error = %e, "connector sync: storing failed");
+                finish(pool, run_id, id, Err(&e.to_string())).await?;
+                return Err(e);
+            }
+        };
+        pulled.found += stored.found;
+        pulled.stored += stored.stored;
+        pulled.skipped += stored.skipped;
+        tracing::info!(connector = %id, round, found = stored.found, stored = stored.stored, complete = pull.complete, "connector sync: round");
+        if pull.complete {
+            complete = true;
+            break;
+        }
+    }
+    finish(pool, run_id, id, Ok((&pulled, complete))).await?;
+    Ok(pulled)
+}
+
+/// Every provider id this connector has stored a source for.
+async fn seen_refs(
+    pool: &PgPool,
+    id: Uuid,
+) -> Result<std::collections::HashSet<String>, StoreError> {
+    let rows: Vec<(String,)> =
+        sqlx::query_as("select external_ref from finance.document_sources where connector_id = $1")
             .bind(id)
-            .bind(status)
-            .execute(pool)
+            .fetch_all(pool)
             .await
             .map_err(map_err)?;
-            finish(pool, run_id, id, Err(&e.to_string())).await?;
-            return Err(e.into());
-        }
-    };
-
-    let pulled = match store_found(pool, row.party_id, id, &found, &seen).await {
-        Ok(p) => p,
-        Err(e) => {
-            tracing::warn!(connector = %id, error = %e, "connector sync: storing failed");
-            finish(pool, run_id, id, Err(&e.to_string())).await?;
-            return Err(e);
-        }
-    };
-    finish(pool, run_id, id, Ok(&pulled)).await?;
-    Ok(pulled)
+    Ok(rows.into_iter().map(|(r,)| r).collect())
 }
 
 /// Store what a pull found: new bytes become a document, known bytes gain a
@@ -472,26 +555,35 @@ async fn finish(
     pool: &PgPool,
     run_id: Uuid,
     id: Uuid,
-    outcome: Result<&Pulled, &str>,
+    outcome: Result<(&Pulled, bool), &str>,
 ) -> Result<(), StoreError> {
     match outcome {
-        Ok(p) => {
+        Ok((p, complete)) => {
+            // A partial run stored what it fetched but did not reach the
+            // present, so the watermark stays put and the next run resumes
+            // from the same window, skipping what this one stored.
+            let status = if complete { "ok" } else { "partial" };
             sqlx::query(
-                "update finance.connector_runs set finished_at = now(), outcome = 'ok', found = $2, stored = $3, skipped = $4
+                "update finance.connector_runs set finished_at = now(), outcome = $5, found = $2, stored = $3, skipped = $4
                   where id = $1",
             )
             .bind(run_id)
             .bind(i32::try_from(p.found).unwrap_or(i32::MAX))
             .bind(i32::try_from(p.stored).unwrap_or(i32::MAX))
             .bind(i32::try_from(p.skipped).unwrap_or(i32::MAX))
+            .bind(status)
             .execute(pool)
             .await
             .map_err(map_err)?;
             sqlx::query(
-                "update finance.connectors set last_sync_at = now(), last_sync_status = 'ok', last_sync_error = null,
-                    updated_at = now() where id = $1",
+                "update finance.connectors
+                    set last_sync_at = case when $2 then now() else last_sync_at end,
+                        last_sync_status = $3, last_sync_error = null, updated_at = now()
+                  where id = $1",
             )
             .bind(id)
+            .bind(complete)
+            .bind(status)
             .execute(pool)
             .await
             .map_err(map_err)?;
