@@ -61,7 +61,11 @@ select gen_random_uuid(), :party, v.slug, v.name, v.kind, v.deductible
     ('loan',         'Loans & credit',         'capital',  false),
     ('kiosk',        'Kiosks & newsstands',    'expense',  false),
     ('equipment',    'Equipment & hardware',   'expense',  true),
-    ('insurance',    'Insurance',              'expense',  true)
+    ('insurance',    'Insurance',              'expense',  true),
+    -- The same money is a cost on the company's books and income on the
+    -- person's: two categories, each claimed by the direction it moves in.
+    ('payroll',      'Salary paid',            'expense',  true),
+    ('salary',       'Salary received',        'income',   false)
   ) as v(slug, name, kind, deductible)
 on conflict (party_id, slug) do update
   set name = excluded.name, kind = excluded.kind,
@@ -120,9 +124,20 @@ select gen_random_uuid(), :party, v.priority, v.name, c.id,
     -- `ISPLATA ZAJMA`: a loan paid out, on whichever side it lands.
     (22, 'zajam',           'loan',    null,                      'ZAJMA', null),
 
-    -- 18: taking money out of the company. A real capital movement on the
-    -- business side, not a trading expense -- the accountant needs it apart.
+    -- 18: money between the company and its owner. These rows are `internal`
+    -- (the other side is an account we hold) and still need a category: a
+    -- salary is a cost to the company and income to the person, a loan under
+    -- contract is capital either way, a profit payout is the owner's draw.
     (18, 'dohodak_kapital', 'owner_draw', null,                   'DOHODAK OD KAPITALA', null),
+    (18, 'isplata_dobiti',  'owner_draw', null,                   'ISPLATA DOBITI', null),
+    (18, 'pozajmica',       'loan',    null,                      'POZAJMICA', null),
+    -- `PLACA` alone also matches `PLACANJE` (a payment of anything); the
+    -- forms the bank writes are `Placa za 7 / 2026` and `, Plaća 7/2026`.
+    (18, 'placa_out',       'payroll', null,                      'PLACA ZA', 'DBIT'),
+    (18, 'placa_in',        'salary',  null,                      'PLACA ZA', 'CRDT'),
+    (18, 'placa_in_alt',    'salary',  null,                      ', PLACA ', 'CRDT'),
+    (18, 'nagrada_out',     'payroll', null,                      'NAGRADA', 'DBIT'),
+    (18, 'nagrada_in',      'salary',  null,                      'NAGRADA', 'CRDT'),
 
     -- 30: the bank charging for being the bank.
     (30, 'bank_fee',        'banking', null,                      'NAKNAD', null),
