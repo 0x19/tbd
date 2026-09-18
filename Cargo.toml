@@ -95,6 +95,10 @@ pyroscope_pprofrs  = "0.2"
 uuid = { version = "1", features = ["v4", "v7", "serde"] }
 chrono          = { version = "0.4", default-features = false, features = ["clock", "std", "serde"] }
 sha2            = "0.10"
+regex           = "1"
+# Text out of supplier PDFs (pure Rust, no poppler in the image). Receipts from
+# Stripe, Google, Hetzner and the like carry real text; scans are out of scope.
+pdf-extract     = "0.12"
 proptest        = "1"
 rand            = "0.9"
 humantime       = "2"

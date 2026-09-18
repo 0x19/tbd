@@ -60,6 +60,17 @@ The finance service. gRPC only. Scaffolded by `tbd new service` (docs/tbd/README
   `ConfigureConnector` may move a connector to another party in the grant, taking
   the documents only it pulled. `service_connectors.rs` holds the RPCs. Tests inject
   a mock kind through `serve_with_kinds`.
+- `documents/`: what a pulled receipt says. `pdf.rs` turns the bytes into text in-process
+  (`pdf-extract`, fenced against its panics, off the runtime; no OCR, a scan reads as
+  empty and says so). `fields.rs` reads vendor, date, amount and number out of the text
+  with labelled rules, each field carrying *how* it was found (`By`: label, sender,
+  first, received) so the page can show a guess as a guess; its tests are the real
+  layouts (Stripe, Google, Hetzner, Medium, our own Typst). `store.rs` lists with search
+  (one `ilike` over the columns, the mail's subject and sender, and the text), the vendor
+  counts and the match total from one `where`; `update` declares a person's corrections
+  (`declared_at`), which `write_read` never overwrites. The reader runs on every document
+  as it is stored, on every unread one at start-up (`backfill`, after the run sweep), and
+  on `ExtractDocument`. `service_documents.rs` holds the RPCs.
 - `categorise.rs` + `seeds/rules.sql`: a pass clears every `inferred` categorisation and
   reapplies rules in priority order; `declared` always survives. The seed is idempotent on
   `(party_id, name)`; a rule joins to its category by slug and a typo drops it silently,

@@ -1,13 +1,11 @@
 //! The connector and document RPCs.
 
-use tbd_db::DbError;
 use tbd_proto::finance::v1::{
     CompleteConnectorRequest, CompleteConnectorResponse, ConfigureConnectorRequest,
     ConfigureConnectorResponse, Connector, ConnectorKind, ConnectorRun, DeleteConnectorRequest,
-    DeleteConnectorResponse, Document, DocumentSource, GetDocumentRequest, GetDocumentResponse,
-    ListConnectorKindsRequest, ListConnectorKindsResponse, ListConnectorRunsRequest,
-    ListConnectorRunsResponse, ListConnectorsRequest, ListConnectorsResponse, ListDocumentsRequest,
-    ListDocumentsResponse, StartConnectorRequest, StartConnectorResponse, SyncConnectorRequest,
+    DeleteConnectorResponse, ListConnectorKindsRequest, ListConnectorKindsResponse,
+    ListConnectorRunsRequest, ListConnectorRunsResponse, ListConnectorsRequest,
+    ListConnectorsResponse, StartConnectorRequest, StartConnectorResponse, SyncConnectorRequest,
     SyncConnectorResponse, TestConnectorRequest, TestConnectorResponse, WatchConnectorsRequest,
     WatchConnectorsResponse,
 };
@@ -81,64 +79,6 @@ fn run_proto(r: RunRow) -> ConnectorRun {
     }
 }
 
-/// A document row with its sources, for the listing.
-#[allow(missing_docs)]
-#[derive(Debug, Clone, sqlx::FromRow)]
-pub struct DocumentRow {
-    pub id: Uuid,
-    pub party_id: Uuid,
-    pub kind: String,
-    pub filename: Option<String>,
-    pub content_type: String,
-    pub size_bytes: i64,
-    pub sha256: String,
-    pub vendor: Option<String>,
-    pub doc_date: Option<chrono::NaiveDate>,
-    pub total_minor: Option<i64>,
-    pub currency: Option<String>,
-    pub created_at: chrono::DateTime<chrono::Utc>,
-}
-
-#[allow(missing_docs)]
-#[derive(Debug, Clone, sqlx::FromRow)]
-pub struct SourceRow {
-    pub document_id: Uuid,
-    pub connector_id: Option<Uuid>,
-    pub external_ref: String,
-    pub subject: String,
-    pub sender: String,
-    pub received_at: Option<chrono::DateTime<chrono::Utc>>,
-}
-
-fn document_proto(d: DocumentRow, sources: Vec<SourceRow>) -> Document {
-    Document {
-        id: d.id.to_string(),
-        party_id: d.party_id.to_string(),
-        kind: d.kind,
-        filename: d.filename.unwrap_or_default(),
-        content_type: d.content_type,
-        size_bytes: d.size_bytes,
-        sha256: d.sha256,
-        vendor: d.vendor.unwrap_or_default(),
-        doc_date: d.doc_date.map(|d| d.to_string()).unwrap_or_default(),
-        total_minor: d.total_minor.map(|m| m.to_string()).unwrap_or_default(),
-        currency: d.currency.unwrap_or_default(),
-        created_at: d.created_at.to_rfc3339(),
-        sources: sources
-            .into_iter()
-            .map(|s| DocumentSource {
-                connector_id: s.connector_id.map(|c| c.to_string()).unwrap_or_default(),
-                external_ref: s.external_ref,
-                subject: s.subject,
-                sender: s.sender,
-                received_at: t(s.received_at),
-            })
-            .collect(),
-    }
-}
-
-const DOC_COLUMNS: &str = "id, party_id, kind, filename, content_type, size_bytes, sha256, vendor, doc_date, total_minor, currency, created_at";
-
 impl Finance {
     fn kinds(&self) -> Vec<Box<dyn connectors::Connector>> {
         match &self.connector_kinds {
@@ -153,7 +93,7 @@ impl Finance {
         })
     }
 
-    fn done_c<T>(
+    pub(crate) fn done_c<T>(
         &self,
         timer: &mut tbd_common::metrics::RequestTimer,
         r: Result<T, StoreError>,
@@ -461,95 +401,6 @@ impl Finance {
             .map(|r| ListConnectorRunsResponse {
                 runs: r.into_iter().map(run_proto).collect(),
             });
-        self.done_c(&mut timer, r)
-    }
-
-    pub(crate) async fn rpc_list_documents(
-        &self,
-        request: Request<ListDocumentsRequest>,
-    ) -> Result<Response<ListDocumentsResponse>, Status> {
-        let req = request.get_ref().clone();
-        let (mut timer, pool, _, view) = self
-            .invoice_context("FinanceService/ListDocuments", &request, &req.party_ids)
-            .await?;
-        let r = async {
-            if view.is_empty() {
-                return Ok(ListDocumentsResponse { documents: Vec::new() });
-            }
-            let limit = i64::from(req.limit.clamp(1, 500).max(if req.limit == 0 { 100 } else { 1 }));
-            let docs = sqlx::query_as::<_, DocumentRow>(sqlx::AssertSqlSafe(format!(
-                "select {DOC_COLUMNS} from finance.documents
-                  where party_id = any($1) and ($2 = '' or kind = $2)
-                  order by coalesce(doc_date, created_at::date) desc, created_at desc limit $3 offset $4"
-            )))
-            .bind(view.party_ids())
-            .bind(&req.kind)
-            .bind(limit)
-            .bind(i64::from(req.offset))
-            .fetch_all(pool)
-            .await
-            .map_err(tbd_db::map_err)?;
-            let ids: Vec<Uuid> = docs.iter().map(|d| d.id).collect();
-            let sources = sqlx::query_as::<_, SourceRow>(
-                "select document_id, connector_id, external_ref, subject, sender, received_at
-                   from finance.document_sources where document_id = any($1)",
-            )
-            .bind(&ids)
-            .fetch_all(pool)
-            .await
-            .map_err(tbd_db::map_err)?;
-            Ok::<_, StoreError>(ListDocumentsResponse {
-                documents: docs
-                    .into_iter()
-                    .map(|d| {
-                        let mine: Vec<SourceRow> = sources.iter().filter(|s| s.document_id == d.id).cloned().collect();
-                        document_proto(d, mine)
-                    })
-                    .collect(),
-            })
-        }
-        .await;
-        self.done_c(&mut timer, r)
-    }
-
-    pub(crate) async fn rpc_get_document(
-        &self,
-        request: Request<GetDocumentRequest>,
-    ) -> Result<Response<GetDocumentResponse>, Status> {
-        let id = uuid(&request.get_ref().id, "id")?;
-        let (mut timer, pool, access, _) = self
-            .invoice_context("FinanceService/GetDocument", &request, &[])
-            .await?;
-        let r = async {
-            let doc = sqlx::query_as::<_, DocumentRow>(sqlx::AssertSqlSafe(format!(
-                "select {DOC_COLUMNS} from finance.documents where id = $1"
-            )))
-            .bind(id)
-            .fetch_optional(pool)
-            .await
-            .map_err(tbd_db::map_err)?
-            .ok_or(DbError::NotFound { what: "document" })?;
-            access.require(tbd_db::PartyId(doc.party_id), "document")?;
-            let (bytes,): (Vec<u8>,) =
-                sqlx::query_as("select bytes from finance.document_blobs where document_id = $1")
-                    .bind(id)
-                    .fetch_one(pool)
-                    .await
-                    .map_err(tbd_db::map_err)?;
-            let sources = sqlx::query_as::<_, SourceRow>(
-                "select document_id, connector_id, external_ref, subject, sender, received_at
-                   from finance.document_sources where document_id = $1",
-            )
-            .bind(id)
-            .fetch_all(pool)
-            .await
-            .map_err(tbd_db::map_err)?;
-            Ok::<_, StoreError>(GetDocumentResponse {
-                document: Some(document_proto(doc, sources)),
-                bytes,
-            })
-        }
-        .await;
         self.done_c(&mut timer, r)
     }
 }

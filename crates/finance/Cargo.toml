@@ -26,6 +26,8 @@ reqwest.workspace = true
 ring.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
+regex.workspace = true
+pdf-extract.workspace = true
 sqlx.workspace = true
 uuid.workspace = true
 

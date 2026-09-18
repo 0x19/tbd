@@ -8,11 +8,13 @@ pub mod banking;
 pub mod categorise;
 pub mod config;
 pub mod connectors;
+pub mod documents;
 pub mod import;
 pub mod invoice;
 pub mod money;
 mod service;
 mod service_connectors;
+mod service_documents;
 mod service_invoices;
 pub mod store;
 pub mod sync;
@@ -202,6 +204,14 @@ pub async fn serve_with(
                 Ok(0) => {}
                 Ok(n) => tracing::info!(runs = n, "closed connector runs left open by a restart"),
                 Err(e) => tracing::warn!(error = %e, "could not close orphaned connector runs"),
+            }
+            // Documents the reader has never seen: those stored before it
+            // existed, or while it was down. After the sweep, so a pull
+            // that restarts is not competing with the backlog for the pool.
+            match documents::backfill(&sweep).await {
+                Ok(0) => {}
+                Ok(n) => tracing::info!(documents = n, "read documents the reader had not seen"),
+                Err(e) => tracing::warn!(error = %e, "document backfill stopped"),
             }
         });
 

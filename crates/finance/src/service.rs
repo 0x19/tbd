@@ -23,22 +23,26 @@ use tbd_proto::finance::v1::{
     DeleteConnectorResponse, DeleteLineTemplateRequest, DeleteLineTemplateResponse,
     GetDocumentRequest, GetDocumentResponse, GetInvoiceDocumentRequest, GetInvoiceDocumentResponse,
     GetInvoiceRequest, GetInvoiceResponse, GetIssuerRequest, GetIssuerResponse,
-    ListAccountsRequest, ListAccountsResponse, ListCategoriesRequest, ListCategoriesResponse,
-    ListClientsRequest, ListClientsResponse, ListConnectionsRequest, ListConnectionsResponse,
-    ListConnectorKindsRequest, ListConnectorKindsResponse, ListConnectorRunsRequest,
-    ListConnectorRunsResponse, ListConnectorsRequest, ListConnectorsResponse, ListDocumentsRequest,
-    ListDocumentsResponse, ListInvoicesRequest, ListInvoicesResponse, ListLineTemplatesRequest,
-    ListLineTemplatesResponse, ListPartiesRequest, ListPartiesResponse, ListRulesRequest,
-    ListRulesResponse, ListTransactionsRequest, ListTransactionsResponse, MonthlySummaryRequest,
+    GetTransactionRequest, GetTransactionResponse, ListAccountsRequest, ListAccountsResponse,
+    ListCategoriesRequest, ListCategoriesResponse, ListClientsRequest, ListClientsResponse,
+    ListConnectionsRequest, ListConnectionsResponse, ListConnectorKindsRequest,
+    ListConnectorKindsResponse, ListConnectorRunsRequest, ListConnectorRunsResponse,
+    ListConnectorsRequest, ListConnectorsResponse, ListDocumentsRequest, ListDocumentsResponse,
+    ListInvoicesRequest, ListInvoicesResponse, ListLineTemplatesRequest, ListLineTemplatesResponse,
+    ListPartiesRequest, ListPartiesResponse, ListRulesRequest, ListRulesResponse,
+    ListTransactionsRequest, ListTransactionsResponse, MonthlySummaryRequest,
     MonthlySummaryResponse, Party, PingRequest, PingResponse, PreviewInvoiceRequest,
     PreviewInvoiceResponse, RefreshAccountRequest, RefreshAccountResponse, Rule,
     SetAccountSyncRequest, SetAccountSyncResponse, StartConnectionRequest, StartConnectionResponse,
     StartConnectorRequest, StartConnectorResponse, SummaryRow, SyncConnectorRequest,
     SyncConnectorResponse, TestConnectorRequest, TestConnectorResponse, Transaction,
-    UpdateInvoiceRequest, UpdateInvoiceResponse, UpsertClientRequest, UpsertClientResponse,
-    UpsertIssuerRequest, UpsertIssuerResponse, UpsertLineTemplateRequest,
-    UpsertLineTemplateResponse, UpsertRuleRequest, UpsertRuleResponse, WatchConnectorsRequest,
-    WatchConnectorsResponse, finance_service_server::FinanceService,
+    UpdateInvoiceRequest, UpdateInvoiceResponse, UpsertCategoryRequest, UpsertCategoryResponse,
+    UpsertClientRequest, UpsertClientResponse, UpsertIssuerRequest, UpsertIssuerResponse,
+    UpsertLineTemplateRequest, UpsertLineTemplateResponse, UpsertRuleRequest, UpsertRuleResponse,
+    WatchConnectorsRequest, WatchConnectorsResponse, finance_service_server::FinanceService,
+};
+use tbd_proto::finance::v1::{
+    ExtractDocumentRequest, ExtractDocumentResponse, UpdateDocumentRequest, UpdateDocumentResponse,
 };
 use tonic::{Code, Request, Response, Status};
 use uuid::Uuid;
@@ -664,6 +668,82 @@ impl FinanceService for Finance {
         }))
     }
 
+    async fn get_transaction(
+        &self,
+        request: Request<GetTransactionRequest>,
+    ) -> Result<Response<GetTransactionResponse>, Status> {
+        let mut timer = self.admit("FinanceService/GetTransaction").await?;
+        let Ok(id) = Uuid::parse_str(&request.get_ref().id) else {
+            return Err(self.reject(&mut timer, Status::invalid_argument("id: not a uuid")));
+        };
+        let (_, access, _) = match self.read_context(&request, &[]).await {
+            Ok(c) => c,
+            Err(status) => return Err(self.reject(&mut timer, status)),
+        };
+        let store = match self.store() {
+            Ok(store) => store,
+            Err(status) => return Err(self.reject(&mut timer, status)),
+        };
+        let filter = TransactionFilter {
+            id: Some(id),
+            ..TransactionFilter::default()
+        };
+        // The store already narrows to the grant, so a foreign row is simply
+        // absent: not-found, with nothing to tell it apart from a wrong id.
+        let row = match store.transactions(&access, &[], &filter, 1).await {
+            Ok(mut rows) => rows.pop(),
+            Err(e) => return Err(self.reject(&mut timer, status_of(e))),
+        };
+        let Some(row) = row else {
+            return Err(self.reject(&mut timer, Status::not_found("transaction")));
+        };
+        Ok(Response::new(GetTransactionResponse {
+            transaction: Some(transaction_proto(row)),
+        }))
+    }
+
+    async fn upsert_category(
+        &self,
+        request: Request<UpsertCategoryRequest>,
+    ) -> Result<Response<UpsertCategoryResponse>, Status> {
+        let mut timer = self.admit("FinanceService/UpsertCategory").await?;
+        let req = request.get_ref().clone();
+        let Ok(party_id) = Uuid::parse_str(&req.party_id) else {
+            return Err(self.reject(&mut timer, Status::invalid_argument("party_id: not a uuid")));
+        };
+        let id = if req.id.trim().is_empty() {
+            None
+        } else {
+            match Uuid::parse_str(&req.id) {
+                Ok(id) => Some(id),
+                Err(_) => {
+                    return Err(self.reject(&mut timer, Status::invalid_argument("id: not a uuid")));
+                }
+            }
+        };
+        let (pool, access, _) = match self.read_context(&request, &[]).await {
+            Ok(c) => c,
+            Err(status) => return Err(self.reject(&mut timer, status)),
+        };
+        let input = money::CategoryInput {
+            id,
+            party_id,
+            name: req.name,
+            kind: req.kind,
+            deductible: req.deductible,
+            archived: req.archived,
+        };
+        let (row, applied) = match money::upsert_category(pool, &access, input).await {
+            Ok(r) => r,
+            Err(e) => return Err(self.reject(&mut timer, status_of(e))),
+        };
+        Ok(Response::new(UpsertCategoryResponse {
+            category: Some(category_proto(row)),
+            categorised: u32::try_from(applied.categorised).unwrap_or(u32::MAX),
+            unmatched: u32::try_from(applied.unmatched).unwrap_or(u32::MAX),
+        }))
+    }
+
     async fn declare_category(
         &self,
         request: Request<DeclareCategoryRequest>,
@@ -978,6 +1058,18 @@ impl FinanceService for Finance {
     ) -> Result<Response<ListConnectorsResponse>, Status> {
         self.rpc_list_connectors(r).await
     }
+    async fn update_document(
+        &self,
+        r: Request<UpdateDocumentRequest>,
+    ) -> Result<Response<UpdateDocumentResponse>, Status> {
+        self.rpc_update_document(r).await
+    }
+    async fn extract_document(
+        &self,
+        r: Request<ExtractDocumentRequest>,
+    ) -> Result<Response<ExtractDocumentResponse>, Status> {
+        self.rpc_extract_document(r).await
+    }
     type WatchConnectorsStream = Pin<
         Box<
             dyn tokio_stream::Stream<Item = Result<WatchConnectorsResponse, Status>>
@@ -1120,6 +1212,15 @@ fn transaction_proto(t: store::Transaction) -> Transaction {
         category: t.category.unwrap_or_default(),
         category_source: t.category_source.unwrap_or_default(),
         internal: t.internal,
+        reference_number: t.reference_number.unwrap_or_default(),
+        entry_reference: t.entry_reference.unwrap_or_default(),
+        category_rule_id: t
+            .category_rule_id
+            .map(|r| r.to_string())
+            .unwrap_or_default(),
+        categorised_at: t.categorised_at.map(|t| t.to_rfc3339()).unwrap_or_default(),
+        account_name: t.account_name.unwrap_or_default(),
+        raw: t.raw.unwrap_or_default(),
     }
 }
 

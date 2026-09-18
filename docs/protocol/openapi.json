@@ -1198,6 +1198,38 @@
               "type": "integer",
               "format": "int32"
             }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "vendor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -1249,6 +1281,112 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/tbd.finance.v1.GetDocumentResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/finance/documents/{id}/extract": {
+      "post": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/ExtractDocument",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/ExtractDocument` on the `finance` backend.",
+        "operationId": "FinanceService.ExtractDocument",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "`tbd.finance.v1.ExtractDocumentRequest`; path variables override their fields",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/tbd.finance.v1.ExtractDocumentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.ExtractDocumentResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.ExtractDocumentResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/finance/documents/{id}/update": {
+      "post": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/UpdateDocument",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/UpdateDocument` on the `finance` backend.",
+        "operationId": "FinanceService.UpdateDocument",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "`tbd.finance.v1.UpdateDocumentRequest`; path variables override their fields",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/tbd.finance.v1.UpdateDocumentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.UpdateDocumentResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.UpdateDocumentResponse"
                 }
               }
             }
@@ -3705,13 +3843,28 @@
           "currency": {
             "type": "string"
           },
+          "declared": {
+            "type": "boolean"
+          },
           "doc_date": {
+            "type": "string"
+          },
+          "extracted_at": {
             "type": "string"
           },
           "filename": {
             "type": "string"
           },
+          "found_by": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
           "id": {
+            "type": "string"
+          },
+          "invoice_no": {
             "type": "string"
           },
           "kind": {
@@ -3759,6 +3912,24 @@
           },
           "subject": {
             "type": "string"
+          }
+        }
+      },
+      "tbd.finance.v1.ExtractDocumentRequest": {
+        "type": "object",
+        "description": "`tbd.finance.v1.ExtractDocumentRequest`",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.finance.v1.ExtractDocumentResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.ExtractDocumentResponse`",
+        "properties": {
+          "document": {
+            "$ref": "#/components/schemas/tbd.finance.v1.Document"
           }
         }
       },
@@ -4114,6 +4285,16 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/tbd.finance.v1.Document"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "vendors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/tbd.finance.v1.VendorCount"
             }
           }
         }
@@ -4542,6 +4723,39 @@
           }
         }
       },
+      "tbd.finance.v1.UpdateDocumentRequest": {
+        "type": "object",
+        "description": "`tbd.finance.v1.UpdateDocumentRequest`",
+        "properties": {
+          "currency": {
+            "type": "string"
+          },
+          "doc_date": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "invoice_no": {
+            "type": "string"
+          },
+          "total_minor": {
+            "type": "string"
+          },
+          "vendor": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.finance.v1.UpdateDocumentResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.UpdateDocumentResponse`",
+        "properties": {
+          "document": {
+            "$ref": "#/components/schemas/tbd.finance.v1.Document"
+          }
+        }
+      },
       "tbd.finance.v1.UpdateInvoiceRequest": {
         "type": "object",
         "description": "`tbd.finance.v1.UpdateInvoiceRequest`",
@@ -4689,6 +4903,19 @@
           "unmatched": {
             "type": "integer",
             "format": "int32"
+          }
+        }
+      },
+      "tbd.finance.v1.VendorCount": {
+        "type": "object",
+        "description": "`tbd.finance.v1.VendorCount`",
+        "properties": {
+          "count": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "vendor": {
+            "type": "string"
           }
         }
       },

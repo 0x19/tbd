@@ -24,8 +24,16 @@ export const Transaction = z.object({
   category: z.string(),
   category_source: z.string(),
   internal: z.boolean(),
+  reference_number: z.string(),
+  entry_reference: z.string(),
+  category_rule_id: z.string(),
+  categorised_at: z.string(),
+  account_name: z.string(),
+  // The bank's record as JSON; only GetTransaction fills it.
+  raw: z.string(),
 });
 export type Transaction = z.infer<typeof Transaction>;
+export const GetTransactionResponse = z.object({ transaction: Transaction.nullable().optional() });
 
 export const ListTransactionsResponse = z.object({
   transactions: z.array(Transaction),
@@ -112,6 +120,21 @@ export type Category = z.infer<typeof Category>;
 export const ListCategoriesResponse = z.object({ categories: z.array(Category) });
 
 export const DeclareCategoryResponse = z.object({ transaction: Transaction.nullable().optional() });
+
+export type UpsertCategory = {
+  id?: string;
+  party_id: string;
+  name: string;
+  kind: string;
+  deductible: boolean;
+  archived: boolean;
+};
+export const UpsertCategoryResponse = z.object({
+  category: Category.nullable().optional(),
+  categorised: z.number(),
+  unmatched: z.number(),
+});
+export type UpsertCategoryResponse = z.infer<typeof UpsertCategoryResponse>;
 
 export const Rule = z.object({
   id: z.string(),
@@ -369,7 +392,19 @@ export const Document = z.object({
   currency: z.string(),
   created_at: z.string(),
   sources: z.array(DocumentSource),
+  invoice_no: z.string(),
+  extracted_at: z.string(),
+  // A person set the fields; a re-read leaves them.
+  declared: z.boolean(),
+  // vendor / date / amount / invoice_no → label | sender | first | received | declared | "".
+  found_by: z.record(z.string(), z.string()),
 });
 export type Document = z.infer<typeof Document>;
-export const ListDocumentsResponse = z.object({ documents: z.array(Document) });
+export const VendorCount = z.object({ vendor: z.string(), count: z.number() });
+export const ListDocumentsResponse = z.object({
+  documents: z.array(Document),
+  total: z.number(),
+  vendors: z.array(VendorCount),
+});
+export const DocumentResponse = z.object({ document: Document.nullable().optional() });
 export const GetDocumentResponse = z.object({ document: Document.nullable().optional(), bytes: z.string() });

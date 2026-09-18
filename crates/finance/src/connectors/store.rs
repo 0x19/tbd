@@ -627,6 +627,13 @@ async fn store_one(
     .await
     .map_err(map_err)?;
     tx.commit().await.map_err(map_err)?;
+    if stored {
+        // What it says, while the next one is on the wire. A reader failure
+        // is recorded on the document, not raised: the bytes are safe.
+        if let Err(e) = crate::documents::read(pool, document_id).await {
+            tracing::warn!(document = %document_id, error = %e, "document stored but not read");
+        }
+    }
     Ok(stored)
 }
 

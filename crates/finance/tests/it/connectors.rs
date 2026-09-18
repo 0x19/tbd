@@ -16,9 +16,9 @@ use tbd_finance::connectors::{
 };
 use tbd_proto::finance::v1::{
     CompleteConnectorRequest, ConfigureConnectorRequest, DeleteConnectorRequest,
-    ListConnectorKindsRequest, ListConnectorRunsRequest, ListConnectorsRequest,
-    ListDocumentsRequest, StartConnectorRequest, SyncConnectorRequest, TestConnectorRequest,
-    WatchConnectorsRequest, WatchConnectorsResponse,
+    ExtractDocumentRequest, ListConnectorKindsRequest, ListConnectorRunsRequest,
+    ListConnectorsRequest, ListDocumentsRequest, StartConnectorRequest, SyncConnectorRequest,
+    TestConnectorRequest, UpdateDocumentRequest, WatchConnectorsRequest, WatchConnectorsResponse,
 };
 use tonic::{Code, Request, metadata::MetadataValue};
 use uuid::Uuid;
@@ -44,6 +44,9 @@ fn as_caller<T>(subject: &str, message: T) -> Request<T> {
 struct MockKind {
     pulls: Arc<Mutex<usize>>,
     refuse: bool,
+    /// The first receipt is a real PDF (our own rendered sample invoice)
+    /// rather than a stand-in, so the reader has something to read.
+    real: bool,
 }
 
 #[async_trait]
@@ -105,7 +108,12 @@ impl Connector for MockKind {
         // The provider is not asked for a message already pulled.
         let mut out = Vec::new();
         if !seen("m1") {
-            out.push(receipt("m1", "Hetzner.pdf", "%PDF-hetzner"));
+            let mut first = receipt("m1", "Hetzner.pdf", "%PDF-hetzner");
+            if self.real {
+                let doc = tbd_finance::invoice::render::sample();
+                first.bytes = tbd_finance::invoice::render::render(&doc).unwrap().pdf;
+            }
+            out.push(first);
         }
         if !seen("m2") {
             out.push(receipt("m2", "Cloudflare.pdf", "%PDF-cloudflare"));
@@ -123,12 +131,10 @@ impl Connector for MockKind {
 
 /// Start a sync and poll its run to the end. The call returns as soon as the
 /// run is open, because the pull is detached from it.
-async fn sync_and_wait(
-    c: &mut tbd_proto::finance::v1::finance_service_client::FinanceServiceClient<
-        tonic::transport::Channel,
-    >,
-    id: &str,
-) -> tbd_proto::finance::v1::ConnectorRun {
+type FinanceClient =
+    tbd_proto::finance::v1::finance_service_client::FinanceServiceClient<tonic::transport::Channel>;
+
+async fn sync_and_wait(c: &mut FinanceClient, id: &str) -> tbd_proto::finance::v1::ConnectorRun {
     let started = c
         .sync_connector(as_caller(OWNER, SyncConnectorRequest { id: id.to_owned() }))
         .await
@@ -188,6 +194,13 @@ async fn seed(pool: &PgPool) -> (Uuid, Uuid) {
 }
 
 fn kinds(refuse: bool) -> (tbd_finance::connectors::KindsFactory, Arc<Mutex<usize>>) {
+    kinds_with(refuse, false)
+}
+
+fn kinds_with(
+    refuse: bool,
+    real: bool,
+) -> (tbd_finance::connectors::KindsFactory, Arc<Mutex<usize>>) {
     let pulls = Arc::new(Mutex::new(0));
     let p = Arc::clone(&pulls);
     (
@@ -195,6 +208,7 @@ fn kinds(refuse: bool) -> (tbd_finance::connectors::KindsFactory, Arc<Mutex<usiz
             vec![Box::new(MockKind {
                 pulls: Arc::clone(&p),
                 refuse,
+                real,
             }) as Box<dyn Connector>]
         }),
         pulls,
@@ -647,4 +661,172 @@ async fn configure_moves_a_connector_and_the_documents_only_it_pulled() {
         .into_inner()
         .connectors;
     assert!(mine.is_empty());
+}
+
+#[tokio::test]
+async fn a_stored_receipt_is_read_searched_and_corrected() {
+    let (factory, _) = kinds_with(false, true);
+    let (server, pool) = start_with_kinds(factory).await;
+    let (_, company) = seed(&pool).await;
+    let linked = link(&server, company).await;
+    let mut c = server.client().await;
+    let run = sync_and_wait(&mut c, &linked.id).await;
+    assert_eq!(run.stored, 2);
+
+    let list = |c: &mut FinanceClient, q: &str| {
+        let mut c = c.clone();
+        let q = q.to_owned();
+        async move {
+            c.list_documents(as_caller(
+                OWNER,
+                ListDocumentsRequest {
+                    kind: "receipt".into(),
+                    q,
+                    ..ListDocumentsRequest::default()
+                },
+            ))
+            .await
+            .unwrap()
+            .into_inner()
+        }
+    };
+    let sample = tbd_finance::invoice::render::sample();
+    let all = list(&mut c, "").await;
+    assert_eq!(all.total, 2);
+    // The real PDF was read: number, date, amount and currency from its
+    // text; the stand-in was not readable and says so.
+    let read = all
+        .documents
+        .iter()
+        .find(|d| d.filename == "Hetzner.pdf")
+        .unwrap();
+    assert_eq!(read.invoice_no, sample.number);
+    assert_eq!(read.total_minor, sample.total_minor.to_string());
+    assert_eq!(read.currency, "EUR");
+    assert_eq!(read.doc_date, "2026-08-31");
+    assert!(!read.extracted_at.is_empty());
+    assert!(!read.declared);
+    assert_eq!(
+        read.found_by.get("amount").map(String::as_str),
+        Some("label")
+    );
+    let unread = all
+        .documents
+        .iter()
+        .find(|d| d.filename == "Cloudflare.pdf")
+        .unwrap();
+    assert!(
+        !unread.extracted_at.is_empty(),
+        "an unreadable file still counts as read"
+    );
+    assert!(unread.total_minor.is_empty());
+    assert!(unread.found_by.get("error").is_some_and(|e| !e.is_empty()));
+    assert_eq!(
+        unread.vendor, "Vendor",
+        "from the sender's domain, for want of text"
+    );
+
+    // Search reaches the text, not just the columns.
+    assert_eq!(list(&mut c, &sample.number).await.total, 1);
+    assert_eq!(list(&mut c, "za platiti").await.total, 1);
+    assert_eq!(list(&mut c, "no such thing").await.total, 0);
+}
+
+#[tokio::test]
+async fn a_correction_is_declared_and_survives_a_re_read() {
+    let (factory, _) = kinds_with(false, true);
+    let (server, pool) = start_with_kinds(factory).await;
+    let (_, company) = seed(&pool).await;
+    let linked = link(&server, company).await;
+    let mut c = server.client().await;
+    sync_and_wait(&mut c, &linked.id).await;
+    let list = |c: &mut FinanceClient, q: &str| {
+        let mut c = c.clone();
+        let q = q.to_owned();
+        async move {
+            c.list_documents(as_caller(
+                OWNER,
+                ListDocumentsRequest {
+                    kind: "receipt".into(),
+                    q,
+                    ..ListDocumentsRequest::default()
+                },
+            ))
+            .await
+            .unwrap()
+            .into_inner()
+        }
+    };
+    let all = list(&mut c, "").await;
+    let read = all
+        .documents
+        .iter()
+        .find(|d| d.filename == "Hetzner.pdf")
+        .unwrap();
+
+    // A correction is declared, and a re-read leaves it alone.
+    let fixed = c
+        .update_document(as_caller(
+            OWNER,
+            UpdateDocumentRequest {
+                id: read.id.clone(),
+                vendor: "Acme GmbH".into(),
+                doc_date: "2026-09-01".into(),
+                total_minor: "1234".into(),
+                currency: "usd".into(),
+                invoice_no: "X-1".into(),
+            },
+        ))
+        .await
+        .unwrap()
+        .into_inner()
+        .document
+        .unwrap();
+    assert!(fixed.declared);
+    assert_eq!(
+        (
+            fixed.vendor.as_str(),
+            fixed.currency.as_str(),
+            fixed.total_minor.as_str()
+        ),
+        ("Acme GmbH", "USD", "1234")
+    );
+    let again = c
+        .extract_document(as_caller(
+            OWNER,
+            ExtractDocumentRequest {
+                id: read.id.clone(),
+            },
+        ))
+        .await
+        .unwrap()
+        .into_inner()
+        .document
+        .unwrap();
+    assert_eq!(again.vendor, "Acme GmbH");
+    assert_eq!(again.invoice_no, "X-1");
+    assert_eq!(
+        again.found_by.get("vendor").map(String::as_str),
+        Some("declared")
+    );
+    let by_vendor = list(&mut c, "acme").await;
+    assert_eq!(by_vendor.total, 1);
+    assert!(
+        by_vendor
+            .vendors
+            .iter()
+            .any(|v| v.vendor == "Acme GmbH" && v.count == 1)
+    );
+
+    // A document that does not exist, or is not the caller's, is not found.
+    let missing = c
+        .extract_document(as_caller(
+            OWNER,
+            ExtractDocumentRequest {
+                id: Uuid::new_v4().to_string(),
+            },
+        ))
+        .await
+        .unwrap_err();
+    assert_eq!(missing.code(), Code::NotFound);
 }

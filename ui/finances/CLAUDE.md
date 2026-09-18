@@ -29,7 +29,11 @@ same conventions; read `ui/chaos/CLAUDE.md` for what is the kit's and what is ou
   (one flat list drawn from the `WatchConnectors` SSE feed via `useEvents`: a pull's
   progress and outcome, a relink, a removal arrive as events; `useFetch` polls only
   while the feed is down. Link a mailbox chooses the party; the row's party select
-  moves it through `ConfigureConnector`), `/connectors/callback/`, `/documents/`.
+  moves it through `ConfigureConnector`), `/connectors/callback/`, `/documents/`
+  (receipts as a ledger: search, vendor and month filters and the sums come from
+  `ListDocuments`; a row opens a sheet with the PDF inline, the fields with how each was
+  found (`found_by`), an editor that declares corrections through `UpdateDocument`, and
+  "Read again" = `ExtractDocument`).
 - Streams: `useEvents(url, schema, onEvent)` in `hooks.ts` wraps `EventSource` with
   credentials; every `data:` frame is one JSON message. Envoy keeps `/v1/**/events`
   open on the finance host. EventSource cannot send the dev bearer token, so in

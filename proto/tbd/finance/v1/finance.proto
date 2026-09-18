@@ -24,6 +24,13 @@ service FinanceService {
     option (google.api.http) = {get: "/v1/finance/transactions"};
   }
 
+  // One transaction with everything the bank sent about it, including the
+  // raw record. Outside the caller's grant it is NOT_FOUND, never
+  // PERMISSION_DENIED.
+  rpc GetTransaction(GetTransactionRequest) returns (GetTransactionResponse) {
+    option (google.api.http) = {get: "/v1/finance/transactions/{id}"};
+  }
+
   // Money in and out by month and category, for the parties the caller may
   // read. Grouped by currency as well: a cross-currency total is never
   // computed, because it would need a rate, and a rate needs a date and a
@@ -74,6 +81,16 @@ service FinanceService {
   rpc DeclareCategory(DeclareCategoryRequest) returns (DeclareCategoryResponse) {
     option (google.api.http) = {
       post: "/v1/finance/transactions/declare"
+      body: "*"
+    };
+  }
+
+  // Create or change a category of a party the caller may read. Archiving
+  // one disables its rules and reapplies the rest; rows already declared
+  // under it keep it.
+  rpc UpsertCategory(UpsertCategoryRequest) returns (UpsertCategoryResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/categories"
       body: "*"
     };
   }
@@ -275,9 +292,23 @@ service FinanceService {
   rpc ListConnectorRuns(ListConnectorRunsRequest) returns (ListConnectorRunsResponse) {
     option (google.api.http) = {get: "/v1/finance/connectors/{id}/runs"};
   }
-  // Receipts and other pulled documents, newest first.
+  // Receipts and other pulled documents, newest first, searchable.
   rpc ListDocuments(ListDocumentsRequest) returns (ListDocumentsResponse) {
     option (google.api.http) = {get: "/v1/finance/documents"};
+  }
+  // Set what a receipt says, by hand. Declared fields survive a re-read.
+  rpc UpdateDocument(UpdateDocumentRequest) returns (UpdateDocumentResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/documents/{id}/update"
+      body: "*"
+    };
+  }
+  // Read the document's text again and refill what was not declared.
+  rpc ExtractDocument(ExtractDocumentRequest) returns (ExtractDocumentResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/documents/{id}/extract"
+      body: "*"
+    };
   }
   rpc GetDocument(GetDocumentRequest) returns (GetDocumentResponse) {
     option (google.api.http) = {get: "/v1/finance/documents/{id}"};
@@ -413,6 +444,14 @@ message Document {
   string created_at = 12;
   // Where it came from.
   repeated DocumentSource sources = 13;
+  string invoice_no = 14;
+  // When the reader last ran; empty if never.
+  string extracted_at = 15;
+  // A person set the fields; a re-read leaves them.
+  bool declared = 16;
+  // How each field was found: `vendor`, `date`, `amount`, `invoice_no` to
+  // `label`, `sender`, `first`, `received`, `declared` or empty.
+  map<string, string> found_by = 17;
 }
 message DocumentSource {
   string connector_id = 1;
@@ -427,9 +466,45 @@ message ListDocumentsRequest {
   string kind = 2;
   uint32 limit = 3;
   uint32 offset = 4;
+  // Matches vendor, file name, invoice number, sender, subject and the
+  // document's text, case-insensitively.
+  string q = 5;
+  // Inclusive bounds on the document date, YYYY-MM-DD; a document with no
+  // date falls back to when it was received.
+  string from = 6;
+  string to = 7;
+  // Exact vendor, as listed.
+  string vendor = 8;
 }
 message ListDocumentsResponse {
   repeated Document documents = 1;
+  // Matches in all, before limit and offset.
+  uint32 total = 2;
+  // Every vendor in view with how many documents it has, for a filter.
+  repeated VendorCount vendors = 3;
+}
+message VendorCount {
+  string vendor = 1;
+  uint32 count = 2;
+}
+message UpdateDocumentRequest {
+  string id = 1;
+  string vendor = 2;
+  // YYYY-MM-DD, or empty to clear.
+  string doc_date = 3;
+  // Minor units as a decimal string, or empty to clear.
+  string total_minor = 4;
+  string currency = 5;
+  string invoice_no = 6;
+}
+message UpdateDocumentResponse {
+  Document document = 1;
+}
+message ExtractDocumentRequest {
+  string id = 1;
+}
+message ExtractDocumentResponse {
+  Document document = 1;
 }
 message GetDocumentRequest {
   string id = 1;
@@ -778,6 +853,24 @@ message DeclareCategoryResponse {
   Transaction transaction = 1;
 }
 
+message UpsertCategoryRequest {
+  // Empty creates; otherwise the category to change.
+  string id = 1;
+  string party_id = 2;
+  string name = 3;
+  // expense, income, transfer, tax or capital.
+  string kind = 4;
+  bool deductible = 5;
+  bool archived = 6;
+}
+
+message UpsertCategoryResponse {
+  Category category = 1;
+  // What the pass after the change did, for the whole party.
+  uint32 categorised = 2;
+  uint32 unmatched = 3;
+}
+
 message ListRulesRequest {
   repeated string party_ids = 1;
 }
@@ -932,4 +1025,23 @@ message Transaction {
   string category_source = 15;
   // A transfer between the caller's own accounts.
   bool internal = 16;
+  // The structured reference (Croatian "poziv na broj"), when the bank gave one.
+  string reference_number = 17;
+  // The bank's own id for the entry.
+  string entry_reference = 18;
+  // The rule that claimed it, when `category_source` is inferred.
+  string category_rule_id = 19;
+  // RFC 3339, when it was last categorised.
+  string categorised_at = 20;
+  string account_name = 21;
+  // The bank's record as JSON. Only GetTransaction fills it.
+  string raw = 22;
+}
+
+message GetTransactionRequest {
+  string id = 1;
+}
+
+message GetTransactionResponse {
+  Transaction transaction = 1;
 }

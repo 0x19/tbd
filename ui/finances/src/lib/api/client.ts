@@ -8,7 +8,9 @@ import {
   CompleteConnectionResponse,
   ConnectorResponse,
   DeclareCategoryResponse,
+  GetTransactionResponse,
   DeleteLineTemplateResponse,
+  DocumentResponse,
   GetDocumentResponse,
   GetIssuerResponse,
   InvoiceDocumentResponse,
@@ -41,6 +43,8 @@ import {
   UpsertClientResponse,
   UpsertIssuerResponse,
   UpsertLineTemplateResponse,
+  type UpsertCategory,
+  UpsertCategoryResponse,
   type UpsertRule,
   UpsertRuleResponse,
 } from "./schema";
@@ -171,6 +175,9 @@ export const api = {
     }),
   categories: (party_ids: string[]) =>
     call(ListCategoriesResponse, `/v1/finance/categories${query({ party_ids })}`),
+  transaction: (id: string) => call(GetTransactionResponse, `/v1/finance/transactions/${id}`),
+  upsertCategory: (category: UpsertCategory) =>
+    call(UpsertCategoryResponse, "/v1/finance/categories", { method: "POST", json: category }),
   declare: (transaction_id: string, category_id: string) =>
     call(DeclareCategoryResponse, "/v1/finance/transactions/declare", {
       method: "POST",
@@ -254,9 +261,23 @@ export const api = {
   /** The connectors feed: an SSE URL for `useEvents`. */
   connectorEventsUrl: (party_ids: string[]) =>
     `${apiBase()}/v1/finance/connectors/events${query({ party_ids })}`,
-  documents: (party_ids: string[], kind = "", limit = 100, offset = 0) =>
-    call(ListDocumentsResponse, `/v1/finance/documents${query({ party_ids, kind, limit, offset })}`),
+  documents: (p: {
+    party_ids: string[];
+    kind?: string;
+    q?: string;
+    from?: string;
+    to?: string;
+    vendor?: string;
+    limit?: number;
+    offset?: number;
+  }) => call(ListDocumentsResponse, `/v1/finance/documents${query({ kind: "receipt", limit: 100, ...p })}`),
   document: (id: string) => call(GetDocumentResponse, `/v1/finance/documents/${id}`),
+  updateDocument: (
+    id: string,
+    fields: { vendor: string; doc_date: string; total_minor: string; currency: string; invoice_no: string },
+  ) => call(DocumentResponse, `/v1/finance/documents/${id}/update`, { method: "POST", json: fields }),
+  extractDocument: (id: string) =>
+    call(DocumentResponse, `/v1/finance/documents/${id}/extract`, { method: "POST", json: {} }),
 };
 
 /** A base64 PDF from the API as an object URL for an <iframe> or a download. */
