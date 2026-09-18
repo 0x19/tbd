@@ -1,6 +1,7 @@
 import {
   IconBuildingBank,
   IconCategory,
+  IconFileInvoice,
   IconLayoutDashboard,
   IconListDetails,
   IconPlugConnected,
@@ -28,6 +29,13 @@ export const navGroups: NavGroup[] = [
     ],
   },
   {
+    title: "Documents",
+    items: [
+      { title: "Receipts", url: "/documents/", icon: IconFileInvoice },
+      { title: "Connectors", url: "/connectors/", icon: IconPlugConnected },
+    ],
+  },
+  {
     title: "Invoicing",
     items: [
       { title: "Invoices", url: "/invoices/", icon: IconReceipt2 },
@@ -43,6 +51,7 @@ export function crumbs(pathname: string): string[] {
   const c = clean(pathname);
   if (c === "/connect/callback") return ["Banking", "Connections", "Bank authorization"];
   if (c === "/invoices/view") return ["Invoicing", "Invoices", "Invoice"];
+  if (c === "/connectors/callback") return ["Documents", "Connectors", "Authorization"];
   for (const group of navGroups) {
     for (const item of group.items) {
       const urls = item.items ? item.items.map((i) => i.url) : [item.url];

@@ -1,13 +1,15 @@
 // One fetch layer for the finance API, which is the protocol's REST surface
 // for tbd.finance.v1.FinanceService (docs/protocol/README.md). Every response
 // is parsed through its Zod schema so pages never touch untyped JSON.
-import type { z } from "zod";
+import { z } from "zod";
 
 import {
   type ClientProfile,
   CompleteConnectionResponse,
+  ConnectorResponse,
   DeclareCategoryResponse,
   DeleteLineTemplateResponse,
+  GetDocumentResponse,
   GetIssuerResponse,
   InvoiceDocumentResponse,
   type InvoiceLine,
@@ -18,6 +20,10 @@ import {
   ListCategoriesResponse,
   ListClientsResponse,
   ListConnectionsResponse,
+  ListConnectorKindsResponse,
+  ListConnectorRunsResponse,
+  ListConnectorsResponse,
+  ListDocumentsResponse,
   ListInvoicesResponse,
   ListLineTemplatesResponse,
   ListPartiesResponse,
@@ -28,6 +34,9 @@ import {
   PreviewInvoiceResponse,
   RefreshAccountResponse,
   StartConnectionResponse,
+  StartConnectorResponse,
+  SyncConnectorResponse,
+  TestConnectorResponse,
   UpsertClientResponse,
   UpsertIssuerResponse,
   UpsertLineTemplateResponse,
@@ -218,6 +227,27 @@ export const api = {
       method: "POST",
       json: { id },
     }),
+
+  // ---- connectors ----
+  connectorKinds: () => call(ListConnectorKindsResponse, "/v1/finance/connectors/kinds"),
+  connectors: (party_ids: string[]) =>
+    call(ListConnectorsResponse, `/v1/finance/connectors${query({ party_ids })}`),
+  startConnector: (party_id: string, kind: string) =>
+    call(StartConnectorResponse, "/v1/finance/connectors", { method: "POST", json: { party_id, kind } }),
+  completeConnector: (state: string, code: string) =>
+    call(ConnectorResponse, "/v1/finance/connectors/complete", { method: "POST", json: { state, code } }),
+  testConnector: (id: string) =>
+    call(TestConnectorResponse, `/v1/finance/connectors/${id}/test`, { method: "POST", json: {} }),
+  syncConnector: (id: string) =>
+    call(SyncConnectorResponse, `/v1/finance/connectors/${id}/sync`, { method: "POST", json: {} }),
+  configureConnector: (id: string, config: string) =>
+    call(ConnectorResponse, `/v1/finance/connectors/${id}/configure`, { method: "POST", json: { config } }),
+  deleteConnector: (id: string) =>
+    call(z.object({}), `/v1/finance/connectors/${id}/delete`, { method: "POST", json: {} }),
+  connectorRuns: (id: string) => call(ListConnectorRunsResponse, `/v1/finance/connectors/${id}/runs`),
+  documents: (party_ids: string[], kind = "", limit = 100, offset = 0) =>
+    call(ListDocumentsResponse, `/v1/finance/documents${query({ party_ids, kind, limit, offset })}`),
+  document: (id: string) => call(GetDocumentResponse, `/v1/finance/documents/${id}`),
 };
 
 /** A base64 PDF from the API as an object URL for an <iframe> or a download. */

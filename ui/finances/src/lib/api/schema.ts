@@ -287,3 +287,77 @@ export type LineTemplate = z.infer<typeof LineTemplate>;
 export const ListLineTemplatesResponse = z.object({ templates: z.array(LineTemplate) });
 export const UpsertLineTemplateResponse = z.object({ template: LineTemplate.nullable().optional() });
 export const DeleteLineTemplateResponse = z.object({});
+
+// ---- connectors -------------------------------------------------------------
+
+export const ConnectorKind = z.object({
+  name: z.string(),
+  label: z.string(),
+  description: z.string(),
+  auth: z.string(),
+  consent_note: z.string(),
+  configured: z.boolean(),
+});
+export type ConnectorKind = z.infer<typeof ConnectorKind>;
+export const ListConnectorKindsResponse = z.object({ kinds: z.array(ConnectorKind) });
+
+export const Connector = z.object({
+  id: z.string(),
+  party_id: z.string(),
+  kind: z.string(),
+  label: z.string(),
+  status: z.string(),
+  config: z.string(),
+  external_id: z.string(),
+  linked_at: z.string(),
+  last_sync_at: z.string(),
+  last_sync_status: z.string(),
+  last_sync_error: z.string(),
+  failure: z.string(),
+  created_at: z.string(),
+});
+export type Connector = z.infer<typeof Connector>;
+export const ListConnectorsResponse = z.object({ connectors: z.array(Connector) });
+export const StartConnectorResponse = z.object({ connector_id: z.string(), url: z.string() });
+export const ConnectorResponse = z.object({ connector: Connector.nullable().optional() });
+export const TestConnectorResponse = z.object({ status: z.string() });
+export const SyncConnectorResponse = z.object({ found: z.number(), stored: z.number(), skipped: z.number() });
+export const ConnectorRun = z.object({
+  id: z.string(),
+  started_at: z.string(),
+  finished_at: z.string(),
+  trigger: z.string(),
+  outcome: z.string(),
+  found: z.number(),
+  stored: z.number(),
+  skipped: z.number(),
+  error: z.string(),
+});
+export type ConnectorRun = z.infer<typeof ConnectorRun>;
+export const ListConnectorRunsResponse = z.object({ runs: z.array(ConnectorRun) });
+
+export const DocumentSource = z.object({
+  connector_id: z.string(),
+  external_ref: z.string(),
+  subject: z.string(),
+  sender: z.string(),
+  received_at: z.string(),
+});
+export const Document = z.object({
+  id: z.string(),
+  party_id: z.string(),
+  kind: z.string(),
+  filename: z.string(),
+  content_type: z.string(),
+  size_bytes: Minor,
+  sha256: z.string(),
+  vendor: z.string(),
+  doc_date: z.string(),
+  total_minor: z.string(),
+  currency: z.string(),
+  created_at: z.string(),
+  sources: z.array(DocumentSource),
+});
+export type Document = z.infer<typeof Document>;
+export const ListDocumentsResponse = z.object({ documents: z.array(Document) });
+export const GetDocumentResponse = z.object({ document: Document.nullable().optional(), bytes: z.string() });
