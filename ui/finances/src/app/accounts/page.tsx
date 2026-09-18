@@ -50,14 +50,23 @@ export default function AccountsPage() {
 function AccountCard({ a, onChanged }: { a: Account; onChanged: () => void }) {
   const [busy, setBusy] = useState(false);
   const closing = a.balances.find((b) => b.balance_type === "CLBD") ?? a.balances[0];
-  const stale = a.last_synced_at ? Date.now() - new Date(a.last_synced_at).getTime() > 2 * 3600_000 : true;
+  const stale = a.last_synced_at ? Date.now() - new Date(a.last_synced_at).getTime() > 9 * 3600_000 : true;
+  const backoffUntil = a.sync_backoff_until ? new Date(a.sync_backoff_until) : null;
+  const backingOff = backoffUntil !== null && backoffUntil.getTime() > Date.now();
+  const hhmm = (d: Date) => d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
   const refresh = async () => {
     setBusy(true);
     try {
       const r = await api.refresh(a.id);
       if (r.outcome === "ok")
         toast.success(`Fetched: ${r.inserted} new, ${r.booked} booked, ${r.duplicates} already known.`);
+      else if (r.outcome === "skipped" && r.skipped === "backing_off" && backoffUntil)
+        toast.warning(`The bank asked us to wait: next fetch possible at ${hhmm(backoffUntil)}.`);
+      else if (r.outcome === "skipped" && r.skipped === "budget_spent")
+        toast.warning("Today's four fetches are spent; the bank allows no more until tomorrow.");
       else if (r.outcome === "skipped") toast.warning(`Not fetched: ${r.skipped.replace(/_/g, " ")}.`);
+      else if (r.outcome === "rate_limited")
+        toast.error("The bank answered 429: rate limited. Backing off for six hours.");
       else toast.error(`Bank answered: ${r.outcome.replace(/_/g, " ")}.`);
       onChanged();
     } catch (e) {
@@ -75,7 +84,7 @@ function AccountCard({ a, onChanged }: { a: Account; onChanged: () => void }) {
             {a.iban || a.provider} · {a.currency}
           </CardDescription>
         </div>
-        <StatusBadge status={a.sync_backoff_until ? "backing_off" : a.last_sync_status} />
+        <StatusBadge status={backingOff ? "backing_off" : a.last_sync_status} />
       </CardHeader>
       <CardContent className="space-y-3">
         <div>
@@ -92,7 +101,13 @@ function AccountCard({ a, onChanged }: { a: Account; onChanged: () => void }) {
           <dt>Booked through</dt>
           <dd>{a.last_booked_through || "—"}</dd>
           <dt>Fetches today</dt>
-          <dd>{a.sync_budget_used}</dd>
+          <dd>{a.sync_budget_used} of 4</dd>
+          {backingOff && backoffUntil ? (
+            <>
+              <dt>Bank asked to wait</dt>
+              <dd className="text-amber-600">until {hhmm(backoffUntil)}</dd>
+            </>
+          ) : null}
           {a.last_sync_error ? (
             <>
               <dt>Last error</dt>
@@ -104,9 +119,23 @@ function AccountCard({ a, onChanged }: { a: Account; onChanged: () => void }) {
           size="sm"
           variant="outline"
           onClick={() => void refresh()}
-          disabled={busy || !a.connection_id}
+          disabled={busy || !a.connection_id || backingOff || a.sync_budget_used >= 4}
+          title={
+            backingOff && backoffUntil
+              ? `The bank asked us to wait until ${hhmm(backoffUntil)}`
+              : a.sync_budget_used >= 4
+                ? "Today's four fetches are spent"
+                : undefined
+          }
         >
-          <RefreshCw className={busy ? "animate-spin" : undefined} /> {busy ? "Fetching…" : "Fetch now"}
+          <RefreshCw className={busy ? "animate-spin" : undefined} />{" "}
+          {busy
+            ? "Fetching…"
+            : backingOff && backoffUntil
+              ? `Wait until ${hhmm(backoffUntil)}`
+              : a.sync_budget_used >= 4
+                ? "Spent for today"
+                : "Fetch now"}
         </Button>
       </CardContent>
     </Card>
