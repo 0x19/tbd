@@ -72,6 +72,25 @@ pub struct Transaction {
     /// stored: true exactly when the counterparty is an account we hold.
     #[sqlx(default)]
     pub internal: bool,
+    /// The structured reference, when the bank gave one.
+    #[sqlx(default)]
+    pub reference_number: Option<String>,
+    /// The bank's own id for the entry.
+    #[sqlx(default)]
+    pub entry_reference: Option<String>,
+    /// The rule that claimed it, for an inferred category.
+    #[sqlx(default)]
+    pub category_rule_id: Option<Uuid>,
+    /// When it was last categorised.
+    #[sqlx(default)]
+    pub categorised_at: Option<chrono::DateTime<chrono::Utc>>,
+    /// The account's name, for a person reading one row.
+    #[sqlx(default)]
+    pub account_name: Option<String>,
+    /// The bank's record as JSON. Filled only when one row is asked for by
+    /// id: a page of a hundred does not carry a hundred records.
+    #[sqlx(default)]
+    pub raw: Option<String>,
 }
 
 /// What a caller narrows a listing to, beyond the parties.

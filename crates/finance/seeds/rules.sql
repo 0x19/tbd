@@ -58,7 +58,10 @@ select gen_random_uuid(), :party, v.slug, v.name, v.kind, v.deductible
     ('crypto',       'Crypto & investments',   'capital',  false),
     ('wallet',       'Wallets & top-ups',      'transfer', false),
     ('owner_draw',   'Owner draw',             'capital',  false),
-    ('loan',         'Loans & credit',         'capital',  false)
+    ('loan',         'Loans & credit',         'capital',  false),
+    ('kiosk',        'Kiosks & newsstands',    'expense',  false),
+    ('equipment',    'Equipment & hardware',   'expense',  true),
+    ('insurance',    'Insurance',              'expense',  true)
   ) as v(slug, name, kind, deductible)
 on conflict (party_id, slug) do update
   set name = excluded.name, kind = excluded.kind,
@@ -105,6 +108,8 @@ select gen_random_uuid(), :party, v.priority, v.name, c.id,
     -- Cash going the other way. Same category: the point is that the balance
     -- moved between the account and a pocket, in whichever direction.
     (25, 'atm_deposit',     'cash',    null,                      'ATM UPLATA', null),
+    -- A withdrawal abroad names the other bank, not the ATM.
+    (25, 'atm_wien',        'cash',    null,                      'ERSTE BANK WIEN', null),
 
     -- 22: own money moving, where no IBAN says so. `Kasica` is Erste's savings
     -- pot and `Revolut**NNNN*` is a top-up of a wallet in the same name --
@@ -112,6 +117,8 @@ select gen_random_uuid(), :party, v.priority, v.name, c.id,
     (22, 'kasica',          'savings', null,                      'KASICE', null),
     (22, 'revolut',         'wallet',  'REVOLUT*',                null, null),
     (22, 'kredit',          'loan',    null,                      'ZATVARANJE KREDITA', null),
+    -- `ISPLATA ZAJMA`: a loan paid out, on whichever side it lands.
+    (22, 'zajam',           'loan',    null,                      'ZAJMA', null),
 
     -- 18: taking money out of the company. A real capital movement on the
     -- business side, not a trading expense -- the accountant needs it apart.
@@ -135,8 +142,17 @@ select gen_random_uuid(), :party, v.priority, v.name, c.id,
     -- NYX is the processor behind fuel-station car washes and vending, so the
     -- merchant name is a site code. The prefix is the only stable part.
     (40, 'nyx',             'vehicle', 'NYX*',                    null, null),
-    (40, 'kolodvor',        'vehicle', 'AUTOBUSNI KO',            null, null),
+    -- The whole word: `DUBRAVICA-AUTOBUSNI KO` is the bakery at the bus
+    -- station, and the short form filed every pastry as transport.
+    (40, 'kolodvor',        'vehicle', 'AUTOBUSNI KOLODVOR',      null, null),
     (40, 'parking',         'vehicle', 'PARKIR',                  null, null),
+    (40, 'parking_en',      'vehicle', 'PARKING',                 null, null),
+    (40, 'garaza',          'vehicle', 'GARAZ',                   null, null),
+    (40, 'garage',          'vehicle', 'GARAGE',                  null, null),
+    -- Rijeka plus runs the city's parking.
+    (40, 'rijeka_plus',     'vehicle', 'RIJEKA PLUS',             null, null),
+    (40, 'putevi',          'vehicle', 'PUTEVI',                  null, null),
+    (40, 'bina_istra',      'vehicle', 'BINA-ISTRA',              null, null),
 
     -- 50: what the business actually runs on.
     (50, 'anthropic',       'software','ANTHROPIC',               null, null),
@@ -151,6 +167,9 @@ select gen_random_uuid(), :party, v.priority, v.name, c.id,
     (50, 'medium',          'software','MEDIUM',                  null, null),
     (50, 'itranslator',     'software','ITRANSLATOR',             null, null),
     (50, 'excalidraw',      'software','EXCALIDRAW',              null, null),
+    (50, 'slack',           'software','SLACK',                   null, null),
+    (50, 'namecheap',       'software','NAME-CHEAP',              null, null),
+    (50, 'namecheap_alt',   'software','NAMECHEAP',               null, null),
 
     -- 55: consumer digital. Kept apart from hosting on purpose -- see the note
     -- at the top; this is the split that was silently wrong before.
@@ -169,6 +188,8 @@ select gen_random_uuid(), :party, v.priority, v.name, c.id,
     (55, 'hrt',             'entertainment','HRT',                null, null),
     (55, 'patreon',         'entertainment','PATREON',            null, null),
     (55, 'spotify',         'entertainment','SPOTIFY',            null, null),
+    (55, 'youtube',         'entertainment','YOUTUBE',            null, null),
+    (55, 'events_pula',     'entertainment','EVENTS AND PRODUCTION', null, null),
 
     -- 60: bills.
     (60, 'a1',              'telco',   'A1 HRVATSKA',             null, null),
@@ -178,7 +199,8 @@ select gen_random_uuid(), :party, v.priority, v.name, c.id,
     (60, 'hep',             'utilities','HEP ',                   null, null),
     (60, 'vodovod',         'utilities','VODOVOD',                null, null),
     (60, 'komunal',         'utilities','KOMUNAL',                null, null),
-    (60, 'osiguranje',      'utilities','OSIGURANJE D.D.',        null, null),
+    (60, 'osiguranje',      'insurance','OSIGURANJE',             null, null),
+    (60, 'saily',           'telco',   'SAILY',                   null, null),
 
     -- 65: the professionals.
     (65, 'racunovodstvo',   'accounting','RACUNOVODSTVO',         null, null),
@@ -202,10 +224,16 @@ select gen_random_uuid(), :party, v.priority, v.name, c.id,
     (75, 'airbnb',          'travel',  'AIRBNB',                  null, null),
     (75, 'hotel',           'travel',  'HOTEL',                   null, null),
     (75, 'aerodrom',        'travel',  'MZLZ',                    null, null),
+    (75, 'uber',            'travel',  'UBER',                    null, null),
+    (75, 'bolt',            'travel',  'BOLT.EU',                 null, null),
+    -- CarGo, the Belgrade ride app, bills as its company.
+    (75, 'cargo',           'travel',  'GO TECHNOLOGIES',         null, null),
+    (75, 'ucka',            'travel',  'NP UCKA',                 null, null),
 
     -- 80: fuel. Distinct from `vehicle` because it is the variable cost.
     (80, 'ina',             'fuel',    'INA ',                    null, null),
-    (80, 'petrol',          'fuel',    'PETROL PM',               null, null),
+    (80, 'petrol',          'fuel',    'PETROL',                  null, null),
+    (80, 'adria_oil',       'fuel',    'ADRIA OIL',               null, null),
     (80, 'petrol_bp',       'fuel',    'PBZTPETROL',              null, null),
     (80, 'crodux',          'fuel',    'CRODUX',                  null, null),
     (80, 'tifon',           'fuel',    'TIFON',                   null, null),
@@ -222,9 +250,11 @@ select gen_random_uuid(), :party, v.priority, v.name, c.id,
     (85, 'vocarnica',       'groceries','VOCARNICA',              null, null),
     (85, 'tommy',           'groceries','TOMMY',                  null, null),
     (85, 'mlinar',          'groceries','MLINAR',                 null, null),
-    (85, 'pekar',           'groceries','PEKAR',                  null, null),
     (85, 'mesnica',         'groceries','MESNICA',                null, null),
-    (85, 'tisak',           'groceries','TISAK',                  null, null),
+    -- Kiosks sell papers, tobacco and a coffee; none of it is groceries.
+    (85, 'tisak',           'kiosk',   'TISAK',                   null, null),
+    (85, 'inovine',         'kiosk',   'INOVINE',                 null, null),
+    (85, 'kiosk',           'kiosk',   'KIOSK',                   null, null),
 
     -- 90: food out.
     (90, 'wolt',            'dining',  'WOLT',                    null, null),
@@ -242,12 +272,33 @@ select gen_random_uuid(), :party, v.priority, v.name, c.id,
     (90, 'degustacija',     'dining',  'SALA ZA DEGUS',           null, null),
     (90, 'bar',             'dining',  ' BAR',                    null, null),
     (90, 'slasticarn',      'dining',  'SLASTICARN',              null, null),
+    -- A bakery is eaten on the way, not cooked at home: the owner filed
+    -- Dubravica as dining by hand, and the rule follows the person.
+    (88, 'pekar',           'dining',  'PEKAR',                   null, null),
+    (88, 'dubravica',       'dining',  'DUBRAVICA',               null, null),
+    -- A refund from the same till names nobody; the text still says who.
+    (88, 'dubravica_rem',   'dining',  null,                      'DUBRAVICA', null),
+    (90, 'pub',             'dining',  ' PUB',                    null, null),
+    (90, 'pivnica',         'dining',  'PIVNICA',                 null, null),
+    (90, 'kod_brace',       'dining',  'KOD BRACE',               null, null),
+    (90, 'doner',           'dining',  'DONER',                   null, null),
+    (90, 'kebab',           'dining',  'KEBAB',                   null, null),
+    (90, 'burek',           'dining',  'BUREK',                   null, null),
+    (90, 'fast_food',       'dining',  'FAST FOOD',               null, null),
+    (90, 'snack',           'dining',  'SNACK',                   null, null),
+    (90, 'grill',           'dining',  'GRILL',                   null, null),
+    (90, 'buffet',          'dining',  'BUFFET',                  null, null),
+    (90, 'gastro',          'dining',  'GASTRO',                  null, null),
+    (90, 'klub_mladih',     'dining',  'KLUB MLADIH',             null, null),
 
     -- 95: things.
     (95, 'lesnina',         'shopping','LESNINA',                 null, null),
     (95, 'pevex',           'shopping','PEVEX',                   null, null),
     (95, 'elipso',          'shopping','ELIPSO',                  null, null),
-    (95, 'istyle',          'shopping','ISTYLE',                  null, null),
+    (95, 'istyle',          'equipment','ISTYLE',                 null, null),
+    (95, 'harvey_norman',   'equipment','HARVEY NORMAN',          null, null),
+    (95, 'tern_setups',     'equipment','TERN SETUPS',            null, null),
+    (95, 'veertee',         'equipment','VEERTEE',                null, null),
     (95, 'decathlon',       'shopping','DECATHLON',               null, null),
     (95, 'intersport',      'shopping','INTERSPORT',              null, null),
     (95, 'sport_vision',    'shopping','SPORT VISION',            null, null),
@@ -258,7 +309,7 @@ select gen_random_uuid(), :party, v.priority, v.name, c.id,
     (95, 'mass',            'shopping','MASS ',                   null, null),
     (95, 'fashionfriends',  'shopping','FASHIONFRIENDS',          null, null),
     (95, 'thomann',         'shopping','THOMANN',                 null, null),
-    (95, 'instar',          'shopping','INSTAR INFORMATIKA',      null, null),
+    (95, 'instar',          'equipment','INSTAR INFORMATIKA',     null, null),
     (95, 'desigual',        'shopping','DESIGUAL',                null, null),
     (95, 'peek',            'shopping','PEEK & CLOPPENBURG',      null, null),
     (95, 'tabacco',         'shopping','TABACCO',                 null, null),

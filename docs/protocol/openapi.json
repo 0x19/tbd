@@ -340,6 +340,47 @@
             }
           }
         }
+      },
+      "post": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/UpsertCategory",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/UpsertCategory` on the `finance` backend.",
+        "operationId": "FinanceService.UpsertCategory",
+        "requestBody": {
+          "description": "`tbd.finance.v1.UpsertCategoryRequest`; path variables override their fields",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/tbd.finance.v1.UpsertCategoryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.UpsertCategoryResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.UpsertCategoryResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/finance/clients": {
@@ -2220,6 +2261,48 @@
         }
       }
     },
+    "/v1/finance/transactions/{id}": {
+      "get": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/GetTransaction",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/GetTransaction` on the `finance` backend.",
+        "operationId": "FinanceService.GetTransaction",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.GetTransactionResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.GetTransactionResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/humans/ping": {
       "get": {
         "tags": [
@@ -3980,6 +4063,15 @@
           }
         }
       },
+      "tbd.finance.v1.GetTransactionResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.GetTransactionResponse`",
+        "properties": {
+          "transaction": {
+            "$ref": "#/components/schemas/tbd.finance.v1.Transaction"
+          }
+        }
+      },
       "tbd.finance.v1.Invoice": {
         "type": "object",
         "description": "`tbd.finance.v1.Invoice`",
@@ -4674,6 +4766,9 @@
           "account_id": {
             "type": "string"
           },
+          "account_name": {
+            "type": "string"
+          },
           "amount_minor": {
             "type": "string",
             "format": "int64"
@@ -4681,10 +4776,16 @@
           "booking_date": {
             "type": "string"
           },
+          "categorised_at": {
+            "type": "string"
+          },
           "category": {
             "type": "string"
           },
           "category_id": {
+            "type": "string"
+          },
+          "category_rule_id": {
             "type": "string"
           },
           "category_source": {
@@ -4699,6 +4800,9 @@
           "currency": {
             "type": "string"
           },
+          "entry_reference": {
+            "type": "string"
+          },
           "id": {
             "type": "string"
           },
@@ -4706,6 +4810,12 @@
             "type": "boolean"
           },
           "party_id": {
+            "type": "string"
+          },
+          "raw": {
+            "type": "string"
+          },
+          "reference_number": {
             "type": "string"
           },
           "remittance": {
@@ -4789,6 +4899,47 @@
         "properties": {
           "invoice": {
             "$ref": "#/components/schemas/tbd.finance.v1.Invoice"
+          }
+        }
+      },
+      "tbd.finance.v1.UpsertCategoryRequest": {
+        "type": "object",
+        "description": "`tbd.finance.v1.UpsertCategoryRequest`",
+        "properties": {
+          "archived": {
+            "type": "boolean"
+          },
+          "deductible": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "party_id": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.finance.v1.UpsertCategoryResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.UpsertCategoryResponse`",
+        "properties": {
+          "categorised": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "category": {
+            "$ref": "#/components/schemas/tbd.finance.v1.Category"
+          },
+          "unmatched": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },

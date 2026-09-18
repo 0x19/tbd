@@ -72,7 +72,10 @@ The finance service. gRPC only. Scaffolded by `tbd new service` (docs/tbd/README
   as it is stored, on every unread one at start-up (`backfill`, after the run sweep), and
   on `ExtractDocument`. `service_documents.rs` holds the RPCs.
 - `categorise.rs` + `seeds/rules.sql`: a pass clears every `inferred` categorisation and
-  reapplies rules in priority order; `declared` always survives. The seed is idempotent on
+  reapplies rules in priority order; `declared` always survives. `money::upsert_category`
+  makes categories from the UI (slug from the name, kept on rename; archiving disables the
+  rules pointing at it and reruns the pass). `GetTransaction` is the one read that carries
+  the bank's raw record. The seed is idempotent on
   `(party_id, name)`; a rule joins to its category by slug and a typo drops it silently,
   so `tests/it/seed.rs` counts.
 

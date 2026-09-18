@@ -8,7 +8,6 @@ import {
   CompleteConnectionResponse,
   ConnectorResponse,
   DeclareCategoryResponse,
-  GetTransactionResponse,
   DeleteLineTemplateResponse,
   DocumentResponse,
   GetDocumentResponse,
@@ -43,8 +42,6 @@ import {
   UpsertClientResponse,
   UpsertIssuerResponse,
   UpsertLineTemplateResponse,
-  type UpsertCategory,
-  UpsertCategoryResponse,
   type UpsertRule,
   UpsertRuleResponse,
 } from "./schema";
@@ -175,9 +172,6 @@ export const api = {
     }),
   categories: (party_ids: string[]) =>
     call(ListCategoriesResponse, `/v1/finance/categories${query({ party_ids })}`),
-  transaction: (id: string) => call(GetTransactionResponse, `/v1/finance/transactions/${id}`),
-  upsertCategory: (category: UpsertCategory) =>
-    call(UpsertCategoryResponse, "/v1/finance/categories", { method: "POST", json: category }),
   declare: (transaction_id: string, category_id: string) =>
     call(DeclareCategoryResponse, "/v1/finance/transactions/declare", {
       method: "POST",

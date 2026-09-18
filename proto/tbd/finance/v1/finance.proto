@@ -24,13 +24,6 @@ service FinanceService {
     option (google.api.http) = {get: "/v1/finance/transactions"};
   }
 
-  // One transaction with everything the bank sent about it, including the
-  // raw record. Outside the caller's grant it is NOT_FOUND, never
-  // PERMISSION_DENIED.
-  rpc GetTransaction(GetTransactionRequest) returns (GetTransactionResponse) {
-    option (google.api.http) = {get: "/v1/finance/transactions/{id}"};
-  }
-
   // Money in and out by month and category, for the parties the caller may
   // read. Grouped by currency as well: a cross-currency total is never
   // computed, because it would need a rate, and a rate needs a date and a
@@ -81,16 +74,6 @@ service FinanceService {
   rpc DeclareCategory(DeclareCategoryRequest) returns (DeclareCategoryResponse) {
     option (google.api.http) = {
       post: "/v1/finance/transactions/declare"
-      body: "*"
-    };
-  }
-
-  // Create or change a category of a party the caller may read. Archiving
-  // one disables its rules and reapplies the rest; rows already declared
-  // under it keep it.
-  rpc UpsertCategory(UpsertCategoryRequest) returns (UpsertCategoryResponse) {
-    option (google.api.http) = {
-      post: "/v1/finance/categories"
       body: "*"
     };
   }
@@ -853,24 +836,6 @@ message DeclareCategoryResponse {
   Transaction transaction = 1;
 }
 
-message UpsertCategoryRequest {
-  // Empty creates; otherwise the category to change.
-  string id = 1;
-  string party_id = 2;
-  string name = 3;
-  // expense, income, transfer, tax or capital.
-  string kind = 4;
-  bool deductible = 5;
-  bool archived = 6;
-}
-
-message UpsertCategoryResponse {
-  Category category = 1;
-  // What the pass after the change did, for the whole party.
-  uint32 categorised = 2;
-  uint32 unmatched = 3;
-}
-
 message ListRulesRequest {
   repeated string party_ids = 1;
 }
@@ -1025,23 +990,4 @@ message Transaction {
   string category_source = 15;
   // A transfer between the caller's own accounts.
   bool internal = 16;
-  // The structured reference (Croatian "poziv na broj"), when the bank gave one.
-  string reference_number = 17;
-  // The bank's own id for the entry.
-  string entry_reference = 18;
-  // The rule that claimed it, when `category_source` is inferred.
-  string category_rule_id = 19;
-  // RFC 3339, when it was last categorised.
-  string categorised_at = 20;
-  string account_name = 21;
-  // The bank's record as JSON. Only GetTransaction fills it.
-  string raw = 22;
-}
-
-message GetTransactionRequest {
-  string id = 1;
-}
-
-message GetTransactionResponse {
-  Transaction transaction = 1;
 }

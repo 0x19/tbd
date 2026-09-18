@@ -108,6 +108,37 @@ pub struct RuleInput {
     pub enabled: bool,
 }
 
+/// A category to create or change.
+#[allow(missing_docs)]
+#[derive(Debug, Clone)]
+pub struct CategoryInput {
+    pub id: Option<Uuid>,
+    pub party_id: Uuid,
+    pub name: String,
+    pub kind: String,
+    pub deductible: bool,
+    pub archived: bool,
+}
+
+/// What a category may do to the books. The same closed set as the table's
+/// check constraint, named here so the refusal names the field.
+pub const CATEGORY_KINDS: [&str; 5] = ["expense", "income", "transfer", "tax", "capital"];
+
+/// A slug from a name: lower case, ASCII, words joined by underscores. Only
+/// for a new category; renaming keeps the slug, which rules and seeds key on.
+#[must_use]
+pub fn slugify(name: &str) -> String {
+    let mut out = String::new();
+    for ch in crate::import::normalise(name).chars() {
+        if ch.is_ascii_alphanumeric() {
+            out.push(ch.to_ascii_lowercase());
+        } else if !out.ends_with('_') && !out.is_empty() {
+            out.push('_');
+        }
+    }
+    out.trim_end_matches('_').to_owned()
+}
+
 /// The parties the caller may read, with why.
 ///
 /// # Errors
@@ -415,6 +446,115 @@ pub async fn upsert_rule(
                 match_counterparty_iban, match_remittance_like, match_currency,
                 match_credit_debit, enabled, hits
            from finance.rules where id = $1",
+    )
+    .bind(id)
+    .fetch_one(pool)
+    .await
+    .map_err(map_err)?;
+    Ok((row, applied))
+}
+
+/// Create or change a category, then reapply the party's rules.
+///
+/// Archiving disables the rules that point at it first, so the pass does not
+/// keep claiming rows for a category nobody can pick any more. Rows a person
+/// declared under it keep it: their choice is not undone by tidying.
+///
+/// # Errors
+/// The database; the party or existing category is not in the view; the
+/// input is malformed; or a new name collides with an existing slug.
+pub async fn upsert_category(
+    pool: &PgPool,
+    access: &Access,
+    input: CategoryInput,
+) -> Result<(CategoryRow, categorise::Applied), DbError> {
+    access.require(PartyId(input.party_id), "party")?;
+    let name = input.name.trim();
+    if name.is_empty() || name.len() > 120 {
+        return Err(DbError::Invalid {
+            field: "name",
+            reason: "want 1 to 120 characters".into(),
+        });
+    }
+    if !CATEGORY_KINDS.contains(&input.kind.as_str()) {
+        return Err(DbError::Invalid {
+            field: "kind",
+            reason: format!("want one of {}", CATEGORY_KINDS.join(", ")),
+        });
+    }
+    let id = if let Some(id) = input.id {
+        let owned: Option<(Uuid,)> =
+            sqlx::query_as("select id from finance.categories where id = $1 and party_id = $2")
+                .bind(id)
+                .bind(input.party_id)
+                .fetch_optional(pool)
+                .await
+                .map_err(map_err)?;
+        owned.ok_or(DbError::NotFound { what: "category" })?;
+        sqlx::query(
+            "update finance.categories
+                set name = $2, kind = $3, deductible = $4,
+                    archived_at = case when $5 then coalesce(archived_at, now()) else null end
+              where id = $1",
+        )
+        .bind(id)
+        .bind(name)
+        .bind(&input.kind)
+        .bind(input.deductible)
+        .bind(input.archived)
+        .execute(pool)
+        .await
+        .map_err(map_err)?;
+        id
+    } else {
+        let slug = slugify(name);
+        if slug.is_empty() {
+            return Err(DbError::Invalid {
+                field: "name",
+                reason: "no letters or digits to make a slug from".into(),
+            });
+        }
+        let taken: Option<(Uuid,)> =
+            sqlx::query_as("select id from finance.categories where party_id = $1 and slug = $2")
+                .bind(input.party_id)
+                .bind(&slug)
+                .fetch_optional(pool)
+                .await
+                .map_err(map_err)?;
+        if taken.is_some() {
+            return Err(DbError::Invalid {
+                field: "name",
+                reason: format!("a category with the slug `{slug}` already exists"),
+            });
+        }
+        let id = Uuid::new_v4();
+        sqlx::query(
+            "insert into finance.categories (id, party_id, slug, name, kind, deductible, archived_at)
+             values ($1, $2, $3, $4, $5, $6, case when $7 then now() end)",
+        )
+        .bind(id)
+        .bind(input.party_id)
+        .bind(&slug)
+        .bind(name)
+        .bind(&input.kind)
+        .bind(input.deductible)
+        .bind(input.archived)
+        .execute(pool)
+        .await
+        .map_err(map_err)?;
+        id
+    };
+    if input.archived {
+        sqlx::query("update finance.rules set enabled = false where category_id = $1")
+            .bind(id)
+            .execute(pool)
+            .await
+            .map_err(map_err)?;
+    }
+    let applied = categorise::apply_rules(pool, input.party_id).await?;
+    let row = sqlx::query_as::<_, CategoryRow>(
+        "select id, party_id, slug, name, kind, deductible, archived_at
+           from finance.categories where id = $1",
     )
     .bind(id)
     .fetch_one(pool)

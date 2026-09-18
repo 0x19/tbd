@@ -20,8 +20,14 @@ same conventions; read `ui/chaos/CLAUDE.md` for what is the kit's and what is ou
   combined toggle (`scope-toggle.tsx`, the sidebar footer, ⌘K) chooses among _those_.
   No page ever holds a party id the server did not list.
 - Pages: `/` (overview: in vs spent by month, a month's categories), `/transactions/`
-  (filters in the URL, inline recategorise = `DeclareCategory`), `/categories/` (rules
-  with hits; `rule-dialog.tsx` saves through `UpsertRule`, which reapplies at once),
+  (filters in the URL, inline recategorise = `DeclareCategory`; a row opens
+  `transaction-sheet.tsx`, which fetches `GetTransaction` for the bank's record and the
+  rule that claimed it, and "Make a rule from this" prefills `rule-dialog.tsx`; the
+  dialog previews what a condition would claim from the newest hundred rows mentioning
+  it), `/categories/` (two tabs: categories as cards with twelve months of use from
+  `MonthlySummary`, edited through `category-dialog.tsx` = `UpsertCategory`; rules
+  grouped by category with search and the claims-nothing filter; `rule-dialog.tsx`
+  saves through `UpsertRule`, which reapplies at once),
   `/accounts/` (balances, sync state, "Fetch now" = `RefreshAccount`), `/connections/`
   (`StartConnection` sends the browser to the bank), `/connect/callback/` (the
   registered redirect: reads `state`+`code` from its URL, POSTs `CompleteConnection`,

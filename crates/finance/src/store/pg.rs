@@ -52,8 +52,12 @@ impl Store for PgStore {
             "select t.id, t.account_id, t.party_id, t.status, t.amount_minor, t.currency,
                     t.scale, t.booking_date, t.counterparty_name, t.remittance,
                     t.value_date, t.counterparty_iban, t.category_id,
-                    c.name as category, t.category_source, t.internal
+                    c.name as category, t.category_source, t.internal,
+                    t.reference_number, t.entry_reference, t.category_rule_id,
+                    t.categorised_at, a.name as account_name,
+                    case when $9::uuid is null then null else t.raw::text end as raw
                from finance.transactions_enriched t
+               join finance.accounts a on a.id = t.account_id
                left join finance.categories c on c.id = t.category_id
               where t.party_id = any($1)
                 and ($3::text is null or to_char(t.booking_date, 'YYYY-MM') = $3)

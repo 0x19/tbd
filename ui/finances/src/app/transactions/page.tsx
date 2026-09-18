@@ -7,8 +7,10 @@ import { toast } from "sonner";
 
 import { useFinance } from "@/app/providers";
 import { PageTitle } from "@/components/kit";
+import { RuleDialog, suggestName } from "@/components/rule-dialog";
 import { ScopeToggle } from "@/components/scope-toggle";
 import { StatusBadge } from "@/components/status-badge";
+import { cleanRemittance,TransactionSheet } from "@/components/transaction-sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -18,7 +20,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { api } from "@/lib/api/client";
 import { describe, useFetch } from "@/lib/api/hooks";
-import type { Category, Transaction } from "@/lib/api/schema";
+import type { Category, Transaction, UpsertRule } from "@/lib/api/schema";
 import { day, money, monthLabel, monthsBefore, thisMonth } from "@/lib/format";
 
 const PAGE = 100;
@@ -31,6 +33,20 @@ export default function TransactionsPage() {
   );
 }
 
+/** A rule prefilled from a row: the counterparty as the condition, its
+ *  category if it has one, a name from the first word. */
+function ruleFrom(t: Transaction): Partial<UpsertRule> {
+  const byName = t.counterparty_name.trim();
+  return {
+    party_id: t.party_id,
+    name: suggestName(byName || cleanRemittance(t.remittance)),
+    category_id: t.category_id || undefined,
+    match_counterparty_like: byName,
+    match_remittance_like: byName ? "" : (cleanRemittance(t.remittance).split(",")[0]?.trim() ?? ""),
+    priority: 50,
+  };
+}
+
 function Transactions() {
   const params = useSearchParams();
   const router = useRouter();
@@ -41,6 +57,8 @@ function Transactions() {
   const [search, setSearch] = useState(params.get("q") ?? "");
   const [applied, setApplied] = useState(search);
   const [offset, setOffset] = useState(0);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [ruleSeed, setRuleSeed] = useState<Partial<UpsertRule> | null>(null);
 
   const set = (k: string, v: string) => {
     const q = new URLSearchParams(params.toString());
@@ -48,6 +66,12 @@ function Transactions() {
     else q.delete(k);
     setOffset(0);
     router.replace(`/transactions/?${q.toString()}`);
+  };
+  const applySearch = (text: string) => {
+    setSearch(text);
+    setApplied(text);
+    setOffset(0);
+    set("q", text);
   };
 
   const key = [partyIds.join(","), month, category, account, applied, offset].join("|");
@@ -65,20 +89,24 @@ function Transactions() {
     0,
     [key],
   );
-  const categories = useFetch(() => api.categories(partyIds), 0, [partyIds.join(",")]);
-  const cats = useMemo(() => categories.data?.categories.filter((c) => !c.archived) ?? [], [categories.data]);
+  const scope = partyIds.join(",");
+  const categories = useFetch(() => api.categories(partyIds), 0, [scope]);
+  const rules = useFetch(() => api.rules(partyIds), 0, [scope]);
+  const cats = useMemo(() => categories.data?.categories ?? [], [categories.data]);
+  const live = useMemo(() => cats.filter((c) => !c.archived), [cats]);
   const rows = list.data?.transactions ?? [];
 
   const months = useMemo(() => {
     const now = thisMonth();
     return Array.from({ length: 24 }, (_, i) => monthsBefore(now, i));
   }, []);
+  const filtered = Boolean(month || category || account || applied);
 
   return (
     <>
       <PageTitle
         title="Transactions"
-        description="Every booked and pending row the bank has sent, newest first."
+        description="Every booked and pending row the bank has sent, newest first. Click a row for everything the bank said about it."
       >
         <ScopeToggle className="md:hidden" />
       </PageTitle>
@@ -88,9 +116,7 @@ function Transactions() {
           className="flex items-center gap-2"
           onSubmit={(e) => {
             e.preventDefault();
-            setOffset(0);
-            setApplied(search.trim());
-            set("q", search.trim());
+            applySearch(search.trim());
           }}
         >
           <div className="relative">
@@ -126,7 +152,7 @@ function Transactions() {
           <SelectContent>
             <SelectItem value="any">Any category</SelectItem>
             <SelectItem value="none">Uncategorised</SelectItem>
-            {cats.map((c) => (
+            {live.map((c) => (
               <SelectItem key={c.id} value={c.id}>
                 {c.name}
                 {multi ? ` · ${partyName(c.party_id)}` : ""}
@@ -134,7 +160,14 @@ function Transactions() {
             ))}
           </SelectContent>
         </Select>
-        {month || category || account || applied ? (
+        <Button
+          variant={category === "none" ? "default" : "outline"}
+          size="sm"
+          onClick={() => set("category", category === "none" ? "" : "none")}
+        >
+          Uncategorised only
+        </Button>
+        {filtered ? (
           <Button
             variant="ghost"
             size="sm"
@@ -180,10 +213,12 @@ function Transactions() {
                   <Row
                     key={t.id}
                     t={t}
-                    cats={cats}
+                    cats={live}
                     multi={multi}
                     partyName={partyName}
+                    onOpen={() => setSelected(t.id)}
                     onChanged={list.reload}
+                    onMakeRule={(seed) => setRuleSeed(ruleFrom(seed))}
                   />
                 ))}
               </TableBody>
@@ -194,6 +229,7 @@ function Transactions() {
       <div className="flex items-center justify-between text-sm">
         <span className="text-muted-foreground">
           {rows.length ? `${offset + 1}–${offset + rows.length}` : "0"}
+          {rows.length === PAGE ? " · more below" : ""}
         </span>
         <div className="flex gap-2">
           <Button
@@ -214,6 +250,32 @@ function Transactions() {
           </Button>
         </div>
       </div>
+
+      <TransactionSheet
+        id={selected}
+        cats={cats}
+        rules={rules.data?.rules ?? []}
+        onClose={() => setSelected(null)}
+        onChanged={list.reload}
+        onMakeRule={(t) => setRuleSeed(ruleFrom(t))}
+        onFilter={(name) => {
+          setSelected(null);
+          applySearch(name);
+        }}
+      />
+      {ruleSeed ? (
+        <RuleDialog
+          rule={null}
+          initial={ruleSeed}
+          categories={live}
+          onClose={() => setRuleSeed(null)}
+          onSaved={() => {
+            setRuleSeed(null);
+            list.reload();
+            rules.reload();
+          }}
+        />
+      ) : null}
     </>
   );
 }
@@ -223,19 +285,24 @@ function Row({
   cats,
   multi,
   partyName,
+  onOpen,
   onChanged,
+  onMakeRule,
 }: {
   t: Transaction;
   cats: Category[];
   multi: boolean;
   partyName: (id: string) => string;
+  onOpen: () => void;
   onChanged: () => void;
+  onMakeRule: (t: Transaction) => void;
 }) {
   const [busy, setBusy] = useState(false);
   const mine = cats.filter((c) => c.party_id === t.party_id);
   const negative = t.amount_minor.startsWith("-");
+  const remittance = cleanRemittance(t.remittance);
   return (
-    <TableRow className={t.internal ? "opacity-60" : undefined}>
+    <TableRow className={["cursor-pointer", t.internal ? "opacity-60" : ""].join(" ")} onClick={onOpen}>
       <TableCell className="text-muted-foreground font-mono text-xs whitespace-nowrap">
         {day(t.booking_date)}
         {t.status !== "BOOKED" ? (
@@ -245,7 +312,9 @@ function Row({
         ) : null}
       </TableCell>
       <TableCell className="max-w-64 truncate font-medium">
-        {t.counterparty_name || <span className="text-muted-foreground italic">—</span>}
+        {t.counterparty_name || (
+          <span className="text-muted-foreground italic">{remittance.split(",")[0] || "—"}</span>
+        )}
         {t.internal ? (
           <Badge variant="outline" className="ml-2 text-[10px]">
             own transfer
@@ -253,14 +322,14 @@ function Row({
         ) : null}
       </TableCell>
       <TableCell className="text-muted-foreground hidden max-w-80 truncate text-xs lg:table-cell">
-        {t.remittance}
+        {remittance}
       </TableCell>
       {multi ? (
         <TableCell className="text-muted-foreground hidden text-xs md:table-cell">
           {partyName(t.party_id)}
         </TableCell>
       ) : null}
-      <TableCell>
+      <TableCell onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-2">
           <Select
             value={t.category_id || "none"}
@@ -270,7 +339,9 @@ function Row({
               setBusy(true);
               try {
                 await api.declare(t.id, v);
-                toast.success("Category set; rules will not change it again.");
+                toast.success("Category set; rules will not change it again.", {
+                  action: { label: "Make it a rule", onClick: () => onMakeRule({ ...t, category_id: v }) },
+                });
                 onChanged();
               } catch (e) {
                 toast.error(describe(e));
@@ -279,7 +350,13 @@ function Row({
               }
             }}
           >
-            <SelectTrigger className="h-7 w-44 text-xs">
+            <SelectTrigger
+              className={
+                t.category_id
+                  ? "h-7 w-44 text-xs"
+                  : "h-7 w-44 border-dashed text-xs text-amber-700 dark:text-amber-300"
+              }
+            >
               <SelectValue placeholder="Uncategorised" />
             </SelectTrigger>
             <SelectContent>

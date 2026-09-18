@@ -15,8 +15,9 @@ use sqlx::PgPool;
 use tbd_db::{Capability, PartyId, UserId, create_org, ensure_user, grant};
 use tbd_finance::banking::Mock;
 use tbd_proto::finance::v1::{
-    CompleteConnectionRequest, DeclareCategoryRequest, ListPartiesRequest, ListTransactionsRequest,
-    MonthlySummaryRequest, RefreshAccountRequest, StartConnectionRequest, UpsertRuleRequest,
+    CompleteConnectionRequest, DeclareCategoryRequest, GetTransactionRequest,
+    ListCategoriesRequest, ListPartiesRequest, ListTransactionsRequest, MonthlySummaryRequest,
+    RefreshAccountRequest, StartConnectionRequest, UpsertCategoryRequest, UpsertRuleRequest,
 };
 use tonic::{Code, Request, metadata::MetadataValue};
 use uuid::Uuid;
@@ -474,4 +475,157 @@ async fn completing_a_connection_with_a_foreign_state_is_not_found_and_exchanges
         .await
         .unwrap_err();
     assert_eq!(e.code(), Code::NotFound);
+}
+
+#[tokio::test]
+async fn one_transaction_outside_the_grant_is_not_found_and_inside_carries_the_bank_record() {
+    let (server, pool) = start_with_store().await;
+    let w = seed(&pool).await;
+    let mut client = server.client().await;
+
+    let e = client
+        .get_transaction(as_caller(
+            READER,
+            GetTransactionRequest {
+                id: w.personal_txn.to_string(),
+            },
+        ))
+        .await
+        .unwrap_err();
+    assert_eq!(e.code(), Code::NotFound, "{e}");
+
+    let t = client
+        .get_transaction(as_caller(
+            READER,
+            GetTransactionRequest {
+                id: w.company_txn.to_string(),
+            },
+        ))
+        .await
+        .unwrap()
+        .into_inner()
+        .transaction
+        .unwrap();
+    assert_eq!(t.account_name, "company");
+    assert_eq!(t.raw, "{}", "the record the bank sent, verbatim");
+
+    // The list does not carry records: a page of a hundred is not a hundred
+    // bank records.
+    let listed = client
+        .list_transactions(as_caller(READER, ListTransactionsRequest::default()))
+        .await
+        .unwrap()
+        .into_inner()
+        .transactions;
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0].raw, "");
+    assert_eq!(listed[0].account_name, "company");
+}
+
+#[tokio::test]
+async fn a_category_is_created_slugged_and_archiving_it_disables_its_rules() {
+    let (server, pool) = start_with_store().await;
+    let w = seed(&pool).await;
+    let mut client = server.client().await;
+    let input = |party: Uuid| UpsertCategoryRequest {
+        party_id: party.to_string(),
+        name: "Kiosks & newsstands".into(),
+        kind: "expense".into(),
+        deductible: false,
+        ..UpsertCategoryRequest::default()
+    };
+
+    let e = client
+        .upsert_category(as_caller(READER, input(w.personal)))
+        .await
+        .unwrap_err();
+    assert_eq!(
+        e.code(),
+        Code::NotFound,
+        "a party not granted does not exist"
+    );
+    let e = client
+        .upsert_category(as_caller(
+            READER,
+            UpsertCategoryRequest {
+                kind: "fun".into(),
+                ..input(w.company)
+            },
+        ))
+        .await
+        .unwrap_err();
+    assert_eq!(e.code(), Code::InvalidArgument, "{e}");
+
+    let made = client
+        .upsert_category(as_caller(OWNER, input(w.company)))
+        .await
+        .unwrap()
+        .into_inner()
+        .category
+        .unwrap();
+    assert_eq!(made.slug, "kiosks_newsstands");
+    assert_eq!(made.name, "Kiosks & newsstands");
+    let e = client
+        .upsert_category(as_caller(OWNER, input(w.company)))
+        .await
+        .unwrap_err();
+    assert_eq!(e.code(), Code::InvalidArgument, "same slug twice: {e}");
+
+    // A rule points at it and claims the company row.
+    let done = client
+        .upsert_rule(as_caller(
+            OWNER,
+            UpsertRuleRequest {
+                party_id: w.company.to_string(),
+                priority: 10,
+                name: "anthropic".into(),
+                category_id: made.id.clone(),
+                match_counterparty_like: "anthropic".into(),
+                enabled: true,
+                ..UpsertRuleRequest::default()
+            },
+        ))
+        .await
+        .unwrap()
+        .into_inner();
+    assert_eq!(done.rule.unwrap().hits, 1);
+
+    // Archiving disables that rule and the pass lets the row go.
+    let archived = client
+        .upsert_category(as_caller(
+            OWNER,
+            UpsertCategoryRequest {
+                id: made.id.clone(),
+                archived: true,
+                ..input(w.company)
+            },
+        ))
+        .await
+        .unwrap()
+        .into_inner();
+    assert!(archived.category.unwrap().archived);
+    assert_eq!(
+        archived.unmatched, 1,
+        "the company row is uncategorised again"
+    );
+    let rows = client
+        .list_transactions(as_caller(
+            OWNER,
+            ListTransactionsRequest {
+                category_id: "none".into(),
+                ..ListTransactionsRequest::default()
+            },
+        ))
+        .await
+        .unwrap()
+        .into_inner()
+        .transactions;
+    assert_eq!(rows.len(), 2);
+    let cats = client
+        .list_categories(as_caller(OWNER, ListCategoriesRequest::default()))
+        .await
+        .unwrap()
+        .into_inner()
+        .categories;
+    assert!(cats.iter().any(|c| c.id == made.id && c.archived));
 }
