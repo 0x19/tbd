@@ -2,13 +2,18 @@
 
 // The money charts, in the kit's style: a big number with an uppercase caption,
 // the kit's --chart-* palette, tooltips through ChartContainer.
+import { useState } from "react";
 import {
+  Area,
   Bar,
   BarChart,
   CartesianGrid,
   Cell,
+  ComposedChart,
   Line,
   LineChart,
+  Pie,
+  PieChart,
   XAxis,
   type XAxisTickContentProps,
   YAxis,
@@ -73,16 +78,20 @@ export function MoneyFlowChart({
   months,
   currency,
   selected,
+  range,
   onSelect,
   height = 280,
 }: {
   months: MonthTotals[];
   currency: string;
   selected?: string;
+  /** Months to keep lit; the rest dim. Overrides `selected` when given. */
+  range?: string[];
   onSelect?: (ym: string) => void;
   height?: number;
 }) {
   const flowConfig = useFlowConfig();
+  const lit = range ? new Set(range) : selected ? new Set([selected]) : null;
   const data = months.map((m, i) => ({
     month: tickLabel(m.month, i === 0),
     ym: m.month,
@@ -90,7 +99,7 @@ export function MoneyFlowChart({
     spent: chartValue(m.spent),
     other: chartValue(m.out - m.spent),
   }));
-  const dim = (ym: string) => (selected && ym !== selected ? 0.35 : 1);
+  const dim = (ym: string) => (lit && !lit.has(ym) ? 0.35 : 1);
   const cells = (key: string) =>
     data.map((d) => (
       <Cell
@@ -116,7 +125,7 @@ export function MoneyFlowChart({
           tickMargin={10}
           tick={({ x, y, payload, index }: XAxisTickContentProps) => {
             const ym = data[index]?.ym;
-            const active = ym === selected;
+            const active = ym != null && (lit ? lit.has(ym) : false);
             return (
               <text
                 x={Number(x)}
@@ -254,5 +263,164 @@ export function SparkLine({ values, height = 56 }: { values: number[]; height?: 
         />
       </LineChart>
     </ChartContainer>
+  );
+}
+
+/** This year as a line over last year as a faint area, month by month: the
+ *  kit's "total revenue" idiom. Missing months leave gaps rather than zeros. */
+export function YearOverYearChart({
+  data,
+  currency,
+  height = 280,
+}: {
+  data: { month: string; thisYear: number | null; lastYear: number | null }[];
+  currency: string;
+  height?: number;
+}) {
+  const t = useT();
+  const config = {
+    thisYear: { label: t("overview.yoy.this"), color: "var(--chart-1)" },
+    lastYear: { label: t("overview.yoy.last"), color: "var(--chart-4)" },
+  } satisfies ChartConfig;
+  const rows = data.map((d) => ({ ...d, label: monthShort(d.month) }));
+  return (
+    <ChartContainer config={config} className="w-full" style={{ height }}>
+      <ComposedChart accessibilityLayer data={rows} margin={{ top: 6, right: 0, bottom: 0, left: 0 }}>
+        <CartesianGrid stroke="var(--border)" strokeDasharray="4 4" strokeOpacity={0.55} vertical={false} />
+        <XAxis axisLine={false} dataKey="label" tickLine={false} tickMargin={10} tick={{ fontSize: 12 }} />
+        <YAxis
+          axisLine={false}
+          tickLine={false}
+          tick={{ fontSize: 12 }}
+          width={44}
+          tickFormatter={axisMoney}
+        />
+        <ChartTooltip
+          content={
+            <ChartTooltipContent
+              formatter={(value, name) => (
+                <div className="flex w-full items-center justify-between gap-4">
+                  <span className="text-muted-foreground">
+                    {config[name as keyof typeof config]?.label ?? name}
+                  </span>
+                  <span className="font-mono font-medium tabular-nums">
+                    {money(Math.round(Number(value) * 100), currency)}
+                  </span>
+                </div>
+              )}
+            />
+          }
+        />
+        <Area
+          dataKey="lastYear"
+          type="linear"
+          stroke="var(--color-lastYear)"
+          strokeWidth={1.5}
+          strokeOpacity={0.6}
+          fill="var(--color-lastYear)"
+          fillOpacity={0.1}
+          connectNulls={false}
+          isAnimationActive={false}
+        />
+        <Line
+          dataKey="thisYear"
+          type="linear"
+          stroke="var(--color-thisYear)"
+          strokeWidth={2}
+          dot={{ r: 2.5, strokeWidth: 0, fill: "var(--color-thisYear)" }}
+          activeDot={{ r: 4 }}
+          connectNulls={false}
+          isAnimationActive={false}
+        />
+      </ComposedChart>
+    </ChartContainer>
+  );
+}
+
+export type Slice = { id: string; label: string; value: number; color: string; pct: number };
+
+/** A donut with the biggest slice in the middle and a legend beside it that
+ *  lights the slice it names: the kit's "categories" idiom. */
+export function CategoryDonut({
+  slices,
+  currency,
+  onPick,
+}: {
+  slices: Slice[];
+  currency: string;
+  onPick?: (id: string) => void;
+}) {
+  const [active, setActive] = useState<number | null>(null);
+  const config = Object.fromEntries(
+    slices.map((s) => [s.id, { label: s.label, color: s.color }]),
+  ) satisfies ChartConfig;
+  const top = slices[0];
+  return (
+    <div className="flex flex-1 flex-col items-center gap-4 sm:flex-row sm:gap-6">
+      <div className="relative size-[170px] shrink-0 sm:size-[190px]">
+        <ChartContainer config={config} className="h-full w-full">
+          <PieChart>
+            <Pie
+              data={slices}
+              dataKey="value"
+              nameKey="label"
+              innerRadius="62%"
+              outerRadius="92%"
+              paddingAngle={2}
+              strokeWidth={0}
+              isAnimationActive={false}
+              onMouseEnter={(_: unknown, index: number) => setActive(index)}
+              onMouseLeave={() => setActive(null)}
+            >
+              {slices.map((s, i) => (
+                <Cell
+                  key={s.id}
+                  fill={s.color}
+                  fillOpacity={active === null || active === i ? 1 : 0.35}
+                  cursor={onPick ? "pointer" : undefined}
+                  onClick={onPick ? () => onPick(s.id) : undefined}
+                />
+              ))}
+            </Pie>
+          </PieChart>
+        </ChartContainer>
+        {top ? (
+          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+            <span className="text-lg font-semibold tabular-nums">
+              {(active !== null ? slices[active] : top)?.pct.toFixed(0)}%
+            </span>
+            <span className="text-muted-foreground max-w-[110px] truncate text-[10px]">
+              {(active !== null ? slices[active] : top)?.label}
+            </span>
+          </div>
+        ) : null}
+      </div>
+      <div className="flex min-w-0 flex-1 flex-col gap-2">
+        {slices.map((s, i) => (
+          <button
+            key={s.id}
+            type="button"
+            className={cn(
+              "flex w-full cursor-pointer items-center gap-2.5 rounded-md text-left transition-opacity",
+              active !== null && active !== i && "opacity-50",
+            )}
+            onPointerEnter={() => setActive(i)}
+            onPointerLeave={() => setActive(null)}
+            onFocus={() => setActive(i)}
+            onBlur={() => setActive(null)}
+            onClick={onPick ? () => onPick(s.id) : undefined}
+          >
+            <span className="h-4 w-1 shrink-0 rounded-sm" style={{ backgroundColor: s.color }} />
+            <span className="text-muted-foreground min-w-0 flex-1 truncate text-xs">{s.label}</span>
+            <span className="shrink-0 font-mono text-xs tabular-nums">
+              {money(Math.round(s.value * 100), currency)}
+            </span>
+            <span className="w-10 shrink-0 text-right text-xs font-semibold tabular-nums">
+              {s.pct.toFixed(0)}%
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }

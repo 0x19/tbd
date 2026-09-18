@@ -1,40 +1,68 @@
 "use client";
 
-import { ArrowDownRight, ArrowUpRight, PiggyBank, Receipt, Wallet } from "lucide-react";
-import Link from "next/link";
+// The overview: one period -- a month, a quarter or a year -- and everything
+// on the page follows it. The numbers come from one 24-month summary fetch
+// sliced client-side (a period is just a set of months), plus what the
+// accounts, invoices, receipts and the ledger say right now. Each widget
+// loads and empties on its own, so one slow endpoint dims one card.
+import { ArrowDownRight, ArrowUpRight, PiggyBank, Receipt } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import { useFinance } from "@/app/providers";
-import { CategoryBars, Legend, MoneyFlowChart, SparkLine } from "@/components/charts";
+import { AccountsCard } from "@/components/dashboard/accounts-card";
+import { ActivityCard } from "@/components/dashboard/activity-card";
+import { DonutCard } from "@/components/dashboard/donut-card";
+import { FlowCard } from "@/components/dashboard/flow-card";
+import { InvoicesCard } from "@/components/dashboard/invoices-card";
+import { MiniCards } from "@/components/dashboard/mini-cards";
+import { PeriodControl } from "@/components/dashboard/period-control";
+import { ReceiptsCard } from "@/components/dashboard/receipts-card";
+import { YearTable } from "@/components/dashboard/year-table";
 import { KpiStrip, PageTitle } from "@/components/kit";
-import { MonthStepper } from "@/components/month-stepper";
 import { ScopeToggle } from "@/components/scope-toggle";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/lib/api/client";
 import { useFetch } from "@/lib/api/hooks";
-import { money, monthLabel, monthsBefore, thisMonth } from "@/lib/format";
+import { money, monthsBefore, periodLabel, thisMonth } from "@/lib/format";
 import { useT } from "@/lib/i18n";
-import { byCategory, byMonth, chartValue, currencies } from "@/lib/summary";
+import {
+  byCategory,
+  byMonth,
+  currencies,
+  monthsEnding,
+  type MonthTotals,
+  percentChange,
+  type Period,
+  periodBounds,
+  periodOf,
+  periodTotals,
+  previousPeriod,
+} from "@/lib/summary";
 
-const WINDOWS = [3, 6, 12, 24] as const;
+/** Enough history for a year and the year before it. */
+const HISTORY = 24;
+
+/** The months a chart draws: every month in the run, zero where nothing was booked. */
+function fill(months: MonthTotals[], run: string[]): MonthTotals[] {
+  const by = new Map(months.map((m) => [m.month, m]));
+  return run.map((ym) => by.get(ym) ?? { month: ym, income: 0n, spent: 0n, out: 0n, in: 0n, count: 0 });
+}
 
 export default function OverviewPage() {
   const t = useT();
   const router = useRouter();
   const { partyIds, scope, loading: partiesLoading, error: partiesError } = useFinance();
-  const [window, setWindow] = useState<(typeof WINDOWS)[number]>(12);
-  const from = monthsBefore(thisMonth(), window - 1);
+  const key = partyIds.join(",");
+  const from = monthsBefore(thisMonth(), HISTORY - 1);
   // Transfers between your own accounts count twice in a combined view, so
-  // there they are left out. In a single party's view they are real: an owner
-  // draw is the company's money out and the person's money in.
+  // there they are left out. In a single party's view they are real.
   const includeInternal = scope !== "all";
+
   const summary = useFetch(() => api.summary(partyIds, from, includeInternal), 60_000, [
-    partyIds.join(","),
+    key,
     from,
     includeInternal,
   ]);
@@ -43,25 +71,50 @@ export default function OverviewPage() {
   const [currency, setCurrency] = useState<string | null>(null);
   const ccy = currency && ccys.includes(currency) ? currency : (ccys[0] ?? "EUR");
   const months = useMemo(() => byMonth(rows, ccy), [rows, ccy]);
-  const [month, setMonth] = useState<string | null>(null);
-  const current =
-    month && months.some((m) => m.month === month) ? month : (months.at(-1)?.month ?? thisMonth());
-  const cur = months.find((m) => m.month === current);
-  const prev = months[months.findIndex((m) => m.month === current) - 1];
-  const cats = useMemo(
-    () => byCategory(rows, ccy, new Set([current])).filter((c) => c.total < 0n),
-    [rows, ccy, current],
-  );
-  const spentTotal = cats
-    .filter((c) => c.kind === "expense" || c.kind === "tax" || c.kind === "")
-    .reduce((s, c) => s - c.total, 0n);
-  const allOut = cats.reduce((s, c) => s - c.total, 0n);
-  const uncategorised = cats.find((c) => c.category_id === "none");
+  const monthList = useMemo(() => months.map((m) => m.month), [months]);
 
-  const delta = (a?: bigint, b?: bigint) =>
-    a == null || b == null || b === 0n ? undefined : Number(((a - b) * 1000n) / b) / 10;
+  // The period: the newest month with data until the person picks one.
+  const [chosen, setChosen] = useState<Period | null>(null);
+  const period = chosen ?? periodOf("month", monthList.at(-1) ?? thisMonth());
+  const last = period.months.at(-1) ?? period.start;
+  const prevPeriod = previousPeriod(period);
+
+  const cur = useMemo(() => periodTotals(months, period), [months, period]);
+  const prev = useMemo(() => periodTotals(months, prevPeriod), [months, prevPeriod]);
+  const cats = useMemo(() => byCategory(rows, ccy, new Set(period.months)), [rows, ccy, period]);
+  const uncategorised = cats.find((c) => c.category_id === "none" && c.total < 0n);
+
+  // Twelve months ending with the period for the bar chart; the mini cards
+  // compare the period's own run of months with the same run before it.
+  const flowWindow = useMemo(() => fill(months, monthsEnding(last, 12)), [months, last]);
+  const miniRun = period.kind === "year" ? period.months : monthsEnding(last, 12);
+  const miniWindow = useMemo(() => fill(months, miniRun), [months, miniRun]);
+  const miniBefore = useMemo(
+    () => fill(months, monthsEnding(monthsBefore(miniRun[0] ?? last, 1), miniRun.length)),
+    [months, miniRun, last],
+  );
+  const yearMonths = useMemo(() => months.filter((m) => period.months.includes(m.month)), [months, period]);
+
+  const bounds = periodBounds(period);
+  const accounts = useFetch(() => api.accounts(partyIds), 60_000, [key]);
+  const invoices = useFetch(() => api.invoices(partyIds), 60_000, [key]);
+  const clients = useFetch(() => api.clients(partyIds), 5 * 60_000, [key]);
+  const documents = useFetch(
+    () => api.documents({ party_ids: partyIds, from: bounds.from, to: bounds.to, limit: 50 }),
+    60_000,
+    [key, bounds.from, bounds.to],
+  );
+  const recent = useFetch(() => api.transactions({ party_ids: partyIds, limit: 8 }), 60_000, [key]);
+  const clientName = (id: string) => clients.data?.clients.find((c) => c.id === id)?.name;
+
   const loading = partiesLoading || (summary.loading && !summary.data);
   const error = partiesError ?? summary.error;
+  const label = periodLabel(period.kind, period.start);
+  const vsPrev = t(`overview.vs_prev.${period.kind}`);
+  const delta = (a: bigint, b: bigint) => (prev.monthsWithData ? percentChange(a, b) : undefined);
+  const pickMonth = (ym: string) => setChosen(periodOf("month", ym));
+  const pickCategory = (id: string) =>
+    router.push(`/transactions/?category=${id}${period.kind === "month" ? `&month=${period.start}` : ""}`);
 
   return (
     <>
@@ -70,21 +123,7 @@ export default function OverviewPage() {
         description={includeInternal ? t("overview.desc_internal") : t("overview.desc_no_internal")}
       >
         <ScopeToggle className="md:hidden" />
-        <Select
-          value={String(window)}
-          onValueChange={(v) => setWindow(Number(v) as (typeof WINDOWS)[number])}
-        >
-          <SelectTrigger className="w-36">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {WINDOWS.map((w) => (
-              <SelectItem key={w} value={String(w)}>
-                {t("overview.last_n_months", { n: w })}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <PeriodControl period={period} months={monthList} onChange={setChosen} />
         {ccys.length > 1 ? (
           <Tabs value={ccy} onValueChange={setCurrency}>
             <TabsList>
@@ -114,32 +153,38 @@ export default function OverviewPage() {
           items={[
             {
               icon: ArrowDownRight,
-              label: t("overview.kpi.spent", { month: monthLabel(current) }),
-              value: cur ? money(cur.spent.toString(), ccy) : "—",
-              previous: prev ? `${monthLabel(prev.month)}: ${money(prev.spent.toString(), ccy)}` : undefined,
+              label: t("overview.kpi.spent_p", { period: label }),
+              value: money(cur.spent.toString(), ccy),
+              previous: prev.monthsWithData
+                ? t("overview.prev_value", { value: money(prev.spent.toString(), ccy) })
+                : undefined,
               delta:
-                cur && prev && delta(cur.spent, prev.spent) != null
-                  ? {
-                      value: delta(cur.spent, prev.spent)!,
-                      label: t("overview.vs_previous_month"),
-                      goodWhen: "down",
-                    }
+                delta(cur.spent, prev.spent) != null
+                  ? { value: delta(cur.spent, prev.spent)!, label: vsPrev, goodWhen: "down" }
                   : undefined,
+              hint: t("overview.kpi.rows", { n: cur.count }),
             },
             {
               icon: ArrowUpRight,
-              label: t("overview.kpi.in", { month: monthLabel(current) }),
-              value: cur ? money(cur.in.toString(), ccy) : "—",
-              previous: prev ? `${monthLabel(prev.month)}: ${money(prev.in.toString(), ccy)}` : undefined,
+              label: t("overview.kpi.in_p", { period: label }),
+              value: money(cur.in.toString(), ccy),
+              previous: prev.monthsWithData
+                ? t("overview.prev_value", { value: money(prev.in.toString(), ccy) })
+                : undefined,
               delta:
-                cur && prev && delta(cur.in, prev.in) != null
-                  ? { value: delta(cur.in, prev.in)!, label: t("overview.vs_previous_month"), goodWhen: "up" }
+                delta(cur.in, prev.in) != null
+                  ? { value: delta(cur.in, prev.in)!, label: vsPrev, goodWhen: "up" }
                   : undefined,
             },
             {
               icon: PiggyBank,
-              label: t("overview.kpi.net", { month: monthLabel(current) }),
-              value: cur ? money((cur.in - cur.out).toString(), ccy, { sign: true }) : "—",
+              label: t("overview.kpi.net_p", { period: label }),
+              value: money((cur.in - cur.out).toString(), ccy, { sign: true }),
+              previous: prev.monthsWithData
+                ? t("overview.prev_value", {
+                    value: money((prev.in - prev.out).toString(), ccy, { sign: true }),
+                  })
+                : undefined,
               hint: t("overview.net_hint"),
             },
             {
@@ -147,121 +192,58 @@ export default function OverviewPage() {
               label: t("overview.uncategorised"),
               value: uncategorised ? money((-uncategorised.total).toString(), ccy) : money(0, ccy),
               hint: uncategorised
-                ? t("overview.uncategorised_hint", { n: uncategorised.count })
+                ? t("overview.uncategorised_rows", { n: uncategorised.count })
                 : t("overview.all_categorised_hint"),
             },
           ]}
         />
       )}
 
-      <div className="grid gap-6 xl:grid-cols-5">
-        <Card className="xl:col-span-3">
-          <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3">
-            <div>
-              <CardTitle>{t("overview.flow_title")}</CardTitle>
-              <CardDescription>{t("overview.flow_desc")}</CardDescription>
-            </div>
-            <div className="flex flex-wrap items-center gap-4">
-              <Legend
-                items={[
-                  { label: t("nav.chart.in"), color: "var(--chart-2)" },
-                  { label: t("nav.chart.spent"), color: "var(--chart-1)" },
-                  { label: t("nav.chart.other"), color: "var(--chart-4)" },
-                ]}
-              />
-              {months.length ? (
-                <MonthStepper months={months.map((m) => m.month)} value={current} onChange={setMonth} />
-              ) : null}
-            </div>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <Skeleton className="h-[280px] w-full" />
-            ) : months.length ? (
-              <MoneyFlowChart months={months} currency={ccy} selected={current} onSelect={setMonth} />
-            ) : (
-              <p className="text-muted-foreground text-sm">{t("overview.no_booked")}</p>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="xl:col-span-2">
-          <CardHeader>
-            <CardTitle>{t("overview.by_category", { month: monthLabel(current) })}</CardTitle>
-            <CardDescription>
-              {cur
-                ? t("overview.out_across", {
-                    amount: money(allOut.toString(), ccy),
-                    n: cats.reduce((n, c) => n + c.count, 0),
-                  })
-                : "—"}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <Skeleton className="h-64 w-full" />
-            ) : cats.length ? (
-              <CategoryBars
-                items={cats}
-                currency={ccy}
-                total={spentTotal > 0n ? spentTotal : allOut}
-                onPick={(id) =>
-                  id === "internal"
-                    ? undefined
-                    : router.push(`/transactions/?month=${current}&category=${id}`)
-                }
-              />
-            ) : (
-              <p className="text-muted-foreground text-sm">{t("overview.nothing_spent")}</p>
-            )}
-          </CardContent>
-        </Card>
+      <div className="grid gap-4 xl:grid-cols-5">
+        <div className="xl:col-span-3">
+          <FlowCard
+            window={flowWindow}
+            all={months}
+            period={period}
+            currency={ccy}
+            onPickMonth={pickMonth}
+            loading={loading}
+          />
+        </div>
+        <div className="xl:col-span-2">
+          <DonutCard
+            categories={cats}
+            period={period}
+            currency={ccy}
+            onPick={pickCategory}
+            loading={loading}
+          />
+        </div>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>{t("overview.spent_monthly")}</CardDescription>
-            <CardTitle className="text-2xl tabular-nums">
-              {months.length
-                ? money((months.reduce((s, m) => s + m.spent, 0n) / BigInt(months.length)).toString(), ccy)
-                : "—"}
-              <span className="text-muted-foreground ml-2 text-sm font-normal">{t("overview.avg")}</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {months.length ? <SparkLine values={months.map((m) => chartValue(m.spent))} /> : null}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>{t("overview.in_monthly")}</CardDescription>
-            <CardTitle className="text-2xl tabular-nums">
-              {months.length
-                ? money((months.reduce((s, m) => s + m.in, 0n) / BigInt(months.length)).toString(), ccy)
-                : "—"}
-              <span className="text-muted-foreground ml-2 text-sm font-normal">{t("overview.avg")}</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {months.length ? <SparkLine values={months.map((m) => chartValue(m.in))} /> : null}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>{t("overview.accounts")}</CardDescription>
-            <CardTitle className="flex items-center gap-2 text-2xl">
-              <Wallet className="text-muted-foreground size-5" /> {t("overview.balances_sync")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="flex items-end justify-between gap-2">
-            <p className="text-muted-foreground text-sm">{t("overview.accounts_desc")}</p>
-            <Button asChild variant="outline" size="sm">
-              <Link href="/accounts/">{t("overview.open")}</Link>
-            </Button>
-          </CardContent>
-        </Card>
+      <MiniCards window={miniWindow} before={miniBefore} currency={ccy} loading={loading} />
+
+      {period.kind === "year" ? (
+        <YearTable months={yearMonths} currency={ccy} onPick={pickMonth} loading={loading} />
+      ) : null}
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        <AccountsCard accounts={accounts.data?.accounts ?? []} loading={accounts.loading && !accounts.data} />
+        <InvoicesCard
+          invoices={invoices.data?.invoices ?? []}
+          period={period}
+          currency={ccy}
+          clientName={clientName}
+          loading={invoices.loading && !invoices.data}
+        />
+        <ReceiptsCard
+          documents={documents.data?.documents ?? []}
+          total={documents.data?.total ?? 0}
+          loading={documents.loading && !documents.data}
+        />
       </div>
+
+      <ActivityCard transactions={recent.data?.transactions ?? []} loading={recent.loading && !recent.data} />
     </>
   );
 }
