@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/sidebar";
 import { navGroups } from "@/data/sidebar-data";
 import { site } from "@/data/site";
+import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 /** The kit's AppSidebar with the finance navigation and the scope block in the footer. */
@@ -86,6 +87,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 function NavScope() {
   const { isMobile } = useSidebar();
   const { parties, scope, setScope, loading, error } = useFinance();
+  const t = useT();
   const current = scope === "all" ? "Combined" : (parties.find((p) => p.id === scope)?.display_name ?? "…");
   const detail = error
     ? "not signed in"
@@ -118,9 +120,9 @@ function NavScope() {
             align="end"
             sideOffset={4}
           >
-            <DropdownMenuLabel className="text-muted-foreground text-xs">Show</DropdownMenuLabel>
+            <DropdownMenuLabel className="text-muted-foreground text-xs">{t("nav.show")}</DropdownMenuLabel>
             <DropdownMenuItem onSelect={() => setScope("all")} className="text-xs">
-              Combined
+              {t("common.combined")}
               {scope === "all" ? <span className="ml-auto">✓</span> : null}
             </DropdownMenuItem>
             <DropdownMenuSeparator />

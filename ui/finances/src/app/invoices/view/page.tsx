@@ -22,6 +22,7 @@ import { api, pdfUrl } from "@/lib/api/client";
 import { describe, useFetch } from "@/lib/api/hooks";
 import type { Invoice, InvoiceLine, LineTemplate } from "@/lib/api/schema";
 import { money, when } from "@/lib/format";
+import { useT } from "@/lib/i18n";
 
 export default function InvoicePage() {
   return (
@@ -67,6 +68,16 @@ function toMinor(text: string, scale: number): string {
   return `${negative ? "-" : ""}${digits}`;
 }
 
+/** The VAT treatment and the template mode are wire values; these are their words. */
+const VAT_LABEL: Record<string, string> = {
+  standard_hr: "invoices.vat.standard_hr",
+  reverse_charge_eu: "invoices.vat.reverse_charge_eu",
+};
+const MODE_LABEL: Record<string, string> = {
+  fixed: "invoices.mode.fixed",
+  variable: "invoices.mode.variable",
+};
+
 function toApiLines(lines: EditLine[]): InvoiceLine[] {
   return lines.map((l, i) => ({
     position: i + 1,
@@ -79,6 +90,7 @@ function toApiLines(lines: EditLine[]): InvoiceLine[] {
 }
 
 function InvoiceView() {
+  const t = useT();
   const id = useSearchParams().get("id") ?? "";
   const loaded = useFetch(() => api.invoice(id), 0, [id]);
   const inv = loaded.data?.invoice ?? null;
@@ -91,7 +103,7 @@ function InvoiceView() {
     [inv?.client_id],
   );
   const templateById = useMemo(
-    () => new Map((templates.data?.templates ?? []).map((t) => [t.id, t])),
+    () => new Map((templates.data?.templates ?? []).map((tp) => [tp.id, tp])),
     [templates.data],
   );
   const [delivery, setDelivery] = useState("");
@@ -246,7 +258,7 @@ function InvoiceView() {
     setBusy("approve");
     try {
       const r = await api.approveInvoice(inv.id, preview.hash);
-      toast.success(`Approved as ${r.invoice?.number}. The number is taken; the PDF is stored.`);
+      toast.success(t("invoices.approved_toast", { number: r.invoice?.number ?? "" }));
       setPreview(null);
       loaded.reload();
     } catch (e) {
@@ -260,7 +272,7 @@ function InvoiceView() {
   const cancel = async () => {
     if (!inv) return;
     const reason = window.prompt(
-      inv.status === "draft" ? "Discard this draft?" : "Cancel this invoice? It keeps its number.",
+      inv.status === "draft" ? t("invoices.discard_confirm") : t("invoices.cancel_confirm"),
       "",
     );
     if (reason === null) return;
@@ -281,15 +293,15 @@ function InvoiceView() {
   return (
     <>
       <PageTitle
-        title={inv.number || "Draft invoice"}
+        title={inv.number || t("invoices.draft_title")}
         description={
           inv.number
-            ? `Issued ${when(inv.issued_at)} · approved ${when(inv.approved_at)}`
-            : "Edit, preview, then approve. Nothing is numbered until you approve exactly what you previewed."
+            ? t("invoices.issued_approved", { issued: when(inv.issued_at), approved: when(inv.approved_at) })
+            : t("invoices.draft_hint")
         }
         back={
           <Button asChild variant="ghost" size="icon" className="mt-0.5">
-            <Link href="/invoices/" aria-label="Back to invoices">
+            <Link href="/invoices/" aria-label={t("invoices.back")}>
               ←
             </Link>
           </Button>
@@ -299,7 +311,7 @@ function InvoiceView() {
         {editable ? (
           <>
             <Button variant="outline" size="sm" onClick={() => void save()} disabled={!dirty || busy !== ""}>
-              {busy === "save" ? "Saving…" : "Save"}
+              {busy === "save" ? t("common.saving") : t("common.save")}
             </Button>
             <Button
               variant="outline"
@@ -307,24 +319,28 @@ function InvoiceView() {
               onClick={() => void doPreview()}
               disabled={busy !== "" || lines.length === 0}
             >
-              <Eye /> {busy === "preview" ? "Rendering…" : "Preview"}
+              <Eye /> {busy === "preview" ? t("invoices.rendering") : t("invoices.preview")}
             </Button>
             <Button size="sm" onClick={() => void approve()} disabled={!preview || dirty || busy !== ""}>
               <Check />{" "}
-              {busy === "approve" ? "Approving…" : preview ? `Approve as ${preview.number}` : "Approve"}
+              {busy === "approve"
+                ? t("invoices.approving")
+                : preview
+                  ? t("invoices.approve_as", { number: preview.number })
+                  : t("invoices.approve")}
             </Button>
           </>
         ) : null}
         {docUrl ? (
           <Button asChild variant="outline" size="sm">
             <a href={docUrl} download={`inorbit-${inv.number}.pdf`}>
-              <Download /> PDF
+              <Download /> {t("invoices.pdf")}
             </a>
           </Button>
         ) : null}
         {inv.status === "draft" || inv.status === "approved" ? (
           <Button variant="ghost" size="sm" onClick={() => void cancel()} disabled={busy !== ""}>
-            <X /> {inv.status === "draft" ? "Discard" : "Cancel"}
+            <X /> {inv.status === "draft" ? t("invoices.discard") : t("invoices.cancel_invoice")}
           </Button>
         ) : null}
       </PageTitle>
@@ -333,14 +349,17 @@ function InvoiceView() {
         <div className="space-y-6 xl:col-span-3">
           <Card>
             <CardHeader>
-              <CardTitle>Details</CardTitle>
+              <CardTitle>{t("invoices.details")}</CardTitle>
               <CardDescription>
-                {inv.vat_treatment.replace(/_/g, " ")} · {inv.currency}
-                {inv.prefilled_from ? " · pre-filled from the previous invoice" : ""}
+                {VAT_LABEL[inv.vat_treatment]
+                  ? t(VAT_LABEL[inv.vat_treatment]!)
+                  : inv.vat_treatment.replace(/_/g, " ")}{" "}
+                · {inv.currency}
+                {inv.prefilled_from ? ` · ${t("invoices.prefilled")}` : ""}
               </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-3">
-              <Field label="Delivery date">
+              <Field label={t("invoices.delivery_date")}>
                 <Input
                   type="date"
                   value={delivery}
@@ -348,7 +367,7 @@ function InvoiceView() {
                   onChange={(e) => edit(setDelivery)(e.target.value)}
                 />
               </Field>
-              <Field label="Due date">
+              <Field label={t("invoices.due_date")}>
                 <Input
                   type="date"
                   value={due}
@@ -356,10 +375,10 @@ function InvoiceView() {
                   onChange={(e) => edit(setDue)(e.target.value)}
                 />
               </Field>
-              <Field label="Place of issue">
+              <Field label={t("invoices.place_of_issue")}>
                 <Input value={place} disabled={!editable} onChange={(e) => edit(setPlace)(e.target.value)} />
               </Field>
-              <Field label="Note (printed under the totals)" className="sm:col-span-3">
+              <Field label={t("invoices.note_label")} className="sm:col-span-3">
                 <Textarea
                   value={note}
                   disabled={!editable}
@@ -373,10 +392,8 @@ function InvoiceView() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
-                <CardTitle>Lines</CardTitle>
-                <CardDescription>
-                  Quantity in units, price per unit. Amounts are computed on the server.
-                </CardDescription>
+                <CardTitle>{t("invoices.lines")}</CardTitle>
+                <CardDescription>{t("invoices.lines_hint")}</CardDescription>
               </div>
               {editable ? (
                 <Button
@@ -389,39 +406,41 @@ function InvoiceView() {
                     ])
                   }
                 >
-                  <Plus /> Line
+                  <Plus /> {t("invoices.add_line")}
                 </Button>
               ) : null}
             </CardHeader>
             <CardContent className="space-y-2">
               {editable &&
               (templates.data?.templates ?? []).some(
-                (t) => t.enabled && !lines.some((l) => l.template_id === t.id),
+                (tp) => tp.enabled && !lines.some((l) => l.template_id === tp.id),
               ) ? (
                 <div className="flex flex-wrap items-center gap-1.5 pb-1">
-                  <span className="text-muted-foreground text-xs">Add from template:</span>
+                  <span className="text-muted-foreground text-xs">{t("invoices.add_from_template")}</span>
                   {(templates.data?.templates ?? [])
-                    .filter((t) => t.enabled && !lines.some((l) => l.template_id === t.id))
-                    .map((t) => (
+                    .filter((tp) => tp.enabled && !lines.some((l) => l.template_id === tp.id))
+                    .map((tp) => (
                       <Button
-                        key={t.id}
+                        key={tp.id}
                         variant="outline"
                         size="sm"
                         className="h-7 text-xs"
-                        onClick={() => edit(setLines)([...lines, fromTemplate(t)])}
+                        onClick={() => edit(setLines)([...lines, fromTemplate(tp)])}
                       >
                         <Plus />{" "}
-                        {t.description.length > 40 ? `${t.description.slice(0, 40)}…` : t.description}
-                        <span className="text-muted-foreground ml-1">{t.mode}</span>
+                        {tp.description.length > 40 ? `${tp.description.slice(0, 40)}…` : tp.description}
+                        <span className="text-muted-foreground ml-1">
+                          {MODE_LABEL[tp.mode] ? t(MODE_LABEL[tp.mode]!) : tp.mode}
+                        </span>
                       </Button>
                     ))}
                 </div>
               ) : null}
               <div className="text-muted-foreground grid grid-cols-[1fr_5rem_8rem_8rem_2rem] gap-2 px-1 text-xs">
-                <span>Description</span>
-                <span className="text-right">Qty</span>
-                <span className="text-right">Price</span>
-                <span className="text-right">Amount</span>
+                <span>{t("invoices.col.description")}</span>
+                <span className="text-right">{t("invoices.col.qty")}</span>
+                <span className="text-right">{t("invoices.col.price")}</span>
+                <span className="text-right">{t("common.amount")}</span>
                 <span />
               </div>
               {lines.map((l, i) => {
@@ -457,7 +476,7 @@ function InvoiceView() {
                       inputMode="decimal"
                       title={
                         templateById.get(l.template_id)?.mode === "variable"
-                          ? "Variable row: pre-filled from last month; set this month's price"
+                          ? t("invoices.variable_hint")
                           : undefined
                       }
                       className={
@@ -480,7 +499,7 @@ function InvoiceView() {
                         size="icon"
                         className="size-8"
                         onClick={() => edit(setLines)(lines.filter((_, j) => j !== i))}
-                        aria-label="Remove line"
+                        aria-label={t("invoices.remove_line")}
                       >
                         <Trash2 />
                       </Button>
@@ -492,15 +511,15 @@ function InvoiceView() {
               })}
               <div className="flex justify-end pt-2">
                 <dl className="grid grid-cols-[auto_auto] gap-x-6 gap-y-1 text-sm">
-                  <dt className="text-muted-foreground text-right">Subtotal</dt>
+                  <dt className="text-muted-foreground text-right">{t("invoices.subtotal")}</dt>
                   <dd className="text-right font-mono tabular-nums">
                     {money(totals.subtotal.toString(), inv.currency)}
                   </dd>
-                  <dt className="text-muted-foreground text-right">VAT</dt>
+                  <dt className="text-muted-foreground text-right">{t("invoices.vat")}</dt>
                   <dd className="text-right font-mono tabular-nums">
                     {money(totals.vat.toString(), inv.currency)}
                   </dd>
-                  <dt className="text-right font-semibold">Total</dt>
+                  <dt className="text-right font-semibold">{t("invoices.total")}</dt>
                   <dd className="text-right font-mono font-semibold tabular-nums">
                     {money(totals.total.toString(), inv.currency)}
                   </dd>
@@ -514,16 +533,20 @@ function InvoiceView() {
           <CardHeader className="flex flex-row items-start justify-between gap-2">
             <div>
               <CardTitle>
-                {inv.number ? "The invoice" : preview ? `Preview · ${preview.number}` : "Preview"}
+                {inv.number
+                  ? t("invoices.the_invoice")
+                  : preview
+                    ? t("invoices.preview_number", { number: preview.number })
+                    : t("invoices.preview")}
               </CardTitle>
               <CardDescription>
                 {inv.number
-                  ? "The stored PDF, byte for byte what was approved."
+                  ? t("invoices.stored_pdf")
                   : preview
                     ? dirty
-                      ? "The draft changed since this preview; preview again before approving."
-                      : "Approve exactly this. The hash of what you see is what gets approved."
-                    : "The draft renders itself after every change, with the number it would take."}
+                      ? t("invoices.changed_since_preview")
+                      : t("invoices.approve_exactly")
+                    : t("invoices.renders_itself")}
               </CardDescription>
             </div>
             {docUrl || preview ? (
@@ -533,7 +556,7 @@ function InvoiceView() {
                   size="icon"
                   className="size-8"
                   onClick={() => setFull(true)}
-                  aria-label="Full size"
+                  aria-label={t("invoices.full_size")}
                 >
                   <Maximize2 />
                 </Button>
@@ -542,7 +565,7 @@ function InvoiceView() {
                     href={docUrl ?? preview!.url}
                     target="_blank"
                     rel="noreferrer"
-                    aria-label="Open in a new tab"
+                    aria-label={t("invoices.open_new_tab")}
                   >
                     <ExternalLink />
                   </a>
@@ -554,7 +577,7 @@ function InvoiceView() {
             {docUrl || preview ? (
               <div className="group relative aspect-[1/1.3] w-full">
                 <iframe
-                  title="invoice"
+                  title={t("invoices.frame_title")}
                   src={`${docUrl ?? preview!.url}#toolbar=0&view=Fit`}
                   className="bg-muted h-full w-full rounded-md border"
                 />
@@ -562,27 +585,27 @@ function InvoiceView() {
                     opens the full-size view, with the cursor saying so. */}
                 <button
                   type="button"
-                  aria-label="Open full size"
+                  aria-label={t("invoices.open_full_size")}
                   onClick={() => setFull(true)}
                   className="hover:bg-foreground/[0.03] absolute inset-0 z-10 cursor-zoom-in rounded-md bg-transparent transition-colors"
                 >
                   <span className="bg-background/90 text-muted-foreground pointer-events-none absolute right-2 bottom-2 rounded-md border px-2 py-1 text-xs opacity-0 transition-opacity group-hover:opacity-100">
-                    Click to enlarge
+                    {t("invoices.click_to_enlarge")}
                   </span>
                 </button>
                 {autoState !== "idle" ? (
                   <span className="bg-background/90 text-muted-foreground absolute top-2 left-2 z-20 rounded-md border px-2 py-1 text-xs">
-                    {autoState === "pending" ? "Re-rendering soon…" : "Rendering…"}
+                    {autoState === "pending" ? t("invoices.rerendering_soon") : t("invoices.rendering")}
                   </span>
                 ) : null}
               </div>
             ) : (
               <div className="bg-muted/40 text-muted-foreground flex aspect-[1/1.3] w-full items-center justify-center rounded-md border border-dashed text-sm">
                 {autoState !== "idle"
-                  ? "Rendering…"
+                  ? t("invoices.rendering")
                   : lines.length
-                    ? "Nothing rendered yet."
-                    : "Add a line and the preview renders itself."}
+                    ? t("invoices.nothing_rendered")
+                    : t("invoices.add_line_hint")}
               </div>
             )}
           </CardContent>
@@ -597,17 +620,21 @@ function InvoiceView() {
         >
           <div className="flex items-center justify-between border-b px-4 py-2">
             <DialogTitle className="text-sm font-medium">
-              {inv.number ? `Invoice ${inv.number}` : preview ? `Preview · ${preview.number}` : "Preview"}
+              {inv.number
+                ? t("invoices.invoice_number", { number: inv.number })
+                : preview
+                  ? t("invoices.preview_number", { number: preview.number })
+                  : t("invoices.preview")}
             </DialogTitle>
             {/* Focused on open so Escape is ours; once the PDF viewer has
                 focus it keeps the keyboard, and this button is the way back. */}
             <Button variant="outline" size="sm" autoFocus onClick={() => setFull(false)}>
-              <X /> Close <span className="text-muted-foreground ml-1 text-xs">Esc</span>
+              <X /> {t("common.close")} <span className="text-muted-foreground ml-1 text-xs">Esc</span>
             </Button>
           </div>
           {docUrl || preview ? (
             <iframe
-              title="invoice, full size"
+              title={t("invoices.frame_title_full")}
               src={`${docUrl ?? preview!.url}#view=FitH`}
               className="bg-muted min-h-0 w-full flex-1 rounded-b-lg"
             />

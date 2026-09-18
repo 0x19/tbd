@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { Button, ButtonProps } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { useT } from "@/lib/i18n";
 
 interface Props extends ButtonProps {
   text: string;
@@ -12,6 +13,7 @@ interface Props extends ButtonProps {
 }
 
 export function CopyButton({ text, className, ...rest }: Props) {
+  const t = useT();
   const [isCopied, setIsCopied] = useState(false);
 
   const copyToClipboard = async () => {
@@ -33,7 +35,7 @@ export function CopyButton({ text, className, ...rest }: Props) {
             size="icon"
             className={className}
             onClick={copyToClipboard}
-            aria-label={isCopied ? "Copied" : "Copy to clipboard"}
+            aria-label={isCopied ? t("nav.copied") : t("nav.copy_to_clipboard")}
             {...rest}
           >
             {isCopied ? (
@@ -44,7 +46,7 @@ export function CopyButton({ text, className, ...rest }: Props) {
           </Button>
         </TooltipTrigger>
         <TooltipContent>
-          <p>{isCopied ? "Copied!" : "Copy"}</p>
+          <p>{isCopied ? t("nav.copied_tip") : t("nav.copy")}</p>
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>

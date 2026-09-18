@@ -14,6 +14,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { useT } from "@/lib/i18n";
 import {
   applyThemePresetToDocument,
   getPresetLabel,
@@ -23,6 +24,14 @@ import {
 } from "@/lib/theme-preset-apply";
 import { defaultPresets } from "@/lib/theme-presets";
 import { cn } from "@/lib/utils";
+
+/** one / few / other, the way both English and Croatian count: 1 tema,
+ *  2–4 teme, 5+ tema (English folds few into other). */
+function plural(n: number): "one" | "few" | "other" {
+  if (n % 10 === 1 && n % 100 !== 11) return "one";
+  if (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14)) return "few";
+  return "other";
+}
 
 function ThemeSwatches({
   colors,
@@ -55,6 +64,7 @@ export function ThemePresetSelector({
   triggerId?: string;
   contentId?: string;
 }) {
+  const t = useT();
   const { resolvedTheme } = useTheme();
   const [mounted, setMounted] = React.useState(false);
   const [open, setOpen] = React.useState(false);
@@ -112,7 +122,7 @@ export function ThemePresetSelector({
             "border-border h-9 max-w-full min-w-0 shrink gap-2 overflow-hidden rounded-lg px-2.5 font-normal",
             className,
           )}
-          aria-label="Choose color theme"
+          aria-label={t("nav.choose_color_theme")}
         >
           <ThemeSwatches colors={previewColors} />
           <span className="hidden max-w-[min(11rem,calc(100vw-7rem))] min-w-0 truncate text-sm sm:block">
@@ -128,26 +138,23 @@ export function ThemePresetSelector({
         sideOffset={8}
       >
         <Command shouldFilter={false}>
-          <CommandInput placeholder="Search themes..." value={search} onValueChange={setSearch} />
+          <CommandInput placeholder={t("nav.search_themes")} value={search} onValueChange={setSearch} />
           <div className="text-muted-foreground flex items-center justify-between border-b px-3 py-2 text-xs">
-            <span>
-              {filteredIds.length} theme
-              {filteredIds.length !== 1 ? "s" : ""}
-            </span>
+            <span>{t(`nav.themes_${plural(filteredIds.length)}`, { n: filteredIds.length })}</span>
             <Button
               type="button"
               variant="ghost"
               size="icon"
               className="size-8"
               onClick={shuffle}
-              aria-label="Random theme"
+              aria-label={t("nav.random_theme")}
             >
               <Shuffle className="size-4" />
             </Button>
           </div>
           <CommandList className="max-h-[min(50vh,320px)]">
-            <CommandEmpty>No themes found.</CommandEmpty>
-            <CommandGroup heading="Built-in themes">
+            <CommandEmpty>{t("nav.no_themes_found")}</CommandEmpty>
+            <CommandGroup heading={t("nav.builtin_themes")}>
               {filteredIds.map((id) => {
                 const colors = getPresetPreviewColors(id, mode);
                 const label = getPresetLabel(id);

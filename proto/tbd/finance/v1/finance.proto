@@ -552,6 +552,17 @@ message ReconciliationRow {
   // bank said so ("75,00 USD"); empty otherwise.
   string original_amount_minor = 8;
   string original_currency = 9;
+  // `need_reason` as a code with arguments, for a page in any language:
+  // internal, income, policy, state_budget, payout_person, cash, bank_fee,
+  // domestic_iban, card_original {amount_minor, currency}, card,
+  // foreign_transfer.
+  Reason need_why = 10;
+}
+// A reason as a code with its arguments, so the page can say it in its own
+// language; the English sentence beside it is the same thing spelled out.
+message Reason {
+  string code = 1;
+  map<string, string> args = 2;
 }
 message LinkedDocument {
   string document_id = 1;
@@ -565,6 +576,9 @@ message LinkedDocument {
   string source = 8;
   uint32 confidence = 9;
   string reason = 10;
+  // `reason` as codes: amount_original / amount / amount_fx
+  // {amount_minor, currency}, vendor, same_days, days_apart {days}, by_hand.
+  repeated Reason why = 11;
 }
 message ReconciliationSummary {
   uint32 transactions = 1;

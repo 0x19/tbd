@@ -14,6 +14,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "@/components/ui/sidebar";
+import { useT } from "@/lib/i18n";
 
 interface Props {
   teams: {
@@ -24,6 +25,7 @@ interface Props {
 }
 
 export function TeamSwitcher({ teams }: Props) {
+  const t = useT();
   const { isMobile } = useSidebar();
   const [activeTeam, setActiveTeam] = React.useState(teams[0]);
 
@@ -52,7 +54,7 @@ export function TeamSwitcher({ teams }: Props) {
             side={isMobile ? "bottom" : "right"}
             sideOffset={4}
           >
-            <DropdownMenuLabel className="text-muted-foreground text-xs">Teams</DropdownMenuLabel>
+            <DropdownMenuLabel className="text-muted-foreground text-xs">{t("nav.teams")}</DropdownMenuLabel>
             {teams.map((team, index) => (
               <DropdownMenuItem
                 key={team.name}
@@ -71,7 +73,7 @@ export function TeamSwitcher({ teams }: Props) {
               <div className="bg-background flex size-6 items-center justify-center rounded-md border">
                 <Plus className="size-4" />
               </div>
-              <div className="text-muted-foreground font-medium">Add team</div>
+              <div className="text-muted-foreground font-medium">{t("nav.add_team")}</div>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

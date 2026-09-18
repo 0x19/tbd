@@ -20,6 +20,7 @@ import { Switch } from "@/components/ui/switch";
 import { api } from "@/lib/api/client";
 import { describe } from "@/lib/api/hooks";
 import type { Category, Rule, UpsertRule, UpsertRuleResponse } from "@/lib/api/schema";
+import { useT } from "@/lib/i18n";
 
 /** The service's normalisation, near enough to preview a match: upper case,
  *  Croatian diacritics stripped. */
@@ -48,6 +49,16 @@ export function suggestName(counterparty: string): string {
   return (first ?? "").toLowerCase();
 }
 
+/** The plural form a count takes, for a `<key>.one|few|many` lookup: English
+ *  needs only one/many, Croatian bends 2-4 differently from 5+ (and 12-14). */
+export function pluralForm(n: number): "one" | "few" | "many" {
+  const ten = n % 10;
+  const hundred = n % 100;
+  if (ten === 1 && hundred !== 11) return "one";
+  if (ten >= 2 && ten <= 4 && (hundred < 12 || hundred > 14)) return "few";
+  return "many";
+}
+
 /** Create or edit one rule. Saving reapplies every rule for the party, and the
  *  toast says what that pass did, so a rule that claims nothing is noticed now.
  *  `initial` prefills a new rule, typically from a transaction. */
@@ -64,6 +75,7 @@ export function RuleDialog({
   onClose: () => void;
   onSaved: (done: UpsertRuleResponse) => void;
 }) {
+  const t = useT();
   const { parties, partyIds } = useFinance();
   const seed = rule ?? initial ?? {};
   const [party, setParty] = useState(seed.party_id ?? partyIds[0] ?? "");
@@ -125,9 +137,7 @@ export function RuleDialog({
         match_credit_debit: cd,
         enabled,
       });
-      toast.success(
-        `Saved. ${done.rule?.hits ?? 0} rows claimed by this rule; ${done.unmatched} still uncategorised.`,
-      );
+      toast.success(t("categories.rule.saved", { n: done.rule?.hits ?? 0, m: done.unmatched }));
       onSaved(done);
     } catch (e) {
       toast.error(describe(e));
@@ -140,16 +150,12 @@ export function RuleDialog({
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{rule ? "Edit rule" : "New rule"}</DialogTitle>
-          <DialogDescription>
-            Every condition is optional; those set must all match. Text matches are case-insensitive and
-            ignore Croatian diacritics; a leading ^ pins the text to the start, a trailing $ to the end. Lower
-            priority numbers win.
-          </DialogDescription>
+          <DialogTitle>{rule ? t("categories.rule.edit") : t("categories.new_rule")}</DialogTitle>
+          <DialogDescription>{t("categories.rule.description")}</DialogDescription>
         </DialogHeader>
         <div className="grid gap-4">
           {!rule && parties.length > 1 ? (
-            <Field label="Party">
+            <Field label={t("common.party")}>
               <Select
                 value={party}
                 onValueChange={(v) => {
@@ -171,17 +177,17 @@ export function RuleDialog({
             </Field>
           ) : null}
           <div className="grid grid-cols-3 gap-3">
-            <Field label="Name" className="col-span-2">
+            <Field label={t("common.name")} className="col-span-2">
               <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="hetzner" />
             </Field>
-            <Field label="Priority">
+            <Field label={t("categories.rule.priority")}>
               <Input value={priority} onChange={(e) => setPriority(e.target.value)} inputMode="numeric" />
             </Field>
           </div>
-          <Field label="Category">
+          <Field label={t("categories.rule.category")}>
             <Select value={category} onValueChange={setCategory}>
               <SelectTrigger>
-                <SelectValue placeholder="Choose…" />
+                <SelectValue placeholder={t("categories.rule.choose")} />
               </SelectTrigger>
               <SelectContent>
                 {mine.map((c) => (
@@ -192,7 +198,7 @@ export function RuleDialog({
               </SelectContent>
             </Select>
           </Field>
-          <Field label="Counterparty contains">
+          <Field label={t("categories.rule.counterparty_contains")}>
             <Input
               value={cp}
               onChange={(e) => setCp(e.target.value)}
@@ -200,7 +206,7 @@ export function RuleDialog({
               className="font-mono"
             />
           </Field>
-          <Field label="Remittance contains">
+          <Field label={t("categories.rule.remittance_contains")}>
             <Input
               value={rem}
               onChange={(e) => setRem(e.target.value)}
@@ -209,10 +215,10 @@ export function RuleDialog({
             />
           </Field>
           <div className="grid grid-cols-3 gap-3">
-            <Field label="Counterparty IBAN">
+            <Field label={t("categories.rule.counterparty_iban")}>
               <Input value={iban} onChange={(e) => setIban(e.target.value)} className="font-mono" />
             </Field>
-            <Field label="Currency">
+            <Field label={t("common.currency")}>
               <Input
                 value={ccy}
                 onChange={(e) => setCcy(e.target.value.toUpperCase())}
@@ -221,15 +227,15 @@ export function RuleDialog({
                 className="font-mono"
               />
             </Field>
-            <Field label="Direction">
+            <Field label={t("categories.rule.direction")}>
               <Select value={cd || "any"} onValueChange={(v) => setCd(v === "any" ? "" : v)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="any">Any</SelectItem>
-                  <SelectItem value="DBIT">Out (DBIT)</SelectItem>
-                  <SelectItem value="CRDT">In (CRDT)</SelectItem>
+                  <SelectItem value="any">{t("categories.rule.dir_any")}</SelectItem>
+                  <SelectItem value="DBIT">{t("categories.rule.dir_out")}</SelectItem>
+                  <SelectItem value="CRDT">{t("categories.rule.dir_in")}</SelectItem>
                 </SelectContent>
               </Select>
             </Field>
@@ -238,36 +244,33 @@ export function RuleDialog({
             {preview ? (
               <>
                 <span className="font-medium">
-                  Would claim {preview.n}
-                  {preview.more ? "+" : ""} {preview.n === 1 ? "row" : "rows"}
+                  {t(`categories.rule.would_claim.${pluralForm(preview.n)}`, {
+                    n: `${preview.n}${preview.more ? "+" : ""}`,
+                  })}
                 </span>
                 {preview.more ? (
-                  <span className="text-muted-foreground"> among the newest hundred mentioning it</span>
+                  <span className="text-muted-foreground">{t("categories.rule.among_newest")}</span>
                 ) : null}
                 {preview.sample.length ? (
                   <span className="text-muted-foreground"> · {preview.sample.join(" · ")}</span>
                 ) : null}
-                <span className="text-muted-foreground">
-                  . Rows a higher-priority rule or a person already claimed stay as they are.
-                </span>
+                <span className="text-muted-foreground">{t("categories.rule.already_claimed")}</span>
               </>
             ) : (
-              <span className="text-muted-foreground">
-                Type a counterparty or remittance condition to see what it would claim.
-              </span>
+              <span className="text-muted-foreground">{t("categories.rule.type_hint")}</span>
             )}
           </div>
           <div className="flex items-center gap-2">
             <Switch checked={enabled} onCheckedChange={setEnabled} id="enabled" />
-            <Label htmlFor="enabled">Enabled</Label>
+            <Label htmlFor="enabled">{t("categories.rule.enabled")}</Label>
           </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button onClick={() => void save()} disabled={busy || !name.trim() || !category}>
-            {busy ? "Saving…" : "Save & apply"}
+            {busy ? t("common.saving") : t("categories.rule.save_apply")}
           </Button>
         </DialogFooter>
       </DialogContent>

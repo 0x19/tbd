@@ -16,6 +16,7 @@ import {
 
 import { type ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { money, monthShort } from "@/lib/format";
+import { useT } from "@/lib/i18n";
 import { type CategoryTotal, chartValue, type MonthTotals } from "@/lib/summary";
 import { cn } from "@/lib/utils";
 
@@ -41,11 +42,15 @@ export function Legend({ items }: { items: { label: string; color: string }[] })
   );
 }
 
-const flowConfig = {
-  in: { label: "In", color: "var(--chart-2)" },
-  spent: { label: "Spent", color: "var(--chart-1)" },
-  other: { label: "Transfers & capital", color: "var(--chart-4)" },
-} satisfies ChartConfig;
+/** The three series, labelled in the page's language. */
+function useFlowConfig() {
+  const t = useT();
+  return {
+    in: { label: t("nav.chart.in"), color: "var(--chart-2)" },
+    spent: { label: t("nav.chart.spent"), color: "var(--chart-1)" },
+    other: { label: t("nav.chart.other"), color: "var(--chart-4)" },
+  } satisfies ChartConfig;
+}
 
 function axisMoney(v: number): string {
   const a = Math.abs(v);
@@ -77,6 +82,7 @@ export function MoneyFlowChart({
   onSelect?: (ym: string) => void;
   height?: number;
 }) {
+  const flowConfig = useFlowConfig();
   const data = months.map((m, i) => ({
     month: tickLabel(m.month, i === 0),
     ym: m.month,

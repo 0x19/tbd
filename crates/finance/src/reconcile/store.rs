@@ -7,7 +7,10 @@ use sqlx::PgPool;
 use tbd_db::{Access, DbError, PartyId, map_err};
 use uuid::Uuid;
 
-use super::{Decision, DocFacts, LINK, Need, Policy, SUGGEST, TxFacts, classify, normalise, score};
+use super::{
+    Decision, DocFacts, LINK, Need, Policy, SUGGEST, TxFacts, Why, classify, encode_all, normalise,
+    score,
+};
 use crate::connectors::store::StoreError;
 
 /// A transaction as the page needs it, from `transactions_enriched`.
@@ -121,7 +124,7 @@ pub struct Row {
     /// Receipts linked to it.
     pub documents: Vec<LinkRow>,
     /// Likely receipts, best first, with score and why.
-    pub suggestions: Vec<(DocRow, u8, String)>,
+    pub suggestions: Vec<(DocRow, u8, Vec<Why>)>,
     /// The card's original charge, when the bank wrote it.
     pub original: Option<(i64, String)>,
 }
@@ -354,7 +357,7 @@ pub async fn month(
     // The matcher: every receipt against every uncovered transaction that
     // needs one, best pairs first, each side used once.
     let pool_docs = candidates(pool, party, from, to).await?;
-    let mut pairs: Vec<(usize, usize, u8, String)> = Vec::new();
+    let mut pairs: Vec<(usize, usize, u8, Vec<Why>)> = Vec::new();
     for (i, row) in rows.iter().enumerate() {
         if row.decision.need != Need::Receipt || !row.documents.is_empty() {
             continue;
@@ -385,7 +388,7 @@ pub async fn month(
         .bind(tx_id)
         .bind(doc.id)
         .bind(i16::from(*points))
-        .bind(why)
+        .bind(encode_all(why))
         .execute(pool)
         .await
         .map_err(map_err)?;
@@ -393,7 +396,7 @@ pub async fn month(
             transaction_id: tx_id,
             source: "inferred".into(),
             confidence: i16::from(*points),
-            reason: why.clone(),
+            reason: encode_all(why),
             document: doc.clone(),
         });
         doc_taken[*j] = true;
@@ -478,7 +481,7 @@ pub async fn link(
         .map_err(map_err)?;
     sqlx::query(
         "insert into finance.transaction_documents (transaction_id, document_id, source, confidence, reason)
-         values ($1, $2, 'declared', 100, 'linked by hand')",
+         values ($1, $2, 'declared', 100, 'by_hand')",
     )
     .bind(tx_id)
     .bind(doc_id)

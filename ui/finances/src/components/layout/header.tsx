@@ -7,14 +7,16 @@ import { useSearch } from "@/components/search-provider";
 import { Button } from "@/components/ui/button";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { site } from "@/data/site";
+import { useT } from "@/lib/i18n";
 
 interface HeaderProps {
   title?: string;
 }
 
 export function Header({ title: titleProp }: HeaderProps) {
+  const t = useT();
   const title = titleProp ?? site.title;
-  const searchAriaLabel = `Open command palette (${title})`;
+  const searchAriaLabel = t("nav.open_command_palette", { title });
   const { setOpen: setCommandOpen } = useSearch();
 
   return (

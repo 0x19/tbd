@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/badge";
+import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 const GOOD =
@@ -32,10 +33,12 @@ const STYLE: Record<string, string> = {
 };
 
 export function StatusBadge({ status, className }: { status: string; className?: string }) {
+  const t = useT();
   const s = status || "never";
+  const word = t(`status.${s}`);
   return (
     <Badge variant="outline" className={cn("gap-1.5", STYLE[s] ?? MUTED, className)}>
-      {s.replace(/_/g, " ")}
+      {word === `status.${s}` ? s.replace(/_/g, " ") : word}
     </Badge>
   );
 }

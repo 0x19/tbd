@@ -17,27 +17,33 @@ import {
   SidebarMenuSubItem,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { useT } from "@/lib/i18n";
 
 import { Badge } from "../ui/badge";
 import { type NavGroup, NavItem } from "./types";
 
 export function NavGroup({ title, items }: NavGroup) {
+  const t = useT();
   const { setOpenMobile } = useSidebar();
   const pathname = usePathname();
   const search = useSearchParams();
   const current = search.size ? `${pathname}?${search.toString()}` : pathname;
   return (
     <SidebarGroup>
-      <SidebarGroupLabel>{title}</SidebarGroupLabel>
+      <SidebarGroupLabel>{t(title)}</SidebarGroupLabel>
       <SidebarMenu>
         {items.map((item) => {
           if (!item.items) {
             return (
               <SidebarMenuItem key={item.title}>
-                <SidebarMenuButton asChild isActive={checkIsActive(current, item, true)} tooltip={item.title}>
+                <SidebarMenuButton
+                  asChild
+                  isActive={checkIsActive(current, item, true)}
+                  tooltip={t(item.title)}
+                >
                   <Link href={item.url} onClick={() => setOpenMobile(false)}>
                     {item.icon && <item.icon />}
-                    <span>{item.title}</span>
+                    <span>{t(item.title)}</span>
                     {item.badge && <NavBadge>{item.badge}</NavBadge>}
                   </Link>
                 </SidebarMenuButton>
@@ -53,9 +59,9 @@ export function NavGroup({ title, items }: NavGroup) {
             >
               <SidebarMenuItem>
                 <CollapsibleTrigger asChild>
-                  <SidebarMenuButton tooltip={item.title}>
+                  <SidebarMenuButton tooltip={t(item.title)}>
                     {item.icon && <item.icon />}
-                    <span>{item.title}</span>
+                    <span>{t(item.title)}</span>
                     {item.badge && <NavBadge>{item.badge}</NavBadge>}
                     <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
                   </SidebarMenuButton>

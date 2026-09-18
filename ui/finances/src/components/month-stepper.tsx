@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { monthLabel } from "@/lib/format";
+import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 /** ‹ Sep 2026 › over an ordered list of months, with "Latest" to jump back. */
@@ -18,6 +19,7 @@ export function MonthStepper({
   onChange: (ym: string) => void;
   className?: string;
 }) {
+  const t = useT();
   const i = months.indexOf(value);
   const prev = i > 0 ? months[i - 1] : undefined;
   const next = i >= 0 && i < months.length - 1 ? months[i + 1] : undefined;
@@ -30,7 +32,7 @@ export function MonthStepper({
         className="size-8"
         disabled={!prev}
         onClick={() => prev && onChange(prev)}
-        aria-label="Previous month"
+        aria-label={t("transactions.previous_month")}
       >
         <ChevronLeft />
       </Button>
@@ -41,13 +43,13 @@ export function MonthStepper({
         className="size-8"
         disabled={!next}
         onClick={() => next && onChange(next)}
-        aria-label="Next month"
+        aria-label={t("transactions.next_month")}
       >
         <ChevronRight />
       </Button>
       {latest && latest !== value ? (
         <Button variant="ghost" size="sm" className="h-8 px-2 text-xs" onClick={() => onChange(latest)}>
-          Latest
+          {t("transactions.latest")}
         </Button>
       ) : null}
     </div>

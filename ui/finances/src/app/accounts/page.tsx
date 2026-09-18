@@ -16,8 +16,10 @@ import { api } from "@/lib/api/client";
 import { describe, useFetch } from "@/lib/api/hooks";
 import type { Account } from "@/lib/api/schema";
 import { ago, money, when } from "@/lib/format";
+import { useLang, useT } from "@/lib/i18n";
 
 export default function AccountsPage() {
+  const t = useT();
   const { partyIds, partyName, multi } = useFinance();
   const accounts = useFetch(() => api.accounts(partyIds), 30_000, [partyIds.join(",")]);
   const list = accounts.data?.accounts ?? [];
@@ -26,10 +28,7 @@ export default function AccountsPage() {
 
   return (
     <>
-      <PageTitle
-        title="Accounts"
-        description="Every linked account: what the bank says it holds, and when we last asked."
-      >
+      <PageTitle title={t("banking.accounts.title")} description={t("banking.accounts.description")}>
         <ScopeToggle className="md:hidden" />
       </PageTitle>
       {accounts.error ? <p className="text-destructive text-sm">{accounts.error}</p> : null}
@@ -49,17 +48,15 @@ export default function AccountsPage() {
 }
 
 function AccountCard({ a, onChanged }: { a: Account; onChanged: () => void }) {
+  const t = useT();
+  const { lang } = useLang();
   const [busy, setBusy] = useState(false);
   const [toggling, setToggling] = useState(false);
   const setSync = async (enabled: boolean) => {
     setToggling(true);
     try {
       await api.setAccountSync(a.id, enabled);
-      toast.success(
-        enabled
-          ? "Scheduled fetches on: three a day, eight hours apart."
-          : "Scheduled fetches off; Fetch now still works.",
-      );
+      toast.success(enabled ? t("banking.sync_on_toast") : t("banking.sync_off_toast"));
       onChanged();
     } catch (e) {
       toast.error(describe(e));
@@ -71,21 +68,24 @@ function AccountCard({ a, onChanged }: { a: Account; onChanged: () => void }) {
   const stale = a.last_synced_at ? Date.now() - new Date(a.last_synced_at).getTime() > 9 * 3600_000 : true;
   const backoffUntil = a.sync_backoff_until ? new Date(a.sync_backoff_until) : null;
   const backingOff = backoffUntil !== null && backoffUntil.getTime() > Date.now();
-  const hhmm = (d: Date) => d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  const hhmm = (d: Date) =>
+    d.toLocaleTimeString(lang === "hr" ? "hr-HR" : "en-GB", { hour: "2-digit", minute: "2-digit" });
   const refresh = async () => {
     setBusy(true);
     try {
       const r = await api.refresh(a.id);
       if (r.outcome === "ok")
-        toast.success(`Fetched: ${r.inserted} new, ${r.booked} booked, ${r.duplicates} already known.`);
+        toast.success(
+          t("banking.fetched_toast", { inserted: r.inserted, booked: r.booked, duplicates: r.duplicates }),
+        );
       else if (r.outcome === "skipped" && r.skipped === "backing_off" && backoffUntil)
-        toast.warning(`The bank asked us to wait: next fetch possible at ${hhmm(backoffUntil)}.`);
+        toast.warning(t("banking.backing_off_toast", { time: hhmm(backoffUntil) }));
       else if (r.outcome === "skipped" && r.skipped === "budget_spent")
-        toast.warning("Today's four fetches are spent; the bank allows no more until tomorrow.");
-      else if (r.outcome === "skipped") toast.warning(`Not fetched: ${r.skipped.replace(/_/g, " ")}.`);
-      else if (r.outcome === "rate_limited")
-        toast.error("The bank answered 429: rate limited. Backing off for six hours.");
-      else toast.error(`Bank answered: ${r.outcome.replace(/_/g, " ")}.`);
+        toast.warning(t("banking.budget_spent_toast"));
+      else if (r.outcome === "skipped")
+        toast.warning(t("banking.not_fetched_toast", { reason: r.skipped.replace(/_/g, " ") }));
+      else if (r.outcome === "rate_limited") toast.error(t("banking.rate_limited_toast"));
+      else toast.error(t("banking.bank_answered_toast", { outcome: r.outcome.replace(/_/g, " ") }));
       onChanged();
     } catch (e) {
       toast.error(describe(e));
@@ -110,25 +110,25 @@ function AccountCard({ a, onChanged }: { a: Account; onChanged: () => void }) {
             {closing ? money(closing.amount_minor, closing.currency) : "—"}
           </div>
           <div className="text-muted-foreground text-xs">
-            {closing ? `${closing.balance_type} · ${when(closing.observed_at)}` : "no balance yet"}
+            {closing ? `${closing.balance_type} · ${when(closing.observed_at)}` : t("banking.no_balance_yet")}
           </div>
         </div>
         <dl className="text-muted-foreground grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
-          <dt>Last fetched</dt>
+          <dt>{t("banking.last_fetched")}</dt>
           <dd className={stale ? "text-amber-600" : undefined}>{ago(a.last_synced_at)}</dd>
-          <dt>Booked through</dt>
+          <dt>{t("banking.booked_through")}</dt>
           <dd>{a.last_booked_through || "—"}</dd>
-          <dt>Fetches today</dt>
-          <dd>{a.sync_budget_used} of 4</dd>
+          <dt>{t("banking.fetches_today")}</dt>
+          <dd>{t("banking.n_of_4", { n: a.sync_budget_used })}</dd>
           {backingOff && backoffUntil ? (
             <>
-              <dt>Bank asked to wait</dt>
-              <dd className="text-amber-600">until {hhmm(backoffUntil)}</dd>
+              <dt>{t("banking.bank_asked_to_wait")}</dt>
+              <dd className="text-amber-600">{t("banking.until_time", { time: hhmm(backoffUntil) })}</dd>
             </>
           ) : null}
           {a.last_sync_error ? (
             <>
-              <dt>Last error</dt>
+              <dt>{t("banking.last_error")}</dt>
               <dd className="text-destructive col-span-2 truncate">{a.last_sync_error}</dd>
             </>
           ) : null}
@@ -140,22 +140,23 @@ function AccountCard({ a, onChanged }: { a: Account; onChanged: () => void }) {
           disabled={busy || !a.connection_id || backingOff || a.sync_budget_used >= 4}
           title={
             backingOff && backoffUntil
-              ? `The bank asked us to wait until ${hhmm(backoffUntil)}`
+              ? t("banking.wait_until_hint", { time: hhmm(backoffUntil) })
               : a.sync_budget_used >= 4
-                ? "Today's four fetches are spent; the bank counts yours too"
-                : "One of today's four fetches is kept for you"
+                ? t("banking.budget_spent_hint")
+                : t("banking.one_kept_hint")
           }
         >
-          <RefreshCw className={busy ? "animate-spin" : undefined} /> {busy ? "Fetching…" : "Fetch now"}
+          <RefreshCw className={busy ? "animate-spin" : undefined} />{" "}
+          {busy ? t("banking.fetching") : t("banking.fetch_now")}
         </Button>
         <label className="text-muted-foreground flex items-center gap-2 text-xs">
           <Switch
             checked={a.sync_enabled}
             disabled={toggling}
             onCheckedChange={(v) => void setSync(v)}
-            aria-label="Fetch on the schedule"
+            aria-label={t("banking.fetch_on_schedule")}
           />
-          Scheduled fetches {a.sync_enabled ? "on" : "off"}
+          {a.sync_enabled ? t("banking.scheduled_on") : t("banking.scheduled_off")}
         </label>
       </CardContent>
     </Card>

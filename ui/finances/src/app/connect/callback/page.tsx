@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { api } from "@/lib/api/client";
 import { describe } from "@/lib/api/hooks";
+import { useT } from "@/lib/i18n";
 
 export default function CallbackPage() {
   return (
@@ -22,24 +23,29 @@ export default function CallbackPage() {
   );
 }
 
+// What went wrong, kept as a key plus its variables so the text follows a
+// language change; the API's own message (`describe`) is shown as it comes.
+type Failure = { key: string; vars?: Record<string, string> } | { text: string };
+
 function Callback() {
+  const t = useT();
   const params = useSearchParams();
   const state = params.get("state") ?? "";
   const code = params.get("code") ?? "";
   const bankError = params.get("error") ?? "";
   const [status, setStatus] = useState<"working" | "done" | "failed">("working");
-  const [detail, setDetail] = useState("");
+  const [failure, setFailure] = useState<Failure | null>(null);
   const [accounts, setAccounts] = useState(0);
 
   useEffect(() => {
     if (bankError) {
       setStatus("failed");
-      setDetail(`The bank refused: ${bankError}`);
+      setFailure({ key: "banking.bank_refused", vars: { error: bankError } });
       return;
     }
     if (!state || !code) {
       setStatus("failed");
-      setDetail("The redirect carried no state and code; start the link again.");
+      setFailure({ key: "banking.no_state_code" });
       return;
     }
     let cancelled = false;
@@ -56,35 +62,43 @@ function Callback() {
       .catch((e: unknown) => {
         if (cancelled) return;
         setStatus("failed");
-        setDetail(describe(e));
+        setFailure({ text: describe(e) });
       });
     return () => {
       cancelled = true;
     };
   }, [state, code, bankError]);
 
+  const detail = failure === null ? "" : "text" in failure ? failure.text : t(failure.key, failure.vars);
+
   return (
     <>
-      <PageTitle title="Bank authorization" />
+      <PageTitle title={t("banking.callback.title")} />
       <Card className="max-w-xl">
         <CardHeader>
           <CardTitle>
-            {status === "working" ? "Finishing the link…" : status === "done" ? "Linked" : "Not linked"}
+            {status === "working"
+              ? t("banking.finishing_link")
+              : status === "done"
+                ? t("banking.linked")
+                : t("banking.not_linked")}
           </CardTitle>
           <CardDescription>
             {status === "working"
-              ? "Exchanging the bank's code for a session. This takes a moment."
+              ? t("banking.exchanging_code")
               : status === "done"
-                ? `${accounts} ${accounts === 1 ? "account is" : "accounts are"} now connected. The first fetch runs within minutes.`
+                ? accounts === 1
+                  ? t("banking.one_account_connected")
+                  : t("banking.n_accounts_connected", { n: accounts })
                 : detail}
           </CardDescription>
         </CardHeader>
         <CardContent className="flex gap-2">
           <Button asChild variant={status === "done" ? "default" : "outline"}>
-            <Link href="/accounts/">Accounts</Link>
+            <Link href="/accounts/">{t("nav.accounts")}</Link>
           </Button>
           <Button asChild variant="outline">
-            <Link href="/connections/">Connections</Link>
+            <Link href="/connections/">{t("nav.connections")}</Link>
           </Button>
         </CardContent>
       </Card>

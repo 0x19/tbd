@@ -26,15 +26,21 @@ import { api, pdfUrl } from "@/lib/api/client";
 import { describe, useFetch } from "@/lib/api/hooks";
 import type { Invoice } from "@/lib/api/schema";
 import { day, money, when } from "@/lib/format";
+import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 type Tab = "all" | "draft" | "issued" | "paid" | "cancelled";
+// `label` is a dictionary key, translated where it is rendered.
 const TABS: { id: Tab; label: string; match: (i: Invoice) => boolean }[] = [
-  { id: "all", label: "All", match: () => true },
-  { id: "draft", label: "Drafts", match: (i) => i.status === "draft" },
-  { id: "issued", label: "Issued", match: (i) => i.status === "approved" || i.status === "sent" },
-  { id: "paid", label: "Paid", match: (i) => i.status === "paid" },
-  { id: "cancelled", label: "Cancelled", match: (i) => i.status === "cancelled" },
+  { id: "all", label: "invoices.tab.all", match: () => true },
+  { id: "draft", label: "invoices.tab.drafts", match: (i) => i.status === "draft" },
+  {
+    id: "issued",
+    label: "invoices.tab.issued",
+    match: (i) => i.status === "approved" || i.status === "sent",
+  },
+  { id: "paid", label: "invoices.tab.paid", match: (i) => i.status === "paid" },
+  { id: "cancelled", label: "invoices.tab.cancelled", match: (i) => i.status === "cancelled" },
 ];
 type SortKey = "issued" | "due" | "total" | "number";
 
@@ -51,6 +57,7 @@ function todayIso(): string {
 }
 
 function Invoices() {
+  const t = useT();
   const router = useRouter();
   const params = useSearchParams();
   const { partyIds, partyName, multi } = useFinance();
@@ -82,8 +89,8 @@ function Invoices() {
   // `/` focuses search, `n` starts a draft, like the kit's lists.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement | null;
-      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      const el = e.target as HTMLElement | null;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
       if (e.key === "/") {
         e.preventDefault();
         searchRef.current?.focus();
@@ -102,9 +109,9 @@ function Invoices() {
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     const digits = needle.replace(/[^0-9]/g, "");
-    const t = TABS.find((x) => x.id === tab) ?? TABS[0]!;
+    const current = TABS.find((x) => x.id === tab) ?? TABS[0]!;
     const rows = all.filter((i) => {
-      if (!t.match(i)) return false;
+      if (!current.match(i)) return false;
       if (clientFilter && i.client_id !== clientFilter) return false;
       if (yearFilter && String(i.year) !== yearFilter) return false;
       if (!needle) return true;
@@ -134,7 +141,7 @@ function Invoices() {
   }, [all, tab, q, clientFilter, yearFilter, sort, dir, clients.data]);
 
   const counts = useMemo(
-    () => Object.fromEntries(TABS.map((t) => [t.id, all.filter(t.match).length])),
+    () => Object.fromEntries(TABS.map((x) => [x.id, all.filter(x.match).length])),
     [all],
   );
   const sums = useMemo(() => {
@@ -201,11 +208,11 @@ function Invoices() {
 
   return (
     <>
-      <PageTitle title="Invoices" description="Every invoice ever issued, and the drafts that are not yet.">
+      <PageTitle title={t("invoices.title")} description={t("invoices.description")}>
         <ScopeToggle className="md:hidden" />
         <Select value={newClient || clientList[0]?.id || ""} onValueChange={setNewClient}>
           <SelectTrigger className="w-44">
-            <SelectValue placeholder="Client" />
+            <SelectValue placeholder={t("invoices.client")} />
           </SelectTrigger>
           <SelectContent>
             {clientList.map((c) => (
@@ -216,7 +223,7 @@ function Invoices() {
           </SelectContent>
         </Select>
         <Button size="sm" onClick={() => void create()} disabled={busy || clientList.length === 0}>
-          <Plus /> New draft
+          <Plus /> {t("invoices.new_draft")}
         </Button>
       </PageTitle>
 
@@ -227,27 +234,29 @@ function Invoices() {
           items={[
             {
               icon: Wallet,
-              label: "Outstanding",
+              label: t("invoices.kpi.outstanding"),
               value: money(sums.open.toString(), sums.ccy),
-              hint: `${sums.openN} issued, not yet paid`,
+              hint: t("invoices.kpi.outstanding_hint", { n: sums.openN }),
             },
             {
               icon: AlertTriangle,
-              label: "Overdue",
+              label: t("invoices.kpi.overdue"),
               value: money(sums.overdue.toString(), sums.ccy),
-              hint: sums.overdueN ? `${sums.overdueN} past due date` : "nothing past its due date",
+              hint: sums.overdueN
+                ? t("invoices.kpi.overdue_hint", { n: sums.overdueN })
+                : t("invoices.kpi.overdue_none"),
             },
             {
               icon: FileText,
-              label: `Billed ${new Date().getFullYear()}`,
+              label: t("invoices.kpi.billed", { year: new Date().getFullYear() }),
               value: money(sums.year.toString(), sums.ccy),
-              hint: `${sums.yearN} invoices this year`,
+              hint: t("invoices.kpi.billed_hint", { n: sums.yearN }),
             },
             {
               icon: Plus,
-              label: "Drafts",
+              label: t("invoices.kpi.drafts"),
               value: String(counts.draft ?? 0),
-              hint: counts.draft ? "waiting to be approved" : "no open drafts",
+              hint: counts.draft ? t("invoices.kpi.drafts_hint") : t("invoices.kpi.drafts_none"),
             },
           ]}
         />
@@ -256,17 +265,17 @@ function Invoices() {
       {!clients.loading && clientList.length === 0 ? (
         <Card className="max-w-xl">
           <CardHeader>
-            <CardTitle>No clients yet</CardTitle>
+            <CardTitle>{t("invoices.no_clients")}</CardTitle>
             <CardDescription>
-              An invoice needs an{" "}
+              {t("invoices.needs.before")}{" "}
               <Link href="/issuer/" className="underline">
-                issuer
+                {t("invoices.needs.issuer")}
               </Link>{" "}
-              and a{" "}
+              {t("invoices.needs.between")}{" "}
               <Link href="/clients/" className="underline">
-                client
+                {t("invoices.needs.client")}
               </Link>
-              .
+              {t("invoices.needs.after")}
             </CardDescription>
           </CardHeader>
         </Card>
@@ -277,11 +286,11 @@ function Invoices() {
           <div className="flex flex-wrap items-center gap-2">
             <Tabs value={tab} onValueChange={(v) => set({ tab: v === "all" ? "" : v })}>
               <TabsList>
-                {TABS.map((t) => (
-                  <TabsTrigger key={t.id} value={t.id} className="gap-1.5">
-                    {t.label}
+                {TABS.map((x) => (
+                  <TabsTrigger key={x.id} value={x.id} className="gap-1.5">
+                    {t(x.label)}
                     <span className="text-muted-foreground text-[11px] tabular-nums">
-                      {counts[t.id] ?? 0}
+                      {counts[x.id] ?? 0}
                     </span>
                   </TabsTrigger>
                 ))}
@@ -302,7 +311,7 @@ function Invoices() {
                   setSearch(e.target.value);
                   if (e.target.value === "") set({ q: "" });
                 }}
-                placeholder="Number, client, amount…  ( / )"
+                placeholder={t("invoices.search_placeholder")}
                 className="w-64 pl-8"
               />
             </form>
@@ -315,7 +324,7 @@ function Invoices() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="any">Any client</SelectItem>
+                  <SelectItem value="any">{t("invoices.any_client")}</SelectItem>
                   {clientList.map((c) => (
                     <SelectItem key={c.id} value={c.id}>
                       {c.name}
@@ -330,7 +339,7 @@ function Invoices() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="any">Any year</SelectItem>
+                  <SelectItem value="any">{t("invoices.any_year")}</SelectItem>
                   {years.map((y) => (
                     <SelectItem key={y} value={y}>
                       {y}
@@ -348,7 +357,7 @@ function Invoices() {
                   router.replace("/invoices/");
                 }}
               >
-                <X /> Clear
+                <X /> {t("invoices.clear")}
               </Button>
             ) : null}
           </div>
@@ -362,13 +371,15 @@ function Invoices() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  {sortHead("number", "Number")}
-                  <TableHead>Client</TableHead>
-                  {multi ? <TableHead className="hidden md:table-cell">Issuer</TableHead> : null}
-                  <TableHead>Status</TableHead>
-                  {sortHead("issued", "Issued", "hidden sm:table-cell")}
-                  {sortHead("due", "Due")}
-                  {sortHead("total", "Total", "text-right")}
+                  {sortHead("number", t("invoices.col.number"))}
+                  <TableHead>{t("invoices.col.client")}</TableHead>
+                  {multi ? (
+                    <TableHead className="hidden md:table-cell">{t("invoices.col.issuer")}</TableHead>
+                  ) : null}
+                  <TableHead>{t("invoices.col.status")}</TableHead>
+                  {sortHead("issued", t("invoices.col.issued"), "hidden sm:table-cell")}
+                  {sortHead("due", t("invoices.col.due"))}
+                  {sortHead("total", t("invoices.col.total"), "text-right")}
                   <TableHead className="w-12" />
                 </TableRow>
               </TableHeader>
@@ -382,7 +393,9 @@ function Invoices() {
                       onClick={() => router.push(`/invoices/view/?id=${i.id}`)}
                     >
                       <TableCell className="font-mono font-medium">
-                        {i.number || <span className="text-muted-foreground italic">draft</span>}
+                        {i.number || (
+                          <span className="text-muted-foreground italic">{t("status.draft")}</span>
+                        )}
                       </TableCell>
                       <TableCell>{clientName(i.client_id)}</TableCell>
                       {multi ? (
@@ -394,7 +407,9 @@ function Invoices() {
                         <StatusBadge status={i.status} />
                       </TableCell>
                       <TableCell className="text-muted-foreground hidden text-xs sm:table-cell">
-                        {i.issued_at ? when(i.issued_at) : `created ${when(i.created_at)}`}
+                        {i.issued_at
+                          ? when(i.issued_at)
+                          : t("invoices.created", { when: when(i.created_at) })}
                       </TableCell>
                       <TableCell
                         className={cn(
@@ -403,7 +418,7 @@ function Invoices() {
                         )}
                       >
                         {day(i.due_date)}
-                        {overdue ? " · overdue" : ""}
+                        {overdue ? ` · ${t("invoices.overdue")}` : ""}
                       </TableCell>
                       <TableCell className="text-right font-mono tabular-nums">
                         {money(i.total_minor, i.currency)}
@@ -414,7 +429,7 @@ function Invoices() {
                             variant="ghost"
                             size="icon"
                             className="size-8"
-                            aria-label="Download PDF"
+                            aria-label={t("invoices.download_pdf")}
                             onClick={() => void download(i)}
                           >
                             <Download />
@@ -428,12 +443,12 @@ function Invoices() {
                   <TableRow>
                     <TableCell colSpan={8} className="text-muted-foreground py-12 text-center text-sm">
                       {all.length === 0
-                        ? "No invoices yet. New draft starts one."
+                        ? t("invoices.empty")
                         : q
-                          ? `Nothing matches “${q}”.`
+                          ? t("invoices.nothing_matches", { q })
                           : tab === "draft"
-                            ? "No open drafts."
-                            : "Nothing here."}
+                            ? t("invoices.no_drafts")
+                            : t("common.nothing_here")}
                     </TableCell>
                   </TableRow>
                 ) : null}
@@ -443,11 +458,11 @@ function Invoices() {
         </CardContent>
         {filtered.length ? (
           <div className="text-muted-foreground flex items-center justify-between border-t px-4 py-2 text-xs">
-            <span>
-              {filtered.length} of {all.length}
-            </span>
+            <span>{t("invoices.n_of_m", { n: filtered.length, m: all.length })}</span>
             <span className="font-mono tabular-nums">
-              {money(filtered.reduce((s, i) => s + BigInt(i.total_minor), 0n).toString(), sums.ccy)} in view
+              {t("invoices.in_view", {
+                amount: money(filtered.reduce((s, i) => s + BigInt(i.total_minor), 0n).toString(), sums.ccy),
+              })}
             </span>
           </div>
         ) : null}

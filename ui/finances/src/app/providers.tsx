@@ -7,6 +7,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { api } from "@/lib/api/client";
 import { useFetch } from "@/lib/api/hooks";
 import type { Party } from "@/lib/api/schema";
+import { LangProvider } from "@/lib/i18n";
 
 /** Which of the caller's parties the pages show: a subset of the grant. */
 export type Scope = "all" | string;
@@ -66,9 +67,11 @@ export function Providers({ children }: Props) {
 
   return (
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-      <FinanceProvider>
-        <SearchProvider value={{ open, setOpen }}>{children}</SearchProvider>
-      </FinanceProvider>
+      <LangProvider>
+        <FinanceProvider>
+          <SearchProvider value={{ open, setOpen }}>{children}</SearchProvider>
+        </FinanceProvider>
+      </LangProvider>
     </ThemeProvider>
   );
 }

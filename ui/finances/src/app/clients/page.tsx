@@ -23,6 +23,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api/client";
 import { describe, useFetch } from "@/lib/api/hooks";
 import type { ClientProfile, LineTemplate } from "@/lib/api/schema";
+import { useT } from "@/lib/i18n";
 
 const EMPTY_CLIENT = (party_id: string): ClientProfile => ({
   id: "",
@@ -37,14 +38,16 @@ const EMPTY_CLIENT = (party_id: string): ClientProfile => ({
   archived: false,
 });
 
+// Wire value → message key; the label is looked up at render time.
 const TREATMENTS: Record<string, string> = {
-  outside_scope_non_eu: "Outside EU · reverse charge, no VAT",
-  reverse_charge_eu: "EU business · reverse charge",
-  standard_hr: "Croatia · 25% VAT",
-  exempt_issuer: "Issuer not in VAT system",
+  outside_scope_non_eu: "parties.treatment.outside_scope_non_eu",
+  reverse_charge_eu: "parties.treatment.reverse_charge_eu",
+  standard_hr: "parties.treatment.standard_hr",
+  exempt_issuer: "parties.treatment.exempt_issuer",
 };
 
 export default function ClientsPage() {
+  const t = useT();
   const { parties, partyIds, partyName, multi } = useFinance();
   const orgs = parties.filter((p) => p.kind === "org");
   const [party, setParty] = useState("");
@@ -54,10 +57,7 @@ export default function ClientsPage() {
   const list = loaded.data?.clients ?? [];
   return (
     <>
-      <PageTitle
-        title="Clients"
-        description="Who is billed. The VAT treatment decides the note each invoice carries."
-      >
+      <PageTitle title={t("parties.clients.title")} description={t("parties.clients.description")}>
         <div className="flex items-center gap-2">
           {parties.length > 1 ? (
             <Select value={chosen} onValueChange={setParty}>
@@ -74,7 +74,7 @@ export default function ClientsPage() {
             </Select>
           ) : null}
           <Button size="sm" onClick={() => setEditing(EMPTY_CLIENT(chosen))} disabled={!chosen}>
-            <Plus /> New client
+            <Plus /> {t("parties.new_client")}
           </Button>
         </div>
       </PageTitle>
@@ -89,13 +89,15 @@ export default function ClientsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Client</TableHead>
-                  <TableHead className="hidden md:table-cell">Address</TableHead>
-                  <TableHead>Country</TableHead>
-                  <TableHead className="hidden lg:table-cell">Tax ID</TableHead>
-                  <TableHead>VAT</TableHead>
-                  <TableHead>Currency</TableHead>
-                  {multi ? <TableHead className="hidden xl:table-cell">Billed by</TableHead> : null}
+                  <TableHead>{t("parties.client")}</TableHead>
+                  <TableHead className="hidden md:table-cell">{t("parties.col.address")}</TableHead>
+                  <TableHead>{t("parties.col.country")}</TableHead>
+                  <TableHead className="hidden lg:table-cell">{t("parties.col.tax_id")}</TableHead>
+                  <TableHead>{t("parties.col.vat")}</TableHead>
+                  <TableHead>{t("common.currency")}</TableHead>
+                  {multi ? (
+                    <TableHead className="hidden xl:table-cell">{t("parties.col.billed_by")}</TableHead>
+                  ) : null}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -125,7 +127,7 @@ export default function ClientsPage() {
                 {loaded.data && list.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={7} className="text-muted-foreground py-10 text-center text-sm">
-                      No clients yet. Add one to start invoicing.
+                      {t("parties.no_clients")}
                     </TableCell>
                   </TableRow>
                 ) : null}
@@ -149,6 +151,7 @@ function ClientSheet({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const t = useT();
   const [form, setForm] = useState<ClientProfile | null>(client);
   const [busy, setBusy] = useState(false);
   useEffect(() => setForm(client), [client]);
@@ -159,7 +162,7 @@ function ClientSheet({
     try {
       const { archived: _archived, ...input } = form;
       const r = await api.upsertClient(input);
-      toast.success("Client saved.");
+      toast.success(t("parties.client_saved"));
       if (r.client) setForm(r.client);
       onSaved();
     } catch (e) {
@@ -168,24 +171,34 @@ function ClientSheet({
       setBusy(false);
     }
   };
+  const treatment = form
+    ? TREATMENTS[form.vat_treatment]
+      ? t(TREATMENTS[form.vat_treatment])
+      : form.vat_treatment
+    : "";
   return (
     <Sheet open={client !== null} onOpenChange={(o) => !o && onClose()}>
       <SheetContent className="flex w-full flex-col gap-4 overflow-y-auto sm:max-w-2xl">
         <SheetHeader className="pr-8">
-          <SheetTitle>{form?.id ? form.name || "Client" : "New client"}</SheetTitle>
+          <SheetTitle>{form?.id ? form.name || t("parties.client") : t("parties.new_client")}</SheetTitle>
           <SheetDescription>
             {form?.id
-              ? `${TREATMENTS[form.vat_treatment] ?? form.vat_treatment} · billed in ${form.currency}`
-              : "Name, address and country print on the invoice; the VAT treatment decides its note."}
+              ? t("parties.billed_in", { treatment, currency: form.currency })
+              : t("parties.new_client.description")}
           </SheetDescription>
         </SheetHeader>
         {form ? (
           <>
             <div className="grid gap-3 sm:grid-cols-2">
-              <TextField label="Name" value={form.name} onChange={set("name")} className="sm:col-span-2" />
+              <TextField
+                label={t("common.name")}
+                value={form.name}
+                onChange={set("name")}
+                className="sm:col-span-2"
+              />
               <div className="sm:col-span-2">
                 <Label className="text-muted-foreground mb-1.5 block text-xs">
-                  Address, one line per row
+                  {t("parties.address_lines")}
                 </Label>
                 <Textarea
                   rows={3}
@@ -194,36 +207,43 @@ function ClientSheet({
                 />
               </div>
               <TextField
-                label="Country (ISO code)"
+                label={t("parties.country_iso")}
                 value={form.country_code}
                 onChange={(v) => set("country_code")(v.toUpperCase())}
                 mono
               />
-              <TextField label="Tax ID (their number)" value={form.tax_id} onChange={set("tax_id")} mono />
+              <TextField
+                label={t("parties.tax_id_theirs")}
+                value={form.tax_id}
+                onChange={set("tax_id")}
+                mono
+              />
               <div>
-                <Label className="text-muted-foreground mb-1.5 block text-xs">VAT treatment</Label>
+                <Label className="text-muted-foreground mb-1.5 block text-xs">
+                  {t("parties.vat_treatment")}
+                </Label>
                 <Select value={form.vat_treatment} onValueChange={set("vat_treatment")}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {Object.entries(TREATMENTS).map(([v, label]) => (
+                    {Object.entries(TREATMENTS).map(([v, key]) => (
                       <SelectItem key={v} value={v}>
-                        {label}
+                        {t(key)}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
               <TextField
-                label="Currency"
+                label={t("common.currency")}
                 value={form.currency}
                 onChange={(v) => set("currency")(v.toUpperCase())}
                 mono
               />
               <div className="sm:col-span-2">
                 <Label className="text-muted-foreground mb-1.5 block text-xs">
-                  Recipients (emails, one per row) — for sending, later
+                  {t("parties.recipients")}
                 </Label>
                 <Textarea
                   rows={2}
@@ -236,18 +256,16 @@ function ClientSheet({
             </div>
             <div className="flex gap-2">
               <Button onClick={() => void save()} disabled={busy || !form.name || !form.country_code}>
-                {busy ? "Saving…" : form.id ? "Save client" : "Create client"}
+                {busy ? t("common.saving") : form.id ? t("parties.save_client") : t("parties.create_client")}
               </Button>
               <Button variant="ghost" onClick={onClose}>
-                Close
+                {t("common.close")}
               </Button>
             </div>
             {form.id ? (
               <TemplatesEditor client={form.id} />
             ) : (
-              <p className="text-muted-foreground text-xs">
-                Line templates can be added once the client is created.
-              </p>
+              <p className="text-muted-foreground text-xs">{t("parties.templates_after_create")}</p>
             )}
           </>
         ) : null}
@@ -256,14 +274,16 @@ function ClientSheet({
   );
 }
 
+// Wire value → message key; the label is looked up at render time.
 const MODES = [
-  ["fixed", "Fixed — on every draft with this price"],
-  ["variable", "Variable — on every draft, price asked each month"],
-  ["optional", "Optional — offered, off until chosen"],
+  ["fixed", "parties.mode.fixed"],
+  ["variable", "parties.mode.variable"],
+  ["optional", "parties.mode.optional"],
 ] as const;
 
 /** The rows a draft for this client starts from. */
 function TemplatesEditor({ client }: { client: string }) {
+  const t = useT();
   const loaded = useFetch(() => api.lineTemplates(client), 0, [client]);
   const [rows, setRows] = useState<LineTemplate[]>([]);
   const [busy, setBusy] = useState(false);
@@ -282,11 +302,11 @@ function TemplatesEditor({ client }: { client: string }) {
   });
   const set = (i: number, patch: Partial<LineTemplate>) =>
     setRows(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
-  const save = async (t: LineTemplate) => {
+  const save = async (row: LineTemplate) => {
     setBusy(true);
     try {
-      await api.upsertLineTemplate(client, t);
-      toast.success("Template saved.");
+      await api.upsertLineTemplate(client, row);
+      toast.success(t("parties.template_saved"));
       loaded.reload();
     } catch (e) {
       toast.error(describe(e));
@@ -294,11 +314,11 @@ function TemplatesEditor({ client }: { client: string }) {
       setBusy(false);
     }
   };
-  const remove = async (t: LineTemplate, i: number) => {
-    if (!t.id) return setRows(rows.filter((_, j) => j !== i));
+  const remove = async (row: LineTemplate, i: number) => {
+    if (!row.id) return setRows(rows.filter((_, j) => j !== i));
     setBusy(true);
     try {
-      await api.deleteLineTemplate(client, t.id);
+      await api.deleteLineTemplate(client, row.id);
       loaded.reload();
     } catch (e) {
       toast.error(describe(e));
@@ -310,52 +330,50 @@ function TemplatesEditor({ client }: { client: string }) {
     <div className="border-t pt-4">
       <div className="mb-2 flex items-center justify-between">
         <div>
-          <Label className="text-xs font-medium">Line templates</Label>
-          <p className="text-muted-foreground text-xs">
-            What a new draft for this client starts with, in order.
-          </p>
+          <Label className="text-xs font-medium">{t("parties.line_templates")}</Label>
+          <p className="text-muted-foreground text-xs">{t("parties.line_templates.description")}</p>
         </div>
         <Button variant="outline" size="sm" onClick={() => setRows([...rows, blank()])}>
-          <Plus /> Row
+          <Plus /> {t("parties.row")}
         </Button>
       </div>
       <div className="space-y-2">
-        {rows.map((t, i) => (
-          <div key={t.id || `new-${i}`} className="space-y-2 rounded-md border p-2">
+        {rows.map((row, i) => (
+          <div key={row.id || `new-${i}`} className="space-y-2 rounded-md border p-2">
             <div className="grid gap-2 sm:grid-cols-[3rem_1fr]">
               <Input
-                value={String(t.position)}
+                value={String(row.position)}
                 inputMode="numeric"
                 className="font-mono"
-                title="Position"
+                title={t("parties.position")}
                 onChange={(e) => set(i, { position: Number(e.target.value) || 0 })}
               />
               <Textarea
                 rows={2}
-                value={t.description}
+                value={row.description}
                 className="min-h-9 text-sm"
-                placeholder="Description as printed"
+                placeholder={t("parties.description_as_printed")}
                 onChange={(e) => set(i, { description: e.target.value })}
               />
             </div>
             <div className="grid gap-2 sm:grid-cols-[1fr_6rem_8rem_auto]">
-              <Select value={t.mode} onValueChange={(v) => set(i, { mode: v })}>
+              <Select value={row.mode} onValueChange={(v) => set(i, { mode: v })}>
                 <SelectTrigger className="text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {MODES.map(([v, label]) => (
+                  {MODES.map(([v, key]) => (
                     <SelectItem key={v} value={v}>
-                      {label}
+                      {t(key)}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
               <Input
-                value={(Number(t.quantity_milli) / 1000).toString()}
+                value={(Number(row.quantity_milli) / 1000).toString()}
                 inputMode="decimal"
                 className="text-right font-mono"
-                title="Quantity"
+                title={t("parties.quantity")}
                 onChange={(e) =>
                   set(i, {
                     quantity_milli: String(
@@ -365,10 +383,12 @@ function TemplatesEditor({ client }: { client: string }) {
                 }
               />
               <Input
-                value={(Number(t.unit_price_minor) / 100).toFixed(2)}
+                value={(Number(row.unit_price_minor) / 100).toFixed(2)}
                 inputMode="decimal"
                 className="text-right font-mono"
-                title={t.mode === "variable" ? "Only used when there is no previous invoice" : "Unit price"}
+                title={
+                  row.mode === "variable" ? t("parties.unit_price.variable_hint") : t("parties.unit_price")
+                }
                 onChange={(e) =>
                   set(i, {
                     unit_price_minor: String(Math.round(Number(e.target.value.replace(",", ".")) * 100) || 0),
@@ -379,17 +399,17 @@ function TemplatesEditor({ client }: { client: string }) {
                 <Button
                   size="sm"
                   variant="outline"
-                  disabled={busy || !t.description.trim()}
-                  onClick={() => void save(t)}
+                  disabled={busy || !row.description.trim()}
+                  onClick={() => void save(row)}
                 >
-                  Save
+                  {t("common.save")}
                 </Button>
                 <Button
                   size="sm"
                   variant="ghost"
                   disabled={busy}
-                  onClick={() => void remove(t, i)}
-                  aria-label="Remove"
+                  onClick={() => void remove(row, i)}
+                  aria-label={t("common.remove")}
                 >
                   ×
                 </Button>
@@ -398,9 +418,7 @@ function TemplatesEditor({ client }: { client: string }) {
           </div>
         ))}
         {rows.length === 0 ? (
-          <p className="text-muted-foreground text-xs">
-            No templates: a draft starts from the last invoice to this client.
-          </p>
+          <p className="text-muted-foreground text-xs">{t("parties.no_templates")}</p>
         ) : null}
       </div>
     </div>

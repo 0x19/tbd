@@ -15,8 +15,16 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { api } from "@/lib/api/client";
 import { describe, useFetch } from "@/lib/api/hooks";
 import { when } from "@/lib/format";
+import { useT } from "@/lib/i18n";
+
+// The wire value of a login type, shown in the page's language.
+const LOGIN_KEY: Record<string, string> = {
+  business: "banking.login.business",
+  personal: "banking.login.personal",
+};
 
 export default function ConnectionsPage() {
+  const t = useT();
   const { parties, partyIds, partyName } = useFinance();
   const connections = useFetch(() => api.connections(partyIds), 30_000, [partyIds.join(",")]);
   const [party, setParty] = useState("");
@@ -37,13 +45,10 @@ export default function ConnectionsPage() {
 
   return (
     <>
-      <PageTitle
-        title="Connections"
-        description="A consent at a bank lasts 180 days. Linking again finds the same accounts and keeps their history."
-      >
+      <PageTitle title={t("banking.connections.title")} description={t("banking.connections.description")}>
         <Select value={chosen} onValueChange={setParty}>
           <SelectTrigger className="w-44">
-            <SelectValue placeholder="Party" />
+            <SelectValue placeholder={t("common.party")} />
           </SelectTrigger>
           <SelectContent>
             {parties.map((p) => (
@@ -58,12 +63,12 @@ export default function ConnectionsPage() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="business">Business login</SelectItem>
-            <SelectItem value="personal">Personal login</SelectItem>
+            <SelectItem value="business">{t("banking.business_login")}</SelectItem>
+            <SelectItem value="personal">{t("banking.personal_login")}</SelectItem>
           </SelectContent>
         </Select>
         <Button size="sm" onClick={() => void start()} disabled={busy || !chosen}>
-          <Plus /> {busy ? "Opening the bank…" : "Link Erste"}
+          <Plus /> {busy ? t("banking.opening_bank") : t("banking.link_erste")}
         </Button>
       </PageTitle>
       <Card>
@@ -76,13 +81,13 @@ export default function ConnectionsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Bank</TableHead>
-                  <TableHead>Party</TableHead>
-                  <TableHead>Login</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Authorized</TableHead>
-                  <TableHead>Valid until</TableHead>
-                  <TableHead className="text-right">Accounts</TableHead>
+                  <TableHead>{t("banking.col.bank")}</TableHead>
+                  <TableHead>{t("common.party")}</TableHead>
+                  <TableHead>{t("banking.col.login")}</TableHead>
+                  <TableHead>{t("banking.col.status")}</TableHead>
+                  <TableHead>{t("banking.col.authorized")}</TableHead>
+                  <TableHead>{t("banking.col.valid_until")}</TableHead>
+                  <TableHead className="text-right">{t("banking.col.accounts")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -90,7 +95,9 @@ export default function ConnectionsPage() {
                   <TableRow key={c.id}>
                     <TableCell className="font-medium">{c.aspsp_name}</TableCell>
                     <TableCell>{partyName(c.party_id)}</TableCell>
-                    <TableCell className="capitalize">{c.psu_type}</TableCell>
+                    <TableCell className="capitalize">
+                      {LOGIN_KEY[c.psu_type] ? t(LOGIN_KEY[c.psu_type]!) : c.psu_type}
+                    </TableCell>
                     <TableCell>
                       <StatusBadge status={c.status} />
                     </TableCell>

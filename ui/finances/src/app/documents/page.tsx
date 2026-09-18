@@ -24,6 +24,7 @@ import { api, pdfUrl } from "@/lib/api/client";
 import { describe, useFetch } from "@/lib/api/hooks";
 import type { Document } from "@/lib/api/schema";
 import { money, monthLabel, monthsBefore, thisMonth, when } from "@/lib/format";
+import { type Lang, useLang, useT } from "@/lib/i18n";
 
 const ALL = "__all";
 
@@ -54,28 +55,33 @@ function decimalToMinor(s: string): string {
   return `${whole || "0"}${frac}`.replace(/^(-?)0+(?=\d)/, "$1");
 }
 
-/** How a field was found, as a short word for the page. */
-function foundLabel(by: string | undefined): string {
+/** How a field was found, as the key of a short word for the page. */
+function foundKey(by: string | undefined): string {
   switch (by) {
     case "label":
-      return "read";
     case "sender":
-      return "from sender";
     case "first":
-      return "guessed";
     case "received":
-      return "mail date";
     case "payment":
-      return "from the account that paid";
     case "text":
-      return "named in the document";
     case "mailbox":
-      return "the mailbox's";
     case "declared":
-      return "set by you";
+      return `documents.found.${by}`;
     default:
-      return "not found";
+      return "documents.found.none";
   }
+}
+
+/** The plural form of a count: Croatian has one, few and other. */
+function plural(lang: Lang, n: number): "one" | "few" | "other" {
+  if (lang === "hr") {
+    const m10 = n % 10;
+    const m100 = n % 100;
+    if (m10 === 1 && m100 !== 11) return "one";
+    if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return "few";
+    return "other";
+  }
+  return n === 1 ? "one" : "other";
 }
 
 function sureEnough(by: string | undefined): boolean {
@@ -83,6 +89,8 @@ function sureEnough(by: string | undefined): boolean {
 }
 
 export default function DocumentsPage() {
+  const t = useT();
+  const { lang } = useLang();
   const { partyIds, partyName, multi } = useFinance();
   const key = partyIds.join(",");
   const [q, setQ] = useState("");
@@ -125,10 +133,7 @@ export default function DocumentsPage() {
 
   return (
     <>
-      <PageTitle
-        title="Receipts"
-        description="Every supplier document pulled from your mailboxes, read for vendor, date and amount. Click a row to see it and correct what was read."
-      >
+      <PageTitle title={t("documents.title")} description={t("documents.description")}>
         <ScopeToggle className="md:hidden" />
       </PageTitle>
 
@@ -138,16 +143,16 @@ export default function DocumentsPage() {
           <Input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search vendor, number, subject, or anything in the document"
+            placeholder={t("documents.search_placeholder")}
             className="pl-8"
           />
         </div>
         <Select value={vendor} onValueChange={setVendor}>
           <SelectTrigger className="w-48">
-            <SelectValue placeholder="Vendor" />
+            <SelectValue placeholder={t("common.vendor")} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={ALL}>All vendors</SelectItem>
+            <SelectItem value={ALL}>{t("documents.all_vendors")}</SelectItem>
             {(docs.data?.vendors ?? []).map((v) => (
               <SelectItem key={v.vendor} value={v.vendor}>
                 {v.vendor} · {v.count}
@@ -157,10 +162,10 @@ export default function DocumentsPage() {
         </Select>
         <Select value={month} onValueChange={setMonth}>
           <SelectTrigger className="w-40">
-            <SelectValue placeholder="Month" />
+            <SelectValue placeholder={t("common.month")} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={ALL}>Any month</SelectItem>
+            <SelectItem value={ALL}>{t("common.any_month")}</SelectItem>
             {months.map((m) => (
               <SelectItem key={m} value={m}>
                 {monthLabel(m)}
@@ -172,8 +177,8 @@ export default function DocumentsPage() {
 
       {docs.data ? (
         <p className="text-muted-foreground text-xs">
-          {docs.data.total} {docs.data.total === 1 ? "receipt" : "receipts"}
-          {docs.data.total > rows.length ? ` (showing ${rows.length})` : ""}
+          {t(`documents.count_${plural(lang, docs.data.total)}`, { n: docs.data.total })}
+          {docs.data.total > rows.length ? ` (${t("common.showing", { n: rows.length })})` : ""}
           {sums.length ? " · " : ""}
           {sums.map(([c, m], i) => (
             <span key={c} className="tabular-nums">
@@ -181,7 +186,7 @@ export default function DocumentsPage() {
               {money(m.toString(), c)}
             </span>
           ))}
-          {unpriced ? ` · ${unpriced} without an amount yet` : ""}
+          {unpriced ? ` · ${t("documents.without_amount", { n: unpriced })}` : ""}
         </p>
       ) : null}
 
@@ -195,12 +200,12 @@ export default function DocumentsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-24">Date</TableHead>
-                  <TableHead>Vendor</TableHead>
-                  <TableHead className="hidden lg:table-cell">Subject</TableHead>
-                  <TableHead className="hidden md:table-cell">Number</TableHead>
-                  <TableHead className="hidden xl:table-cell">Mailbox</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
+                  <TableHead className="w-24">{t("common.date")}</TableHead>
+                  <TableHead>{t("common.vendor")}</TableHead>
+                  <TableHead className="hidden lg:table-cell">{t("documents.subject")}</TableHead>
+                  <TableHead className="hidden md:table-cell">{t("common.number")}</TableHead>
+                  <TableHead className="hidden xl:table-cell">{t("documents.mailbox")}</TableHead>
+                  <TableHead className="text-right">{t("common.amount")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -222,11 +227,11 @@ export default function DocumentsPage() {
                               "truncate " + (d.vendor ? "font-medium" : "text-muted-foreground italic")
                             }
                           >
-                            {d.vendor || "unknown vendor"}
+                            {d.vendor || t("documents.unknown_vendor")}
                           </span>
                           {d.vendor && guessedVendor ? (
                             <Badge variant="outline" className="text-muted-foreground shrink-0 text-[10px]">
-                              {foundLabel(d.found_by.vendor)}
+                              {t(foundKey(d.found_by.vendor))}
                             </Badge>
                           ) : null}
                           {multi ? (
@@ -255,7 +260,7 @@ export default function DocumentsPage() {
                           </span>
                         ) : (
                           <span className="text-muted-foreground text-xs italic">
-                            {d.extracted_at ? "not found" : "reading…"}
+                            {d.extracted_at ? t("documents.found.none") : t("documents.reading")}
                           </span>
                         )}
                       </TableCell>
@@ -266,8 +271,8 @@ export default function DocumentsPage() {
                   <TableRow>
                     <TableCell colSpan={6} className="text-muted-foreground py-10 text-center text-sm">
                       {term || vendor !== ALL || month !== ALL
-                        ? "Nothing matches."
-                        : "Nothing pulled yet. Link a mailbox under Connectors and pull."}
+                        ? t("common.nothing_matches")
+                        : t("documents.nothing_pulled")}
                     </TableCell>
                   </TableRow>
                 ) : null}
@@ -298,6 +303,7 @@ function DocumentSheet({
   onChanged: () => void;
   vendors: string[];
 }) {
+  const t = useT();
   const [doc, setDoc] = useState<Document | null>(null);
   const [url, setUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -370,7 +376,7 @@ function DocumentSheet({
 
   const s = doc?.sources[0];
   const hint = (key: string) => (
-    <span className="text-muted-foreground ml-2 text-[10px]">{foundLabel(doc?.found_by[key])}</span>
+    <span className="text-muted-foreground ml-2 text-[10px]">{t(foundKey(doc?.found_by[key]))}</span>
   );
 
   return (
@@ -378,7 +384,7 @@ function DocumentSheet({
       <SheetContent className="flex w-full flex-col gap-4 overflow-y-auto sm:max-w-4xl">
         <SheetHeader className="pr-8">
           <SheetTitle className="flex flex-wrap items-center gap-2">
-            {doc ? doc.vendor || "Unknown vendor" : "Receipt"}
+            {doc ? doc.vendor || t("documents.unknown_vendor_title") : t("documents.receipt")}
             {doc?.total_minor ? (
               <span className="font-mono text-base font-normal tabular-nums">
                 {money(doc.total_minor, doc.currency || "EUR")}
@@ -386,18 +392,19 @@ function DocumentSheet({
             ) : null}
             {doc?.declared ? (
               <Badge variant="outline" className="text-[10px]">
-                corrected
+                {t("documents.corrected")}
               </Badge>
             ) : null}
           </SheetTitle>
           <SheetDescription>
             {doc ? (
               <>
-                {doc.doc_date || "no date"} · {doc.invoice_no || "no number"} · {doc.filename}
-                {s ? ` · from ${s.sender}` : ""}
+                {doc.doc_date || t("documents.no_date")} · {doc.invoice_no || t("documents.no_number")} ·{" "}
+                {doc.filename}
+                {s ? ` · ${t("documents.from", { sender: s.sender })}` : ""}
               </>
             ) : (
-              "Loading…"
+              t("common.loading")
             )}
           </SheetDescription>
         </SheetHeader>
@@ -411,7 +418,7 @@ function DocumentSheet({
             onClick={() => setEditing((v) => !v)}
             disabled={!doc}
           >
-            <Pencil /> {editing ? "Close editor" : "Correct"}
+            <Pencil /> {editing ? t("documents.close_editor") : t("documents.correct")}
           </Button>
           <Button
             variant="outline"
@@ -422,11 +429,12 @@ function DocumentSheet({
               void act(
                 "extract",
                 async () => (await api.extractDocument(doc.id)).document,
-                doc.declared ? "Read again; your corrections kept." : "Read again.",
+                doc.declared ? t("documents.read_again_kept") : t("documents.read_again_done"),
               )
             }
           >
-            <RefreshCw className={busy === "extract" ? "animate-spin" : undefined} /> Read again
+            <RefreshCw className={busy === "extract" ? "animate-spin" : undefined} />{" "}
+            {t("documents.read_again")}
           </Button>
           <Button
             variant="outline"
@@ -440,7 +448,7 @@ function DocumentSheet({
               a.click();
             }}
           >
-            <Download /> Download
+            <Download /> {t("common.download")}
           </Button>
         </div>
 
@@ -462,12 +470,14 @@ function DocumentSheet({
                       party_id: form.party_id,
                     })
                   ).document,
-                "Saved. These fields are yours now; a re-read will not change them.",
+                t("documents.saved_yours"),
               );
             }}
           >
             <div className="sm:col-span-2">
-              <Label className="text-xs">Whose {hint("party")}</Label>
+              <Label className="text-xs">
+                {t("documents.whose")} {hint("party")}
+              </Label>
               <Select value={form.party_id} onValueChange={(v) => setForm({ ...form, party_id: v })}>
                 <SelectTrigger className="mt-1">
                   <SelectValue />
@@ -482,7 +492,9 @@ function DocumentSheet({
               </Select>
             </div>
             <div className="sm:col-span-2">
-              <Label className="text-xs">Vendor {hint("vendor")}</Label>
+              <Label className="text-xs">
+                {t("common.vendor")} {hint("vendor")}
+              </Label>
               <Input
                 list="vendors"
                 value={form.vendor}
@@ -496,7 +508,9 @@ function DocumentSheet({
               </datalist>
             </div>
             <div>
-              <Label className="text-xs">Date {hint("date")}</Label>
+              <Label className="text-xs">
+                {t("common.date")} {hint("date")}
+              </Label>
               <Input
                 type="date"
                 value={form.doc_date}
@@ -505,7 +519,9 @@ function DocumentSheet({
               />
             </div>
             <div>
-              <Label className="text-xs">Number {hint("invoice_no")}</Label>
+              <Label className="text-xs">
+                {t("common.number")} {hint("invoice_no")}
+              </Label>
               <Input
                 value={form.invoice_no}
                 onChange={(e) => setForm({ ...form, invoice_no: e.target.value })}
@@ -513,7 +529,9 @@ function DocumentSheet({
               />
             </div>
             <div>
-              <Label className="text-xs">Amount {hint("amount")}</Label>
+              <Label className="text-xs">
+                {t("common.amount")} {hint("amount")}
+              </Label>
               <Input
                 inputMode="decimal"
                 value={form.amount}
@@ -523,7 +541,7 @@ function DocumentSheet({
               />
             </div>
             <div>
-              <Label className="text-xs">Currency</Label>
+              <Label className="text-xs">{t("common.currency")}</Label>
               <Input
                 value={form.currency}
                 onChange={(e) => setForm({ ...form, currency: e.target.value.toUpperCase() })}
@@ -533,40 +551,38 @@ function DocumentSheet({
             </div>
             <div className="flex items-end gap-2 sm:col-span-2">
               <Button type="submit" size="sm" disabled={busy !== ""}>
-                {busy === "save" ? "Saving…" : "Save"}
+                {busy === "save" ? t("common.saving") : t("common.save")}
               </Button>
-              <span className="text-muted-foreground text-xs">
-                Leave a field empty to clear it. Saving marks all of them as yours.
-              </span>
+              <span className="text-muted-foreground text-xs">{t("documents.clear_hint")}</span>
             </div>
           </form>
         ) : null}
 
         {doc && !editing ? (
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-xs">
-            <dt className="text-muted-foreground">Whose</dt>
+            <dt className="text-muted-foreground">{t("documents.whose")}</dt>
             <dd>
               {partyName(doc.party_id)} {hint("party")}
             </dd>
-            <dt className="text-muted-foreground">Vendor</dt>
+            <dt className="text-muted-foreground">{t("common.vendor")}</dt>
             <dd>
               {doc.vendor || "—"} {hint("vendor")}
             </dd>
-            <dt className="text-muted-foreground">Date</dt>
+            <dt className="text-muted-foreground">{t("common.date")}</dt>
             <dd>
               {doc.doc_date || "—"} {hint("date")}
             </dd>
-            <dt className="text-muted-foreground">Amount</dt>
+            <dt className="text-muted-foreground">{t("common.amount")}</dt>
             <dd className="font-mono tabular-nums">
               {doc.total_minor ? money(doc.total_minor, doc.currency || "EUR") : "—"} {hint("amount")}
             </dd>
-            <dt className="text-muted-foreground">Number</dt>
+            <dt className="text-muted-foreground">{t("common.number")}</dt>
             <dd className="font-mono">
               {doc.invoice_no || "—"} {hint("invoice_no")}
             </dd>
             {doc.sources.map((src) => (
               <div key={src.external_ref} className="contents">
-                <dt className="text-muted-foreground">Mail</dt>
+                <dt className="text-muted-foreground">{t("documents.mail")}</dt>
                 <dd className="truncate">
                   {src.sender} · {src.subject} · {when(src.received_at)}
                 </dd>
@@ -574,7 +590,7 @@ function DocumentSheet({
             ))}
             {doc.found_by.error ? (
               <>
-                <dt className="text-muted-foreground">Reader</dt>
+                <dt className="text-muted-foreground">{t("documents.reader")}</dt>
                 <dd className="text-amber-700 dark:text-amber-300">{doc.found_by.error}</dd>
               </>
             ) : null}
@@ -583,10 +599,11 @@ function DocumentSheet({
 
         <div className="bg-muted/40 min-h-[60vh] flex-1 overflow-hidden rounded-md border">
           {url ? (
-            <iframe title="Receipt" src={url} className="h-[70vh] w-full" />
+            <iframe title={t("documents.receipt")} src={url} className="h-[70vh] w-full" />
           ) : (
             <div className="text-muted-foreground flex h-[60vh] items-center justify-center gap-2 text-sm">
-              <FileSearch className="size-4" /> {error ? "Could not load the file." : "Loading the file…"}
+              <FileSearch className="size-4" />{" "}
+              {error ? t("documents.file_error") : t("documents.file_loading")}
             </div>
           )}
         </div>

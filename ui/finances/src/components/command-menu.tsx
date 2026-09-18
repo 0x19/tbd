@@ -16,11 +16,13 @@ import {
   CommandSeparator,
 } from "@/components/ui/command";
 import { navGroups } from "@/data/sidebar-data";
+import { useT } from "@/lib/i18n";
 
 import { useSearch } from "./search-provider";
 
 /** ⌘K: pages, the party scope, and the theme. */
 export function CommandMenu() {
+  const t = useT();
   const router = useRouter();
   const { setTheme } = useTheme();
   const { open, setOpen } = useSearch();
@@ -36,13 +38,13 @@ export function CommandMenu() {
 
   return (
     <CommandDialog modal open={open} onOpenChange={setOpen}>
-      <CommandInput placeholder="Go to…" />
+      <CommandInput placeholder={t("nav.go_to")} />
       <CommandList>
-        <CommandEmpty>Nothing found.</CommandEmpty>
+        <CommandEmpty>{t("nav.no_results")}</CommandEmpty>
         {navGroups.map((group) => (
-          <CommandGroup key={group.title} heading={group.title}>
+          <CommandGroup key={group.title} heading={t(group.title)}>
             {group.items
-              .flatMap((item) => (item.url ? [{ title: item.title, url: item.url }] : []))
+              .flatMap((item) => (item.url ? [{ title: t(item.title), url: item.url }] : []))
               .map((item) => (
                 <CommandItem
                   key={item.url}
@@ -58,8 +60,8 @@ export function CommandMenu() {
           </CommandGroup>
         ))}
         <CommandSeparator />
-        <CommandGroup heading="Show">
-          <CommandItem onSelect={() => run(() => setScope("all"))}>Combined</CommandItem>
+        <CommandGroup heading={t("nav.show")}>
+          <CommandItem onSelect={() => run(() => setScope("all"))}>{t("common.combined")}</CommandItem>
           {parties.map((p) => (
             <CommandItem key={p.id} onSelect={() => run(() => setScope(p.id))}>
               {p.display_name}
@@ -67,17 +69,17 @@ export function CommandMenu() {
           ))}
         </CommandGroup>
         <CommandSeparator />
-        <CommandGroup heading="Theme">
+        <CommandGroup heading={t("nav.theme")}>
           <CommandItem onSelect={() => run(() => setTheme("light"))}>
-            <IconSun /> <span>Light</span>
+            <IconSun /> <span>{t("nav.theme.light")}</span>
           </CommandItem>
           <CommandItem onSelect={() => run(() => setTheme("dark"))}>
             <IconMoon className="scale-90" />
-            <span>Dark</span>
+            <span>{t("nav.theme.dark")}</span>
           </CommandItem>
           <CommandItem onSelect={() => run(() => setTheme("system"))}>
             <IconDeviceLaptop />
-            <span>System</span>
+            <span>{t("nav.theme.system")}</span>
           </CommandItem>
         </CommandGroup>
       </CommandList>

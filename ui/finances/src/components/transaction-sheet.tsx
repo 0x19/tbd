@@ -16,6 +16,7 @@ import { api } from "@/lib/api/client";
 import { describe, useFetch } from "@/lib/api/hooks";
 import type { Category, Rule, Transaction } from "@/lib/api/schema";
 import { day, money, when } from "@/lib/format";
+import { useT } from "@/lib/i18n";
 
 /** Erste prefixes a card line with the masked PAN; nobody reads it twice. */
 export function cleanRemittance(r: string): string {
@@ -41,18 +42,22 @@ export function TransactionSheet({
   onMakeRule: (t: Transaction) => void;
   onFilter: (counterparty: string) => void;
 }) {
+  const t = useT();
   const { multi, partyName } = useFinance();
   const one = useFetch(() => (id ? api.transaction(id) : Promise.resolve(null)), 0, [id]);
   const [busy, setBusy] = useState(false);
-  const t = one.data?.transaction ?? null;
+  const tx = one.data?.transaction ?? null;
 
   const declare = async (v: string) => {
-    if (!t || v === t.category_id) return;
+    if (!tx || v === tx.category_id) return;
     setBusy(true);
     try {
-      await api.declare(t.id, v);
-      toast.success("Category set; rules will not change it again.", {
-        action: { label: "Make it a rule", onClick: () => onMakeRule({ ...t, category_id: v }) },
+      await api.declare(tx.id, v);
+      toast.success(t("transactions.category_set"), {
+        action: {
+          label: t("transactions.make_it_a_rule"),
+          onClick: () => onMakeRule({ ...tx, category_id: v }),
+        },
       });
       one.reload();
       onChanged();
@@ -63,17 +68,17 @@ export function TransactionSheet({
     }
   };
 
-  const rule = t?.category_rule_id ? rules.find((r) => r.id === t.category_rule_id) : undefined;
-  const mine = t
-    ? cats.filter((c) => c.party_id === t.party_id && (!c.archived || c.id === t.category_id))
+  const rule = tx?.category_rule_id ? rules.find((r) => r.id === tx.category_rule_id) : undefined;
+  const mine = tx
+    ? cats.filter((c) => c.party_id === tx.party_id && (!c.archived || c.id === tx.category_id))
     : [];
-  const negative = t?.amount_minor.startsWith("-") ?? false;
+  const negative = tx?.amount_minor.startsWith("-") ?? false;
   let record: string | null = null;
-  if (t?.raw) {
+  if (tx?.raw) {
     try {
-      record = JSON.stringify(JSON.parse(t.raw), null, 2);
+      record = JSON.stringify(JSON.parse(tx.raw), null, 2);
     } catch {
-      record = t.raw;
+      record = tx.raw;
     }
   }
 
@@ -82,7 +87,7 @@ export function TransactionSheet({
       <SheetContent className="flex w-full flex-col gap-0 overflow-y-auto p-0 sm:max-w-lg">
         {one.error ? (
           <p className="text-destructive p-6 text-sm">{one.error}</p>
-        ) : !t ? (
+        ) : !tx ? (
           <div className="space-y-3 p-6">
             <Skeleton className="h-8 w-40" />
             <Skeleton className="h-4 w-64" />
@@ -92,11 +97,11 @@ export function TransactionSheet({
           <>
             <SheetHeader className="border-b p-6">
               <SheetDescription className="flex items-center gap-2 text-xs">
-                {day(t.booking_date)}
-                <StatusBadge status={t.status.toLowerCase()} className="text-[10px]" />
-                {t.internal ? (
+                {day(tx.booking_date)}
+                <StatusBadge status={tx.status.toLowerCase()} className="text-[10px]" />
+                {tx.internal ? (
                   <Badge variant="outline" className="text-[10px]">
-                    own transfer
+                    {t("transactions.own_transfer")}
                   </Badge>
                 ) : null}
               </SheetDescription>
@@ -107,83 +112,100 @@ export function TransactionSheet({
                     : "font-mono text-3xl text-emerald-700 tabular-nums dark:text-emerald-300"
                 }
               >
-                {money(t.amount_minor, t.currency, { sign: true })}
+                {money(tx.amount_minor, tx.currency, { sign: true })}
               </SheetTitle>
               <p className="text-base font-medium">
-                {t.counterparty_name || <span className="text-muted-foreground italic">No counterparty</span>}
+                {tx.counterparty_name || (
+                  <span className="text-muted-foreground italic">{t("transactions.no_counterparty")}</span>
+                )}
               </p>
             </SheetHeader>
 
             <div className="space-y-6 p-6">
               <section className="space-y-2">
                 <h3 className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-                  Category
+                  {t("transactions.category")}
                 </h3>
                 <div className="flex flex-wrap items-center gap-2">
                   <Select
-                    value={t.category_id || "none"}
+                    value={tx.category_id || "none"}
                     disabled={busy}
                     onValueChange={(v) => void declare(v)}
                   >
                     <SelectTrigger className="w-56">
-                      <SelectValue placeholder="Uncategorised" />
+                      <SelectValue placeholder={t("transactions.uncategorised")} />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none" disabled>
-                        Uncategorised
+                        {t("transactions.uncategorised")}
                       </SelectItem>
                       {mine.map((c) => (
                         <SelectItem key={c.id} value={c.id}>
                           {c.name}
-                          {c.archived ? " (archived)" : ""}
+                          {c.archived ? ` (${t("transactions.archived")})` : ""}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                  {t.category_source ? (
-                    <StatusBadge status={t.category_source} className="text-[10px]" />
+                  {tx.category_source ? (
+                    <StatusBadge status={tx.category_source} className="text-[10px]" />
                   ) : null}
                 </div>
                 <p className="text-muted-foreground text-xs">
-                  {t.category_source === "declared"
-                    ? `Set by hand${t.categorised_at ? ` ${when(t.categorised_at)}` : ""}; no rule will change it.`
-                    : t.category_source === "inferred"
-                      ? `Claimed by the rule ${rule ? `“${rule.name}” (priority ${rule.priority})` : "that has since gone"}${t.categorised_at ? `, ${when(t.categorised_at)}` : ""}.`
-                      : "No rule claims it. Pick a category here, or make a rule so the next one is claimed too."}
+                  {tx.category_source === "declared"
+                    ? t("transactions.set_by_hand", {
+                        at: tx.categorised_at ? ` ${when(tx.categorised_at)}` : "",
+                      })
+                    : tx.category_source === "inferred"
+                      ? t("transactions.claimed_by_rule", {
+                          rule: rule
+                            ? `“${rule.name}” (${t("transactions.priority", { n: rule.priority })})`
+                            : t("transactions.rule_gone"),
+                          at: tx.categorised_at ? `, ${when(tx.categorised_at)}` : "",
+                        })
+                      : t("transactions.no_rule")}
                 </p>
                 <div className="flex flex-wrap gap-2 pt-1">
-                  <Button size="sm" variant="outline" onClick={() => onMakeRule(t)}>
-                    <Wand2 /> Make a rule from this
+                  <Button size="sm" variant="outline" onClick={() => onMakeRule(tx)}>
+                    <Wand2 /> {t("transactions.make_rule_from_this")}
                   </Button>
-                  {t.counterparty_name ? (
-                    <Button size="sm" variant="ghost" onClick={() => onFilter(t.counterparty_name)}>
-                      <Filter /> All from this counterparty
+                  {tx.counterparty_name ? (
+                    <Button size="sm" variant="ghost" onClick={() => onFilter(tx.counterparty_name)}>
+                      <Filter /> {t("transactions.all_from_counterparty")}
                     </Button>
                   ) : null}
                 </div>
               </section>
 
               <section className="space-y-2">
-                <h3 className="text-muted-foreground text-xs font-medium tracking-wide uppercase">Details</h3>
+                <h3 className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+                  {t("transactions.details")}
+                </h3>
                 <dl className="grid grid-cols-[8rem_1fr] gap-x-3 gap-y-1.5 text-sm">
-                  <Row k="Remittance" v={cleanRemittance(t.remittance) || "—"} mono />
-                  {t.reference_number ? <Row k="Reference" v={t.reference_number} mono /> : null}
-                  <Row k="Booked" v={day(t.booking_date)} />
-                  {t.value_date && t.value_date !== t.booking_date ? (
-                    <Row k="Value date" v={day(t.value_date)} />
+                  <Row k={t("transactions.remittance")} v={cleanRemittance(tx.remittance) || "—"} mono />
+                  {tx.reference_number ? (
+                    <Row k={t("transactions.reference")} v={tx.reference_number} mono />
                   ) : null}
-                  <Row k="Account" v={t.account_name || t.account_id} />
-                  {multi ? <Row k="Party" v={partyName(t.party_id)} /> : null}
-                  {t.counterparty_iban ? <Row k="Their IBAN" v={t.counterparty_iban} mono /> : null}
-                  {t.entry_reference ? <Row k="Bank's ref" v={t.entry_reference} mono /> : null}
-                  <Row k="Id" v={t.id} mono muted />
+                  <Row k={t("transactions.booked")} v={day(tx.booking_date)} />
+                  {tx.value_date && tx.value_date !== tx.booking_date ? (
+                    <Row k={t("transactions.value_date")} v={day(tx.value_date)} />
+                  ) : null}
+                  <Row k={t("transactions.account")} v={tx.account_name || tx.account_id} />
+                  {multi ? <Row k={t("common.party")} v={partyName(tx.party_id)} /> : null}
+                  {tx.counterparty_iban ? (
+                    <Row k={t("transactions.their_iban")} v={tx.counterparty_iban} mono />
+                  ) : null}
+                  {tx.entry_reference ? (
+                    <Row k={t("transactions.bank_ref")} v={tx.entry_reference} mono />
+                  ) : null}
+                  <Row k={t("transactions.id")} v={tx.id} mono muted />
                 </dl>
               </section>
 
               {record ? (
                 <Collapsible>
                   <CollapsibleTrigger className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs font-medium tracking-wide uppercase">
-                    <ChevronDown className="size-3.5" /> The bank&apos;s record
+                    <ChevronDown className="size-3.5" /> {t("transactions.bank_record")}
                   </CollapsibleTrigger>
                   <CollapsibleContent>
                     <pre className="bg-muted mt-2 max-h-96 overflow-auto rounded-md p-3 font-mono text-[11px] leading-snug">

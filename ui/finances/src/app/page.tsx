@@ -18,11 +18,13 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/lib/api/client";
 import { useFetch } from "@/lib/api/hooks";
 import { money, monthLabel, monthsBefore, thisMonth } from "@/lib/format";
+import { useT } from "@/lib/i18n";
 import { byCategory, byMonth, chartValue, currencies } from "@/lib/summary";
 
 const WINDOWS = [3, 6, 12, 24] as const;
 
 export default function OverviewPage() {
+  const t = useT();
   const router = useRouter();
   const { partyIds, scope, loading: partiesLoading, error: partiesError } = useFinance();
   const [window, setWindow] = useState<(typeof WINDOWS)[number]>(12);
@@ -64,12 +66,8 @@ export default function OverviewPage() {
   return (
     <>
       <PageTitle
-        title="Overview"
-        description={
-          includeInternal
-            ? "Where the money goes. Transfers with your other accounts count here."
-            : "Where the money goes. Transfers between your own accounts are left out."
-        }
+        title={t("overview.title")}
+        description={includeInternal ? t("overview.desc_internal") : t("overview.desc_no_internal")}
       >
         <ScopeToggle className="md:hidden" />
         <Select
@@ -82,7 +80,7 @@ export default function OverviewPage() {
           <SelectContent>
             {WINDOWS.map((w) => (
               <SelectItem key={w} value={String(w)}>
-                Last {w} months
+                {t("overview.last_n_months", { n: w })}
               </SelectItem>
             ))}
           </SelectContent>
@@ -103,7 +101,7 @@ export default function OverviewPage() {
       {error ? (
         <Card className="border-destructive/40">
           <CardHeader>
-            <CardTitle>Nothing to show</CardTitle>
+            <CardTitle>{t("overview.nothing_to_show")}</CardTitle>
             <CardDescription>{error}</CardDescription>
           </CardHeader>
         </Card>
@@ -116,37 +114,41 @@ export default function OverviewPage() {
           items={[
             {
               icon: ArrowDownRight,
-              label: `Spent · ${monthLabel(current)}`,
+              label: t("overview.kpi.spent", { month: monthLabel(current) }),
               value: cur ? money(cur.spent.toString(), ccy) : "—",
               previous: prev ? `${monthLabel(prev.month)}: ${money(prev.spent.toString(), ccy)}` : undefined,
               delta:
                 cur && prev && delta(cur.spent, prev.spent) != null
-                  ? { value: delta(cur.spent, prev.spent)!, label: "vs previous month", goodWhen: "down" }
+                  ? {
+                      value: delta(cur.spent, prev.spent)!,
+                      label: t("overview.vs_previous_month"),
+                      goodWhen: "down",
+                    }
                   : undefined,
             },
             {
               icon: ArrowUpRight,
-              label: `In · ${monthLabel(current)}`,
+              label: t("overview.kpi.in", { month: monthLabel(current) }),
               value: cur ? money(cur.in.toString(), ccy) : "—",
               previous: prev ? `${monthLabel(prev.month)}: ${money(prev.in.toString(), ccy)}` : undefined,
               delta:
                 cur && prev && delta(cur.in, prev.in) != null
-                  ? { value: delta(cur.in, prev.in)!, label: "vs previous month", goodWhen: "up" }
+                  ? { value: delta(cur.in, prev.in)!, label: t("overview.vs_previous_month"), goodWhen: "up" }
                   : undefined,
             },
             {
               icon: PiggyBank,
-              label: `Net · ${monthLabel(current)}`,
+              label: t("overview.kpi.net", { month: monthLabel(current) }),
               value: cur ? money((cur.in - cur.out).toString(), ccy, { sign: true }) : "—",
-              hint: "everything in minus everything out, own transfers excluded",
+              hint: t("overview.net_hint"),
             },
             {
               icon: Receipt,
-              label: "Uncategorised",
+              label: t("overview.uncategorised"),
               value: uncategorised ? money((-uncategorised.total).toString(), ccy) : money(0, ccy),
               hint: uncategorised
-                ? `${uncategorised.count} rows this month need a category`
-                : "every row this month has a category",
+                ? t("overview.uncategorised_hint", { n: uncategorised.count })
+                : t("overview.all_categorised_hint"),
             },
           ]}
         />
@@ -156,15 +158,15 @@ export default function OverviewPage() {
         <Card className="xl:col-span-3">
           <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3">
             <div>
-              <CardTitle>Money in, money spent</CardTitle>
-              <CardDescription>Click a bar to pick the month.</CardDescription>
+              <CardTitle>{t("overview.flow_title")}</CardTitle>
+              <CardDescription>{t("overview.flow_desc")}</CardDescription>
             </div>
             <div className="flex flex-wrap items-center gap-4">
               <Legend
                 items={[
-                  { label: "In", color: "var(--chart-2)" },
-                  { label: "Spent", color: "var(--chart-1)" },
-                  { label: "Transfers & capital", color: "var(--chart-4)" },
+                  { label: t("nav.chart.in"), color: "var(--chart-2)" },
+                  { label: t("nav.chart.spent"), color: "var(--chart-1)" },
+                  { label: t("nav.chart.other"), color: "var(--chart-4)" },
                 ]}
               />
               {months.length ? (
@@ -178,17 +180,20 @@ export default function OverviewPage() {
             ) : months.length ? (
               <MoneyFlowChart months={months} currency={ccy} selected={current} onSelect={setMonth} />
             ) : (
-              <p className="text-muted-foreground text-sm">No booked transactions in this window.</p>
+              <p className="text-muted-foreground text-sm">{t("overview.no_booked")}</p>
             )}
           </CardContent>
         </Card>
 
         <Card className="xl:col-span-2">
           <CardHeader>
-            <CardTitle>{monthLabel(current)} by category</CardTitle>
+            <CardTitle>{t("overview.by_category", { month: monthLabel(current) })}</CardTitle>
             <CardDescription>
               {cur
-                ? `${money(allOut.toString(), ccy)} out across ${cats.reduce((n, c) => n + c.count, 0)} rows`
+                ? t("overview.out_across", {
+                    amount: money(allOut.toString(), ccy),
+                    n: cats.reduce((n, c) => n + c.count, 0),
+                  })
                 : "—"}
             </CardDescription>
           </CardHeader>
@@ -207,7 +212,7 @@ export default function OverviewPage() {
                 }
               />
             ) : (
-              <p className="text-muted-foreground text-sm">Nothing spent.</p>
+              <p className="text-muted-foreground text-sm">{t("overview.nothing_spent")}</p>
             )}
           </CardContent>
         </Card>
@@ -216,12 +221,12 @@ export default function OverviewPage() {
       <div className="grid gap-6 md:grid-cols-3">
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>Spent, month by month</CardDescription>
+            <CardDescription>{t("overview.spent_monthly")}</CardDescription>
             <CardTitle className="text-2xl tabular-nums">
               {months.length
                 ? money((months.reduce((s, m) => s + m.spent, 0n) / BigInt(months.length)).toString(), ccy)
                 : "—"}
-              <span className="text-muted-foreground ml-2 text-sm font-normal">avg</span>
+              <span className="text-muted-foreground ml-2 text-sm font-normal">{t("overview.avg")}</span>
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -230,12 +235,12 @@ export default function OverviewPage() {
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>In, month by month</CardDescription>
+            <CardDescription>{t("overview.in_monthly")}</CardDescription>
             <CardTitle className="text-2xl tabular-nums">
               {months.length
                 ? money((months.reduce((s, m) => s + m.in, 0n) / BigInt(months.length)).toString(), ccy)
                 : "—"}
-              <span className="text-muted-foreground ml-2 text-sm font-normal">avg</span>
+              <span className="text-muted-foreground ml-2 text-sm font-normal">{t("overview.avg")}</span>
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -244,17 +249,15 @@ export default function OverviewPage() {
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>Accounts</CardDescription>
+            <CardDescription>{t("overview.accounts")}</CardDescription>
             <CardTitle className="flex items-center gap-2 text-2xl">
-              <Wallet className="text-muted-foreground size-5" /> Balances & sync
+              <Wallet className="text-muted-foreground size-5" /> {t("overview.balances_sync")}
             </CardTitle>
           </CardHeader>
           <CardContent className="flex items-end justify-between gap-2">
-            <p className="text-muted-foreground text-sm">
-              Every linked account, when it was last fetched, and what the bank says it holds.
-            </p>
+            <p className="text-muted-foreground text-sm">{t("overview.accounts_desc")}</p>
             <Button asChild variant="outline" size="sm">
-              <Link href="/accounts/">Open</Link>
+              <Link href="/accounts/">{t("overview.open")}</Link>
             </Button>
           </CardContent>
         </Card>

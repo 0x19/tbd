@@ -37,10 +37,21 @@ import {
   WatchConnectorsResponse,
 } from "@/lib/api/schema";
 import { ago, when } from "@/lib/format";
+import { useT } from "@/lib/i18n";
 
 type Entry = { connector: Connector; run: ConnectorRun | null };
 
+type T = ReturnType<typeof useT>;
+
+/** A kind's text in the page's language when the dictionary has it, else the server's. */
+function kindText(t: T, k: ConnectorKind, field: "label" | "description" | "consent_note"): string {
+  const key = `kinds.${k.name}.${field}`;
+  const v = t(key);
+  return v === key ? k[field] : v;
+}
+
 export default function ConnectorsPage() {
+  const t = useT();
   const { parties, partyIds, partyName, multi } = useFinance();
   const key = partyIds.join(",");
   const kinds = useFetch(() => api.connectorKinds(), 0);
@@ -85,14 +96,14 @@ export default function ConnectorsPage() {
 
   return (
     <>
-      <PageTitle
-        title="Connectors"
-        description="Mailboxes and portals the system pulls receipts from. Read-only, and only what you link."
-      >
+      <PageTitle title={t("connectors.title")} description={t("connectors.description")}>
         <div className="flex items-center gap-3">
-          <Dot tone={feed.live ? "good" : "off"} label={feed.live ? "Live" : "Polling"} />
+          <Dot
+            tone={feed.live ? "good" : "off"}
+            label={feed.live ? t("connectors.live") : t("connectors.polling")}
+          />
           <Button size="sm" onClick={() => setLinking(true)}>
-            <Plus /> Link a mailbox
+            <Plus /> {t("connectors.link_mailbox")}
           </Button>
         </div>
       </PageTitle>
@@ -106,7 +117,9 @@ export default function ConnectorsPage() {
       />
 
       {list.error ? <p className="text-destructive text-sm">{list.error}</p> : null}
-      {feed.error ? <p className="text-destructive text-sm">Feed: {feed.error}</p> : null}
+      {feed.error ? (
+        <p className="text-destructive text-sm">{t("connectors.feed_error", { error: feed.error })}</p>
+      ) : null}
       {list.loading && !list.data ? <Skeleton className="h-40 w-full" /> : null}
       <div className="space-y-3">
         {rows.map((e) => (
@@ -119,9 +132,7 @@ export default function ConnectorsPage() {
           />
         ))}
         {list.data && rows.length === 0 ? (
-          <p className="text-muted-foreground text-sm">
-            Nothing linked yet. Link a mailbox to start collecting receipts.
-          </p>
+          <p className="text-muted-foreground text-sm">{t("connectors.nothing_linked")}</p>
         ) : null}
       </div>
     </>
@@ -141,6 +152,7 @@ function LinkDialog({
   parties: { id: string; display_name: string }[];
   defaultParty: string;
 }) {
+  const t = useT();
   const [kind, setKind] = useState("");
   const [party, setParty] = useState(defaultParty);
   const [busy, setBusy] = useState(false);
@@ -165,14 +177,12 @@ function LinkDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Link a mailbox</DialogTitle>
-          <DialogDescription>
-            Each account authorizes on its own side; the party is yours to choose here and to change later.
-          </DialogDescription>
+          <DialogTitle>{t("connectors.link_mailbox")}</DialogTitle>
+          <DialogDescription>{t("connectors.link_dialog_desc")}</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label>Kind</Label>
+            <Label>{t("connectors.kind")}</Label>
             <div className="grid gap-2">
               {kinds.map((k) => (
                 <button
@@ -185,20 +195,20 @@ function LinkDialog({
                     (kind === k.name ? "border-foreground" : "hover:bg-muted/50")
                   }
                 >
-                  <div className="font-medium">{k.label}</div>
-                  <div className="text-muted-foreground text-xs">{k.description}</div>
+                  <div className="font-medium">{kindText(t, k, "label")}</div>
+                  <div className="text-muted-foreground text-xs">{kindText(t, k, "description")}</div>
                   {!k.configured ? (
-                    <div className="text-xs text-amber-600">Not configured on the server yet.</div>
+                    <div className="text-xs text-amber-600">{t("connectors.not_configured")}</div>
                   ) : null}
                 </button>
               ))}
             </div>
           </div>
           <div className="space-y-2">
-            <Label>Belongs to</Label>
+            <Label>{t("connectors.belongs_to")}</Label>
             <Select value={party} onValueChange={setParty}>
               <SelectTrigger className="w-full">
-                <SelectValue placeholder="Party" />
+                <SelectValue placeholder={t("common.party")} />
               </SelectTrigger>
               <SelectContent>
                 {parties.map((p) => (
@@ -209,11 +219,17 @@ function LinkDialog({
               </SelectContent>
             </Select>
           </div>
-          {chosen ? <p className="text-muted-foreground text-xs">{chosen.consent_note}</p> : null}
+          {chosen ? (
+            <p className="text-muted-foreground text-xs">{kindText(t, chosen, "consent_note")}</p>
+          ) : null}
         </div>
         <DialogFooter>
           <Button onClick={() => void start()} disabled={busy || !kind || !party}>
-            {busy ? "Opening…" : `Continue to ${chosen?.label.split(" /")[0] ?? "provider"}`}
+            {busy
+              ? t("connectors.opening")
+              : t("connectors.continue_to", {
+                  provider: chosen ? kindText(t, chosen, "label").split(" /")[0] : t("connectors.provider"),
+                })}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -232,6 +248,7 @@ function ConnectorRow({
   partyName: (id: string) => string;
   onChanged: () => void;
 }) {
+  const t = useT();
   const [busy, setBusy] = useState("");
   const [open, setOpen] = useState<"" | "settings" | "history">("");
   const [query, setQuery] = useState(() => {
@@ -275,7 +292,7 @@ function ConnectorRow({
                   variant="outline"
                   className="gap-1 border-transparent bg-amber-500/15 text-[10px] text-amber-700 dark:text-amber-300"
                 >
-                  <Loader2 className="size-3 animate-spin" /> syncing
+                  <Loader2 className="size-3 animate-spin" /> {t("status.syncing")}
                 </Badge>
               ) : (
                 <StatusBadge status={c.status} className="text-[10px]" />
@@ -291,7 +308,7 @@ function ConnectorRow({
                 onValueChange={(party_id) =>
                   void act("party", async () => {
                     await api.configureConnector(c.id, { party_id });
-                    return `Moved to ${partyName(party_id)}, with the receipts only it pulled.`;
+                    return t("connectors.moved_to", { party: partyName(party_id) });
                   })
                 }
               >
@@ -322,19 +339,23 @@ function ConnectorRow({
               }
             >
               <RefreshCw className={pulling ? "animate-spin" : undefined} />{" "}
-              {pulling ? "Pulling…" : "Pull now"}
+              {pulling ? t("connectors.pulling") : t("connectors.pull_now")}
             </Button>
             <Button
               variant="ghost"
               size="sm"
               disabled={busy !== "" || c.status !== "linked"}
-              onClick={() => void act("test", async () => `OK: ${(await api.testConnector(c.id)).status}`)}
-              title="Prove the link still works"
+              onClick={() =>
+                void act("test", async () =>
+                  t("connectors.test_ok", { status: (await api.testConnector(c.id)).status }),
+                )
+              }
+              title={t("connectors.test_title")}
             >
-              <Wrench /> {busy === "test" ? "Testing…" : "Test"}
+              <Wrench /> {busy === "test" ? t("connectors.testing") : t("connectors.test")}
             </Button>
             <Button variant="ghost" size="sm" onClick={() => setOpen(open === "history" ? "" : "history")}>
-              <History /> History
+              <History /> {t("connectors.history")}
             </Button>
             {c.kind === "gmail" ? (
               <Button
@@ -342,19 +363,19 @@ function ConnectorRow({
                 size="sm"
                 onClick={() => setOpen(open === "settings" ? "" : "settings")}
               >
-                Filter
+                {t("connectors.filter")}
               </Button>
             ) : null}
             <Button
               variant="ghost"
               size="sm"
               disabled={busy !== ""}
-              title="Remove"
+              title={t("common.remove")}
               onClick={() => {
-                if (window.confirm("Remove this connector? Documents already pulled stay."))
+                if (window.confirm(t("connectors.remove_confirm")))
                   void act("delete", async () => {
                     await api.deleteConnector(c.id);
-                    return "Removed.";
+                    return t("common.removed");
                   });
               }}
             >
@@ -367,7 +388,7 @@ function ConnectorRow({
           <div className="flex flex-wrap items-end gap-2 border-t pt-3">
             <div className="min-w-72 flex-1">
               <Label className="text-muted-foreground mb-1.5 block text-xs">
-                Gmail search (empty: any PDF attachment)
+                {t("connectors.gmail_search")}
               </Label>
               <Input
                 value={query}
@@ -383,11 +404,11 @@ function ConnectorRow({
               onClick={() =>
                 void act("config", async () => {
                   await api.configureConnector(c.id, { config: JSON.stringify({ query }) });
-                  return "Saved.";
+                  return t("common.saved");
                 })
               }
             >
-              Save
+              {t("common.save")}
             </Button>
           </div>
         ) : null}
@@ -395,15 +416,15 @@ function ConnectorRow({
         {open === "history" ? (
           <div className="border-t pt-3 text-xs">
             {(history.data?.runs ?? []).length === 0 ? (
-              <p className="text-muted-foreground">No runs yet.</p>
+              <p className="text-muted-foreground">{t("connectors.no_runs")}</p>
             ) : null}
             {(history.data?.runs ?? []).map((r: ConnectorRun) => (
               <div key={r.id} className="flex flex-wrap items-center gap-3 border-b py-1 last:border-0">
                 <span className="text-muted-foreground w-36">{when(r.started_at)}</span>
-                <span className="w-16">{r.trigger}</span>
+                <span className="w-16">{triggerWord(t, r.trigger)}</span>
                 <StatusBadge status={r.outcome || "running"} className="text-[10px]" />
                 <span>
-                  found {r.found} · stored {r.stored} · skipped {r.skipped}
+                  {t("connectors.run_counts", { found: r.found, stored: r.stored, skipped: r.skipped })}
                 </span>
                 {r.error ? <span className="text-destructive">{r.error}</span> : null}
               </div>
@@ -415,30 +436,43 @@ function ConnectorRow({
   );
 }
 
+/** A run's trigger word in the page's language when the dictionary has it, else as sent. */
+function triggerWord(t: T, trigger: string): string {
+  const key = `status.${trigger}`;
+  const v = t(key);
+  return v === key ? trigger : v;
+}
+
 /** What the latest run is doing or did, in one line that moves while it pulls. */
 function RunLine({ run, c }: { run: ConnectorRun | null; c: Connector }) {
+  const t = useT();
   if (run && run.outcome === "") {
     return (
       <p className="text-muted-foreground text-xs">
-        Pulling since {ago(run.started_at)} · found {run.found} · stored {run.stored} new · {run.skipped}{" "}
-        already known
+        {t("connectors.pulling_since", {
+          ago: ago(run.started_at),
+          found: run.found,
+          stored: run.stored,
+          skipped: run.skipped,
+        })}
       </p>
     );
   }
   if (run) {
     return (
       <p className="text-muted-foreground text-xs">
-        Last pull {ago(run.finished_at || run.started_at)} ·{" "}
-        <StatusBadge status={run.outcome} className="text-[10px]" /> · found {run.found} · stored {run.stored}{" "}
-        new · {run.skipped} already known
-        {run.outcome === "partial" ? " · more remains, pull again" : ""}
+        {t("connectors.last_pull", { ago: ago(run.finished_at || run.started_at) })} ·{" "}
+        <StatusBadge status={run.outcome} className="text-[10px]" /> ·{" "}
+        {t("connectors.run_summary", { found: run.found, stored: run.stored, skipped: run.skipped })}
+        {run.outcome === "partial" ? ` · ${t("connectors.more_remains")}` : ""}
         {run.error ? <span className="text-destructive"> · {run.error}</span> : null}
       </p>
     );
   }
   return (
     <p className="text-muted-foreground text-xs">
-      {c.linked_at ? `Linked ${when(c.linked_at)}` : "Not linked"} · never pulled
+      {c.linked_at ? t("connectors.linked_at", { when: when(c.linked_at) }) : t("connectors.not_linked")} ·{" "}
+      {t("connectors.never_pulled")}
     </p>
   );
 }

@@ -4,6 +4,7 @@ import { Search } from "lucide-react";
 import { ComponentProps } from "react";
 
 import { Input } from "@/components/ui/input";
+import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 interface SearchInputProps extends Omit<ComponentProps<"input">, "onChange"> {
@@ -12,18 +13,14 @@ interface SearchInputProps extends Omit<ComponentProps<"input">, "onChange"> {
   className?: string;
 }
 
-export function SearchInput({
-  placeholder = "Search...",
-  onChange,
-  className = "",
-  ...rest
-}: SearchInputProps) {
+export function SearchInput({ placeholder, onChange, className = "", ...rest }: SearchInputProps) {
+  const t = useT();
   return (
     <div className={cn("relative", className)}>
       <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
       <Input
         type="search"
-        placeholder={placeholder}
+        placeholder={placeholder ?? t("nav.search_placeholder")}
         onChange={(e) => onChange && onChange(e.target.value)}
         className="pr-4 pl-10"
         {...rest}

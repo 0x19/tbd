@@ -99,15 +99,165 @@ pub struct Policy {
     pub need: Need,
 }
 
+/// A reason as a code with arguments: what the page translates, and what
+/// `describe` spells out in English. Stored as `code[:arg…]`, joined by `|`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Why {
+    /// The code.
+    pub code: &'static str,
+    /// Named arguments, in the order the code defines.
+    pub args: Vec<(&'static str, String)>,
+}
+
+impl Why {
+    fn new(code: &'static str) -> Self {
+        Self {
+            code,
+            args: Vec::new(),
+        }
+    }
+
+    fn money(code: &'static str, minor: i64, currency: &str) -> Self {
+        Self {
+            code,
+            args: vec![
+                ("amount_minor", minor.to_string()),
+                ("currency", currency.to_owned()),
+            ],
+        }
+    }
+
+    /// The English sentence.
+    #[must_use]
+    pub fn describe(&self) -> String {
+        let arg = |k: &str| {
+            self.args
+                .iter()
+                .find(|(n, _)| *n == k)
+                .map(|(_, v)| v.as_str())
+        };
+        let money_of = || {
+            let minor: i64 = arg("amount_minor")
+                .and_then(|m| m.parse().ok())
+                .unwrap_or(0);
+            format!("{} {}", money(minor), arg("currency").unwrap_or(""))
+        };
+        match self.code {
+            "internal" => "transfer between own accounts".into(),
+            "income" => "money in".into(),
+            "policy" => "policy".into(),
+            "state_budget" => "state budget: tax or contribution".into(),
+            "payout_person" => "payout to a person: salary, dividend, allowance".into(),
+            "cash" => "cash withdrawal".into(),
+            "bank_fee" => "bank fee: the statement is the document".into(),
+            "domestic_iban" => "domestic supplier: e-invoice reaches the accountant".into(),
+            "card_original" => format!("card, charged {}", money_of()),
+            "card" => "card payment".into(),
+            "foreign_transfer" => "foreign transfer".into(),
+            "amount_original" | "amount" => format!("amount {}", money_of()),
+            "amount_fx" => format!("≈ {} at FX", money_of()),
+            "vendor" => "vendor".into(),
+            "same_days" => "same days".into(),
+            "days_apart" => format!("{} days apart", arg("days").unwrap_or("?")),
+            "by_hand" => "linked by hand".into(),
+            other => other.to_owned(),
+        }
+    }
+
+    /// `code:arg:arg`, for the row.
+    #[must_use]
+    pub fn encode(&self) -> String {
+        std::iter::once(self.code.to_owned())
+            .chain(self.args.iter().map(|(_, v)| v.clone()))
+            .collect::<Vec<_>>()
+            .join(":")
+    }
+
+    /// Back from `encode`, argument names restored from the code.
+    #[must_use]
+    pub fn decode(s: &str) -> Self {
+        let mut parts = s.split(':');
+        let code: &'static str = match parts.next().unwrap_or("") {
+            "internal" => "internal",
+            "income" => "income",
+            "policy" => "policy",
+            "state_budget" => "state_budget",
+            "payout_person" => "payout_person",
+            "cash" => "cash",
+            "bank_fee" => "bank_fee",
+            "domestic_iban" => "domestic_iban",
+            "card_original" => "card_original",
+            "card" => "card",
+            "foreign_transfer" => "foreign_transfer",
+            "amount_original" => "amount_original",
+            "amount" => "amount",
+            "amount_fx" => "amount_fx",
+            "vendor" => "vendor",
+            "same_days" => "same_days",
+            "days_apart" => "days_apart",
+            "by_hand" => "by_hand",
+            _ => "unknown",
+        };
+        let names: &[&'static str] = match code {
+            "card_original" | "amount_original" | "amount" | "amount_fx" => {
+                &["amount_minor", "currency"]
+            }
+            "days_apart" => &["days"],
+            _ => &[],
+        };
+        Self {
+            code,
+            args: names
+                .iter()
+                .zip(parts)
+                .map(|(n, v)| (*n, v.to_owned()))
+                .collect(),
+        }
+    }
+}
+
+/// Several reasons, `|`-joined, as stored on a link.
+#[must_use]
+pub fn encode_all(why: &[Why]) -> String {
+    why.iter().map(Why::encode).collect::<Vec<_>>().join("|")
+}
+
+/// Back from `encode_all`. An older row holding an English sentence
+/// decodes to one unknown reason whose description is the sentence itself.
+#[must_use]
+pub fn decode_all(s: &str) -> Vec<Why> {
+    if s.is_empty() {
+        return Vec::new();
+    }
+    s.split('|').map(Why::decode).collect()
+}
+
+/// The English of several reasons, " · "-joined.
+#[must_use]
+pub fn describe_all(why: &[Why]) -> String {
+    why.iter()
+        .map(Why::describe)
+        .collect::<Vec<_>>()
+        .join(" · ")
+}
+
 /// The decision, with why.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Decision {
     /// What is needed.
     pub need: Need,
-    /// One line the page shows.
-    pub reason: String,
+    /// Why, as a code the page can translate.
+    pub why: Why,
     /// The policy that decided, if one did.
     pub policy_id: Option<Uuid>,
+}
+
+impl Decision {
+    /// The English sentence.
+    #[must_use]
+    pub fn reason(&self) -> String {
+        self.why.describe()
+    }
 }
 
 /// Upper-case ASCII, diacritics folded, the way `finance.normalise` does
@@ -167,9 +317,9 @@ const STATE: &[&str] = &[
 /// What the accountant needs, from the facts and the person's policies.
 #[must_use]
 pub fn classify(tx: &TxFacts, policies: &[Policy]) -> Decision {
-    let decide = |need: Need, reason: &str| Decision {
+    let decide = |need: Need, why: Why| Decision {
         need,
-        reason: reason.to_owned(),
+        why,
         policy_id: None,
     };
     // Tax and payouts first: a salary or dividend goes to the owner's own
@@ -178,19 +328,16 @@ pub fn classify(tx: &TxFacts, policies: &[Policy]) -> Decision {
     let name = normalise(&tx.counterparty_name);
     let reference = tx.reference_number.trim().to_ascii_uppercase();
     if !tx.credit && (reference.starts_with("HR68") || STATE.iter().any(|s| name.contains(s))) {
-        return decide(Need::None, "state budget: tax or contribution");
+        return decide(Need::None, Why::new("state_budget"));
     }
     if !tx.credit && reference.starts_with("HR69 40002") {
-        return decide(
-            Need::None,
-            "payout to a person: salary, dividend, allowance",
-        );
+        return decide(Need::None, Why::new("payout_person"));
     }
     if tx.internal {
-        return decide(Need::Internal, "transfer between own accounts");
+        return decide(Need::Internal, Why::new("internal"));
     }
     if tx.credit {
-        return decide(Need::Income, "money in");
+        return decide(Need::Income, Why::new("income"));
     }
     if let Some(p) = policies.iter().find(|p| {
         if p.exact {
@@ -201,33 +348,27 @@ pub fn classify(tx: &TxFacts, policies: &[Policy]) -> Decision {
     }) {
         return Decision {
             need: p.need,
-            reason: "policy".into(),
+            why: Why::new("policy"),
             policy_id: Some(p.id),
         };
     }
     let text = normalise(&tx.remittance);
     if tx.counterparty_iban.is_empty() && (name.contains(" ATM") || name.starts_with("ATM")) {
-        return decide(Need::None, "cash withdrawal");
+        return decide(Need::None, Why::new("cash"));
     }
     if name.contains("BANK") && text.contains("NAKNAD") {
-        return decide(Need::None, "bank fee: the statement is the document");
+        return decide(Need::None, Why::new("bank_fee"));
     }
     if tx.counterparty_iban.to_ascii_uppercase().starts_with("HR") {
-        return decide(
-            Need::Eracun,
-            "domestic supplier: e-invoice reaches the accountant",
-        );
+        return decide(Need::Eracun, Why::new("domestic_iban"));
     }
     if tx.counterparty_iban.is_empty() {
         if let Some((minor, cur)) = original_amount(&tx.remittance) {
-            return decide(
-                Need::Receipt,
-                &format!("card, charged {} {cur}", money(minor)),
-            );
+            return decide(Need::Receipt, Why::money("card_original", minor, &cur));
         }
-        return decide(Need::Receipt, "card payment");
+        return decide(Need::Receipt, Why::new("card"));
     }
-    decide(Need::Receipt, "foreign transfer")
+    decide(Need::Receipt, Why::new("foreign_transfer"))
 }
 
 fn money(minor: i64) -> String {
@@ -257,22 +398,22 @@ pub const SUGGEST: u8 = 35;
 
 /// How well a receipt fits a transaction, with what fitted.
 #[must_use]
-pub fn score(tx: &TxFacts, doc: &DocFacts) -> Option<(u8, String)> {
+pub fn score(tx: &TxFacts, doc: &DocFacts) -> Option<(u8, Vec<Why>)> {
     let mut points = 0u8;
-    let mut why: Vec<String> = Vec::new();
+    let mut why: Vec<Why> = Vec::new();
     let paid = tx.amount_minor.abs();
     match (doc.total_minor, original_amount(&tx.remittance)) {
         (Some(total), Some((orig, cur))) if doc.currency == cur && total == orig => {
             points += 60;
-            why.push(format!("amount {} {cur}", money(total)));
+            why.push(Why::money("amount_original", total, &cur));
         }
         (Some(total), _) if doc.currency == tx.currency && total == paid => {
             points += 60;
-            why.push(format!("amount {} {}", money(total), tx.currency));
+            why.push(Why::money("amount", total, &tx.currency));
         }
         (Some(total), _) if doc.currency != tx.currency && within(total, paid, 12) => {
             points += 20;
-            why.push(format!("≈ {} {} at FX", money(total), doc.currency));
+            why.push(Why::money("amount_fx", total, &doc.currency));
         }
         _ => {}
     }
@@ -286,25 +427,29 @@ pub fn score(tx: &TxFacts, doc: &DocFacts) -> Option<(u8, String)> {
         .any(|t| party.contains(t));
     if vendor_hit {
         points += 30;
-        why.push("vendor".into());
+        why.push(Why::new("vendor"));
     }
     if let Some(d) = doc.doc_date {
         let days = (tx.booking_date - d).num_days().abs();
+        let apart = Why {
+            code: "days_apart",
+            args: vec![("days", days.to_string())],
+        };
         if days <= 3 {
             points += 10;
-            why.push("same days".into());
+            why.push(Why::new("same_days"));
         } else if days <= 10 {
             points += 5;
-            why.push(format!("{days} days apart"));
+            why.push(apart);
         } else {
             // Last month's invoice for this month's charge of the same
             // amount: a subscription, and the wrong receipt. Offered, not
             // linked.
             points = points.saturating_sub(25);
-            why.push(format!("{days} days apart"));
+            why.push(apart);
         }
     }
-    (points >= SUGGEST).then(|| (points, why.join(" · ")))
+    (points >= SUGGEST).then_some((points, why))
 }
 
 fn within(a: i64, b: i64, percent: i64) -> bool {
@@ -433,7 +578,7 @@ mod tests {
         ];
         for (t, want) in cases {
             let got = classify(&t, &[]);
-            assert_eq!(got.need, want, "{}: {}", t.counterparty_name, got.reason);
+            assert_eq!(got.need, want, "{}: {}", t.counterparty_name, got.reason());
         }
     }
 
@@ -446,7 +591,7 @@ mod tests {
             "HR99",
             -6636,
         );
-        assert_eq!(classify(&card, &[]).reason, "card, charged 75,00 USD");
+        assert_eq!(classify(&card, &[]).reason(), "card, charged 75,00 USD");
         let mut own = tx("Vesic Nevio", "HR3924020061100000000", "x", "", -100);
         own.internal = true;
         assert_eq!(classify(&own, &[]).need, Need::Internal);
@@ -461,7 +606,7 @@ mod tests {
         );
         salary.internal = true;
         let got = classify(&salary, &[]);
-        assert_eq!(got.need, Need::None, "{}", got.reason);
+        assert_eq!(got.need, Need::None, "{}", got.reason());
     }
 
     #[test]
@@ -532,6 +677,7 @@ mod tests {
             currency: "USD".into(),
         };
         let (points, why) = score(&t, &exact).unwrap();
+        let why = describe_all(&why);
         assert!(points >= LINK, "{points}: {why}");
         assert!(why.contains("amount 75,00 USD") && why.contains("vendor"));
         // Same vendor, another month's charge: a suggestion, not a link.
@@ -549,7 +695,16 @@ mod tests {
             ..exact.clone()
         };
         let (points, why) = score(&t, &last_month).unwrap();
+        let why = describe_all(&why);
         assert!((SUGGEST..LINK).contains(&points), "{points}: {why}");
+        // Codes survive the row and come back with their arguments.
+        let stored = encode_all(&score(&t, &exact).unwrap().1);
+        assert_eq!(stored, "amount_original:7500:USD|vendor|same_days");
+        assert_eq!(
+            describe_all(&decode_all(&stored)),
+            "amount 75,00 USD · vendor · same days"
+        );
+        assert_eq!(decode_all("by_hand")[0].describe(), "linked by hand");
         // Nothing in common: not even a suggestion.
         let stranger = DocFacts {
             id: Uuid::new_v4(),

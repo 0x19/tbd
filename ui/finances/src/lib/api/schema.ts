@@ -410,6 +410,8 @@ export const DocumentResponse = z.object({ document: Document.nullable().optiona
 export const GetDocumentResponse = z.object({ document: Document.nullable().optional(), bytes: z.string() });
 
 // ---- reconciliation (the accountant's month) ----
+export const Reason = z.object({ code: z.string(), args: z.record(z.string(), z.string()) });
+export type Reason = z.infer<typeof Reason>;
 export const LinkedDocument = z.object({
   document_id: z.string(),
   vendor: z.string(),
@@ -422,6 +424,7 @@ export const LinkedDocument = z.object({
   source: z.string(),
   confidence: z.number(),
   reason: z.string(),
+  why: z.array(Reason),
 });
 export type LinkedDocument = z.infer<typeof LinkedDocument>;
 export const ReconciliationRow = z.object({
@@ -436,6 +439,7 @@ export const ReconciliationRow = z.object({
   policy_id: z.string(),
   original_amount_minor: z.string(),
   original_currency: z.string(),
+  need_why: Reason.nullable().optional(),
 });
 export type ReconciliationRow = z.infer<typeof ReconciliationRow>;
 export const CounterpartyPolicy = z.object({

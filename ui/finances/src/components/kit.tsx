@@ -10,6 +10,7 @@ import { ArrowDownRight, ArrowUpRight, ChevronDown, type LucideIcon } from "luci
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 export function PageTitle({
@@ -207,12 +208,13 @@ export function FilterRail({
   onChange: (group: string, values: string[]) => void;
   onReset: () => void;
 }) {
+  const t = useT();
   return (
     <div className="grid content-start gap-4 border-r pr-4">
       <div className="flex items-center justify-between">
-        <span className="text-sm font-semibold">Filters</span>
+        <span className="text-sm font-semibold">{t("nav.filters")}</span>
         <Button variant="outline" size="sm" onClick={onReset}>
-          Reset
+          {t("nav.reset")}
         </Button>
       </div>
       {groups.map((g) => (

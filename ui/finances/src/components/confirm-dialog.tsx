@@ -12,6 +12,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -30,6 +31,7 @@ interface Props {
 }
 
 export function ConfirmDialog(props: Props) {
+  const t = useT();
   const {
     title,
     desc,
@@ -54,13 +56,13 @@ export function ConfirmDialog(props: Props) {
         </AlertDialogHeader>
         {children}
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={isLoading}>{cancelBtnText ?? "Cancel"}</AlertDialogCancel>
+          <AlertDialogCancel disabled={isLoading}>{cancelBtnText ?? t("common.cancel")}</AlertDialogCancel>
           <Button
             variant={destructive ? "destructive" : "default"}
             onClick={handleConfirm}
             disabled={disabled || isLoading}
           >
-            {confirmText ?? "Continue"}
+            {confirmText ?? t("nav.continue")}
           </Button>
         </AlertDialogFooter>
       </AlertDialogContent>

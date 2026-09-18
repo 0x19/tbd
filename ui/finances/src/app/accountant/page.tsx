@@ -5,8 +5,8 @@
 // tax and salary carry their own paperwork), or a receipt we owe -- and for
 // those, which pulled receipt covers it. Rules decide by default; a policy
 // on a counterparty or a link made by hand overrides them. The bundle is
-// built here, in the browser: the covered receipts, a summary, and the list
-// of what is still missing.
+// built here, in the browser, in the page's language: the covered receipts,
+// a summary, and the list of what is still missing.
 import {
   CheckCircle2,
   CircleDashed,
@@ -33,32 +33,23 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { api } from "@/lib/api/client";
 import { describe, useFetch } from "@/lib/api/hooks";
-import type { LinkedDocument, ReconciliationRow } from "@/lib/api/schema";
-import { money, monthLabel, monthsBefore, thisMonth } from "@/lib/format";
+import type { LinkedDocument, Reason, ReconciliationRow } from "@/lib/api/schema";
+import { dateOnly, money, monthLong, monthsBefore, thisMonth } from "@/lib/format";
+import { useT } from "@/lib/i18n";
 import { safeName, zip } from "@/lib/zip";
 
-const NEEDS: Record<string, { label: string; tone: string }> = {
-  receipt: { label: "receipt", tone: "" },
-  eracun: { label: "eRačun", tone: "border-transparent bg-sky-500/15 text-sky-700 dark:text-sky-300" },
-  none: { label: "nothing needed", tone: "border-transparent bg-muted text-muted-foreground" },
-  personal: {
-    label: "personal",
-    tone: "border-transparent bg-violet-500/15 text-violet-700 dark:text-violet-300",
-  },
-  income: {
-    label: "income",
-    tone: "border-transparent bg-emerald-600/12 text-emerald-700 dark:text-emerald-300",
-  },
-  internal: { label: "own transfer", tone: "border-transparent bg-muted text-muted-foreground" },
+type T = ReturnType<typeof useT>;
+
+const NEED_TONE: Record<string, string> = {
+  receipt: "",
+  eracun: "border-transparent bg-sky-500/15 text-sky-700 dark:text-sky-300",
+  none: "border-transparent bg-muted text-muted-foreground",
+  personal: "border-transparent bg-violet-500/15 text-violet-700 dark:text-violet-300",
+  income: "border-transparent bg-emerald-600/12 text-emerald-700 dark:text-emerald-300",
+  internal: "border-transparent bg-muted text-muted-foreground",
 };
 
-const POLICY_CHOICES: [string, string][] = [
-  ["auto", "Decide by the rules"],
-  ["eracun", "eRačun: the supplier delivers it"],
-  ["receipt", "Receipt needed from us"],
-  ["none", "Nothing needed"],
-  ["personal", "Personal, not a business cost"],
-];
+const POLICIES = ["auto", "eracun", "receipt", "none", "personal"] as const;
 
 const ORDER: Record<string, number> = { receipt: 0, eracun: 2, personal: 3, none: 4, internal: 5, income: 6 };
 
@@ -83,7 +74,26 @@ function amountOf(r: ReconciliationRow): string {
   return money(r.transaction.amount_minor, r.transaction.currency);
 }
 
+/** A server reason, in the page's language: the code with its arguments. */
+function sayWhy(t: T, prefix: "need" | "why", r: Reason | null | undefined, fallback: string): string {
+  if (!r) return fallback;
+  const vars: Record<string, string> = { ...r.args };
+  if (r.args.amount_minor) vars.amount = money(r.args.amount_minor, r.args.currency || "EUR");
+  const out = t(`${prefix}.${r.code}`, vars);
+  return out === `${prefix}.${r.code}` ? fallback : out;
+}
+
+function sayWhys(t: T, d: LinkedDocument): string {
+  if (!d.why.length) return d.reason;
+  return d.why.map((w) => sayWhy(t, "why", w, w.code)).join(" · ");
+}
+
+function needLabel(t: T, need: string): string {
+  return t(`accountant.need.${need}`);
+}
+
 export default function AccountantPage() {
+  const t = useT();
   const { parties } = useFinance();
   const orgs = useMemo(() => parties.filter((p) => p.kind === "org"), [parties]);
   const [party, setParty] = useState("");
@@ -96,7 +106,8 @@ export default function AccountantPage() {
   const [month, setMonth] = useState(() => monthsBefore(thisMonth(), 1));
   const [only, setOnly] = useState<"all" | "missing" | "receipt" | "eracun" | "other">("all");
   const data = useFetch(
-    () => (chosen ? api.reconciliation(chosen, month) : Promise.reject(new Error("no company in scope"))),
+    () =>
+      chosen ? api.reconciliation(chosen, month) : Promise.reject(new Error(t("accountant.no_company"))),
     0,
     [chosen, month],
   );
@@ -130,47 +141,42 @@ export default function AccountantPage() {
     const by = new Map<string, bigint>();
     for (const r of missing) {
       const c = r.transaction.currency;
-      by.set(
-        c,
-        (by.get(c) ?? 0n) +
-          (BigInt(r.transaction.amount_minor) < 0n
-            ? -BigInt(r.transaction.amount_minor)
-            : BigInt(r.transaction.amount_minor)),
-      );
+      const v = BigInt(r.transaction.amount_minor);
+      by.set(c, (by.get(c) ?? 0n) + (v < 0n ? -v : v));
     }
     return [...by.entries()].map(([c, m]) => money(m.toString(), c)).join(" + ");
   }, [missing]);
 
-  const summaryText = () => {
-    const lines = [
-      `${chosenName} · ${monthLabel(month)}`,
+  const line = (r: ReconciliationRow) =>
+    `  ${dateOnly(r.transaction.booking_date)}  ${r.transaction.counterparty_name}  ${amountOf(r)}`;
+  const summaryText = () =>
+    [
+      `${chosenName} · ${monthLong(month)}`,
       "",
-      `Receipts attached (${covered.length}):`,
+      t("accountant.bundle.readme_attached", { n: covered.length }),
       ...covered.map(
         (r) =>
-          `  ${r.transaction.booking_date}  ${r.transaction.counterparty_name}  ${amountOf(r)}  → ${r.documents.map((d) => `${d.vendor} ${d.invoice_no || d.filename}`).join(", ")}`,
+          `${line(r)}  → ${r.documents.map((d) => `${d.vendor} ${d.invoice_no || d.filename}`).join(", ")}`,
       ),
       "",
-      `Still missing a receipt (${missing.length}):`,
+      t("accountant.bundle.readme_missing", { n: missing.length }),
       ...missing.map(
         (r) =>
-          `  ${r.transaction.booking_date}  ${r.transaction.counterparty_name}  ${amountOf(r)}${r.original_amount_minor ? ` (${money(r.original_amount_minor, r.original_currency)})` : ""}`,
+          `${line(r)}${r.original_amount_minor ? ` (${money(r.original_amount_minor, r.original_currency)})` : ""}`,
       ),
       "",
-      `Domestic suppliers, e-invoiced to you directly (${eracun.length}):`,
-      ...eracun.map(
-        (r) => `  ${r.transaction.booking_date}  ${r.transaction.counterparty_name}  ${amountOf(r)}`,
-      ),
-    ];
-    return lines.join("\n");
-  };
+      t("accountant.bundle.readme_eracun", { n: eracun.length }),
+      ...eracun.map(line),
+    ].join("\n");
 
   const [bundling, setBundling] = useState(false);
   const bundle = async () => {
     setBundling(true);
     try {
+      const folder = t("accountant.bundle.folder");
       const entries: { name: string; bytes: Uint8Array }[] = [];
       const used = new Set<string>();
+      const h = (k: string) => t(`accountant.csv.${k}`);
       const summary: string[][] = [
         [
           "date",
@@ -183,53 +189,53 @@ export default function AccountantPage() {
           "receipt",
           "invoice_no",
           "reason",
-        ],
+        ].map(h),
       ];
       for (const r of sorted) {
         const files: string[] = [];
         if (r.need === "receipt") {
           for (const d of r.documents) {
             const got = await api.document(d.document_id);
-            let name = `receipts/${r.transaction.booking_date}_${safeName(d.vendor || r.transaction.counterparty_name)}_${safeName(money(d.total_minor || r.transaction.amount_minor, d.currency || r.transaction.currency))}.pdf`;
+            let name = `${folder}/${r.transaction.booking_date}_${safeName(d.vendor || r.transaction.counterparty_name)}_${safeName(money(d.total_minor || r.transaction.amount_minor, d.currency || r.transaction.currency))}.pdf`;
             let n = 2;
             while (used.has(name)) name = name.replace(/(\.pdf)$/, `_${n++}$1`);
             used.add(name);
             entries.push({ name, bytes: bytesOf(got.bytes) });
-            files.push(name.replace("receipts/", ""));
+            files.push(name.slice(folder.length + 1));
           }
         }
         summary.push([
-          r.transaction.booking_date,
+          dateOnly(r.transaction.booking_date),
           r.transaction.counterparty_name,
           amountOf(r),
           r.transaction.currency,
           r.original_amount_minor ? money(r.original_amount_minor, r.original_currency) : "",
-          NEEDS[r.need]?.label ?? r.need,
-          r.status,
+          needLabel(t, r.need),
+          r.status ? t(`accountant.status.${r.status}`) : "",
           files.join(" | "),
           r.documents
             .map((d) => d.invoice_no)
             .filter(Boolean)
             .join(" | "),
-          r.need_reason,
+          sayWhy(t, "need", r.need_why, r.need_reason),
         ]);
       }
       const enc = new TextEncoder();
       entries.unshift(
-        { name: "README.txt", bytes: enc.encode(summaryText() + "\n") },
-        { name: "summary.csv", bytes: enc.encode("﻿" + csv(summary)) },
+        { name: t("accountant.bundle.readme_file"), bytes: enc.encode(summaryText() + "\n") },
+        { name: t("accountant.bundle.summary_file"), bytes: enc.encode("﻿" + csv(summary)) },
         {
-          name: "missing.csv",
+          name: t("accountant.bundle.missing_file"),
           bytes: enc.encode(
             "﻿" +
               csv([
-                ["date", "counterparty", "amount", "original", "reason"],
+                ["date", "counterparty", "amount", "original", "reason"].map(h),
                 ...missing.map((r) => [
-                  r.transaction.booking_date,
+                  dateOnly(r.transaction.booking_date),
                   r.transaction.counterparty_name,
                   amountOf(r),
                   r.original_amount_minor ? money(r.original_amount_minor, r.original_currency) : "",
-                  r.need_reason,
+                  sayWhy(t, "need", r.need_why, r.need_reason),
                 ]),
               ]),
           ),
@@ -238,10 +244,10 @@ export default function AccountantPage() {
       const blob = zip(entries);
       const a = window.document.createElement("a");
       a.href = URL.createObjectURL(blob);
-      a.download = `${safeName(chosenName.toLowerCase())}-${month}-accountant.zip`;
+      a.download = `${safeName(chosenName.toLowerCase())}-${month}-${t("accountant.bundle.zip_suffix")}.zip`;
       a.click();
       setTimeout(() => URL.revokeObjectURL(a.href), 60_000);
-      toast.success(`Bundle: ${covered.length} receipts, ${missing.length} still missing.`);
+      toast.success(t("accountant.bundled", { covered: covered.length, missing: missing.length }));
     } catch (e) {
       toast.error(describe(e));
     } finally {
@@ -252,10 +258,7 @@ export default function AccountantPage() {
   const s = data.data?.summary;
   return (
     <>
-      <PageTitle
-        title="Accountant"
-        description="What the accountant needs from us for each transaction, and which receipt covers it. Domestic suppliers e-invoice them directly; foreign ones we owe a receipt for."
-      >
+      <PageTitle title={t("accountant.title")} description={t("accountant.description")}>
         <div className="flex flex-wrap items-center gap-2">
           {orgs.length > 1 ? (
             <Select value={chosen} onValueChange={setParty}>
@@ -276,9 +279,7 @@ export default function AccountantPage() {
       </PageTitle>
 
       {orgs.length === 0 ? (
-        <p className="text-muted-foreground text-sm">
-          No company in your scope. This page reads the company account only, never a personal one.
-        </p>
+        <p className="text-muted-foreground text-sm">{t("accountant.no_company")}</p>
       ) : null}
 
       {s ? (
@@ -286,44 +287,40 @@ export default function AccountantPage() {
           items={[
             {
               icon: XCircle,
-              label: "Missing a receipt",
+              label: t("accountant.kpi.missing"),
               value: String(s.receipt_missing),
-              hint: missingSum || "nothing outstanding",
+              hint: missingSum || t("accountant.kpi.missing_none"),
             },
             {
               icon: FileCheck,
-              label: "Receipts to attach",
+              label: t("accountant.kpi.covered"),
               value: String(s.receipt_covered),
-              hint: "matched or linked by hand",
+              hint: t("accountant.kpi.covered_hint"),
             },
             {
               icon: CheckCircle2,
-              label: "eRačun, delivered by supplier",
+              label: t("accountant.kpi.eracun"),
               value: String(s.eracun),
-              hint: "domestic, nothing to send",
+              hint: t("accountant.kpi.eracun_hint"),
             },
             {
               icon: CircleDashed,
-              label: "Nothing needed",
+              label: t("accountant.kpi.nothing"),
               value: String(s.none + s.personal + s.internal),
-              hint: `${s.none} tax, salary, fees · ${s.personal} personal · ${s.internal} own transfers`,
+              hint: t("accountant.kpi.nothing_hint", {
+                none: s.none,
+                personal: s.personal,
+                internal: s.internal,
+              }),
             },
           ]}
         />
       ) : null}
 
       <div className="flex flex-wrap items-center gap-2">
-        {(
-          [
-            ["all", "All"],
-            ["missing", "Missing"],
-            ["receipt", "Receipts"],
-            ["eracun", "eRačun"],
-            ["other", "Other"],
-          ] as const
-        ).map(([k, label]) => (
+        {(["all", "missing", "receipt", "eracun", "other"] as const).map((k) => (
           <Button key={k} size="sm" variant={only === k ? "secondary" : "ghost"} onClick={() => setOnly(k)}>
-            {label}
+            {t(`accountant.filter.${k}`)}
           </Button>
         ))}
         <div className="flex-1" />
@@ -333,14 +330,14 @@ export default function AccountantPage() {
           onClick={() => {
             void navigator.clipboard
               .writeText(summaryText())
-              .then(() => toast.success("Summary copied. Paste it into the mail."));
+              .then(() => toast.success(t("accountant.copied")));
           }}
           disabled={!data.data}
         >
-          Copy summary for the mail
+          {t("accountant.copy_summary")}
         </Button>
         <Button size="sm" onClick={() => void bundle()} disabled={bundling || !data.data}>
-          <Download /> {bundling ? "Bundling…" : "Download bundle"}
+          <Download /> {bundling ? t("accountant.bundling") : t("accountant.download_bundle")}
         </Button>
       </div>
 
@@ -354,12 +351,12 @@ export default function AccountantPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-24">Date</TableHead>
-                  <TableHead>Counterparty</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
-                  <TableHead>Accountant needs</TableHead>
-                  <TableHead>Receipt</TableHead>
-                  <TableHead className="w-44">Rule</TableHead>
+                  <TableHead className="w-24">{t("accountant.col.date")}</TableHead>
+                  <TableHead>{t("accountant.col.counterparty")}</TableHead>
+                  <TableHead className="text-right">{t("accountant.col.amount")}</TableHead>
+                  <TableHead>{t("accountant.col.need")}</TableHead>
+                  <TableHead>{t("accountant.col.receipt")}</TableHead>
+                  <TableHead className="w-44">{t("accountant.col.rule")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -375,7 +372,7 @@ export default function AccountantPage() {
                 {data.data && shown.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={6} className="text-muted-foreground py-10 text-center text-sm">
-                      Nothing here for {monthLabel(month)}.
+                      {t("accountant.nothing_for", { month: monthLong(month) })}
                     </TableCell>
                   </TableRow>
                 ) : null}
@@ -389,10 +386,11 @@ export default function AccountantPage() {
 }
 
 function DocChip({ d, onRemove }: { d: LinkedDocument; onRemove?: () => void }) {
+  const t = useT();
   return (
     <span
       className="inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px]"
-      title={`${d.reason || d.source}${d.confidence ? ` · ${d.confidence}` : ""} · ${d.filename}`}
+      title={`${sayWhys(t, d) || d.source}${d.confidence ? ` · ${d.confidence}` : ""} · ${d.filename}`}
     >
       {d.source === "declared" ? <Link2 className="size-3" /> : <FileCheck className="size-3" />}
       {d.vendor || d.filename} · {d.total_minor ? money(d.total_minor, d.currency || "EUR") : "?"}
@@ -402,7 +400,7 @@ function DocChip({ d, onRemove }: { d: LinkedDocument; onRemove?: () => void }) 
           type="button"
           onClick={onRemove}
           className="text-muted-foreground hover:text-destructive ml-0.5"
-          aria-label="Unlink"
+          aria-label={t("accountant.unlink")}
         >
           <Unlink className="size-3" />
         </button>
@@ -422,7 +420,8 @@ function Row({
   onChanged: (row: ReconciliationRow) => void;
   onPolicy: () => void;
 }) {
-  const t = r.transaction;
+  const t = useT();
+  const tx = r.transaction;
   const [busy, setBusy] = useState(false);
   const [finding, setFinding] = useState(false);
   const act = async (f: () => Promise<ReconciliationRow | void>, done?: string) => {
@@ -437,16 +436,17 @@ function Row({
       setBusy(false);
     }
   };
-  const need = NEEDS[r.need] ?? { label: r.need, tone: "" };
   const missing = r.need === "receipt" && r.status === "missing";
   const policy = r.policy_id ? r.need : "auto";
+  const docLabel = (d: LinkedDocument) =>
+    `${d.vendor || d.filename} · ${d.total_minor ? money(d.total_minor, d.currency || "EUR") : "?"}`;
   return (
     <TableRow className={missing ? "bg-destructive/5" : undefined}>
-      <TableCell className="text-xs whitespace-nowrap tabular-nums">{t.booking_date}</TableCell>
+      <TableCell className="text-xs whitespace-nowrap tabular-nums">{dateOnly(tx.booking_date)}</TableCell>
       <TableCell className="max-w-72">
-        <div className="truncate font-medium">{t.counterparty_name || "—"}</div>
-        <div className="text-muted-foreground max-w-72 truncate text-[11px]" title={t.remittance}>
-          {t.remittance.replace(/^HR\d\d \| /, "")}
+        <div className="truncate font-medium">{tx.counterparty_name || "—"}</div>
+        <div className="text-muted-foreground max-w-72 truncate text-[11px]" title={tx.remittance}>
+          {tx.remittance.replace(/^HR\d\d \| /, "")}
         </div>
       </TableCell>
       <TableCell className="text-right font-mono whitespace-nowrap tabular-nums">
@@ -468,14 +468,16 @@ function Row({
                   : "border-transparent bg-emerald-600/12 text-[10px] text-emerald-700 dark:text-emerald-300"
               }
             >
-              {missing ? "receipt missing" : "receipt attached"}
+              {missing ? t("accountant.receipt_missing") : t("accountant.receipt_attached")}
             </Badge>
           ) : (
-            <Badge variant="outline" className={`text-[10px] ${need.tone}`}>
-              {need.label}
+            <Badge variant="outline" className={`text-[10px] ${NEED_TONE[r.need] ?? ""}`}>
+              {needLabel(t, r.need)}
             </Badge>
           )}
-          <span className="text-muted-foreground text-[11px]">{r.need_reason}</span>
+          <span className="text-muted-foreground text-[11px]">
+            {sayWhy(t, "need", r.need_why, r.need_reason)}
+          </span>
         </div>
       </TableCell>
       <TableCell>
@@ -485,7 +487,10 @@ function Row({
               key={d.document_id}
               d={d}
               onRemove={() =>
-                void act(async () => (await api.unlinkDocument(t.id, d.document_id)).row, "Unlinked.")
+                void act(
+                  async () => (await api.unlinkDocument(tx.id, d.document_id)).row,
+                  t("accountant.unlinked"),
+                )
               }
             />
           ))}
@@ -497,13 +502,15 @@ function Row({
                   variant="outline"
                   className="h-6 px-1.5 text-[11px]"
                   disabled={busy}
-                  title={`${d.reason} · ${d.confidence}`}
+                  title={`${sayWhys(t, d)} · ${d.confidence}`}
                   onClick={() =>
-                    void act(async () => (await api.linkDocument(t.id, d.document_id)).row, "Linked.")
+                    void act(
+                      async () => (await api.linkDocument(tx.id, d.document_id)).row,
+                      t("accountant.linked"),
+                    )
                   }
                 >
-                  Use {d.vendor || d.filename} ·{" "}
-                  {d.total_minor ? money(d.total_minor, d.currency || "EUR") : "?"}
+                  {t("accountant.use", { doc: docLabel(d) })}
                 </Button>
               ))
             : null}
@@ -515,7 +522,7 @@ function Row({
               disabled={busy}
               onClick={() => setFinding(true)}
             >
-              <Search className="size-3" /> Find
+              <Search className="size-3" /> {t("accountant.find")}
             </Button>
           ) : null}
         </div>
@@ -523,10 +530,10 @@ function Row({
           open={finding}
           onClose={() => setFinding(false)}
           party={party}
-          initial={t.counterparty_name.split(/[*\s]/)[0] ?? ""}
+          initial={tx.counterparty_name.split(/[*\s]/)[0] ?? ""}
           onPick={(id) => {
             setFinding(false);
-            void act(async () => (await api.linkDocument(t.id, id)).row, "Linked.");
+            void act(async () => (await api.linkDocument(tx.id, id)).row, t("accountant.linked"));
           }}
         />
       </TableCell>
@@ -544,7 +551,7 @@ function Row({
                   } else {
                     await api.setPolicy({
                       party_id: party,
-                      match: t.counterparty_name,
+                      match: tx.counterparty_name,
                       exact: true,
                       policy: v,
                       note: "",
@@ -553,8 +560,11 @@ function Row({
                   onPolicy();
                 },
                 v === "auto"
-                  ? "Back to the rules."
-                  : `${t.counterparty_name}: ${POLICY_CHOICES.find(([k]) => k === v)?.[1]}`,
+                  ? t("accountant.back_to_rules")
+                  : t("accountant.policy_set", {
+                      counterparty: tx.counterparty_name,
+                      policy: t(`accountant.policy.${v}`),
+                    }),
               )
             }
           >
@@ -562,9 +572,9 @@ function Row({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {POLICY_CHOICES.map(([k, label]) => (
+              {POLICIES.map((k) => (
                 <SelectItem key={k} value={k} className="text-xs">
-                  {label}
+                  {t(`accountant.policy.${k}`)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -588,6 +598,7 @@ function FindDialog({
   initial: string;
   onPick: (documentId: string) => void;
 }) {
+  const t = useT();
   const [q, setQ] = useState(initial);
   useEffect(() => {
     if (open) setQ(initial);
@@ -601,15 +612,13 @@ function FindDialog({
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Find the receipt</DialogTitle>
-          <DialogDescription>
-            Search the pulled receipts by vendor, number, subject or text, and pick the one that paid this.
-          </DialogDescription>
+          <DialogTitle>{t("accountant.find.title")}</DialogTitle>
+          <DialogDescription>{t("accountant.find.description")}</DialogDescription>
         </DialogHeader>
         <Input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="vendor, invoice number, anything in the PDF"
+          placeholder={t("accountant.find.placeholder")}
           autoFocus
         />
         <div className="max-h-80 space-y-1 overflow-y-auto">
@@ -624,7 +633,8 @@ function FindDialog({
                 <span className="font-medium">{d.vendor || d.filename}</span>
                 <span className="text-muted-foreground">
                   {" "}
-                  · {d.doc_date || "no date"} · {d.invoice_no || d.filename}
+                  · {d.doc_date ? dateOnly(d.doc_date) : t("accountant.find.no_date")} ·{" "}
+                  {d.invoice_no || d.filename}
                 </span>
               </span>
               <span className="font-mono whitespace-nowrap tabular-nums">
@@ -633,7 +643,7 @@ function FindDialog({
             </button>
           ))}
           {found.data && found.data.documents.length === 0 ? (
-            <p className="text-muted-foreground p-2 text-xs">Nothing matches.</p>
+            <p className="text-muted-foreground p-2 text-xs">{t("common.nothing_matches")}</p>
           ) : null}
         </div>
       </DialogContent>

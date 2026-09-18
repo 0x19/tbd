@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use tbd_proto::finance::v1::{
     CounterpartyPolicy, DeleteCounterpartyPolicyRequest, DeleteCounterpartyPolicyResponse,
     LinkDocumentRequest, LinkDocumentResponse, LinkedDocument, MonthlyReconciliationRequest,
-    MonthlyReconciliationResponse, ReconciliationRow, ReconciliationSummary,
+    MonthlyReconciliationResponse, Reason, ReconciliationRow, ReconciliationSummary,
     SetCounterpartyPolicyRequest, SetCounterpartyPolicyResponse, Transaction,
     UnlinkDocumentRequest, UnlinkDocumentResponse,
 };
@@ -14,7 +14,7 @@ use uuid::Uuid;
 
 use crate::{
     reconcile::{
-        Need,
+        Need, Why, decode_all, describe_all,
         store::{self, DocRow, LinkRow, PolicyRow, Row, TxRow},
     },
     service::Finance,
@@ -50,7 +50,18 @@ fn transaction_proto(t: &TxRow) -> Transaction {
     }
 }
 
-fn doc_proto(d: &DocRow, source: &str, confidence: u32, reason: &str) -> LinkedDocument {
+fn reason_proto(w: &Why) -> Reason {
+    Reason {
+        code: w.code.to_owned(),
+        args: w
+            .args
+            .iter()
+            .map(|(k, v)| ((*k).to_owned(), v.clone()))
+            .collect(),
+    }
+}
+
+fn doc_proto(d: &DocRow, source: &str, confidence: u32, why: &[Why]) -> LinkedDocument {
     LinkedDocument {
         document_id: d.id.to_string(),
         vendor: d.vendor.clone().unwrap_or_default(),
@@ -61,7 +72,8 @@ fn doc_proto(d: &DocRow, source: &str, confidence: u32, reason: &str) -> LinkedD
         invoice_no: d.invoice_no.clone().unwrap_or_default(),
         source: source.to_owned(),
         confidence,
-        reason: reason.to_owned(),
+        reason: describe_all(why),
+        why: why.iter().map(reason_proto).collect(),
     }
 }
 
@@ -70,7 +82,7 @@ fn link_proto(l: &LinkRow) -> LinkedDocument {
         &l.document,
         &l.source,
         u32::try_from(l.confidence).unwrap_or(0),
-        &l.reason,
+        &decode_all(&l.reason),
     )
 }
 
@@ -78,7 +90,8 @@ fn row_proto(r: &Row) -> ReconciliationRow {
     ReconciliationRow {
         transaction: Some(transaction_proto(&r.tx)),
         need: r.decision.need.as_str().into(),
-        need_reason: r.decision.reason.clone(),
+        need_reason: r.decision.reason(),
+        need_why: Some(reason_proto(&r.decision.why)),
         status: r.status().into(),
         documents: r.documents.iter().map(link_proto).collect(),
         suggestions: r

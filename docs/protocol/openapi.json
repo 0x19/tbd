@@ -4609,6 +4609,12 @@
           },
           "vendor": {
             "type": "string"
+          },
+          "why": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/tbd.finance.v1.Reason"
+            }
           }
         }
       },
@@ -4881,6 +4887,21 @@
           }
         }
       },
+      "tbd.finance.v1.Reason": {
+        "type": "object",
+        "description": "`tbd.finance.v1.Reason`",
+        "properties": {
+          "args": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "code": {
+            "type": "string"
+          }
+        }
+      },
       "tbd.finance.v1.ReconciliationRow": {
         "type": "object",
         "description": "`tbd.finance.v1.ReconciliationRow`",
@@ -4896,6 +4917,9 @@
           },
           "need_reason": {
             "type": "string"
+          },
+          "need_why": {
+            "$ref": "#/components/schemas/tbd.finance.v1.Reason"
           },
           "original_amount_minor": {
             "type": "string"

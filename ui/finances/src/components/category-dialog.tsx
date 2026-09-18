@@ -21,14 +21,11 @@ import { Switch } from "@/components/ui/switch";
 import { api } from "@/lib/api/client";
 import { describe } from "@/lib/api/hooks";
 import type { Category, UpsertCategoryResponse } from "@/lib/api/schema";
+import { useT } from "@/lib/i18n";
 
-export const KINDS: { value: string; label: string; hint: string }[] = [
-  { value: "expense", label: "Expense", hint: "Money spent on something." },
-  { value: "income", label: "Income", hint: "Money earned." },
-  { value: "transfer", label: "Transfer", hint: "Own money moving; not spending." },
-  { value: "tax", label: "Tax", hint: "The state's share." },
-  { value: "capital", label: "Capital", hint: "Loans, draws, investments." },
-];
+/** The wire kinds; the label and hint are `categories.kind_label.<kind>` and
+ *  `categories.kind_hint.<kind>`, looked up where rendered. */
+export const KINDS = ["expense", "income", "transfer", "tax", "capital"] as const;
 
 /** Create or edit one category. A rename keeps the slug; archiving disables
  *  the rules pointing at it and reapplies the rest. */
@@ -43,6 +40,7 @@ export function CategoryDialog({
   onClose: () => void;
   onSaved: (done: UpsertCategoryResponse) => void;
 }) {
+  const t = useT();
   const { parties, partyIds } = useFinance();
   const [party, setParty] = useState(category?.party_id ?? partyId ?? partyIds[0] ?? "");
   const [name, setName] = useState(category?.name ?? "");
@@ -64,8 +62,8 @@ export function CategoryDialog({
       });
       toast.success(
         archived
-          ? `Archived. Its rules are off; ${done.unmatched} rows are uncategorised now.`
-          : `Saved ${done.category?.name ?? name}.`,
+          ? t("categories.cat.archived_toast", { n: done.unmatched })
+          : t("categories.cat.saved", { name: done.category?.name ?? name }),
       );
       onSaved(done);
     } catch (e) {
@@ -79,15 +77,12 @@ export function CategoryDialog({
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{category ? "Edit category" : "New category"}</DialogTitle>
-          <DialogDescription>
-            What it does to the books matters more than what it is called: the kind decides whether the
-            overview counts it as spending.
-          </DialogDescription>
+          <DialogTitle>{category ? t("categories.cat.edit") : t("categories.new_category")}</DialogTitle>
+          <DialogDescription>{t("categories.cat.description")}</DialogDescription>
         </DialogHeader>
         <div className="grid gap-4">
           {!category && parties.length > 1 ? (
-            <Field label="Party">
+            <Field label={t("common.party")}>
               <Select value={party} onValueChange={setParty}>
                 <SelectTrigger>
                   <SelectValue />
@@ -102,23 +97,24 @@ export function CategoryDialog({
               </Select>
             </Field>
           ) : null}
-          <Field label="Name">
+          <Field label={t("common.name")}>
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Kiosks & newsstands"
+              placeholder={t("categories.cat.name_placeholder")}
               autoFocus
             />
           </Field>
-          <Field label="Kind">
+          <Field label={t("categories.cat.kind")}>
             <Select value={kind} onValueChange={setKind}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 {KINDS.map((k) => (
-                  <SelectItem key={k.value} value={k.value}>
-                    {k.label} <span className="text-muted-foreground">· {k.hint}</span>
+                  <SelectItem key={k} value={k}>
+                    {t(`categories.kind_label.${k}`)}{" "}
+                    <span className="text-muted-foreground">· {t(`categories.kind_hint.${k}`)}</span>
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -126,26 +122,26 @@ export function CategoryDialog({
           </Field>
           <div className="flex items-center gap-2">
             <Switch checked={deductible} onCheckedChange={setDeductible} id="deductible" />
-            <Label htmlFor="deductible">Deductible business cost</Label>
+            <Label htmlFor="deductible">{t("categories.cat.deductible")}</Label>
           </div>
           {category ? (
             <div className="flex items-center gap-2">
               <Switch checked={archived} onCheckedChange={setArchived} id="archived" />
-              <Label htmlFor="archived">Archived: hidden from pickers, its rules turned off</Label>
+              <Label htmlFor="archived">{t("categories.cat.archived")}</Label>
             </div>
           ) : null}
           {category ? (
             <p className="text-muted-foreground text-xs">
-              Slug <code>{category.slug}</code> stays as it is; rules and seeds key on it.
+              {t("categories.cat.slug_before")} <code>{category.slug}</code> {t("categories.cat.slug_after")}
             </p>
           ) : null}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button onClick={() => void save()} disabled={busy || !name.trim() || !party}>
-            {busy ? "Saving…" : "Save"}
+            {busy ? t("common.saving") : t("common.save")}
           </Button>
         </DialogFooter>
       </DialogContent>

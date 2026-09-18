@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { api } from "@/lib/api/client";
 import { describe } from "@/lib/api/hooks";
+import { useT } from "@/lib/i18n";
 
 export default function CallbackPage() {
   return (
@@ -23,6 +24,7 @@ export default function CallbackPage() {
 }
 
 function Callback() {
+  const t = useT();
   const params = useSearchParams();
   const router = useRouter();
   const state = params.get("state") ?? "";
@@ -34,7 +36,7 @@ function Callback() {
   useEffect(() => {
     if (providerError) {
       setStatus("failed");
-      setDetail(`The provider refused: ${providerError}`);
+      setDetail("");
       return;
     }
     // No parameters: this is a revisit (back button, a session refresh
@@ -52,7 +54,11 @@ function Callback() {
         setStatus("done");
         // Leave this URL: the code is spent, and a reload here must not
         // look like a failure. The list shows the new link.
-        toast.success(`${r.connector?.label ?? "Mailbox"} linked.`);
+        toast.success(
+          t("connectors.callback.toast_linked", {
+            name: r.connector?.label ?? t("connectors.callback.mailbox"),
+          }),
+        );
         router.replace("/connectors/");
       })
       .catch((e: unknown) => {
@@ -63,27 +69,33 @@ function Callback() {
     return () => {
       cancelled = true;
     };
-  }, [state, code, providerError, router]);
+  }, [state, code, providerError, router, t]);
 
   return (
     <>
-      <PageTitle title="Authorization" />
+      <PageTitle title={t("nav.authorization")} />
       <Card className="max-w-xl">
         <CardHeader>
           <CardTitle>
-            {status === "working" ? "Finishing the link…" : status === "done" ? "Linked" : "Not linked"}
+            {status === "working"
+              ? t("connectors.callback.finishing")
+              : status === "done"
+                ? t("connectors.callback.linked")
+                : t("connectors.callback.not_linked")}
           </CardTitle>
           <CardDescription>
             {status === "working"
-              ? "Exchanging the provider's code. This takes a moment."
+              ? t("connectors.callback.exchanging")
               : status === "done"
-                ? `${detail} is connected. Pull now, or wait for the next scheduled sync.`
-                : detail}
+                ? t("connectors.callback.connected", { name: detail })
+                : status === "failed" && providerError
+                  ? t("connectors.callback.refused", { error: providerError })
+                  : detail}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <Button asChild variant={status === "done" ? "default" : "outline"}>
-            <Link href="/connectors/">Connectors</Link>
+            <Link href="/connectors/">{t("nav.connectors")}</Link>
           </Button>
         </CardContent>
       </Card>

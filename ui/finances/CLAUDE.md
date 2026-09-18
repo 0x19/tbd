@@ -51,6 +51,15 @@ same conventions; read `ui/chaos/CLAUDE.md` for what is the kit's and what is ou
   credentials; every `data:` frame is one JSON message. Envoy keeps `/v1/**/events`
   open on the finance host. EventSource cannot send the dev bearer token, so in
   development the feed shows "Polling" and the list refreshes on a timer.
+- **Two languages.** `src/lib/i18n/` holds the provider (`LangProvider`, the choice in
+  `localStorage`, the browser's language first), `useT()` and per-namespace dictionaries in
+  `messages/<ns>.ts` (`en` and `hr` maps keyed `<ns>.<slug>`; `common.*`, `nav.*`,
+  `status.*` are shared). Every visible string goes through `t()`; sidebar titles and
+  breadcrumbs are keys; `StatusBadge` translates wire words; `format.ts` follows the
+  language for dates and counts (`money()` does not). Server reasons arrive as codes with
+  arguments (`Reason`) and are translated on the page (`need.*`, `why.*`); the accountant
+  bundle's file names, CSV headers and README follow the language too. API error messages
+  stay English. A missing Croatian key falls back to English, a missing key shows itself.
 - Static export, no `basePath`, `trailingSlash: true`; detail-less by design so far.
   `pnpm dev` is on 3004.
 - Checks: `mise run ui:finances:check` (prettier, eslint, tsc) is part of `mise run ci`;

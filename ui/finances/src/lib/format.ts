@@ -37,19 +37,72 @@ function group(whole: string): string {
   return whole.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 }
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+// The language the page is in, set by the LangProvider: dates and counts
+// follow it. Money never does: minor units are formatted the same way in
+// both, the European way, with a code after the figure.
+let lang: "en" | "hr" = "en";
+export function setFormatLang(l: "en" | "hr") {
+  lang = l;
+}
+function locale(): string {
+  return lang === "hr" ? "hr-HR" : "en-GB";
+}
+
+const MONTHS: Record<"en" | "hr", string[]> = {
+  en: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
+  hr: ["sij", "velj", "ožu", "tra", "svi", "lip", "srp", "kol", "ruj", "lis", "stu", "pro"],
+};
+const MONTHS_LONG: Record<"en" | "hr", string[]> = {
+  en: [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+  ],
+  hr: [
+    "siječanj",
+    "veljača",
+    "ožujak",
+    "travanj",
+    "svibanj",
+    "lipanj",
+    "srpanj",
+    "kolovoz",
+    "rujan",
+    "listopad",
+    "studeni",
+    "prosinac",
+  ],
+};
 
 /** "2026-09" → "Sep 2026". */
 export function monthLabel(ym: string): string {
   const [y, m] = ym.split("-");
   const i = Number(m) - 1;
-  return MONTHS[i] ? `${MONTHS[i]} ${y}` : ym;
+  const names = MONTHS[lang];
+  return names[i] ? `${names[i]} ${y}` : ym;
+}
+
+/** "2026-09" → "September 2026". */
+export function monthLong(ym: string): string {
+  const [y, m] = ym.split("-");
+  const i = Number(m) - 1;
+  const names = MONTHS_LONG[lang];
+  return names[i] ? `${names[i]} ${y}` : ym;
 }
 
 /** "2026-09" → "Sep". */
 export function monthShort(ym: string): string {
   const i = Number(ym.split("-")[1]) - 1;
-  return MONTHS[i] ?? ym;
+  return MONTHS[lang][i] ?? ym;
 }
 
 /** This month as YYYY-MM, local time. */
@@ -65,24 +118,48 @@ export function monthsBefore(ym: string, n: number): string {
 }
 
 export function num(v: number | null | undefined): string {
-  return v == null ? "—" : v.toLocaleString("en-US");
+  return v == null ? "—" : v.toLocaleString(locale());
 }
 
+const AGO = {
+  en: {
+    never: "never",
+    now: "just now",
+    min: (n: number) => `${n} min ago`,
+    h: (n: number) => `${n} h ago`,
+    d: (n: number) => `${n} d ago`,
+  },
+  hr: {
+    never: "nikad",
+    now: "upravo sada",
+    min: (n: number) => `prije ${n} min`,
+    h: (n: number) => `prije ${n} h`,
+    d: (n: number) => `prije ${n} d`,
+  },
+};
+
 export function ago(iso: string | null | undefined): string {
-  if (!iso) return "never";
+  const w = AGO[lang];
+  if (!iso) return w.never;
   const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
-  if (s < 60) return "just now";
-  if (s < 3600) return `${Math.floor(s / 60)} min ago`;
-  if (s < 86400) return `${Math.floor(s / 3600)} h ago`;
-  return `${Math.floor(s / 86400)} d ago`;
+  if (s < 60) return w.now;
+  if (s < 3600) return w.min(Math.floor(s / 60));
+  if (s < 86400) return w.h(Math.floor(s / 3600));
+  return w.d(Math.floor(s / 86400));
 }
 
 export function when(iso: string | null | undefined): string {
   if (!iso) return "—";
-  return new Date(iso).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" });
+  return new Date(iso).toLocaleString(locale(), { dateStyle: "medium", timeStyle: "short" });
 }
 
 export function day(iso: string | null | undefined): string {
   if (!iso) return "—";
-  return new Date(`${iso}T00:00:00`).toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+  return new Date(`${iso}T00:00:00`).toLocaleDateString(locale(), { day: "2-digit", month: "short" });
+}
+
+/** A YYYY-MM-DD as the page's language writes a date: 11.08.2026. or 11 Aug 2026. */
+export function dateOnly(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  return new Date(`${iso}T00:00:00`).toLocaleDateString(locale(), { dateStyle: "medium" });
 }
