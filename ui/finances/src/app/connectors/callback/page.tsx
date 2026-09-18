@@ -4,8 +4,9 @@
 // Envoy, the page reads `state` and `code` from its own URL, POSTs them to
 // CompleteConnector (the code in the body), then scrubs the URL.
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
+import { toast } from "sonner";
 
 import { PageTitle } from "@/components/kit";
 import { Button } from "@/components/ui/button";
@@ -23,10 +24,11 @@ export default function CallbackPage() {
 
 function Callback() {
   const params = useSearchParams();
+  const router = useRouter();
   const state = params.get("state") ?? "";
   const code = params.get("code") ?? "";
   const providerError = params.get("error") ?? "";
-  const [status, setStatus] = useState<"working" | "done" | "failed">("working");
+  const [status, setStatus] = useState<"working" | "done" | "failed" | "idle">("working");
   const [detail, setDetail] = useState("");
 
   useEffect(() => {
@@ -35,9 +37,10 @@ function Callback() {
       setDetail(`The provider refused: ${providerError}`);
       return;
     }
+    // No parameters: this is a revisit (back button, a session refresh
+    // landing on the scrubbed URL), not a failed link. Say so, neutrally.
     if (!state || !code) {
-      setStatus("failed");
-      setDetail("The redirect carried no state and code; start the link again.");
+      setStatus("idle");
       return;
     }
     let cancelled = false;
@@ -47,7 +50,10 @@ function Callback() {
         if (cancelled) return;
         setDetail(r.connector?.label ?? "");
         setStatus("done");
-        window.history.replaceState(null, "", "/connectors/callback/");
+        // Leave this URL: the code is spent, and a reload here must not
+        // look like a failure. The list shows the new link.
+        toast.success(`${r.connector?.label ?? "Mailbox"} linked.`);
+        router.replace("/connectors/");
       })
       .catch((e: unknown) => {
         if (cancelled) return;

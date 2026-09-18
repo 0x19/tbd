@@ -22,6 +22,7 @@ use crate::{
 };
 
 fn connector_status(e: StoreError) -> Status {
+    tracing::warn!(error = %e, "connector rpc refused");
     match e {
         StoreError::Db(d) => status_of(d),
         StoreError::Connector(ConnectorError::Unconfigured(m)) => Status::failed_precondition(m),

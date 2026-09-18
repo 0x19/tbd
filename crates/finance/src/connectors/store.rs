@@ -353,6 +353,7 @@ pub async fn sync(
     let creds = match credentials(pool, sealer, id).await {
         Ok(c) => c,
         Err(e) => {
+            tracing::warn!(connector = %id, error = %e, "connector sync: credentials");
             finish(pool, run_id, id, Err(&e.to_string())).await?;
             return Err(e);
         }
@@ -360,6 +361,7 @@ pub async fn sync(
     let (found, _) = match kind.pull(&creds, &row.config, since, &seen).await {
         Ok(f) => f,
         Err(e) => {
+            tracing::warn!(connector = %id, kind = %row.kind, error = %e, "connector sync: pull failed");
             let status = if matches!(e, ConnectorError::Unlinked(_)) {
                 "expired"
             } else {
@@ -378,7 +380,14 @@ pub async fn sync(
         }
     };
 
-    let pulled = store_found(pool, row.party_id, id, &found, &seen).await?;
+    let pulled = match store_found(pool, row.party_id, id, &found, &seen).await {
+        Ok(p) => p,
+        Err(e) => {
+            tracing::warn!(connector = %id, error = %e, "connector sync: storing failed");
+            finish(pool, run_id, id, Err(&e.to_string())).await?;
+            return Err(e);
+        }
+    };
     finish(pool, run_id, id, Ok(&pulled)).await?;
     Ok(pulled)
 }
