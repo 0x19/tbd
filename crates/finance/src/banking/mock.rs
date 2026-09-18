@@ -17,7 +17,9 @@ use async_trait::async_trait;
 use chrono::{NaiveDate, Utc};
 use serde_json::{Value, json};
 
-use super::{Authorization, AuthorizationRequest, Provider, ProviderError, Session, SessionStatus};
+use super::{
+    Authorization, AuthorizationRequest, Provider, ProviderError, Psu, Session, SessionStatus,
+};
 use crate::import::{ProviderAccount, accounts_in};
 
 /// What the next calls should do.
@@ -56,6 +58,8 @@ struct Inner {
     valid_until: Option<chrono::DateTime<Utc>>,
     /// Calls per path, for assertions on what was and was not fetched.
     seen: Vec<String>,
+    /// How many calls carried a PSU: attended ones.
+    attended: usize,
 }
 
 impl Mock {
@@ -118,6 +122,11 @@ impl Mock {
     /// The paths called, in order.
     pub fn seen(&self) -> Vec<String> {
         self.lock().seen.clone()
+    }
+
+    /// How many calls carried a PSU, i.e. were attended.
+    pub fn attended(&self) -> usize {
+        self.lock().attended
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, Inner> {
@@ -187,8 +196,11 @@ impl Provider for Mock {
         })
     }
 
-    async fn balances(&self, account_uid: &str) -> Result<Value, ProviderError> {
+    async fn balances(&self, account_uid: &str, psu: Option<&Psu>) -> Result<Value, ProviderError> {
         self.admit(&format!("/accounts/{account_uid}/balances"))?;
+        if psu.is_some() {
+            self.lock().attended += 1;
+        }
         Ok(self
             .lock()
             .balances
@@ -202,8 +214,12 @@ impl Provider for Mock {
         account_uid: &str,
         _from: NaiveDate,
         _to: NaiveDate,
+        psu: Option<&Psu>,
     ) -> Result<Vec<Value>, ProviderError> {
         self.admit(&format!("/accounts/{account_uid}/transactions"))?;
+        if psu.is_some() {
+            self.lock().attended += 1;
+        }
         Ok(self
             .lock()
             .transactions

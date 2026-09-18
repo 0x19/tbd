@@ -78,6 +78,21 @@ async fn call(
         .headers()
         .get(crate::principal::PAYLOAD_HEADER)
         .and_then(|v| tonic::metadata::MetadataValue::try_from(v.as_bytes()).ok());
+    // The person's address and browser, as the edge saw them: a backend that
+    // calls a bank on the person's behalf marks the call attended with them.
+    let forwarded: Vec<(
+        &'static str,
+        tonic::metadata::MetadataValue<tonic::metadata::Ascii>,
+    )> = ["x-forwarded-for", "user-agent"]
+        .into_iter()
+        .filter_map(|name| {
+            let v = request.headers().get(name)?;
+            Some((
+                name,
+                tonic::metadata::MetadataValue::try_from(v.as_bytes()).ok()?,
+            ))
+        })
+        .collect();
     let body = match binding.body {
         BodyRule::None => None,
         BodyRule::Whole | BodyRule::Field(_) => Some(read_json_body(request).await?),
@@ -88,6 +103,9 @@ async fn call(
         if let Some(payload) = &payload {
             req.metadata_mut()
                 .insert(crate::principal::PAYLOAD_HEADER, payload.clone());
+        }
+        for (name, value) in &forwarded {
+            req.metadata_mut().insert(*name, value.clone());
         }
         req
     };

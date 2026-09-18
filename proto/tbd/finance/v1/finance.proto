@@ -55,6 +55,15 @@ service FinanceService {
     };
   }
 
+  // Whether the scheduler fetches this account. Off for an account that
+  // never moves: every scheduled fetch is one of the day's four.
+  rpc SetAccountSync(SetAccountSyncRequest) returns (SetAccountSyncResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/accounts/sync"
+      body: "*"
+    };
+  }
+
   // Categories for the caller's parties.
   rpc ListCategories(ListCategoriesRequest) returns (ListCategoriesResponse) {
     option (google.api.http) = {get: "/v1/finance/categories"};
@@ -708,6 +717,17 @@ message RefreshAccountResponse {
   uint32 inserted = 3;
   uint32 booked = 4;
   uint32 duplicates = 5;
+  // The call carried the person's address, so the bank did not count it
+  // against the unattended allowance.
+  bool attended = 6;
+}
+
+message SetAccountSyncRequest {
+  string account_id = 1;
+  bool enabled = 2;
+}
+message SetAccountSyncResponse {
+  Account account = 1;
 }
 
 message ListCategoriesRequest {

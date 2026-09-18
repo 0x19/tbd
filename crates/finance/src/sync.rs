@@ -23,27 +23,40 @@ use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use crate::{
-    banking::{Provider, ProviderError},
+    banking::{Provider, ProviderError, Psu},
     categorise,
     config::Sync as SyncConfig,
     import::{ProviderAccount, SeenKeys, ingest_balances, ingest_pages},
 };
 
 /// Why a sync was started. Decides which share of the budget it spends.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Trigger {
     /// The loop found the account due. Spends from `scheduled_budget`.
     Scheduled,
-    /// A person asked. Spends from the reserve above `scheduled_budget`, up
-    /// to `budget_per_day`.
+    /// A person asked, but the call cannot say so to the bank (no address
+    /// known). Spends from the reserve above `scheduled_budget`.
     Manual,
+    /// A person asked and is present: the call carries their address, the
+    /// bank does not count it, and neither does the budget. The backoff is
+    /// not consulted either -- it was earned by unattended calls -- but a
+    /// 429 here still sets it.
+    Attended(Psu),
 }
 
 impl Trigger {
-    fn as_str(self) -> &'static str {
+    fn as_str(&self) -> &'static str {
         match self {
             Self::Scheduled => "scheduled",
             Self::Manual => "manual",
+            Self::Attended(_) => "attended",
+        }
+    }
+
+    fn psu(&self) -> Option<&Psu> {
+        match self {
+            Self::Attended(psu) => Some(psu),
+            _ => None,
         }
     }
 }
@@ -204,7 +217,8 @@ impl<P: Provider + ?Sized + 'static> Syncer<P> {
         Ok(report)
     }
 
-    /// Fetch one account now, from the reserve budget.
+    /// Fetch one account now: attended when the person's address is known
+    /// (outside the allowance), from the reserve budget otherwise.
     ///
     /// # Errors
     /// The database, or the account does not exist.
@@ -212,8 +226,10 @@ impl<P: Provider + ?Sized + 'static> Syncer<P> {
         &self,
         account_id: Uuid,
         now: DateTime<Utc>,
+        psu: Option<Psu>,
     ) -> Result<Result<Outcome, Skipped>, SyncError> {
-        self.sync_one(account_id, Trigger::Manual, now).await
+        let trigger = psu.map_or(Trigger::Manual, Trigger::Attended);
+        self.sync_one(account_id, trigger, now).await
     }
 
     /// Claim, fetch, record.
@@ -226,7 +242,7 @@ impl<P: Provider + ?Sized + 'static> Syncer<P> {
         // 1. Claim: lock the row, decide against it, commit the decision.
         //    The transaction is short and holds no network call.
         let mut tx = self.pool.begin().await.map_err(map_err)?;
-        let Some(claimed) = self.claim(&mut tx, account_id, trigger, now).await? else {
+        let Some(claimed) = self.claim(&mut tx, account_id, &trigger, now).await? else {
             return Err(SyncError::NotFound);
         };
         let claimed = match claimed {
@@ -258,7 +274,7 @@ impl<P: Provider + ?Sized + 'static> Syncer<P> {
 
         // 2. Fetch, with no lock held. Balances first: a snapshot is what a
         //    later reconciliation checks the transactions against.
-        let outcome = self.fetch(&claimed, from, to).await;
+        let outcome = self.fetch(&claimed, from, to, trigger.psu()).await;
 
         // 3. Record, whatever happened.
         let outcome = match outcome {
@@ -281,7 +297,7 @@ impl<P: Provider + ?Sized + 'static> Syncer<P> {
         &self,
         tx: &mut Transaction<'_, Postgres>,
         account_id: Uuid,
-        trigger: Trigger,
+        trigger: &Trigger,
         now: DateTime<Utc>,
     ) -> Result<Option<Result<Claimed, Skipped>>, SyncError> {
         // Exists at all? Asked separately so a row another worker holds is
@@ -318,6 +334,11 @@ impl<P: Provider + ?Sized + 'static> Syncer<P> {
         if row.connection_status.as_deref() != Some("authorized") {
             return Ok(Some(Err(Skipped::NoConsent)));
         }
+        // An attended call is the person asking; the allowance and the backoff
+        // both belong to the unattended side.
+        if trigger.psu().is_some() {
+            return Ok(Some(Ok(row)));
+        }
         if row.sync_backoff_until.is_some_and(|until| until > now) {
             return Ok(Some(Err(Skipped::BackingOff)));
         }
@@ -334,7 +355,7 @@ impl<P: Provider + ?Sized + 'static> Syncer<P> {
         };
         let cap = match trigger {
             Trigger::Scheduled => self.config.scheduled_budget,
-            Trigger::Manual => self.config.budget_per_day,
+            Trigger::Manual | Trigger::Attended(_) => self.config.budget_per_day,
         };
         if u32::try_from(used).unwrap_or(u32::MAX) >= cap {
             return Ok(Some(Err(Skipped::BudgetSpent)));
@@ -380,14 +401,20 @@ impl<P: Provider + ?Sized + 'static> Syncer<P> {
         (from, today)
     }
 
-    async fn fetch(&self, account: &Claimed, from: NaiveDate, to: NaiveDate) -> Fetched {
-        let balances = match self.provider.balances(&account.provider_uid).await {
+    async fn fetch(
+        &self,
+        account: &Claimed,
+        from: NaiveDate,
+        to: NaiveDate,
+        psu: Option<&Psu>,
+    ) -> Fetched {
+        let balances = match self.provider.balances(&account.provider_uid, psu).await {
             Ok(v) => v,
             Err(e) => return Fetched::Failed(e),
         };
         match self
             .provider
-            .transactions(&account.provider_uid, from, to)
+            .transactions(&account.provider_uid, from, to, psu)
             .await
         {
             Ok(pages) => Fetched::Ok { balances, pages },

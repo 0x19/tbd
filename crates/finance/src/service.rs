@@ -4,6 +4,7 @@
 //! Every RPC first consults the fault handle in [`Runtime`], so an embedder can
 //! make this service slow, failing or hung at runtime.
 
+use std::pin::Pin;
 use std::sync::Arc;
 
 use sqlx::PgPool;
@@ -17,6 +18,7 @@ use tbd_proto::finance::v1::{
     Account, ApproveInvoiceRequest, ApproveInvoiceResponse, Balance, CancelInvoiceRequest,
     CancelInvoiceResponse, Category, CompleteConnectionRequest, CompleteConnectionResponse,
     CompleteConnectorRequest, CompleteConnectorResponse, ConfigureConnectorRequest,
+    WatchConnectorsRequest, WatchConnectorsResponse,
     ConfigureConnectorResponse, Connection, CreateInvoiceRequest, CreateInvoiceResponse,
     DeclareCategoryRequest, DeclareCategoryResponse, DeleteConnectorRequest,
     DeleteConnectorResponse, DeleteLineTemplateRequest, DeleteLineTemplateResponse,
@@ -31,11 +33,12 @@ use tbd_proto::finance::v1::{
     ListRulesResponse, ListTransactionsRequest, ListTransactionsResponse, MonthlySummaryRequest,
     MonthlySummaryResponse, Party, PingRequest, PingResponse, PreviewInvoiceRequest,
     PreviewInvoiceResponse, RefreshAccountRequest, RefreshAccountResponse, Rule,
-    StartConnectionRequest, StartConnectionResponse, StartConnectorRequest, StartConnectorResponse,
-    SummaryRow, SyncConnectorRequest, SyncConnectorResponse, TestConnectorRequest,
-    TestConnectorResponse, Transaction, UpdateInvoiceRequest, UpdateInvoiceResponse,
-    UpsertClientRequest, UpsertClientResponse, UpsertIssuerRequest, UpsertIssuerResponse,
-    UpsertLineTemplateRequest, UpsertLineTemplateResponse, UpsertRuleRequest, UpsertRuleResponse,
+    SetAccountSyncRequest, SetAccountSyncResponse, StartConnectionRequest, StartConnectionResponse,
+    StartConnectorRequest, StartConnectorResponse, SummaryRow, SyncConnectorRequest,
+    SyncConnectorResponse, TestConnectorRequest, TestConnectorResponse, Transaction,
+    UpdateInvoiceRequest, UpdateInvoiceResponse, UpsertClientRequest, UpsertClientResponse,
+    UpsertIssuerRequest, UpsertIssuerResponse, UpsertLineTemplateRequest,
+    UpsertLineTemplateResponse, UpsertRuleRequest, UpsertRuleResponse,
     finance_service_server::FinanceService,
 };
 use tonic::{Code, Request, Response, Status};
@@ -522,49 +525,7 @@ impl FinanceService for Finance {
         Ok(Response::new(ListAccountsResponse {
             accounts: accounts
                 .into_iter()
-                .map(|a| {
-                    let today = chrono::Utc::now().date_naive();
-                    let used = if a.sync_budget_day == Some(today) {
-                        a.sync_budget_used
-                    } else {
-                        0
-                    };
-                    Account {
-                        id: a.id.to_string(),
-                        party_id: a.party_id.to_string(),
-                        connection_id: a.connection_id.map(|c| c.to_string()).unwrap_or_default(),
-                        provider: a.provider,
-                        iban: a.iban.unwrap_or_default(),
-                        currency: a.currency,
-                        name: a.name,
-                        sync_enabled: a.sync_enabled,
-                        last_synced_at: a
-                            .last_synced_at
-                            .map(|t| t.to_rfc3339())
-                            .unwrap_or_default(),
-                        last_sync_status: a.last_sync_status.unwrap_or_default(),
-                        last_sync_error: a.last_sync_error.unwrap_or_default(),
-                        last_booked_through: a
-                            .last_booked_through
-                            .map(|d| d.to_string())
-                            .unwrap_or_default(),
-                        sync_backoff_until: a
-                            .sync_backoff_until
-                            .map(|t| t.to_rfc3339())
-                            .unwrap_or_default(),
-                        sync_budget_used: u32::try_from(used).unwrap_or(0),
-                        balances: balances
-                            .iter()
-                            .filter(|b| b.account_id == a.id)
-                            .map(|b| Balance {
-                                balance_type: b.balance_type.clone(),
-                                amount_minor: b.amount_minor,
-                                currency: b.currency.clone(),
-                                observed_at: b.observed_at.to_rfc3339(),
-                            })
-                            .collect(),
-                    }
-                })
+                .map(|a| account_proto(a, &balances))
                 .collect(),
         }))
     }
@@ -591,8 +552,27 @@ impl FinanceService for Finance {
         if let Err(e) = money::account_party(pool, &access, account).await {
             return Err(self.reject(&mut timer, status_of(e)));
         }
+        // The person's address, as Envoy saw it and the gateway forwarded it.
+        // With it the fetch is attended and outside the bank's allowance;
+        // without it, it spends the reserve like before.
+        let psu = request
+            .metadata()
+            .get("x-forwarded-for")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.split(',').next())
+            .map(str::trim)
+            .filter(|ip| !ip.is_empty())
+            .map(|ip| crate::banking::Psu {
+                ip: ip.to_owned(),
+                user_agent: request
+                    .metadata()
+                    .get("user-agent")
+                    .and_then(|v| v.to_str().ok())
+                    .map(str::to_owned),
+            });
+        let attended = psu.is_some();
         let syncer = Syncer::new(pool.clone(), Arc::clone(bank), self.sync.clone());
-        let result = match syncer.refresh(account, chrono::Utc::now()).await {
+        let result = match syncer.refresh(account, chrono::Utc::now(), psu).await {
             Ok(r) => r,
             Err(crate::sync::SyncError::NotFound) => {
                 return Err(self.reject(&mut timer, Status::not_found("account")));
@@ -611,6 +591,7 @@ impl FinanceService for Finance {
                 inserted: u32::try_from(inserted).unwrap_or(u32::MAX),
                 booked: u32::try_from(booked).unwrap_or(u32::MAX),
                 duplicates: u32::try_from(duplicates).unwrap_or(u32::MAX),
+                attended,
             },
             Ok(outcome) => RefreshAccountResponse {
                 outcome: match outcome {
@@ -633,6 +614,35 @@ impl FinanceService for Finance {
                 .into(),
                 ..RefreshAccountResponse::default()
             },
+        }))
+    }
+
+    async fn set_account_sync(
+        &self,
+        request: Request<SetAccountSyncRequest>,
+    ) -> Result<Response<SetAccountSyncResponse>, Status> {
+        let mut timer = self.admit("FinanceService/SetAccountSync").await?;
+        let req = request.get_ref().clone();
+        let Ok(account) = Uuid::parse_str(&req.account_id) else {
+            return Err(self.reject(
+                &mut timer,
+                Status::invalid_argument("account_id: not a uuid"),
+            ));
+        };
+        let (pool, access, view) = match self.read_context(&request, &[]).await {
+            Ok(c) => c,
+            Err(status) => return Err(self.reject(&mut timer, status)),
+        };
+        let row = match money::set_sync_enabled(pool, &access, account, req.enabled).await {
+            Ok(row) => row,
+            Err(e) => return Err(self.reject(&mut timer, status_of(e))),
+        };
+        let balances = match money::latest_balances(pool, &view).await {
+            Ok(b) => b,
+            Err(e) => return Err(self.reject(&mut timer, status_of(e))),
+        };
+        Ok(Response::new(SetAccountSyncResponse {
+            account: Some(account_proto(row, &balances)),
         }))
     }
 
@@ -969,6 +979,16 @@ impl FinanceService for Finance {
     ) -> Result<Response<ListConnectorsResponse>, Status> {
         self.rpc_list_connectors(r).await
     }
+    type WatchConnectorsStream = Pin<
+        Box<dyn tokio_stream::Stream<Item = Result<WatchConnectorsResponse, Status>> + Send + 'static>,
+    >;
+    async fn watch_connectors(
+        &self,
+        r: Request<WatchConnectorsRequest>,
+    ) -> Result<Response<Self::WatchConnectorsStream>, Status> {
+        let stream = self.rpc_watch_connectors(r).await?.into_inner();
+        Ok(Response::new(Box::pin(stream)))
+    }
     async fn start_connector(
         &self,
         r: Request<StartConnectorRequest>,
@@ -1022,6 +1042,48 @@ impl FinanceService for Finance {
         r: Request<GetDocumentRequest>,
     ) -> Result<Response<GetDocumentResponse>, Status> {
         self.rpc_get_document(r).await
+    }
+}
+
+/// One account row and its latest balances, on the wire.
+fn account_proto(a: money::AccountRow, balances: &[money::BalanceRow]) -> Account {
+    let today = chrono::Utc::now().date_naive();
+    let used = if a.sync_budget_day == Some(today) {
+        a.sync_budget_used
+    } else {
+        0
+    };
+    Account {
+        id: a.id.to_string(),
+        party_id: a.party_id.to_string(),
+        connection_id: a.connection_id.map(|c| c.to_string()).unwrap_or_default(),
+        provider: a.provider,
+        iban: a.iban.unwrap_or_default(),
+        currency: a.currency,
+        name: a.name,
+        sync_enabled: a.sync_enabled,
+        last_synced_at: a.last_synced_at.map(|t| t.to_rfc3339()).unwrap_or_default(),
+        last_sync_status: a.last_sync_status.unwrap_or_default(),
+        last_sync_error: a.last_sync_error.unwrap_or_default(),
+        last_booked_through: a
+            .last_booked_through
+            .map(|d| d.to_string())
+            .unwrap_or_default(),
+        sync_backoff_until: a
+            .sync_backoff_until
+            .map(|t| t.to_rfc3339())
+            .unwrap_or_default(),
+        sync_budget_used: u32::try_from(used).unwrap_or(0),
+        balances: balances
+            .iter()
+            .filter(|b| b.account_id == a.id)
+            .map(|b| Balance {
+                balance_type: b.balance_type.clone(),
+                amount_minor: b.amount_minor,
+                currency: b.currency.clone(),
+                observed_at: b.observed_at.to_rfc3339(),
+            })
+            .collect(),
     }
 }
 

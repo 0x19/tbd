@@ -94,7 +94,10 @@ async fn a_continuation_repeats_the_date_window_because_erste_rejects_it_alone()
         .mount(&server)
         .await;
 
-    let pages = client(&server).transactions("u1", from, to).await.unwrap();
+    let pages = client(&server)
+        .transactions("u1", from, to, None)
+        .await
+        .unwrap();
     assert_eq!(pages.len(), 2);
     assert_eq!(pages[0]["transactions"][0]["entry_reference"], "a");
     assert_eq!(pages[1]["transactions"][0]["entry_reference"], "b");
@@ -116,7 +119,7 @@ async fn a_429_is_rate_limited_with_the_banks_retry_after_and_is_not_retried() {
         .mount(&server)
         .await;
 
-    let e = client(&server).balances("u1").await.unwrap_err();
+    let e = client(&server).balances("u1", None).await.unwrap_err();
     assert!(
         matches!(e, ProviderError::RateLimited { retry_after: Some(d) } if d == Duration::from_secs(21600)),
         "{e}"
@@ -141,7 +144,7 @@ async fn an_expired_consent_is_reported_as_needing_a_person() {
         .await;
     let (from, to) = window();
     let e = client(&server)
-        .transactions("u1", from, to)
+        .transactions("u1", from, to, None)
         .await
         .unwrap_err();
     assert!(e.needs_consent(), "{e}");
@@ -160,7 +163,7 @@ async fn a_continuation_that_never_ends_is_refused_rather_than_followed_forever(
         .await;
     let (from, to) = window();
     let e = client(&server)
-        .transactions("u1", from, to)
+        .transactions("u1", from, to, None)
         .await
         .unwrap_err();
     assert!(matches!(e, ProviderError::Malformed(_)), "{e}");
@@ -181,7 +184,7 @@ async fn a_connection_failure_is_transport_and_may_be_retried() {
         Duration::from_secs(2),
     )
     .unwrap();
-    let e = c.balances("u1").await.unwrap_err();
+    let e = c.balances("u1", None).await.unwrap_err();
     assert!(matches!(e, ProviderError::Transport(_)), "{e}");
     assert!(e.retryable());
 }
@@ -206,4 +209,47 @@ async fn creating_a_session_yields_the_accounts_in_the_providers_order() {
     let uids: Vec<_> = s.accounts.iter().map(|a| a.uid.as_str()).collect();
     assert_eq!(uids, ["usd", "eur"]);
     assert_eq!(s.accounts[0].currency, "USD");
+}
+
+#[tokio::test]
+async fn an_attended_call_carries_the_persons_address_and_an_unattended_one_does_not() {
+    use tbd_finance::banking::Psu;
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/accounts/u1/balances"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"balances": []})))
+        .mount(&server)
+        .await;
+    let c = client(&server);
+    c.balances("u1", None).await.unwrap();
+    let psu = Psu {
+        ip: "203.0.113.7".into(),
+        user_agent: Some("Mozilla/5.0 test".into()),
+    };
+    c.balances("u1", Some(&psu)).await.unwrap();
+
+    let seen: Vec<Request> = server.received_requests().await.unwrap();
+    assert_eq!(seen.len(), 2);
+    assert!(
+        seen[0].headers.get("psu-ip-address").is_none(),
+        "unattended: no PSU headers"
+    );
+    assert_eq!(
+        seen[1]
+            .headers
+            .get("psu-ip-address")
+            .unwrap()
+            .to_str()
+            .unwrap(),
+        "203.0.113.7"
+    );
+    assert_eq!(
+        seen[1]
+            .headers
+            .get("psu-user-agent")
+            .unwrap()
+            .to_str()
+            .unwrap(),
+        "Mozilla/5.0 test"
+    );
 }

@@ -13,7 +13,7 @@ use reqwest::{StatusCode, header};
 use serde_json::{Value, json};
 
 use super::{
-    Authorization, AuthorizationRequest, Provider, ProviderError, Session, SessionStatus,
+    Authorization, AuthorizationRequest, Provider, ProviderError, Psu, Session, SessionStatus,
     auth::Signer, timestamp,
 };
 use crate::import::accounts_in;
@@ -77,11 +77,26 @@ impl EnableBanking {
         classify(status, retry_after, &text)
     }
 
-    async fn get(&self, path: &str, query: &[(&str, String)]) -> Result<Value, ProviderError> {
-        let req = self
+    async fn get(
+        &self,
+        path: &str,
+        query: &[(&str, String)],
+        psu: Option<&Psu>,
+    ) -> Result<Value, ProviderError> {
+        let mut req = self
             .http
             .get(format!("{}{path}", self.base_url))
             .query(query);
+        // Attended: the person's address goes with the call, and the bank
+        // does not count it against the unattended allowance. Erste requires
+        // no PSU headers, so sending these two alone is within the rule
+        // "all required headers or none".
+        if let Some(psu) = psu {
+            req = req.header("Psu-Ip-Address", &psu.ip);
+            if let Some(ua) = &psu.user_agent {
+                req = req.header("Psu-User-Agent", ua);
+            }
+        }
         self.send(req).await
     }
 
@@ -205,7 +220,9 @@ impl Provider for EnableBanking {
     }
 
     async fn session(&self, session_id: &str) -> Result<SessionStatus, ProviderError> {
-        let v = self.get(&format!("/sessions/{session_id}"), &[]).await?;
+        let v = self
+            .get(&format!("/sessions/{session_id}"), &[], None)
+            .await?;
         Ok(SessionStatus {
             status: str_field(&v, "status")?,
             account_uids: v
@@ -221,8 +238,8 @@ impl Provider for EnableBanking {
         })
     }
 
-    async fn balances(&self, account_uid: &str) -> Result<Value, ProviderError> {
-        self.get(&format!("/accounts/{account_uid}/balances"), &[])
+    async fn balances(&self, account_uid: &str, psu: Option<&Psu>) -> Result<Value, ProviderError> {
+        self.get(&format!("/accounts/{account_uid}/balances"), &[], psu)
             .await
     }
 
@@ -231,6 +248,7 @@ impl Provider for EnableBanking {
         account_uid: &str,
         from: NaiveDate,
         to: NaiveDate,
+        psu: Option<&Psu>,
     ) -> Result<Vec<Value>, ProviderError> {
         let path = format!("/accounts/{account_uid}/transactions");
         let base = [("date_from", from.to_string()), ("date_to", to.to_string())];
@@ -244,7 +262,7 @@ impl Provider for EnableBanking {
             if let Some(key) = &continuation {
                 query.push(("continuation_key", key.clone()));
             }
-            let page = self.get(&path, &query).await?;
+            let page = self.get(&path, &query, psu).await?;
             continuation = page
                 .get("continuation_key")
                 .and_then(Value::as_str)

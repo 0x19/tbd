@@ -186,7 +186,7 @@ async fn one_shot(
             );
             let now = chrono::Utc::now();
             if let Some(id) = account {
-                println!("{id}: {:?}", syncer.refresh(*id, now).await?);
+                println!("{id}: {:?}", syncer.refresh(*id, now, None).await?);
             } else {
                 let tick = syncer.tick(now).await?;
                 for (id, outcome) in &tick.synced {

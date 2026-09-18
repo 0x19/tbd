@@ -80,6 +80,21 @@ pub struct SessionStatus {
     pub valid_until: Option<DateTime<Utc>>,
 }
 
+/// The person, when they are present.
+///
+/// PSD2 (RTS Art. 36(5)) caps unattended access at four a day per account
+/// and lifts the cap when the customer is actively asking; the bank tells
+/// the two apart by `Psu-Ip-Address`. A fetch a person triggered from the
+/// UI carries their address, so it is not one of the four -- and the
+/// scheduler, which has no person behind it, never pretends otherwise.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Psu {
+    /// The person's IP address as the edge saw it.
+    pub ip: String,
+    /// Their browser, when known.
+    pub user_agent: Option<String>,
+}
+
 /// A bank, behind whatever API it has.
 ///
 /// Every method is a read except the two that establish consent. None of them
@@ -107,8 +122,9 @@ pub trait Provider: Send + Sync + std::fmt::Debug {
     /// The current state of a session.
     async fn session(&self, session_id: &str) -> Result<SessionStatus, ProviderError>;
 
-    /// The balances of one account, as the bank reports them.
-    async fn balances(&self, account_uid: &str) -> Result<Value, ProviderError>;
+    /// The balances of one account, as the bank reports them. `psu` marks an
+    /// attended call.
+    async fn balances(&self, account_uid: &str, psu: Option<&Psu>) -> Result<Value, ProviderError>;
 
     /// Every page of transactions in the window, in order.
     ///
@@ -119,6 +135,7 @@ pub trait Provider: Send + Sync + std::fmt::Debug {
         account_uid: &str,
         from: NaiveDate,
         to: NaiveDate,
+        psu: Option<&Psu>,
     ) -> Result<Vec<Value>, ProviderError>;
 }
 

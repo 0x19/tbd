@@ -422,3 +422,32 @@ pub async fn upsert_rule(
     .map_err(map_err)?;
     Ok((row, applied))
 }
+
+/// Turn the scheduler on or off for one account the caller may see.
+///
+/// # Errors
+/// The database, or the account is not in the view.
+pub async fn set_sync_enabled(
+    pool: &PgPool,
+    access: &Access,
+    account: Uuid,
+    enabled: bool,
+) -> Result<AccountRow, DbError> {
+    account_party(pool, access, account).await?;
+    sqlx::query("update finance.accounts set sync_enabled = $2 where id = $1")
+        .bind(account)
+        .bind(enabled)
+        .execute(pool)
+        .await
+        .map_err(map_err)?;
+    sqlx::query_as::<_, AccountRow>(
+        "select id, party_id, connection_id, provider, iban, currency, name, sync_enabled,
+                last_synced_at, last_sync_status, last_sync_error, last_booked_through,
+                sync_backoff_until, sync_budget_day, sync_budget_used
+           from finance.accounts where id = $1",
+    )
+    .bind(account)
+    .fetch_one(pool)
+    .await
+    .map_err(map_err)
+}

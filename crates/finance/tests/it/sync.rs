@@ -314,13 +314,13 @@ async fn the_scheduler_stops_at_its_share_and_the_reserve_is_left_for_a_person()
     );
 
     // A person may still spend the fourth.
-    let manual = syncer.refresh(w.account, at(12)).await.unwrap();
+    let manual = syncer.refresh(w.account, at(12), None).await.unwrap();
     assert!(matches!(manual, Ok(Outcome::Ok { .. })));
     assert!(w.mock.calls() > calls_after_three);
     let calls_after_four = w.mock.calls();
 
     // And not a fifth, from anyone.
-    let manual = syncer.refresh(w.account, at(13)).await.unwrap();
+    let manual = syncer.refresh(w.account, at(13), None).await.unwrap();
     assert_eq!(manual, Err(Skipped::BudgetSpent));
     assert_eq!(w.mock.calls(), calls_after_four);
 }
@@ -590,4 +590,59 @@ async fn two_workers_cannot_both_claim_the_same_call() {
         fetched * 2,
         "two requests per fetch, none for a skip"
     );
+}
+
+#[tokio::test]
+async fn an_attended_refresh_is_outside_the_allowance_and_the_backoff() {
+    use tbd_finance::banking::Psu;
+    let (_s, w) = world().await;
+    let syncer = Syncer::new(w.pool.clone(), Arc::clone(&w.mock), config());
+    // Spend the day: three scheduled, one manual, then a 429 sets a backoff.
+    for hour in 8..11 {
+        syncer.tick(at(hour)).await.unwrap();
+    }
+    assert!(matches!(
+        syncer.refresh(w.account, at(11), None).await.unwrap(),
+        Ok(Outcome::Ok { .. })
+    ));
+    assert_eq!(
+        syncer.refresh(w.account, at(12), None).await.unwrap(),
+        Err(Skipped::BudgetSpent)
+    );
+    let calls = w.mock.calls();
+
+    // The person is present: the call goes out, carries the PSU, and the
+    // budget stays where it was.
+    let psu = Psu {
+        ip: "203.0.113.7".into(),
+        user_agent: Some("test".into()),
+    };
+    let r = syncer
+        .refresh(w.account, at(12), Some(psu.clone()))
+        .await
+        .unwrap();
+    assert!(matches!(r, Ok(Outcome::Ok { .. })), "{r:?}");
+    assert_eq!(w.mock.calls(), calls + 2);
+    assert_eq!(w.mock.attended(), 2, "both requests carried the PSU");
+    let (used, trigger): (i32, String) = sqlx::query_as(
+        "select a.sync_budget_used, (select trigger from finance.sync_runs r where r.account_id = a.id order by started_at desc limit 1)
+           from finance.accounts a where a.id = $1",
+    )
+    .bind(w.account)
+    .fetch_one(&w.pool)
+    .await
+    .unwrap();
+    assert_eq!(used, 4, "attended does not spend the allowance");
+    assert_eq!(trigger, "attended");
+
+    // Under a backoff earned by unattended calls, the person can still ask.
+    w.mock.set_mode(Mode::RateLimited(None));
+    syncer.tick(at(13)).await.unwrap();
+    w.mock.set_mode(Mode::Ok);
+    assert_eq!(
+        syncer.refresh(w.account, at(14), None).await.unwrap(),
+        Err(Skipped::BudgetSpent)
+    );
+    let r = syncer.refresh(w.account, at(14), Some(psu)).await.unwrap();
+    assert!(matches!(r, Ok(Outcome::Ok { .. })), "{r:?}");
 }
