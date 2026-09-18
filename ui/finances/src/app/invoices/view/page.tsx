@@ -106,6 +106,14 @@ function InvoiceView() {
   );
   const [docUrl, setDocUrl] = useState<string | null>(null);
   const [full, setFull] = useState(false);
+  useEffect(() => {
+    if (!full) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setFull(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [full]);
 
   // Load the draft into the form once; later edits are the person's.
   useEffect(() => {
@@ -582,13 +590,25 @@ function InvoiceView() {
       </div>
 
       <Dialog open={full} onOpenChange={setFull}>
-        <DialogContent className="h-[94vh] w-[96vw] max-w-[96vw] gap-0 p-0 sm:max-w-[96vw]">
-          <DialogTitle className="sr-only">Invoice preview</DialogTitle>
+        <DialogContent
+          className="flex h-[94vh] w-[96vw] max-w-[96vw] flex-col gap-0 p-0 sm:max-w-[96vw]"
+          onEscapeKeyDown={() => setFull(false)}
+        >
+          <div className="flex items-center justify-between border-b px-4 py-2">
+            <DialogTitle className="text-sm font-medium">
+              {inv.number ? `Invoice ${inv.number}` : preview ? `Preview · ${preview.number}` : "Preview"}
+            </DialogTitle>
+            {/* Focused on open so Escape is ours; once the PDF viewer has
+                focus it keeps the keyboard, and this button is the way back. */}
+            <Button variant="outline" size="sm" autoFocus onClick={() => setFull(false)}>
+              <X /> Close <span className="text-muted-foreground ml-1 text-xs">Esc</span>
+            </Button>
+          </div>
           {docUrl || preview ? (
             <iframe
               title="invoice, full size"
               src={`${docUrl ?? preview!.url}#view=FitH`}
-              className="bg-muted h-full w-full rounded-lg"
+              className="bg-muted min-h-0 w-full flex-1 rounded-b-lg"
             />
           ) : null}
         </DialogContent>
