@@ -29,8 +29,10 @@ The finance service. gRPC only. Scaffolded by `tbd new service` (docs/tbd/README
 - `sync.rs`: the worker. Budget, backoff and watermark are columns on the account, decided
   under `for update skip locked` and committed *before* the network call. Three of four
   daily fetches are the scheduler's; the fourth is a person's. Measured on Erste
-  (`prototype/bank/FINDINGS.md`): unattended history is 90 days whatever is asked; no
-  4/day 429 seen in 12 fetches. `tick(now)` is a pure step for tests; `run` loops it.
+  (`prototype/bank/FINDINGS.md`): unattended history is 90 days whatever is asked; the
+  cap is four fetches per account per calendar day, the fifth is a 429, and a call carrying
+  `Psu-Ip-Address` is counted like any other, so an attended refresh is labelled but not
+  exempt. `tick(now)` is a pure step for tests; `run` loops it.
 - `invoice/`: drafts, previews, approvals (`store.rs`), the gapless counter
   (`numbering.rs`, a locked row, never a sequence), integer totals (`totals.rs`), and
   the Typst renderer (`render.rs`: template, Inter and the mark compiled in; PDF id

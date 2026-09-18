@@ -37,10 +37,13 @@ pub enum Trigger {
     /// A person asked, but the call cannot say so to the bank (no address
     /// known). Spends from the reserve above `scheduled_budget`.
     Manual,
-    /// A person asked and is present: the call carries their address, the
-    /// bank does not count it, and neither does the budget. The backoff is
-    /// not consulted either -- it was earned by unattended calls -- but a
-    /// 429 here still sets it.
+    /// A person asked and is present: the call carries their address as
+    /// `Psu-Ip-Address`, which PSD2 says makes it attended and uncounted.
+    /// Erste counts it anyway (measured 2026-09-18: a 429 on an attended
+    /// call, `prototype/bank/FINDINGS.md`), so it spends the reserve and
+    /// honours the backoff exactly like `Manual`. The label and the headers
+    /// stay: the run row says the address went, and another bank may honour
+    /// it.
     Attended(Psu),
 }
 
@@ -334,11 +337,8 @@ impl<P: Provider + ?Sized + 'static> Syncer<P> {
         if row.connection_status.as_deref() != Some("authorized") {
             return Ok(Some(Err(Skipped::NoConsent)));
         }
-        // An attended call is the person asking; the allowance and the backoff
-        // both belong to the unattended side.
-        if trigger.psu().is_some() {
-            return Ok(Some(Ok(row)));
-        }
+        // Attended or not, the bank counts it (see `Trigger::Attended`), so
+        // the backoff and the budget apply to every trigger.
         if row.sync_backoff_until.is_some_and(|until| until > now) {
             return Ok(Some(Err(Skipped::BackingOff)));
         }

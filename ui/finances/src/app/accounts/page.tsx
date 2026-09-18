@@ -77,9 +77,7 @@ function AccountCard({ a, onChanged }: { a: Account; onChanged: () => void }) {
     try {
       const r = await api.refresh(a.id);
       if (r.outcome === "ok")
-        toast.success(
-          `Fetched${r.attended ? " as you, not counted by the bank" : ""}: ${r.inserted} new, ${r.booked} booked, ${r.duplicates} already known.`,
-        );
+        toast.success(`Fetched: ${r.inserted} new, ${r.booked} booked, ${r.duplicates} already known.`);
       else if (r.outcome === "skipped" && r.skipped === "backing_off" && backoffUntil)
         toast.warning(`The bank asked us to wait: next fetch possible at ${hhmm(backoffUntil)}.`);
       else if (r.outcome === "skipped" && r.skipped === "budget_spent")
@@ -139,8 +137,14 @@ function AccountCard({ a, onChanged }: { a: Account; onChanged: () => void }) {
           size="sm"
           variant="outline"
           onClick={() => void refresh()}
-          disabled={busy || !a.connection_id}
-          title="Fetched as you: the bank does not count a fetch you ask for against the daily four"
+          disabled={busy || !a.connection_id || backingOff || a.sync_budget_used >= 4}
+          title={
+            backingOff && backoffUntil
+              ? `The bank asked us to wait until ${hhmm(backoffUntil)}`
+              : a.sync_budget_used >= 4
+                ? "Today's four fetches are spent; the bank counts yours too"
+                : "One of today's four fetches is kept for you"
+          }
         >
           <RefreshCw className={busy ? "animate-spin" : undefined} /> {busy ? "Fetching…" : "Fetch now"}
         </Button>

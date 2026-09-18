@@ -231,6 +231,33 @@ which is exactly the case the scheduled syncer will be in. The plan's budget-in-
 design stands. But the real unattended limit is still unmeasured, and the plan should not
 claim otherwise until a sync runs a day after consent.
 
+### The unattended cap, measured (2026-09-17/18, the running syncer)
+
+The cap is real and it is **four fetches per account per calendar day**. From
+`finance.sync_runs` on the INORBIT EUR account:
+
+| Day (CEST) | Fetches that succeeded | The next one |
+|---|---|---|
+| 09-17 | 18:24 (3 pages), 19:29, 20:33 | 21:33 → **429** |
+| 09-18 | 03:34, 04:34, 05:34, 06:34 | 07:35 → **429** |
+
+- A fetch is one `balances` call plus one or more `transactions` pages; the 3-page
+  initial pull counted as one, so the cap is per fetch, not per HTTP request.
+- The count reset overnight (a 429 at 21:33, success at 03:34), so it is a calendar
+  day, not a rolling window. UTC or local midnight is not distinguishable from this.
+- All four currency entries of the one IBAN hit the cap at the same minute: each
+  account has its own four. The empty GBP/HRK/USD entries are no longer synced.
+- No `Retry-After` header on the 429.
+- **`Psu-Ip-Address` and `Psu-User-Agent` do not lift it.** An attended call at
+  12:15 on 09-18, carrying the person's address and user agent through the same
+  client, was refused with the same 429. Erste lists no required PSU headers, and
+  whether Enable Banking forwards optional ones is not visible to us; either way
+  the person's presence buys nothing here. The syncer therefore counts an
+  attended refresh like any other and only labels it.
+
+So the allowance is spent as: three scheduled fetches eight hours apart, and one
+kept for a person pressing *Fetch now*. Anything more is a 429 and a day of waiting.
+
 ### Pagination: continuation keys are not self-contained
 
 Erste rejects a continuation key sent on its own:
