@@ -172,13 +172,26 @@ pub fn classify(tx: &TxFacts, policies: &[Policy]) -> Decision {
         reason: reason.to_owned(),
         policy_id: None,
     };
+    // Tax and payouts first: a salary or dividend goes to the owner's own
+    // account, which is in the grant and would otherwise read as a mere
+    // transfer between accounts. To the accountant it is payroll.
+    let name = normalise(&tx.counterparty_name);
+    let reference = tx.reference_number.trim().to_ascii_uppercase();
+    if !tx.credit && (reference.starts_with("HR68") || STATE.iter().any(|s| name.contains(s))) {
+        return decide(Need::None, "state budget: tax or contribution");
+    }
+    if !tx.credit && reference.starts_with("HR69 40002") {
+        return decide(
+            Need::None,
+            "payout to a person: salary, dividend, allowance",
+        );
+    }
     if tx.internal {
         return decide(Need::Internal, "transfer between own accounts");
     }
     if tx.credit {
         return decide(Need::Income, "money in");
     }
-    let name = normalise(&tx.counterparty_name);
     if let Some(p) = policies.iter().find(|p| {
         if p.exact {
             name == p.match_normalised
@@ -191,16 +204,6 @@ pub fn classify(tx: &TxFacts, policies: &[Policy]) -> Decision {
             reason: "policy".into(),
             policy_id: Some(p.id),
         };
-    }
-    let reference = tx.reference_number.trim().to_ascii_uppercase();
-    if reference.starts_with("HR68") || STATE.iter().any(|s| name.contains(s)) {
-        return decide(Need::None, "state budget: tax or contribution");
-    }
-    if reference.starts_with("HR69 40002") {
-        return decide(
-            Need::None,
-            "payout to a person: salary, dividend, allowance",
-        );
     }
     let text = normalise(&tx.remittance);
     if tx.counterparty_iban.is_empty() && (name.contains(" ATM") || name.starts_with("ATM")) {
@@ -441,6 +444,18 @@ mod tests {
         let mut own = tx("Vesic Nevio", "HR3924020061100000000", "x", "", -100);
         own.internal = true;
         assert_eq!(classify(&own, &[]).need, Need::Internal);
+        // Salary to the owner's own account: payroll to the accountant, not
+        // a transfer, even though the account is in the grant.
+        let mut salary = tx(
+            "Vesic Nevio",
+            "HR3924020061100000000",
+            "HR69 40002-38846238650-100 | Placa za 7 / 2026",
+            "HR69 40002-38846238650-100",
+            -107_560,
+        );
+        salary.internal = true;
+        let got = classify(&salary, &[]);
+        assert_eq!(got.need, Need::None, "{}", got.reason);
     }
 
     #[test]
