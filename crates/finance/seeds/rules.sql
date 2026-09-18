@@ -213,6 +213,9 @@ select gen_random_uuid(), :party, v.priority, v.name, c.id,
     (40, 'dubasnica',       'vehicle', 'DUBASNICA',               null, null),
     (40, 'kmd_babic',       'vehicle', 'K.M.D. BABIC',            null, null),
     (40, 'ark_mihelic',     'vehicle', 'ARK MIHELIC',             null, null),
+    -- Registar d.o.o.'s Skurinje branch: the car's registration, inspection
+    -- and insurance, paid at the counter.
+    (40, 'registar',        'vehicle', 'URED SKURINJE',           null, null),
     (40, 'novema',          'vehicle', 'NOVEMA NOVA',             null, null),
     (40, 'kelpi',           'vehicle', 'KELPICUSTOM',             null, null),
     (40, 'drury',           'vehicle', 'DRURYPRECIS',             null, null),
@@ -260,6 +263,8 @@ select gen_random_uuid(), :party, v.priority, v.name, c.id,
     (55, 'ok_fest',         'entertainment','OK FEST',            null, null),
     (55, 'cabaret',         'entertainment','CABARET CLUB',       null, null),
     (55, 'choptones',       'digital', 'CHOPTONES',               null, null),
+    -- Age of Empires Mobile, billed from Amsterdam.
+    (55, 'aoem',            'digital', '^AOEM',                   null, null),
     (55, 'ads_akta',        'entertainment','ADS AKTA',           null, null),
     (55, 'volksgarten',     'entertainment','VOLKSGARTEN',        null, null),
 
@@ -301,8 +306,6 @@ select gen_random_uuid(), :party, v.priority, v.name, c.id,
     (70, 'cvjecarn',        'giving',  'CVJECARN',                null, null),
     (70, 'benu',            'health',  'BENU PHARMAC',            null, null),
     (70, 'apoteka',         'health',  'APOTEKA',                 null, null),
-    -- Two visits of about 1,250 and two of 127 at a Skurinje practice.
-    (70, 'ured_skurinje',   'health',  'URED SKURINJE',           null, null),
     (70, 'petshop',         'pets',    'PETSHOP',                 null, null),
     (70, 'zoo_city',        'pets',    'ZOO CITY',                null, null),
     (70, 'preply',          'education','PREPLY',                 null, null),
@@ -324,9 +327,6 @@ select gen_random_uuid(), :party, v.priority, v.name, c.id,
     (75, 'tino',            'travel',  'TINO CENTAR',             null, null),
     (75, 'apt_trieste',     'travel',  'APT TRIESTE',             null, null),
     (75, 'gp_kallithea',    'travel',  null,                      'GP PAYMENTS KALLITHEA', null),
-    -- Forty-odd charges of 106 from an Amsterdam-registered platform over
-    -- the Belgrade months, one per night: a stay, paid nightly.
-    (75, 'aoem',            'travel',  '^AOEM',                   null, null),
     (75, 'aerodrom',        'travel',  'MZLZ',                    null, null),
     (75, 'uber',            'travel',  'UBER',                    null, null),
     (75, 'bolt',            'travel',  'BOLT.EU',                 null, null),
