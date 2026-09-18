@@ -65,6 +65,12 @@ function foundLabel(by: string | undefined): string {
       return "guessed";
     case "received":
       return "mail date";
+    case "payment":
+      return "from the account that paid";
+    case "text":
+      return "named in the document";
+    case "mailbox":
+      return "the mailbox's";
     case "declared":
       return "set by you";
     default:
@@ -77,7 +83,7 @@ function sureEnough(by: string | undefined): boolean {
 }
 
 export default function DocumentsPage() {
-  const { partyIds } = useFinance();
+  const { partyIds, partyName, multi } = useFinance();
   const key = partyIds.join(",");
   const [q, setQ] = useState("");
   const [term, setTerm] = useState("");
@@ -223,6 +229,11 @@ export default function DocumentsPage() {
                               {foundLabel(d.found_by.vendor)}
                             </Badge>
                           ) : null}
+                          {multi ? (
+                            <Badge variant="secondary" className="shrink-0 text-[10px]">
+                              {partyName(d.party_id)}
+                            </Badge>
+                          ) : null}
                         </div>
                         <div className="text-muted-foreground max-w-48 truncate text-[11px] lg:hidden">
                           {s?.subject || d.filename}
@@ -291,8 +302,16 @@ function DocumentSheet({
   const [url, setUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState("");
-  const [form, setForm] = useState({ vendor: "", doc_date: "", amount: "", currency: "EUR", invoice_no: "" });
+  const [form, setForm] = useState({
+    vendor: "",
+    doc_date: "",
+    amount: "",
+    currency: "EUR",
+    invoice_no: "",
+    party_id: "",
+  });
   const [editing, setEditing] = useState(false);
+  const { parties, partyName } = useFinance();
 
   const fill = (d: Document) => {
     setDoc(d);
@@ -302,6 +321,7 @@ function DocumentSheet({
       amount: minorToDecimal(d.total_minor),
       currency: d.currency || "EUR",
       invoice_no: d.invoice_no,
+      party_id: d.party_id,
     });
   };
 
@@ -439,12 +459,28 @@ function DocumentSheet({
                       total_minor: decimalToMinor(form.amount),
                       currency: form.currency,
                       invoice_no: form.invoice_no,
+                      party_id: form.party_id,
                     })
                   ).document,
                 "Saved. These fields are yours now; a re-read will not change them.",
               );
             }}
           >
+            <div className="sm:col-span-2">
+              <Label className="text-xs">Whose {hint("party")}</Label>
+              <Select value={form.party_id} onValueChange={(v) => setForm({ ...form, party_id: v })}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {parties.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.display_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="sm:col-span-2">
               <Label className="text-xs">Vendor {hint("vendor")}</Label>
               <Input
@@ -500,7 +536,7 @@ function DocumentSheet({
                 {busy === "save" ? "Saving…" : "Save"}
               </Button>
               <span className="text-muted-foreground text-xs">
-                Leave a field empty to clear it. Saving marks all five as yours.
+                Leave a field empty to clear it. Saving marks all of them as yours.
               </span>
             </div>
           </form>
@@ -508,6 +544,10 @@ function DocumentSheet({
 
         {doc && !editing ? (
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-xs">
+            <dt className="text-muted-foreground">Whose</dt>
+            <dd>
+              {partyName(doc.party_id)} {hint("party")}
+            </dd>
             <dt className="text-muted-foreground">Vendor</dt>
             <dd>
               {doc.vendor || "—"} {hint("vendor")}

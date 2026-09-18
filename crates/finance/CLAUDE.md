@@ -81,6 +81,14 @@ The finance service. gRPC only. Scaffolded by `tbd new service` (docs/tbd/README
   overrides either; an undone inferred link stays `rejected` so the matcher does not make
   it again. `store.rs` runs the matcher greedily, best pairs first, each side once.
   `service_reconcile.rs` holds the RPCs.
+- `documents/`: what a pulled document says (`fields.rs`: vendor, date, amount, number,
+  each with how it was found; the reader breaks words across glyph runs, so the number
+  is also sought with every space removed) and whose it is (`party.rs`). A mailbox
+  belongs to a party but its mail does not: the party is decided from the account that
+  paid (one candidate party has that debit near that date), else the text (the
+  company's name or OIB beats a person's name), else the mailbox; a person's choice
+  through `UpdateDocument` is final. The candidates are the parties the mailbox's owner
+  may see. `extracted.party` records which; a re-read keeps it.
 - `categorise.rs` + `seeds/rules.sql`: a pass clears every `inferred` categorisation and
   reapplies rules in priority order; `declared` always survives. A text condition is a
   substring unless anchored (`^INA ` pins the start, ` BAR$` the end): unanchored `INA `

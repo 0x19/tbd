@@ -294,7 +294,14 @@ export const api = {
     call(z.object({}), `/v1/finance/reconciliation/policies/${id}/delete`, { method: "POST", json: {} }),
   updateDocument: (
     id: string,
-    fields: { vendor: string; doc_date: string; total_minor: string; currency: string; invoice_no: string },
+    fields: {
+      vendor: string;
+      doc_date: string;
+      total_minor: string;
+      currency: string;
+      invoice_no: string;
+      party_id: string;
+    },
   ) => call(DocumentResponse, `/v1/finance/documents/${id}/update`, { method: "POST", json: fields }),
   extractDocument: (id: string) =>
     call(DocumentResponse, `/v1/finance/documents/${id}/extract`, { method: "POST", json: {} }),

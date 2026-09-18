@@ -5331,6 +5331,9 @@
           "invoice_no": {
             "type": "string"
           },
+          "party_id": {
+            "type": "string"
+          },
           "total_minor": {
             "type": "string"
           },

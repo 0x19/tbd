@@ -8,6 +8,7 @@ mod banking;
 mod categorise;
 mod connect;
 mod connectors;
+mod documents;
 mod import;
 mod invoices;
 mod reconcile;

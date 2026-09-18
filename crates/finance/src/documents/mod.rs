@@ -7,6 +7,7 @@
 //! corrections are declared and outlive any re-read.
 
 pub mod fields;
+pub mod party;
 pub mod pdf;
 pub mod store;
 
@@ -58,7 +59,12 @@ pub async fn read(pool: &PgPool, id: Uuid) -> Result<(), StoreError> {
         pdf::ENGINE,
         error.as_deref(),
     )
-    .await
+    .await?;
+    // Whose it is, from the amount, the date and the text just written.
+    if let Some(moved) = party::assign(pool, id).await? {
+        tracing::debug!(document = %id, party = %moved.party_id, by = moved.by.as_str(), "document party");
+    }
+    Ok(())
 }
 
 /// Read every document the reader has never run on. For start-up, after a

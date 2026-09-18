@@ -39,7 +39,9 @@ same conventions; read `ui/chaos/CLAUDE.md` for what is the kit's and what is ou
   moves it through `ConfigureConnector`), `/connectors/callback/`, `/documents/`
   (receipts as a ledger: search, vendor and month filters and the sums come from
   `ListDocuments`; a row opens a sheet with the PDF inline, the fields with how each was
-  found (`found_by`), an editor that declares corrections through `UpdateDocument`, and
+  found (`found_by`), an editor that declares corrections through `UpdateDocument`
+  (including whose it is: `party_id`; `found_by.party` says whether the account that
+  paid, the text or the mailbox decided), and
   "Read again" = `ExtractDocument`), `/accountant/` (the company's month from
   `MonthlyReconciliation`: each transaction's need and its receipt; a policy select per
   counterparty = `SetCounterpartyPolicy`, suggestions and "Find" = `LinkDocument`; the

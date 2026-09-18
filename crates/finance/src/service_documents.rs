@@ -167,12 +167,18 @@ impl Finance {
                 "currency: required with total_minor",
             ));
         }
+        let party_id = if req.party_id.trim().is_empty() {
+            None
+        } else {
+            Some(uuid(&req.party_id, "party_id")?)
+        };
         let declared = Declared {
             vendor: Some(req.vendor.trim().to_owned()).filter(|v| !v.is_empty()),
             doc_date: date(&req.doc_date, "doc_date")?,
             total_minor,
             currency: Some(currency).filter(|c| !c.is_empty()),
             invoice_no: Some(req.invoice_no.trim().to_owned()).filter(|v| !v.is_empty()),
+            party_id,
         };
         let (mut timer, pool, access, _) = self
             .invoice_context("FinanceService/UpdateDocument", &request, &[])

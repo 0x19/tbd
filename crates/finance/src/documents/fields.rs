@@ -577,32 +577,83 @@ fn name_from_domain(domain: &str) -> Option<String> {
 
 // ------------------------------------------------------------ invoice no.
 
+/// The keyword, then any run of label words ("Number / Broj računa",
+/// "no.:", "#", an em dash), then the value. Croatian invoices say "Broj
+/// računa", "Broj ovog računa", "Račun br." and "Račun-otpremnica br.";
+/// an order confirmation says "narudžbe #".
 static INVOICE_NO: LazyLock<Regex> = LazyLock::new(|| {
-    // The keyword, then any run of label words ("Number / Broj računa",
-    // "no.:", "#"), then the value.
     re(r"(?ix)
-        \b(?:invoice|receipt|rechnung|račun|racun|faktura)
-        (?:\s*(?:number|num|no\.?|nr\.?|\#|id|/|broj|ra[čc]una|invoice|receipt|:))*
+        \b(?:broj\s*(?:ovog\s*)?ra[čc]una|invoice|receipt|rechnung|ra[čc]un(?:-otpremnica)?|racun|faktura|narud[žz]b[ae]|order)
+        (?:\s*(?:number|num|no\.?|nr\.?|br\.?|\#|id|/|broj|ra[čc]una|invoice|receipt|:|—|–|-))*
         \s*
         (?P<no>[A-Za-z0-9][A-Za-z0-9/-]{3,})")
 });
 
+/// The same keywords with the value on their left: Adobe's columns read
+/// "3364411459Invoice Number".
+static INVOICE_NO_BEFORE: LazyLock<Regex> =
+    LazyLock::new(|| re(r"(?i)(?P<no>\b\d{6,})\s*(?:invoice|receipt)\s*(?:number|no\.?|nr\.?|\#)"));
+
+/// The reader breaks words across glyph runs: "Inv oi ce number", "Recei p t
+/// number", "561 1703644". With every space removed the keyword is whole and
+/// the value is the upper-case run that follows, stopped where prose starts.
+static INVOICE_NO_TIGHT: LazyLock<Regex> = LazyLock::new(|| {
+    re(r"(?x)
+        (?i:broj(?:ovog)?ra[čc]una|invoice|receipt|rechnung|ra[čc]un|racun|faktura|narud[žz]b[ae])
+        (?i:number|num|no\.?|nr\.?|br\.?|\#|id|/|broj|ra[čc]una|invoice|receipt|:|—|–|-)*
+        (?P<no>[A-Z0-9][A-Z0-9/-]{3,})")
+});
+
+/// A value that is really a date or a year, which the label "Invoice date"
+/// or a column layout puts where the number would be.
+static DATE_LIKE: LazyLock<Regex> =
+    LazyLock::new(|| re(r"(?i)^\d{1,2}-[a-z]{3}-\d{2,4}$|^(?:19|20)\d{2}$"));
+
+fn plausible_no(no: &str) -> bool {
+    let lower = no.to_ascii_lowercase();
+    no.chars().any(|c| c.is_ascii_digit())
+        && !matches!(
+            lower.as_str(),
+            "number" | "date" | "amount" | "total" | "period" | "details" | "summary"
+        )
+        && !DATE_LIKE.is_match(no)
+        && first_date(no).is_none()
+}
+
+/// Trim the punctuation a sentence leaves, and the prose the reader glued
+/// on: `G9DMV7ZW0009Paymentmethod` ends where a capitalised word begins.
+/// A lower-case hex number (`930d0222020d`) has no such word and stays.
+fn clean_no(no: &str) -> String {
+    let chars: Vec<char> = no.chars().collect();
+    let end = (1..chars.len())
+        .find(|&i| {
+            chars[i].is_ascii_uppercase() && chars.get(i + 1).is_some_and(char::is_ascii_lowercase)
+        })
+        .unwrap_or(chars.len());
+    chars[..end]
+        .iter()
+        .collect::<String>()
+        .trim_end_matches(['.', ',', ':', '-', '/'])
+        .to_owned()
+}
+
 fn invoice_no(lines: &[&str]) -> Option<(String, By)> {
-    for line in lines.iter().take(60) {
+    for line in lines.iter().take(80) {
         for c in INVOICE_NO.captures_iter(line) {
             let no = &c["no"];
-            let lower = no.to_ascii_lowercase();
-            // "Invoice date", "Invoice number" with the value on the next
-            // line, "Invoice for ...": words, not numbers.
-            if !no.chars().any(|c| c.is_ascii_digit())
-                || matches!(
-                    lower.as_str(),
-                    "number" | "date" | "amount" | "total" | "period" | "details" | "summary"
-                )
-            {
-                continue;
+            if plausible_no(no) {
+                return Some((clean_no(no), By::Label));
             }
-            return Some((no.trim_end_matches(['.', ',', ':']).to_owned(), By::Label));
+        }
+        if let Some(c) = INVOICE_NO_BEFORE.captures(line) {
+            return Some((clean_no(&c["no"]), By::Label));
+        }
+        let tight: String = line.chars().filter(|c| !c.is_whitespace()).collect();
+        for c in INVOICE_NO_TIGHT.captures_iter(&tight) {
+            let no = clean_no(&c["no"]);
+            if no.len() >= 4 && plausible_no(&no) {
+                return Some((no, By::Label));
+            }
         }
     }
     None
@@ -782,6 +833,58 @@ mod tests {
         // An unambiguous one is itself whatever the anchor says.
         let f = read("Invoice date: 25/08/2026", "", Some(d(2026, 1, 1)), "");
         assert_eq!(f.date, Some((d(2026, 8, 25), By::Label)));
+    }
+
+    #[test]
+    fn a_number_is_read_through_the_reader_s_broken_words() {
+        let no = |text: &str| invoice_no(&text.lines().collect::<Vec<_>>()).map(|n| n.0);
+        assert_eq!(
+            no("Inv oi ce number G9DMV7ZW0009\nPayment method"),
+            Some("G9DMV7ZW0009".into())
+        );
+        assert_eq!(
+            no("Receipt\nInv oice number SBIE11477587\nRecei pt number 239297698626"),
+            Some("SBIE11477587".into())
+        );
+        assert_eq!(no("Invoice number: 561 1703644"), Some("5611703644".into()));
+        assert_eq!(no("INVOICE\nINVOICE TS1 3 5 3 6"), Some("TS13536".into()));
+        assert_eq!(
+            no("InvoicenumberG9DMV7ZW0009Paymentmethod"),
+            Some("G9DMV7ZW0009".into())
+        );
+    }
+
+    #[test]
+    fn croatian_and_column_layouts_yield_the_number() {
+        let no = |text: &str| invoice_no(&text.lines().collect::<Vec<_>>()).map(|n| n.0);
+        assert_eq!(
+            no("Broj računa: 260007839477-A-1"),
+            Some("260007839477-A-1".into())
+        );
+        assert_eq!(
+            no("Broj ovog računa: 5030539125-315-6"),
+            Some("5030539125-315-6".into())
+        );
+        assert_eq!(no("RAČUN br. 1002-02-261"), Some("1002-02-261".into()));
+        assert_eq!(
+            no("Račun-otpremnica br. 1288/19/200"),
+            Some("1288/19/200".into())
+        );
+        assert_eq!(
+            no("Potvrda narudžbe #1762795891284"),
+            Some("1762795891284".into())
+        );
+        assert_eq!(
+            no("Invoice #— 186948\nInvoice Date— Jun 03, 2026"),
+            Some("186948".into())
+        );
+        assert_eq!(
+            no("3364411459Invoice Number 12-FEB-2026Invoice Date Credit CardPayment Terms"),
+            Some("3364411459".into()),
+            "the value on the left, not the date on the right"
+        );
+        assert_eq!(no("Invoice date 2026-09-01\nInvoice for August"), None);
+        assert_eq!(no("Račun 2026"), None, "a year is not a number");
     }
 
     #[test]

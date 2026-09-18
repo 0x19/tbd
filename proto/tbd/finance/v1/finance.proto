@@ -482,7 +482,9 @@ message Document {
   // A person set the fields; a re-read leaves them.
   bool declared = 16;
   // How each field was found: `vendor`, `date`, `amount`, `invoice_no` to
-  // `label`, `sender`, `first`, `received`, `declared` or empty.
+  // `label`, `sender`, `first`, `received`, `declared` or empty; `party` to
+  // `declared`, `payment` (the account that paid it), `text` (the document
+  // names the party) or `mailbox` (the connector's, for want of better).
   map<string, string> found_by = 17;
 }
 message DocumentSource {
@@ -623,6 +625,9 @@ message UpdateDocumentRequest {
   string total_minor = 4;
   string currency = 5;
   string invoice_no = 6;
+  // Whose it is: a party the caller may read, or empty to leave it. Once
+  // set by a person, no re-read decides it again.
+  string party_id = 7;
 }
 message UpdateDocumentResponse {
   Document document = 1;

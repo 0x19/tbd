@@ -229,6 +229,8 @@ pub struct Declared {
     pub currency: Option<String>,
     /// The supplier's number.
     pub invoice_no: Option<String>,
+    /// Whose it is. `None` leaves the party as decided.
+    pub party_id: Option<Uuid>,
 }
 
 /// Set the fields by hand. Every field in `declared` is written as given,
@@ -247,10 +249,20 @@ pub async fn update(
     for key in ["vendor", "date", "amount", "invoice_no"] {
         found_by.insert(key.to_owned(), Value::String("declared".into()));
     }
+    // The party moves only to one the caller may see, and is then theirs:
+    // no re-read decides it again.
+    let party = match declared.party_id {
+        Some(p) => {
+            access.require(PartyId(p), "party")?;
+            found_by.insert("party".into(), Value::String("declared".into()));
+            p
+        }
+        None => doc.party_id,
+    };
     sqlx::query(
         "update finance.documents
             set vendor = $2, doc_date = $3, total_minor = $4, currency = $5, invoice_no = $6,
-                declared_at = now(), extracted = $7
+                declared_at = now(), extracted = $7, party_id = $8
           where id = $1",
     )
     .bind(id)
@@ -260,6 +272,7 @@ pub async fn update(
     .bind(&declared.currency)
     .bind(&declared.invoice_no)
     .bind(Value::Object(found_by))
+    .bind(party)
     .execute(pool)
     .await
     .map_err(map_err)?;
@@ -363,7 +376,10 @@ pub async fn write_read(
     ]);
     if declared {
         sqlx::query(
-            "update finance.documents set text = coalesce($2, text), extracted = $3, extracted_at = now()
+            "update finance.documents
+                set text = coalesce($2, text), extracted_at = now(),
+                    extracted = (coalesce(extracted, '{}'::jsonb)
+                                 - 'engine' - 'error' - 'vendor' - 'date' - 'amount' - 'invoice_no') || $3
               where id = $1",
         )
         .bind(id)
@@ -376,7 +392,11 @@ pub async fn write_read(
     }
     sqlx::query(
         "update finance.documents
-            set text = coalesce($2, text), extracted = $3, extracted_at = now(),
+            set text = coalesce($2, text), extracted_at = now(),
+                -- The fields' record is rewritten; what else the row knows
+                -- (whose it is, and how that was decided) is kept.
+                extracted = (coalesce(extracted, '{}'::jsonb)
+                             - 'engine' - 'error' - 'vendor' - 'date' - 'amount' - 'invoice_no') || $3,
                 vendor = $4, doc_date = $5, total_minor = $6, currency = $7, invoice_no = $8
           where id = $1",
     )

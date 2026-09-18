@@ -775,6 +775,7 @@ async fn a_correction_is_declared_and_survives_a_re_read() {
                 total_minor: "1234".into(),
                 currency: "usd".into(),
                 invoice_no: "X-1".into(),
+                ..UpdateDocumentRequest::default()
             },
         ))
         .await
