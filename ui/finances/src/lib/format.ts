@@ -105,6 +105,23 @@ export function monthShort(ym: string): string {
   return MONTHS[lang][i] ?? ym;
 }
 
+/** "2026-07" → "Q3 2026" (the quarter the month is in). */
+export function quarterLabel(ym: string): string {
+  const [y, m] = ym.split("-");
+  const q = Math.floor((Number(m) - 1) / 3) + 1;
+  return `Q${q} ${y}`;
+}
+
+/** "2026-07" → "2026". */
+export function yearLabel(ym: string): string {
+  return ym.split("-")[0] ?? ym;
+}
+
+/** The label of a period by its kind and first month. */
+export function periodLabel(kind: "month" | "quarter" | "year", start: string): string {
+  return kind === "month" ? monthLabel(start) : kind === "quarter" ? quarterLabel(start) : yearLabel(start);
+}
+
 /** This month as YYYY-MM, local time. */
 export function thisMonth(d = new Date()): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;

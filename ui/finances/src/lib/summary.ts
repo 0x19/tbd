@@ -87,3 +87,123 @@ export function currencies(rows: SummaryRow[]): string[] {
 export function chartValue(v: bigint): number {
   return Number(v) / 100;
 }
+
+// ---- periods ---------------------------------------------------------------
+// A period is a run of whole months: one, a quarter's three, or a year's
+// twelve. Everything the overview shows is a slice of monthly totals, so a
+// period is just the set of months to sum -- switching from month to year
+// needs no new fetch, only a bigger set.
+
+export type PeriodKind = "month" | "quarter" | "year";
+
+export type Period = {
+  kind: PeriodKind;
+  /** The first month of the period, YYYY-MM. */
+  start: string;
+  /** Every month in it, oldest first. */
+  months: string[];
+};
+
+function ym(y: number, m0: number): string {
+  const d = new Date(y, m0, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+/** The period of `kind` that contains the month `anchor`. */
+export function periodOf(kind: PeriodKind, anchor: string): Period {
+  const [y, m] = anchor.split("-").map(Number) as [number, number];
+  const m0 = m - 1;
+  if (kind === "month") return { kind, start: anchor, months: [anchor] };
+  if (kind === "quarter") {
+    const q0 = Math.floor(m0 / 3) * 3;
+    return { kind, start: ym(y, q0), months: [0, 1, 2].map((i) => ym(y, q0 + i)) };
+  }
+  return { kind, start: ym(y, 0), months: Array.from({ length: 12 }, (_, i) => ym(y, i)) };
+}
+
+/** The same kind of period, `delta` periods later (negative for earlier). */
+export function shiftPeriod(period: Period, delta: number): Period {
+  const [y, m] = period.start.split("-").map(Number) as [number, number];
+  const step = period.kind === "month" ? 1 : period.kind === "quarter" ? 3 : 12;
+  return periodOf(period.kind, ym(y, m - 1 + delta * step));
+}
+
+/** The previous period of the same size. */
+export function previousPeriod(period: Period): Period {
+  return shiftPeriod(period, -1);
+}
+
+export type Totals = {
+  income: bigint;
+  spent: bigint;
+  out: bigint;
+  in: bigint;
+  count: number;
+  /** How many of the period's months had any rows at all. */
+  monthsWithData: number;
+};
+
+/** Sum the monthly totals that fall inside `period`. Months with no rows
+ *  count as zero, and `monthsWithData` says how many were real. */
+export function periodTotals(months: MonthTotals[], period: Period): Totals {
+  const want = new Set(period.months);
+  const t: Totals = { income: ZERO, spent: ZERO, out: ZERO, in: ZERO, count: 0, monthsWithData: 0 };
+  for (const m of months) {
+    if (!want.has(m.month)) continue;
+    t.income += m.income;
+    t.spent += m.spent;
+    t.out += m.out;
+    t.in += m.in;
+    t.count += m.count;
+    t.monthsWithData += 1;
+  }
+  return t;
+}
+
+/** Percent change from `before` to `after`, one decimal; undefined when there
+ *  is nothing to compare against. */
+export function percentChange(after: bigint, before: bigint): number | undefined {
+  if (before === ZERO) return undefined;
+  return Number(((after - before) * 1000n) / (before < ZERO ? -before : before)) / 10;
+}
+
+/** What stayed: (in − out) ÷ in, as a percentage; null with nothing in. */
+export function keptRate(t: { in: bigint; out: bigint }): number | null {
+  if (t.in === ZERO) return null;
+  return Number(((t.in - t.out) * 1000n) / t.in) / 10;
+}
+
+/** A year against the one before it, month by month (index 0 = January).
+ *  Missing months are null so a chart can leave a gap rather than draw zero. */
+export function yearOverYear(
+  months: MonthTotals[],
+  year: string,
+  pick: (m: MonthTotals) => bigint,
+): { month: string; thisYear: number | null; lastYear: number | null }[] {
+  const by = new Map(months.map((m) => [m.month, m]));
+  const y = Number(year);
+  return Array.from({ length: 12 }, (_, i) => {
+    const cur = by.get(ym(y, i));
+    const prev = by.get(ym(y - 1, i));
+    return {
+      month: ym(y, i),
+      thisYear: cur ? chartValue(pick(cur)) : null,
+      lastYear: prev ? chartValue(pick(prev)) : null,
+    };
+  });
+}
+
+/** The period's first and last day, YYYY-MM-DD, for date-bounded API calls. */
+export function periodBounds(period: Period): { from: string; to: string } {
+  const first = period.months[0] ?? period.start;
+  const last = period.months.at(-1) ?? period.start;
+  const [y, m] = last.split("-").map(Number) as [number, number];
+  const end = new Date(y, m, 0).getDate();
+  return { from: `${first}-01`, to: `${last}-${String(end).padStart(2, "0")}` };
+}
+
+/** The `n` months ending with `last`, oldest first, as YYYY-MM. */
+export function monthsEnding(last: string, n: number): string[] {
+  const [y, m] = last.split("-").map(Number) as [number, number];
+  return Array.from({ length: n }, (_, i) => ym(y, m - 1 - (n - 1 - i)));
+}
