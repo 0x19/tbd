@@ -1,8 +1,8 @@
 "use client";
 
+import { LangToggle } from "@/components/lang-toggle";
 import { HeaderThemeControls } from "@/components/layout/header-theme-controls";
 import { HeaderUser } from "@/components/layout/header-user";
-import { LangToggle } from "@/components/lang-toggle";
 import { cn } from "@/lib/utils";
 
 export function HeaderUtilityActions({ className }: { className?: string }) {
