@@ -189,7 +189,57 @@ service FinanceService {
   rpc GetInvoiceDocument(GetInvoiceDocumentRequest) returns (GetInvoiceDocumentResponse) {
     option (google.api.http) = {get: "/v1/finance/invoices/{id}/document"};
   }
+
+  // What a client is usually billed for: the rows a draft starts from.
+  rpc ListLineTemplates(ListLineTemplatesRequest) returns (ListLineTemplatesResponse) {
+    option (google.api.http) = {get: "/v1/finance/clients/{client_id}/lines"};
+  }
+  rpc UpsertLineTemplate(UpsertLineTemplateRequest) returns (UpsertLineTemplateResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/clients/{client_id}/lines"
+      body: "*"
+    };
+  }
+  rpc DeleteLineTemplate(DeleteLineTemplateRequest) returns (DeleteLineTemplateResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/clients/{client_id}/lines/delete"
+      body: "*"
+    };
+  }
 }
+
+message LineTemplate {
+  string id = 1;
+  string client_id = 2;
+  int32 position = 3;
+  string description = 4;
+  // fixed: always on a draft with this price. variable: always on a draft,
+  // price pre-filled from the last invoice that carried it. optional:
+  // offered in the editor, off until chosen.
+  string mode = 5;
+  int64 quantity_milli = 6;
+  int64 unit_price_minor = 7;
+  bool enabled = 8;
+}
+message ListLineTemplatesRequest {
+  string client_id = 1;
+}
+message ListLineTemplatesResponse {
+  repeated LineTemplate templates = 1;
+}
+message UpsertLineTemplateRequest {
+  string client_id = 1;
+  // Empty id creates.
+  LineTemplate template = 2;
+}
+message UpsertLineTemplateResponse {
+  LineTemplate template = 1;
+}
+message DeleteLineTemplateRequest {
+  string client_id = 1;
+  string id = 2;
+}
+message DeleteLineTemplateResponse {}
 
 message IssuerProfile {
   string party_id = 1;
@@ -262,6 +312,8 @@ message InvoiceLine {
   int64 unit_price_minor = 4;
   // Computed by the service.
   int64 amount_minor = 5;
+  // The template this line came from; empty for one typed by hand.
+  string template_id = 6;
 }
 
 message Invoice {

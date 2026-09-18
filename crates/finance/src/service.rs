@@ -17,17 +17,19 @@ use tbd_proto::finance::v1::{
     Account, ApproveInvoiceRequest, ApproveInvoiceResponse, Balance, CancelInvoiceRequest,
     CancelInvoiceResponse, Category, CompleteConnectionRequest, CompleteConnectionResponse,
     Connection, CreateInvoiceRequest, CreateInvoiceResponse, DeclareCategoryRequest,
-    DeclareCategoryResponse, GetInvoiceDocumentRequest, GetInvoiceDocumentResponse,
-    GetInvoiceRequest, GetInvoiceResponse, GetIssuerRequest, GetIssuerResponse,
-    ListAccountsRequest, ListAccountsResponse, ListCategoriesRequest, ListCategoriesResponse,
-    ListClientsRequest, ListClientsResponse, ListConnectionsRequest, ListConnectionsResponse,
-    ListInvoicesRequest, ListInvoicesResponse, ListPartiesRequest, ListPartiesResponse,
+    DeclareCategoryResponse, DeleteLineTemplateRequest, DeleteLineTemplateResponse,
+    GetInvoiceDocumentRequest, GetInvoiceDocumentResponse, GetInvoiceRequest, GetInvoiceResponse,
+    GetIssuerRequest, GetIssuerResponse, ListAccountsRequest, ListAccountsResponse,
+    ListCategoriesRequest, ListCategoriesResponse, ListClientsRequest, ListClientsResponse,
+    ListConnectionsRequest, ListConnectionsResponse, ListInvoicesRequest, ListInvoicesResponse,
+    ListLineTemplatesRequest, ListLineTemplatesResponse, ListPartiesRequest, ListPartiesResponse,
     ListRulesRequest, ListRulesResponse, ListTransactionsRequest, ListTransactionsResponse,
     MonthlySummaryRequest, MonthlySummaryResponse, Party, PingRequest, PingResponse,
     PreviewInvoiceRequest, PreviewInvoiceResponse, RefreshAccountRequest, RefreshAccountResponse,
     Rule, StartConnectionRequest, StartConnectionResponse, SummaryRow, Transaction,
     UpdateInvoiceRequest, UpdateInvoiceResponse, UpsertClientRequest, UpsertClientResponse,
-    UpsertIssuerRequest, UpsertIssuerResponse, UpsertRuleRequest, UpsertRuleResponse,
+    UpsertIssuerRequest, UpsertIssuerResponse, UpsertLineTemplateRequest,
+    UpsertLineTemplateResponse, UpsertRuleRequest, UpsertRuleResponse,
     finance_service_server::FinanceService,
 };
 use tonic::{Code, Request, Response, Status};
@@ -879,6 +881,24 @@ impl FinanceService for Finance {
         r: Request<GetInvoiceDocumentRequest>,
     ) -> Result<Response<GetInvoiceDocumentResponse>, Status> {
         self.rpc_get_invoice_document(r).await
+    }
+    async fn list_line_templates(
+        &self,
+        r: Request<ListLineTemplatesRequest>,
+    ) -> Result<Response<ListLineTemplatesResponse>, Status> {
+        self.rpc_list_line_templates(r).await
+    }
+    async fn upsert_line_template(
+        &self,
+        r: Request<UpsertLineTemplateRequest>,
+    ) -> Result<Response<UpsertLineTemplateResponse>, Status> {
+        self.rpc_upsert_line_template(r).await
+    }
+    async fn delete_line_template(
+        &self,
+        r: Request<DeleteLineTemplateRequest>,
+    ) -> Result<Response<DeleteLineTemplateResponse>, Status> {
+        self.rpc_delete_line_template(r).await
     }
 }
 

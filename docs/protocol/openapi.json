@@ -383,6 +383,152 @@
         }
       }
     },
+    "/v1/finance/clients/{client_id}/lines": {
+      "get": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/ListLineTemplates",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/ListLineTemplates` on the `finance` backend.",
+        "operationId": "FinanceService.ListLineTemplates",
+        "parameters": [
+          {
+            "name": "client_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.ListLineTemplatesResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.ListLineTemplatesResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/UpsertLineTemplate",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/UpsertLineTemplate` on the `finance` backend.",
+        "operationId": "FinanceService.UpsertLineTemplate",
+        "parameters": [
+          {
+            "name": "client_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "`tbd.finance.v1.UpsertLineTemplateRequest`; path variables override their fields",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/tbd.finance.v1.UpsertLineTemplateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.UpsertLineTemplateResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.UpsertLineTemplateResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/finance/clients/{client_id}/lines/delete": {
+      "post": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/DeleteLineTemplate",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/DeleteLineTemplate` on the `finance` backend.",
+        "operationId": "FinanceService.DeleteLineTemplate",
+        "parameters": [
+          {
+            "name": "client_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "`tbd.finance.v1.DeleteLineTemplateRequest`; path variables override their fields",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/tbd.finance.v1.DeleteLineTemplateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.DeleteLineTemplateResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.DeleteLineTemplateResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/finance/connections": {
       "get": {
         "tags": [
@@ -2754,6 +2900,22 @@
           }
         }
       },
+      "tbd.finance.v1.DeleteLineTemplateRequest": {
+        "type": "object",
+        "description": "`tbd.finance.v1.DeleteLineTemplateRequest`",
+        "properties": {
+          "client_id": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.finance.v1.DeleteLineTemplateResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.DeleteLineTemplateResponse`"
+      },
       "tbd.finance.v1.GetInvoiceDocumentResponse": {
         "type": "object",
         "description": "`tbd.finance.v1.GetInvoiceDocumentResponse`",
@@ -2895,6 +3057,9 @@
             "type": "string",
             "format": "int64"
           },
+          "template_id": {
+            "type": "string"
+          },
           "unit_price_minor": {
             "type": "string",
             "format": "int64"
@@ -2965,6 +3130,39 @@
           }
         }
       },
+      "tbd.finance.v1.LineTemplate": {
+        "type": "object",
+        "description": "`tbd.finance.v1.LineTemplate`",
+        "properties": {
+          "client_id": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "mode": {
+            "type": "string"
+          },
+          "position": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "quantity_milli": {
+            "type": "string",
+            "format": "int64"
+          },
+          "unit_price_minor": {
+            "type": "string",
+            "format": "int64"
+          }
+        }
+      },
       "tbd.finance.v1.ListAccountsResponse": {
         "type": "object",
         "description": "`tbd.finance.v1.ListAccountsResponse`",
@@ -3021,6 +3219,18 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/tbd.finance.v1.Invoice"
+            }
+          }
+        }
+      },
+      "tbd.finance.v1.ListLineTemplatesResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.ListLineTemplatesResponse`",
+        "properties": {
+          "templates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/tbd.finance.v1.LineTemplate"
             }
           }
         }
@@ -3410,6 +3620,27 @@
         "properties": {
           "issuer": {
             "$ref": "#/components/schemas/tbd.finance.v1.IssuerProfile"
+          }
+        }
+      },
+      "tbd.finance.v1.UpsertLineTemplateRequest": {
+        "type": "object",
+        "description": "`tbd.finance.v1.UpsertLineTemplateRequest`",
+        "properties": {
+          "client_id": {
+            "type": "string"
+          },
+          "template": {
+            "$ref": "#/components/schemas/tbd.finance.v1.LineTemplate"
+          }
+        }
+      },
+      "tbd.finance.v1.UpsertLineTemplateResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.UpsertLineTemplateResponse`",
+        "properties": {
+          "template": {
+            "$ref": "#/components/schemas/tbd.finance.v1.LineTemplate"
           }
         }
       },

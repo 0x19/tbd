@@ -120,6 +120,7 @@ fn lines() -> Vec<InvoiceLine> {
             quantity_milli: 1000,
             unit_price_minor: 1_375_000,
             amount_minor: 0,
+            template_id: String::new(),
         },
         InvoiceLine {
             position: 0,
@@ -127,6 +128,7 @@ fn lines() -> Vec<InvoiceLine> {
             quantity_milli: 1000,
             unit_price_minor: 75_082,
             amount_minor: 0,
+            template_id: String::new(),
         },
     ]
 }
@@ -460,4 +462,104 @@ async fn the_reader_sees_the_companys_invoices_but_cannot_draft_or_approve() {
         .unwrap_err();
     assert_eq!(e.code(), Code::NotFound, "{e}");
     let _ = (id, client_id);
+}
+
+#[tokio::test]
+async fn a_draft_starts_from_the_templates_with_last_months_variable_price() {
+    use tbd_proto::finance::v1::{
+        LineTemplate, ListLineTemplatesRequest, UpsertLineTemplateRequest,
+    };
+    let (server, pool) = start_with_store().await;
+    let w = seed(&pool).await;
+    let (first, client_id) = draft(&server, w.company).await;
+    let mut c = server.client().await;
+    let tpl =
+        |position: i32, description: &str, mode: &str, price: i64| UpsertLineTemplateRequest {
+            client_id: client_id.clone(),
+            template: Some(LineTemplate {
+                id: String::new(),
+                client_id: client_id.clone(),
+                position,
+                description: description.into(),
+                mode: mode.into(),
+                quantity_milli: 1000,
+                unit_price_minor: price,
+                enabled: true,
+            }),
+        };
+    c.upsert_line_template(as_caller(
+        OWNER,
+        tpl(1, "Prepaid services / Usluge", "fixed", 1_375_000),
+    ))
+    .await
+    .unwrap();
+    c.upsert_line_template(as_caller(
+        OWNER,
+        tpl(2, "On-call / Dežurstvo", "variable", 0),
+    ))
+    .await
+    .unwrap();
+    c.upsert_line_template(as_caller(OWNER, tpl(3, "Bonus", "optional", 0)))
+        .await
+        .unwrap();
+    let listed = c
+        .list_line_templates(as_caller(
+            OWNER,
+            ListLineTemplatesRequest {
+                client_id: client_id.clone(),
+            },
+        ))
+        .await
+        .unwrap()
+        .into_inner()
+        .templates;
+    assert_eq!(listed.len(), 3);
+
+    // The first draft (made before the templates, with on-call at 750.82)
+    // is approved; the next draft takes the fixed row from the template and
+    // the variable row's price from that invoice, and leaves the bonus out.
+    approve(&server, first).await;
+    let next = c
+        .create_invoice(as_caller(
+            OWNER,
+            CreateInvoiceRequest {
+                client_id: client_id.clone(),
+            },
+        ))
+        .await
+        .unwrap()
+        .into_inner()
+        .invoice
+        .unwrap();
+    let rows: Vec<(String, i64, bool)> = next
+        .lines
+        .iter()
+        .map(|l| {
+            (
+                l.description.clone(),
+                l.unit_price_minor,
+                !l.template_id.is_empty(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        rows,
+        vec![
+            ("Prepaid services / Usluge".to_owned(), 1_375_000, true),
+            ("On-call / Dežurstvo".to_owned(), 75_082, true),
+        ]
+    );
+
+    // A reader cannot write templates for a party they were not granted.
+    let e = c
+        .upsert_line_template(as_caller(
+            READER,
+            UpsertLineTemplateRequest {
+                client_id: Uuid::new_v4().to_string(),
+                template: tpl(1, "x", "fixed", 1).template,
+            },
+        ))
+        .await
+        .unwrap_err();
+    assert_eq!(e.code(), Code::NotFound);
 }

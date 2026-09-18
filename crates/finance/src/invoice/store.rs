@@ -141,6 +141,34 @@ pub struct LineRow {
     pub quantity_milli: i64,
     pub unit_price_minor: i64,
     pub amount_minor: i64,
+    pub template_id: Option<Uuid>,
+}
+
+#[allow(missing_docs)]
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct TemplateRow {
+    pub id: Uuid,
+    pub client_id: Uuid,
+    pub position: i32,
+    pub description: String,
+    pub mode: String,
+    pub quantity_milli: i64,
+    pub unit_price_minor: i64,
+    pub enabled: bool,
+}
+
+/// What a person writes on a line template.
+#[allow(missing_docs)]
+#[derive(Debug, Clone)]
+pub struct TemplateInput {
+    pub id: Option<Uuid>,
+    pub client_id: Uuid,
+    pub position: i32,
+    pub description: String,
+    pub mode: String,
+    pub quantity_milli: i64,
+    pub unit_price_minor: i64,
+    pub enabled: bool,
 }
 
 /// What a person writes on an issuer profile.
@@ -200,6 +228,7 @@ pub struct LineInput {
     pub description: String,
     pub quantity_milli: i64,
     pub unit_price_minor: i64,
+    pub template_id: Option<Uuid>,
 }
 
 /// A preview: the document, its hash, and the PDF.
@@ -316,6 +345,142 @@ pub async fn clients(pool: &PgPool, view: &Access) -> Result<Vec<ClientRow>, Inv
     .map_err(map_err)?)
 }
 
+const TEMPLATE_COLUMNS: &str =
+    "id, client_id, position, description, mode, quantity_milli, unit_price_minor, enabled";
+
+/// Whose a client is, if the caller may know.
+async fn client_party(pool: &PgPool, access: &Access, client: Uuid) -> Result<Uuid, DbError> {
+    let row: Option<(Uuid,)> = sqlx::query_as("select party_id from finance.clients where id = $1")
+        .bind(client)
+        .fetch_optional(pool)
+        .await
+        .map_err(map_err)?;
+    let party = row
+        .map(|(p,)| p)
+        .ok_or(DbError::NotFound { what: "client" })?;
+    access.require(PartyId(party), "client")?;
+    Ok(party)
+}
+
+/// A client's line templates, in order, disabled ones included and marked.
+///
+/// # Errors
+/// The database, or the client is outside the grant.
+pub async fn templates(
+    pool: &PgPool,
+    access: &Access,
+    client: Uuid,
+) -> Result<Vec<TemplateRow>, InvoiceError> {
+    client_party(pool, access, client).await?;
+    Ok(sqlx::query_as::<_, TemplateRow>(sql(&format!(
+        "select {TEMPLATE_COLUMNS} from finance.line_templates where client_id = $1 order by position, created_at"
+    )))
+    .bind(client)
+    .fetch_all(pool)
+    .await
+    .map_err(map_err)?)
+}
+
+/// Create or change a line template.
+///
+/// # Errors
+/// The database; the client or template is outside the grant; bad input.
+pub async fn upsert_template(
+    pool: &PgPool,
+    access: &Access,
+    input: TemplateInput,
+) -> Result<TemplateRow, InvoiceError> {
+    client_party(pool, access, input.client_id).await?;
+    if !matches!(input.mode.as_str(), "fixed" | "variable" | "optional") {
+        return Err(DbError::Invalid {
+            field: "mode",
+            reason: "want fixed, variable or optional".into(),
+        }
+        .into());
+    }
+    if input.description.trim().is_empty() {
+        return Err(DbError::Invalid {
+            field: "description",
+            reason: "empty".into(),
+        }
+        .into());
+    }
+    if input.quantity_milli <= 0 {
+        return Err(DbError::Invalid {
+            field: "quantity",
+            reason: "must be positive".into(),
+        }
+        .into());
+    }
+    let id = match input.id {
+        Some(id) => {
+            let owned: Option<(Uuid,)> = sqlx::query_as(
+                "select id from finance.line_templates where id = $1 and client_id = $2",
+            )
+            .bind(id)
+            .bind(input.client_id)
+            .fetch_optional(pool)
+            .await
+            .map_err(map_err)?;
+            owned.ok_or(DbError::NotFound { what: "template" })?;
+            id
+        }
+        None => Uuid::new_v4(),
+    };
+    sqlx::query(
+        "insert into finance.line_templates (id, client_id, position, description, mode, quantity_milli,
+            unit_price_minor, enabled)
+         values ($1,$2,$3,$4,$5,$6,$7,$8)
+         on conflict (id) do update set position = excluded.position, description = excluded.description,
+            mode = excluded.mode, quantity_milli = excluded.quantity_milli,
+            unit_price_minor = excluded.unit_price_minor, enabled = excluded.enabled,
+            updated_at = clock_timestamp()",
+    )
+    .bind(id)
+    .bind(input.client_id)
+    .bind(input.position)
+    .bind(input.description.trim())
+    .bind(&input.mode)
+    .bind(input.quantity_milli)
+    .bind(input.unit_price_minor)
+    .bind(input.enabled)
+    .execute(pool)
+    .await
+    .map_err(map_err)?;
+    Ok(sqlx::query_as::<_, TemplateRow>(sql(&format!(
+        "select {TEMPLATE_COLUMNS} from finance.line_templates where id = $1"
+    )))
+    .bind(id)
+    .fetch_one(pool)
+    .await
+    .map_err(map_err)?)
+}
+
+/// Remove a line template. Lines already drawn from it keep their text and
+/// lose the link.
+///
+/// # Errors
+/// The database, or the client or template is outside the grant.
+pub async fn delete_template(
+    pool: &PgPool,
+    access: &Access,
+    client: Uuid,
+    id: Uuid,
+) -> Result<(), InvoiceError> {
+    client_party(pool, access, client).await?;
+    let n = sqlx::query("delete from finance.line_templates where id = $1 and client_id = $2")
+        .bind(id)
+        .bind(client)
+        .execute(pool)
+        .await
+        .map_err(map_err)?
+        .rows_affected();
+    if n == 0 {
+        return Err(DbError::NotFound { what: "template" }.into());
+    }
+    Ok(())
+}
+
 /// Create or change a client.
 ///
 /// # Errors
@@ -420,7 +585,8 @@ pub async fn invoice(
 
 async fn lines_of(pool: &PgPool, id: Uuid) -> Result<Vec<LineRow>, DbError> {
     sqlx::query_as::<_, LineRow>(
-        "select id, invoice_id, position, description, quantity_milli, unit_price_minor, amount_minor
+        "select id, invoice_id, position, description, quantity_milli, unit_price_minor, amount_minor,
+                template_id
            from finance.invoice_lines where invoice_id = $1 order by position",
     )
     .bind(id)
@@ -469,10 +635,11 @@ pub async fn create_draft(
     .fetch_optional(pool)
     .await
     .map_err(map_err)?;
-    let prefill_lines = match &previous {
+    let previous_lines = match &previous {
         Some(p) => lines_of(pool, p.id).await?,
         None => Vec::new(),
     };
+    let inputs = starting_lines(pool, client_id, &previous_lines).await?;
 
     let id = Uuid::new_v4();
     let day = today();
@@ -499,14 +666,6 @@ pub async fn create_draft(
     .execute(&mut *tx)
     .await
     .map_err(map_err)?;
-    let inputs: Vec<LineInput> = prefill_lines
-        .iter()
-        .map(|l| LineInput {
-            description: l.description.clone(),
-            quantity_milli: l.quantity_milli,
-            unit_price_minor: l.unit_price_minor,
-        })
-        .collect();
     write_lines(&mut tx, id, &inputs, treatment).await?;
     event(
         &mut tx,
@@ -518,6 +677,56 @@ pub async fn create_draft(
     .await?;
     tx.commit().await.map_err(map_err)?;
     invoice(pool, access, id).await.map(|(row, _)| row)
+}
+
+/// The rows a new draft starts with.
+///
+/// The templates decide which rows exist; the last invoice decides what a
+/// variable row cost last time. Without templates, the last invoice's lines
+/// are the best guess there is.
+async fn starting_lines(
+    pool: &PgPool,
+    client_id: Uuid,
+    previous_lines: &[LineRow],
+) -> Result<Vec<LineInput>, InvoiceError> {
+    let templates: Vec<TemplateRow> = sqlx::query_as::<_, TemplateRow>(sql(&format!(
+        "select {TEMPLATE_COLUMNS} from finance.line_templates
+          where client_id = $1 and enabled and mode in ('fixed', 'variable')
+          order by position, created_at"
+    )))
+    .bind(client_id)
+    .fetch_all(pool)
+    .await
+    .map_err(map_err)?;
+    if templates.is_empty() {
+        return Ok(previous_lines
+            .iter()
+            .map(|l| LineInput {
+                description: l.description.clone(),
+                quantity_milli: l.quantity_milli,
+                unit_price_minor: l.unit_price_minor,
+                template_id: l.template_id,
+            })
+            .collect());
+    }
+    Ok(templates
+        .iter()
+        .map(|t| {
+            let last = previous_lines
+                .iter()
+                .find(|l| l.template_id == Some(t.id) || l.description == t.description);
+            let price = match (t.mode.as_str(), last) {
+                ("variable", Some(l)) => l.unit_price_minor,
+                _ => t.unit_price_minor,
+            };
+            LineInput {
+                description: t.description.clone(),
+                quantity_milli: t.quantity_milli,
+                unit_price_minor: price,
+                template_id: Some(t.id),
+            }
+        })
+        .collect())
 }
 
 /// Replace a draft's editable fields and lines, and recompute its totals.
@@ -595,7 +804,7 @@ async fn write_lines(
     for l in &lines {
         sqlx::query(
             "insert into finance.invoice_lines (id, invoice_id, position, description, quantity_milli,
-                unit_price_minor, amount_minor) values ($1,$2,$3,$4,$5,$6,$7)",
+                unit_price_minor, amount_minor, template_id) values ($1,$2,$3,$4,$5,$6,$7,$8)",
         )
         .bind(Uuid::new_v4())
         .bind(id)
@@ -604,6 +813,7 @@ async fn write_lines(
         .bind(l.quantity_milli)
         .bind(l.unit_price_minor)
         .bind(l.amount_minor)
+        .bind(inputs.get(usize::try_from(l.position).unwrap_or(1).saturating_sub(1)).and_then(|i| i.template_id))
         .execute(&mut **tx)
         .await
         .map_err(map_err)?;

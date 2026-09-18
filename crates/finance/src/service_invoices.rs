@@ -6,12 +6,14 @@
 use tbd_db::DbError;
 use tbd_proto::finance::v1::{
     ApproveInvoiceRequest, ApproveInvoiceResponse, CancelInvoiceRequest, CancelInvoiceResponse,
-    ClientProfile, CreateInvoiceRequest, CreateInvoiceResponse, GetInvoiceDocumentRequest,
-    GetInvoiceDocumentResponse, GetInvoiceRequest, GetInvoiceResponse, GetIssuerRequest,
-    GetIssuerResponse, Invoice, InvoiceLine, IssuerProfile, ListClientsRequest,
-    ListClientsResponse, ListInvoicesRequest, ListInvoicesResponse, PreviewInvoiceRequest,
-    PreviewInvoiceResponse, UpdateInvoiceRequest, UpdateInvoiceResponse, UpsertClientRequest,
-    UpsertClientResponse, UpsertIssuerRequest, UpsertIssuerResponse,
+    ClientProfile, CreateInvoiceRequest, CreateInvoiceResponse, DeleteLineTemplateRequest,
+    DeleteLineTemplateResponse, GetInvoiceDocumentRequest, GetInvoiceDocumentResponse,
+    GetInvoiceRequest, GetInvoiceResponse, GetIssuerRequest, GetIssuerResponse, Invoice,
+    InvoiceLine, IssuerProfile, LineTemplate, ListClientsRequest, ListClientsResponse,
+    ListInvoicesRequest, ListInvoicesResponse, ListLineTemplatesRequest, ListLineTemplatesResponse,
+    PreviewInvoiceRequest, PreviewInvoiceResponse, UpdateInvoiceRequest, UpdateInvoiceResponse,
+    UpsertClientRequest, UpsertClientResponse, UpsertIssuerRequest, UpsertIssuerResponse,
+    UpsertLineTemplateRequest, UpsertLineTemplateResponse,
 };
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
@@ -21,7 +23,7 @@ use crate::{
         VatTreatment,
         store::{
             self, ClientInput, ClientRow, DraftInput, InvoiceError, InvoiceRow, IssuerInput,
-            IssuerRow, LineInput, LineRow,
+            IssuerRow, LineInput, LineRow, TemplateInput, TemplateRow,
         },
     },
     service::{Finance, status_of},
@@ -125,8 +127,22 @@ fn invoice_proto(r: InvoiceRow, lines: Vec<LineRow>) -> Invoice {
                 quantity_milli: l.quantity_milli,
                 unit_price_minor: l.unit_price_minor,
                 amount_minor: l.amount_minor,
+                template_id: l.template_id.map(|t| t.to_string()).unwrap_or_default(),
             })
             .collect(),
+    }
+}
+
+fn template_proto(t: TemplateRow) -> LineTemplate {
+    LineTemplate {
+        id: t.id.to_string(),
+        client_id: t.client_id.to_string(),
+        position: t.position,
+        description: t.description,
+        mode: t.mode,
+        quantity_milli: t.quantity_milli,
+        unit_price_minor: t.unit_price_minor,
+        enabled: t.enabled,
     }
 }
 
@@ -360,6 +376,7 @@ impl Finance {
                     description: l.description,
                     quantity_milli: l.quantity_milli,
                     unit_price_minor: l.unit_price_minor,
+                    template_id: Uuid::parse_str(&l.template_id).ok(),
                 })
                 .collect(),
         };
@@ -437,6 +454,77 @@ impl Finance {
             })
         }
         .await;
+        self.done(&mut timer, r)
+    }
+
+    pub(crate) async fn rpc_list_line_templates(
+        &self,
+        request: Request<ListLineTemplatesRequest>,
+    ) -> Result<Response<ListLineTemplatesResponse>, Status> {
+        let client = uuid(&request.get_ref().client_id, "client_id")?;
+        let (mut timer, pool, access, _) = self
+            .invoice_context("FinanceService/ListLineTemplates", &request, &[])
+            .await?;
+        let r = store::templates(pool, &access, client)
+            .await
+            .map(|t| ListLineTemplatesResponse {
+                templates: t.into_iter().map(template_proto).collect(),
+            });
+        self.done(&mut timer, r)
+    }
+
+    pub(crate) async fn rpc_upsert_line_template(
+        &self,
+        request: Request<UpsertLineTemplateRequest>,
+    ) -> Result<Response<UpsertLineTemplateResponse>, Status> {
+        let req = request.get_ref().clone();
+        let client = uuid(&req.client_id, "client_id")?;
+        let Some(t) = req.template else {
+            return Err(Status::invalid_argument("template is required"));
+        };
+        let id = if t.id.is_empty() {
+            None
+        } else {
+            Some(uuid(&t.id, "template.id")?)
+        };
+        let (mut timer, pool, access, _) = self
+            .invoice_context("FinanceService/UpsertLineTemplate", &request, &[])
+            .await?;
+        let input = TemplateInput {
+            id,
+            client_id: client,
+            position: t.position,
+            description: t.description,
+            mode: t.mode,
+            quantity_milli: if t.quantity_milli == 0 {
+                1000
+            } else {
+                t.quantity_milli
+            },
+            unit_price_minor: t.unit_price_minor,
+            enabled: t.enabled,
+        };
+        let r = store::upsert_template(pool, &access, input).await.map(|t| {
+            UpsertLineTemplateResponse {
+                template: Some(template_proto(t)),
+            }
+        });
+        self.done(&mut timer, r)
+    }
+
+    pub(crate) async fn rpc_delete_line_template(
+        &self,
+        request: Request<DeleteLineTemplateRequest>,
+    ) -> Result<Response<DeleteLineTemplateResponse>, Status> {
+        let req = request.get_ref().clone();
+        let client = uuid(&req.client_id, "client_id")?;
+        let id = uuid(&req.id, "id")?;
+        let (mut timer, pool, access, _) = self
+            .invoice_context("FinanceService/DeleteLineTemplate", &request, &[])
+            .await?;
+        let r = store::delete_template(pool, &access, client, id)
+            .await
+            .map(|()| DeleteLineTemplateResponse {});
         self.done(&mut timer, r)
     }
 
