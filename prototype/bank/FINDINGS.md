@@ -292,3 +292,16 @@ is tested for the day the bank starts counting.
 Also confirmed: nothing new was booked on the 17th by the time of the first
 sync, so the first unattended pull was 653 duplicates and 0 inserts -- the
 dedup path taking every row, as it should.
+
+
+## Corrected the next day (2026-09-18): the cap is real
+
+The twelve-fetch burst above passed because it ran on a freshly authorised
+account inside its first day. With the worker on an hourly cadence overnight,
+every account hit a 429 on its fifth fetch of the day, at the same minute for
+all four business accounts, with **no `Retry-After` header**; after the
+six-hour default backoff each account got two to four more fetches and then
+another 429. Whether the bank counts per account or per consent, and on a
+calendar day or a rolling window, cannot be told from the runs -- both fit.
+What follows either way: three scheduled fetches a day, eight hours apart,
+and one kept for a person; the backoff path honours the bank as written.
