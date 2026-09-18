@@ -12,6 +12,7 @@ import {
   DocumentResponse,
   GetDocumentResponse,
   GetIssuerResponse,
+  GetTransactionResponse,
   InvoiceDocumentResponse,
   type InvoiceLine,
   InvoiceResponse,
@@ -39,6 +40,8 @@ import {
   StartConnectorResponse,
   SyncConnectorResponse,
   TestConnectorResponse,
+  type UpsertCategory,
+  UpsertCategoryResponse,
   UpsertClientResponse,
   UpsertIssuerResponse,
   UpsertLineTemplateResponse,
@@ -172,6 +175,9 @@ export const api = {
     }),
   categories: (party_ids: string[]) =>
     call(ListCategoriesResponse, `/v1/finance/categories${query({ party_ids })}`),
+  transaction: (id: string) => call(GetTransactionResponse, `/v1/finance/transactions/${id}`),
+  upsertCategory: (category: UpsertCategory) =>
+    call(UpsertCategoryResponse, "/v1/finance/categories", { method: "POST", json: category }),
   declare: (transaction_id: string, category_id: string) =>
     call(DeclareCategoryResponse, "/v1/finance/transactions/declare", {
       method: "POST",
