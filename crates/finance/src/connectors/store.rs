@@ -463,24 +463,7 @@ pub async fn run_sync(
         }
         let reach = match reach {
             Ok(r) => r,
-            Err(e) => {
-                tracing::warn!(connector = %id, kind = %row.kind, round, error = %e, "connector sync: pull failed");
-                let status = if matches!(e, ConnectorError::Unlinked(_)) {
-                    "expired"
-                } else {
-                    "linked"
-                };
-                sqlx::query(
-                    "update finance.connectors set status = $2, updated_at = now() where id = $1",
-                )
-                .bind(id)
-                .bind(status)
-                .execute(pool)
-                .await
-                .map_err(map_err)?;
-                finish(pool, run_id, id, Err(&e.to_string())).await?;
-                return Err(e.into());
-            }
+            Err(e) => return Err(pull_failed(pool, id, run_id, &row.kind, round, e).await),
         };
         tracing::info!(connector = %id, round, found = counts.found, stored = counts.stored, ?reach, "connector sync: round");
         if reach == Reach::Complete {
@@ -490,6 +473,44 @@ pub async fn run_sync(
     }
     finish(pool, run_id, id, Ok((&pulled, complete))).await?;
     Ok(pulled)
+}
+
+/// A pull that failed: log it, mark the connector when its credential is
+/// the problem, close the run, and hand back the error as the store's.
+async fn pull_failed(
+    pool: &PgPool,
+    id: Uuid,
+    run_id: Uuid,
+    kind: &str,
+    round: usize,
+    e: ConnectorError,
+) -> StoreError {
+    tracing::warn!(connector = %id, kind, round, error = %e, "connector sync: pull failed");
+    // A credential that no longer works marks the row expired with the
+    // reason on it, so the page says "link again" and why, rather than a
+    // run history the person has to open.
+    let (status, failure) = if let ConnectorError::Unlinked(why) = &e {
+        ("expired", Some(why.clone()))
+    } else {
+        ("linked", None)
+    };
+    let marked = sqlx::query(
+        "update finance.connectors set status = $2, failure = coalesce($3, failure), updated_at = now()
+          where id = $1",
+    )
+    .bind(id)
+    .bind(status)
+    .bind(failure)
+    .execute(pool)
+    .await
+    .map_err(map_err);
+    if let Err(db) = marked {
+        return db.into();
+    }
+    if let Err(db) = finish(pool, run_id, id, Err(&e.to_string())).await {
+        return db;
+    }
+    e.into()
 }
 
 /// Count one stored or skipped document on the run row, so a watcher sees

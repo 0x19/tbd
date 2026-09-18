@@ -83,25 +83,118 @@ impl Gmail {
             .ok_or_else(|| ConnectorError::Provider(format!("token endpoint answered {status}")))
     }
 
+    /// One authenticated GET, with Google's transient refusals retried.
+    /// Gmail says "slow down" as a 403 with a reason, not a 429, so the
+    /// reason decides; a 403 for a missing scope is a link problem instead,
+    /// and is not retried.
     async fn get(&self, token: &str, url: &str) -> Result<Value, ConnectorError> {
-        let resp = self
-            .http
-            .get(url)
-            .bearer_auth(token)
-            .send()
-            .await
-            .map_err(|e| ConnectorError::Provider(e.to_string()))?;
-        let status = resp.status();
-        if status == reqwest::StatusCode::UNAUTHORIZED {
-            return Err(ConnectorError::Unlinked("token refused".into()));
+        let mut wait = std::time::Duration::from_secs(1);
+        for attempt in 0..RETRIES {
+            let resp = self
+                .http
+                .get(url)
+                .bearer_auth(token)
+                .send()
+                .await
+                .map_err(|e| ConnectorError::Provider(e.to_string()))?;
+            let status = resp.status();
+            if status.is_success() {
+                return resp
+                    .json()
+                    .await
+                    .map_err(|e| ConnectorError::Provider(format!("gmail: {e}")));
+            }
+            let body = resp.text().await.unwrap_or_default();
+            match classify(status, &body) {
+                Refusal::Transient(why) if attempt + 1 < RETRIES => {
+                    tracing::debug!(%status, why, ?wait, "gmail: transient, retrying");
+                    tokio::time::sleep(wait).await;
+                    wait *= 2;
+                }
+                Refusal::Transient(why) => {
+                    return Err(ConnectorError::Provider(format!(
+                        "gmail {status} after {RETRIES} attempts: {why}"
+                    )));
+                }
+                Refusal::Unlinked(why) => return Err(ConnectorError::Unlinked(why)),
+                Refusal::Fatal(why) => return Err(ConnectorError::Provider(why)),
+            }
         }
-        if !status.is_success() {
-            return Err(ConnectorError::Provider(format!("gmail {status}")));
-        }
-        resp.json()
-            .await
-            .map_err(|e| ConnectorError::Provider(format!("gmail: {e}")))
+        Err(ConnectorError::Provider("gmail: retries exhausted".into()))
     }
+}
+
+/// Attempts at one request before its refusal stands.
+const RETRIES: u32 = 5;
+
+/// What a non-2xx answer from Google means for us.
+#[derive(Debug, PartialEq, Eq)]
+enum Refusal {
+    /// Rate limit, quota burst, or a Google-side error: wait and try again.
+    Transient(String),
+    /// The credential is no good: the token was refused, or the consent
+    /// never covered the mailbox. Relinking is the fix.
+    Unlinked(String),
+    /// Anything else, with Google's reason.
+    Fatal(String),
+}
+
+/// Read Google's error envelope: `{"error": {"code", "message", "status",
+/// "errors": [{"reason", "message"}]}}`, in either of its two shapes.
+fn classify(status: reqwest::StatusCode, body: &str) -> Refusal {
+    let json: Value = serde_json::from_str(body).unwrap_or(Value::Null);
+    let error = json.get("error");
+    let reason = error
+        .and_then(|e| e.pointer("/errors/0/reason"))
+        .and_then(Value::as_str)
+        .or_else(|| {
+            error
+                .and_then(|e| e.pointer("/details/0/reason"))
+                .and_then(Value::as_str)
+        })
+        .unwrap_or("");
+    let message = error
+        .and_then(|e| e.get("message"))
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .trim();
+    let google_status = error
+        .and_then(|e| e.get("status"))
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let why = if message.is_empty() {
+        format!("gmail {status}")
+    } else if reason.is_empty() {
+        format!("gmail {status}: {message}")
+    } else {
+        format!("gmail {status}: {reason}: {message}")
+    };
+    if status == reqwest::StatusCode::UNAUTHORIZED {
+        return Refusal::Unlinked(format!("token refused: {message}"));
+    }
+    let lower = message.to_ascii_lowercase();
+    if matches!(
+        reason,
+        "insufficientPermissions" | "ACCESS_TOKEN_SCOPE_INSUFFICIENT" | "forbidden"
+    ) || lower.contains("insufficient authentication scopes")
+        || lower.contains("insufficient permission")
+    {
+        return Refusal::Unlinked(
+            "the consent did not include reading the mailbox; link again and allow \"View your email messages\""
+                .into(),
+        );
+    }
+    if status == reqwest::StatusCode::TOO_MANY_REQUESTS
+        || status.is_server_error()
+        || matches!(
+            reason,
+            "rateLimitExceeded" | "userRateLimitExceeded" | "quotaExceeded" | "backendError"
+        )
+        || google_status == "RESOURCE_EXHAUSTED"
+    {
+        return Refusal::Transient(why);
+    }
+    Refusal::Fatal(why)
 }
 
 fn header<'a>(message: &'a Value, name: &str) -> &'a str {
@@ -349,5 +442,79 @@ impl Connector for Gmail {
             }
         }
         Ok(reach)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn body(reason: &str, message: &str) -> String {
+        serde_json::json!({
+            "error": {
+                "code": 403,
+                "message": message,
+                "errors": [{"domain": "global", "reason": reason, "message": message}],
+                "status": "PERMISSION_DENIED"
+            }
+        })
+        .to_string()
+    }
+
+    #[test]
+    fn a_rate_limit_is_a_403_worth_retrying() {
+        let r = classify(
+            reqwest::StatusCode::FORBIDDEN,
+            &body(
+                "userRateLimitExceeded",
+                "User-rate limit exceeded. Retry after ...",
+            ),
+        );
+        assert!(matches!(r, Refusal::Transient(w) if w.contains("userRateLimitExceeded")));
+        assert!(matches!(
+            classify(reqwest::StatusCode::TOO_MANY_REQUESTS, ""),
+            Refusal::Transient(_)
+        ));
+        assert!(matches!(
+            classify(reqwest::StatusCode::BAD_GATEWAY, "<html>"),
+            Refusal::Transient(_)
+        ));
+    }
+
+    #[test]
+    fn a_missing_scope_means_relink_not_retry() {
+        let r = classify(
+            reqwest::StatusCode::FORBIDDEN,
+            &body(
+                "insufficientPermissions",
+                "Request had insufficient authentication scopes.",
+            ),
+        );
+        assert!(matches!(r, Refusal::Unlinked(w) if w.contains("link again")));
+        // The newer envelope shape, with no `errors` array.
+        let newer = serde_json::json!({"error": {"code": 403, "message": "Request had insufficient authentication scopes.", "status": "PERMISSION_DENIED", "details": [{"reason": "ACCESS_TOKEN_SCOPE_INSUFFICIENT"}]}}).to_string();
+        assert!(matches!(
+            classify(reqwest::StatusCode::FORBIDDEN, &newer),
+            Refusal::Unlinked(_)
+        ));
+    }
+
+    #[test]
+    fn anything_else_carries_googles_reason() {
+        let r = classify(
+            reqwest::StatusCode::FORBIDDEN,
+            &body(
+                "accessNotConfigured",
+                "Gmail API has not been used in project 1 before",
+            ),
+        );
+        assert_eq!(
+            r,
+            Refusal::Fatal("gmail 403 Forbidden: accessNotConfigured: Gmail API has not been used in project 1 before".into())
+        );
+        assert_eq!(
+            classify(reqwest::StatusCode::UNAUTHORIZED, ""),
+            Refusal::Unlinked("token refused: ".into())
+        );
     }
 }
