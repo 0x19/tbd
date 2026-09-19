@@ -64,7 +64,21 @@ The finance service. gRPC only. Scaffolded by `tbd new service` (docs/tbd/README
   the store per watcher) -- the page draws from it and never polls while it is up.
   `ConfigureConnector` may move a connector to another party in the grant, taking
   the documents only it pulled. `service_connectors.rs` holds the RPCs. Tests inject
-  a mock kind through `serve_with_kinds`.
+  a mock kind through `serve_with_kinds`. A kind may also *send*: `capabilities` says
+  so from the consent it holds (Gmail asks for `gmail.send` too; a mailbox linked before
+  that is read-only until linked again, `connectors.can_send` records it), `send` builds
+  the MIME itself (text, attachments, `In-Reply-To` and Gmail's `threadId` for a reply),
+  and `replies` reads a thread it sent for what others answered.
+- `mail/`: mail sent as a linked mailbox and kept. `store.rs` holds templates (a name per
+  party; `{{Month}}`-style helpers are filled on the page, the service stores what was
+  sent), `send` (refuses a mailbox that cannot send, an implausible address, no subject,
+  and any recipient outside `[mail] allow_to` when that list is non-empty -- `local.toml`
+  lists only the owner's two addresses so a test never reaches an accountant; production
+  lists none, so nothing is guarded there; a provider failure is a `failed` row, not an
+  error), the list and thread reads, and `import_replies`, which `run_sync` calls at the
+  end of every pull: each reply is an `in` row under its parent and its PDF a receipt of
+  the party, never imported twice (`provider_id` unique per connector). `service_mail.rs`
+  holds the RPCs.
 - `documents/`: what a pulled receipt says. `pdf.rs` turns the bytes into text in-process
   (`pdf-extract`, fenced against its panics, off the runtime; no OCR, a scan reads as
   empty and says so). `fields.rs` reads vendor, date, amount and number out of the text

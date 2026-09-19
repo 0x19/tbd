@@ -8,6 +8,10 @@ export const en: Dict = {
   "connectors.live": "Live",
   "connectors.polling": "Polling",
   "connectors.link_mailbox": "Link a mailbox",
+  "connectors.can_send": "can send",
+  "connectors.can_send_hint": "The consent included sending mail as this account",
+  "connectors.cannot_send": "read only",
+  "connectors.cannot_send_hint": "Linked before sending was asked for. Link it again to send mail from it.",
   "connectors.feed_error": "Feed: {error}",
   "connectors.nothing_linked": "Nothing linked yet. Link a mailbox to start collecting receipts.",
   "connectors.link_dialog_desc":
@@ -56,6 +60,10 @@ export const hr: Dict = {
   "connectors.live": "Uživo",
   "connectors.polling": "Osvježava",
   "connectors.link_mailbox": "Poveži sandučić",
+  "connectors.can_send": "može slati",
+  "connectors.can_send_hint": "Privola je uključila slanje pošte s ovog računa",
+  "connectors.cannot_send": "samo čitanje",
+  "connectors.cannot_send_hint": "Povezano prije nego što se tražilo slanje. Poveži ponovno za slanje pošte.",
   "connectors.feed_error": "Tok: {error}",
   "connectors.nothing_linked": "Još ništa nije povezano. Povežite sandučić da počnete prikupljati račune.",
   "connectors.link_dialog_desc":

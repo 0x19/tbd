@@ -287,6 +287,19 @@ function ConnectorRow({
               <Badge variant="outline" className="text-[10px]">
                 {c.kind}
               </Badge>
+              {c.status === "linked" ? (
+                <Badge
+                  variant="outline"
+                  className={
+                    c.can_send
+                      ? "border-transparent bg-emerald-600/12 text-[10px] text-emerald-700 dark:text-emerald-300"
+                      : "text-muted-foreground border-dashed text-[10px]"
+                  }
+                  title={c.can_send ? t("connectors.can_send_hint") : t("connectors.cannot_send_hint")}
+                >
+                  {c.can_send ? t("connectors.can_send") : t("connectors.cannot_send")}
+                </Badge>
+              ) : null}
               {pulling ? (
                 <Badge
                   variant="outline"

@@ -3,9 +3,9 @@
 import type { Dict } from "./index";
 
 export const en: Dict = {
-  "accountant.title": "Accountant",
+  "accountant.title": "Reconciliation",
   "accountant.description":
-    "What the accountant needs from us for each transaction, and which receipt covers it. Domestic suppliers e-invoice them directly; foreign ones we owe a receipt for.",
+    "Every transaction of the month against the receipt that covers it: what the accountant needs from us, what came on its own, and what is still missing. Domestic suppliers e-invoice the accountant directly; foreign ones we owe a receipt for.",
   "accountant.no_company":
     "No company in your scope. This page reads the company account only, never a personal one.",
   "accountant.kpi.missing": "Missing a receipt",
@@ -111,9 +111,9 @@ export const en: Dict = {
 };
 
 export const hr: Dict = {
-  "accountant.title": "Knjigovođa",
+  "accountant.title": "Usklađivanje",
   "accountant.description":
-    "Što knjigovođa treba od nas za svaku transakciju i koji ulazni račun je pokriva. Domaći dobavljači šalju eRačun izravno; za strane dugujemo račun.",
+    "Svaka transakcija mjeseca uz račun koji je pokriva: što knjigovođa treba od nas, što je stiglo samo i što još nedostaje. Domaći dobavljači šalju eRačun izravno knjigovođi; za strane dugujemo račun.",
   "accountant.no_company": "Nema tvrtke u vašem opsegu. Ova stranica čita samo račun tvrtke, nikad osobni.",
   "accountant.kpi.missing": "Nedostaje račun",
   "accountant.kpi.missing_none": "ništa ne nedostaje",

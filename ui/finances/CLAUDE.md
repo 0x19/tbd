@@ -48,7 +48,7 @@ same conventions; read `ui/chaos/CLAUDE.md` for what is the kit's and what is ou
   (including whose it is: `party_id`; `found_by.party` says whether the account that
   paid, the text or the mailbox decided), "Read again" = `ExtractDocument`, and
   "Upload" = `UploadDocument` through `upload-receipt.tsx`, which shrinks a photo to fit
-  the gateway's 2 MiB body and refuses a larger PDF with the size), `/accountant/` (the company's month from
+  the gateway's 2 MiB body and refuses a larger PDF with the size), `/reconciliation/` (the company's month from
   `MonthlyReconciliation`: each transaction's need and its receipt; a policy select per
   counterparty = `SetCounterpartyPolicy`, suggestions and "Find" = `LinkDocument`, "Attach"
   on a missing row = `UploadDocument` then `LinkDocument`. Every hand-made link goes
@@ -56,7 +56,15 @@ same conventions; read `ui/chaos/CLAUDE.md` for what is the kit's and what is ou
   disagrees with the charge, and a dialog shows the service's words with "Attach anyway"
   (`force`); the toast says whether the amount was checked or nothing could be read; the
   bundle -- receipts, summary.csv, missing.csv, README -- is zipped in the browser by
-  `src/lib/zip.ts`, since a month of PDFs would not fit one gRPC message).
+  `src/lib/zip.ts`, since a month of PDFs would not fit one gRPC message), `/mail/`
+  (three tabs: compose -- the sender is a linked connector with `can_send`, a template
+  fills recipients, subject and body, and `src/lib/mail-template.ts` renders `{{Month}}`,
+  `{{MonthName}}`, `{{Year}}`, `{{MonthYear}}`, `{{Company}}`, `{{Today}}` from a chosen
+  month, live in a preview and a legend; receipts attach from `ListDocuments`; a confirm
+  dialog counts recipients, then `SendMail`; sent & replies -- `ListMail` with direction
+  and search, a row opens the thread from `GetMail` with Reply prefilling the composer
+  (`in_reply_to_mail_id`); templates -- `UpsertMailTemplate`/`DeleteMailTemplate`).
+  The Accountant nav group holds `/reconciliation/` and `/mail/`.
 - Streams: `useEvents(url, schema, onEvent)` in `hooks.ts` wraps `EventSource` with
   credentials; every `data:` frame is one JSON message. Envoy keeps `/v1/**/events`
   open on the finance host. EventSource cannot send the dev bearer token, so in

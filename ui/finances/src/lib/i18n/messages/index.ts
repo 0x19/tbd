@@ -9,6 +9,7 @@ import * as connectors from "./connectors";
 import * as documents from "./documents";
 import * as invoices from "./invoices";
 import * as kinds from "./kinds";
+import * as mail from "./mail";
 import * as nav from "./nav";
 import * as overview from "./overview";
 import * as parties from "./parties";
@@ -35,6 +36,7 @@ const all = [
   documents,
   connectors,
   accountant,
+  mail,
 ];
 
 export const messages: Record<Lang, Dict> = {

@@ -5,6 +5,7 @@ import {
   IconFileInvoice,
   IconLayoutDashboard,
   IconListDetails,
+  IconMail,
   IconPlugConnected,
   IconReceipt2,
   IconSettings,
@@ -35,8 +36,14 @@ export const navGroups: NavGroup[] = [
     title: "nav.group.documents",
     items: [
       { title: "nav.receipts", url: "/documents/", icon: IconFileInvoice },
-      { title: "nav.accountant", url: "/accountant/", icon: IconChecklist },
       { title: "nav.connectors", url: "/connectors/", icon: IconPlugConnected },
+    ],
+  },
+  {
+    title: "nav.group.accountant",
+    items: [
+      { title: "nav.reconciliation", url: "/reconciliation/", icon: IconChecklist },
+      { title: "nav.mail", url: "/mail/", icon: IconMail },
     ],
   },
   {

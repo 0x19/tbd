@@ -10,9 +10,11 @@ import {
   CounterpartyPolicyResponse,
   DeclareCategoryResponse,
   DeleteLineTemplateResponse,
+  DeleteMailTemplateResponse,
   DocumentResponse,
   GetDocumentResponse,
   GetIssuerResponse,
+  GetMailResponse,
   GetTransactionResponse,
   InvoiceDocumentResponse,
   type InvoiceLine,
@@ -29,6 +31,8 @@ import {
   ListDocumentsResponse,
   ListInvoicesResponse,
   ListLineTemplatesResponse,
+  ListMailResponse,
+  ListMailTemplatesResponse,
   ListPartiesResponse,
   ListRulesResponse,
   ListTransactionsResponse,
@@ -38,6 +42,7 @@ import {
   PreviewInvoiceResponse,
   ReconciliationRowResponse,
   RefreshAccountResponse,
+  SendMailResponse,
   SetAccountSyncResponse,
   StartConnectionResponse,
   StartConnectorResponse,
@@ -48,6 +53,7 @@ import {
   UpsertClientResponse,
   UpsertIssuerResponse,
   UpsertLineTemplateResponse,
+  UpsertMailTemplateResponse,
   type UpsertRule,
   UpsertRuleResponse,
 } from "./schema";
@@ -279,6 +285,42 @@ export const api = {
     offset?: number;
   }) => call(ListDocumentsResponse, `/v1/finance/documents${query({ kind: "receipt", limit: 100, ...p })}`),
   document: (id: string) => call(GetDocumentResponse, `/v1/finance/documents/${id}`),
+  // ---- mail ----
+  mailTemplates: (party_ids: string[]) =>
+    call(ListMailTemplatesResponse, `/v1/finance/mail/templates${query({ party_ids })}`),
+  upsertMailTemplate: (t: {
+    id?: string;
+    party_id: string;
+    name: string;
+    subject: string;
+    body: string;
+    to: string[];
+    cc: string[];
+    bcc: string[];
+  }) => call(UpsertMailTemplateResponse, "/v1/finance/mail/templates", { method: "POST", json: t }),
+  deleteMailTemplate: (id: string) =>
+    call(DeleteMailTemplateResponse, `/v1/finance/mail/templates/${id}/delete`, { method: "POST", json: {} }),
+  sendMail: (m: {
+    connector_id: string;
+    template_id: string;
+    to: string[];
+    cc: string[];
+    bcc: string[];
+    subject: string;
+    body: string;
+    html: string;
+    attachment_document_ids: string[];
+    in_reply_to_mail_id: string;
+  }) => call(SendMailResponse, "/v1/finance/mail/send", { method: "POST", json: m }),
+  mail: (p: {
+    party_ids: string[];
+    connector_id?: string;
+    direction?: string;
+    q?: string;
+    limit?: number;
+    offset?: number;
+  }) => call(ListMailResponse, `/v1/finance/mail${query(p)}`),
+  mailThread: (id: string) => call(GetMailResponse, `/v1/finance/mail/${id}`),
   uploadDocument: (party_id: string, filename: string, content_type: string, bytes: string) =>
     call(DocumentResponse, "/v1/finance/documents/upload", {
       method: "POST",

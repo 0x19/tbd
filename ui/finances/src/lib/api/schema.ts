@@ -341,9 +341,59 @@ export const Connector = z.object({
   last_sync_error: z.string(),
   failure: z.string(),
   created_at: z.string(),
+  can_send: z.boolean(),
 });
 export type Connector = z.infer<typeof Connector>;
 export const ListConnectorsResponse = z.object({ connectors: z.array(Connector) });
+
+// Mail from a linked mailbox.
+export const MailTemplate = z.object({
+  id: z.string(),
+  party_id: z.string(),
+  name: z.string(),
+  subject: z.string(),
+  body: z.string(),
+  to: z.array(z.string()),
+  cc: z.array(z.string()),
+  bcc: z.array(z.string()),
+  updated_at: z.string(),
+});
+export type MailTemplate = z.infer<typeof MailTemplate>;
+export const ListMailTemplatesResponse = z.object({ templates: z.array(MailTemplate) });
+export const UpsertMailTemplateResponse = z.object({ template: MailTemplate.nullable().optional() });
+export const DeleteMailTemplateResponse = z.object({});
+export const MailDocument = z.object({
+  document_id: z.string(),
+  filename: z.string(),
+  content_type: z.string(),
+  size_bytes: Minor,
+});
+export type MailDocument = z.infer<typeof MailDocument>;
+export const Mail = z.object({
+  id: z.string(),
+  party_id: z.string(),
+  connector_id: z.string(),
+  direction: z.string(),
+  from: z.string(),
+  to: z.array(z.string()),
+  cc: z.array(z.string()),
+  bcc: z.array(z.string()),
+  subject: z.string(),
+  body: z.string(),
+  status: z.string(),
+  error: z.string(),
+  sent_at: z.string(),
+  received_at: z.string(),
+  template_id: z.string(),
+  parent_id: z.string(),
+  replies: z.number(),
+  documents: z.array(MailDocument),
+  thread_key: z.string(),
+});
+export type Mail = z.infer<typeof Mail>;
+export const SendMailResponse = z.object({ mail: Mail.nullable().optional() });
+export const ListMailResponse = z.object({ mails: z.array(Mail), total: z.number() });
+export const GetMailResponse = z.object({ mail: Mail.nullable().optional(), thread: z.array(Mail) });
 export const StartConnectorResponse = z.object({ connector_id: z.string(), url: z.string() });
 export const ConnectorResponse = z.object({ connector: Connector.nullable().optional() });
 export const TestConnectorResponse = z.object({ status: z.string() });
