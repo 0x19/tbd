@@ -83,11 +83,14 @@ pub fn read(text: &str, sender: &str, received: Option<NaiveDate>, filename: &st
 
 /// An amount with a currency mark before or after it. The number may group
 /// thousands with `,`, `.` or a space and carry up to two decimals either way.
+/// A trailing mark must not be the leading mark of the next figure: in
+/// "August 29, 2026 $75.00" the year is not 2,026 dollars, so a mark that a
+/// digit follows is not this number's.
 static AMOUNT: LazyLock<Regex> = LazyLock::new(|| {
     re(r"(?x)
         (?:(?P<pre>€|\$|£|EUR|USD|GBP|CHF|HRK|kn)\s?)?
         (?P<num>\d{1,3}(?:[.,\ ]\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)\b
-        (?:\s?(?P<post>€|\$|£|EUR|USD|GBP|CHF|HRK|kn))?")
+        (?:\s?(?P<post>€|\$|£|EUR|USD|GBP|CHF|HRK|kn)(?:[^\d.,]|$))?")
 });
 
 /// Labels that name the figure we want, best first. A line's best label
@@ -122,9 +125,14 @@ fn amount(lines: &[&str]) -> Option<(i64, String, By)> {
         if lower.contains("subtotal") || lower.contains("sub total") || lower.contains("excl") {
             continue;
         }
+        // The reader breaks words ("Amount pai d"), so a label is also
+        // sought with every space removed.
+        let tight: String = lower.chars().filter(|c| !c.is_whitespace()).collect();
         let Some(rank) = AMOUNT_LABELS
             .iter()
-            .filter(|(l, _)| lower.contains(l))
+            .filter(|(l, _)| {
+                lower.contains(l) || tight.contains(&l.replace(' ', "").trim().to_owned())
+            })
             .map(|(_, r)| *r)
             .max()
         else {
@@ -665,6 +673,29 @@ mod tests {
 
     fn d(y: i32, m: u32, day: u32) -> NaiveDate {
         NaiveDate::from_ymd_opt(y, m, day).unwrap()
+    }
+
+    #[test]
+    fn a_year_before_a_dollar_figure_is_not_money() {
+        assert_eq!(
+            best_money("Visa - 9355 August 29, 2026 $75.00 2278 6704"),
+            Some((7_500, "USD".into()))
+        );
+        assert_eq!(
+            best_money("$75.00 pai d on August 29, 2026"),
+            Some((7_500, "USD".into()))
+        );
+        assert_eq!(
+            best_money("Total 1.234,50 EUR"),
+            Some((123_450, "EUR".into()))
+        );
+        assert_eq!(best_money("USD 12.00"), Some((1_200, "USD".into())));
+        let lines = [
+            "Receipt",
+            "Amount pai d $75.00",
+            "Visa - 9355 August 29, 2026 $75.00 2278 6704",
+        ];
+        assert_eq!(amount(&lines), Some((7_500, "USD".into(), By::Label)));
     }
 
     #[test]
