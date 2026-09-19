@@ -86,6 +86,83 @@ pub struct Found {
     pub received_at: Option<DateTime<Utc>>,
 }
 
+/// What a linked credential may do beyond pulling.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Capabilities {
+    /// Mail may be sent as this account.
+    pub send: bool,
+}
+
+/// A file that goes with a mail, or came with one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Attachment {
+    /// As shown to the recipient.
+    pub filename: String,
+    /// `application/pdf` and the like.
+    pub content_type: String,
+    /// The bytes.
+    pub bytes: Vec<u8>,
+}
+
+/// A mail to send as the linked account.
+#[derive(Debug, Clone, Default)]
+pub struct Outgoing {
+    /// Recipients.
+    pub to: Vec<String>,
+    /// Copied.
+    pub cc: Vec<String>,
+    /// Copied, unseen by the others.
+    pub bcc: Vec<String>,
+    /// The subject line.
+    pub subject: String,
+    /// The text body.
+    pub text: String,
+    /// An HTML body beside the text, when the composer made one.
+    pub html: Option<String>,
+    /// Files to attach.
+    pub attachments: Vec<Attachment>,
+    /// When answering: the provider's thread and the RFC 5322 id replied to.
+    pub in_reply_to: Option<(String, String)>,
+}
+
+/// What the provider said about a sent mail.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SentMail {
+    /// The provider's id for the message.
+    pub provider_id: String,
+    /// The provider's thread, where replies arrive.
+    pub thread_key: String,
+    /// The RFC 5322 Message-ID it went out with.
+    pub message_id: String,
+}
+
+/// A mail that arrived in a thread we started.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Inbound {
+    /// The provider's id for the message.
+    pub provider_id: String,
+    /// Its thread.
+    pub thread_key: String,
+    /// RFC 5322 ids.
+    pub message_id: String,
+    /// What it answers, when the sender's client said.
+    pub in_reply_to: String,
+    /// `Name <addr>`.
+    pub from: String,
+    /// Recipients as written.
+    pub to: Vec<String>,
+    /// Copied.
+    pub cc: Vec<String>,
+    /// The subject line.
+    pub subject: String,
+    /// The text body (HTML reduced when there was no text part).
+    pub text: String,
+    /// When it arrived.
+    pub received_at: Option<DateTime<Utc>>,
+    /// Files that came with it.
+    pub attachments: Vec<Attachment>,
+}
+
 /// What a pull did.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Pulled {
@@ -145,6 +222,35 @@ pub trait Connector: Send + Sync + std::fmt::Debug {
         seen: &(dyn for<'a> Fn(&'a str) -> bool + Sync),
         sink: tokio::sync::mpsc::Sender<Found>,
     ) -> Result<Reach, ConnectorError>;
+
+    /// What this credential may do beyond pulling. Decided once, at link
+    /// time, from the consent the person gave; a kind that only pulls says
+    /// nothing.
+    fn capabilities(&self, _credentials: &serde_json::Value) -> Capabilities {
+        Capabilities::default()
+    }
+
+    /// Send a mail as the linked account. A kind that cannot refuses.
+    async fn send(
+        &self,
+        _credentials: &serde_json::Value,
+        _mail: &Outgoing,
+    ) -> Result<SentMail, ConnectorError> {
+        Err(ConnectorError::Invalid(
+            "this kind of connector cannot send mail".into(),
+        ))
+    }
+
+    /// Everything that arrived in `thread_key` that is not ours and not yet
+    /// `seen` (by provider id). A kind that cannot read a thread says none.
+    async fn replies(
+        &self,
+        _credentials: &serde_json::Value,
+        _thread_key: &str,
+        _seen: &(dyn for<'a> Fn(&'a str) -> bool + Sync),
+    ) -> Result<Vec<Inbound>, ConnectorError> {
+        Ok(Vec::new())
+    }
 }
 
 /// How far one round of a pull got.

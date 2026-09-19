@@ -64,6 +64,7 @@ fn connector_proto(c: ConnectorRow) -> Connector {
         last_sync_error: c.last_sync_error.unwrap_or_default(),
         failure: c.failure.unwrap_or_default(),
         created_at: c.created_at.to_rfc3339(),
+        can_send: c.can_send,
     }
 }
 
@@ -82,14 +83,14 @@ fn run_proto(r: RunRow) -> ConnectorRun {
 }
 
 impl Finance {
-    fn kinds(&self) -> Vec<Box<dyn connectors::Connector>> {
+    pub(crate) fn kinds(&self) -> Vec<Box<dyn connectors::Connector>> {
         match &self.connector_kinds {
             Some(k) => k(),
             None => connectors::registry(&self.connectors),
         }
     }
 
-    fn sealer(&self) -> Result<std::sync::Arc<connectors::crypto::Sealer>, Status> {
+    pub(crate) fn sealer(&self) -> Result<std::sync::Arc<connectors::crypto::Sealer>, Status> {
         self.sealer.clone().ok_or_else(|| {
             Status::failed_precondition("no FINANCE_CONNECTOR_KEY: connectors cannot be linked")
         })

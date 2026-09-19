@@ -13,14 +13,21 @@ use base64::{Engine, engine::general_purpose::URL_SAFE};
 use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
 
-use super::{Auth, AuthContext, Connector, ConnectorError, Found, Kind, Linked, Reach};
+use super::{
+    Attachment, Auth, AuthContext, Capabilities, Connector, ConnectorError, Found, Inbound, Kind,
+    Linked, Outgoing, Reach, SentMail,
+};
 use crate::{config::Connectors as Config, documents::mail};
 
 const AUTH_URL: &str = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
 const USERINFO_URL: &str = "https://www.googleapis.com/oauth2/v3/userinfo";
 const API: &str = "https://gmail.googleapis.com/gmail/v1/users/me";
-const SCOPES: &str = "https://www.googleapis.com/auth/gmail.readonly email";
+/// Read to pull receipts, send to write to the accountant, `email` to name
+/// the mailbox. A link made before `send` was asked for lacks it; the
+/// credential records the scopes granted, and `capabilities` reads them.
+const SCOPES: &str = "https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send email";
+const SEND_SCOPE: &str = "https://www.googleapis.com/auth/gmail.send";
 /// Never more than this per pull; a first pull of a busy mailbox is paged
 /// over several runs rather than held open for minutes.
 /// Messages fetched per round. A round runs detached from the RPC, so the
@@ -432,6 +439,144 @@ impl Connector for Gmail {
         }
     }
 
+    fn capabilities(&self, credentials: &Value) -> Capabilities {
+        let scope = credentials
+            .get("scope")
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        Capabilities {
+            send: scope.split_whitespace().any(|s| s == SEND_SCOPE),
+        }
+    }
+
+    async fn send(&self, credentials: &Value, mail: &Outgoing) -> Result<SentMail, ConnectorError> {
+        if !self.capabilities(credentials).send {
+            return Err(ConnectorError::Unlinked(
+                "the consent did not include sending; link the mailbox again and allow \"Send email on your behalf\"".into(),
+            ));
+        }
+        let session = self.open(credentials).await?;
+        let profile = self
+            .get(&session, &format!("{}/profile", self.api), &Pace::default())
+            .await?;
+        let from = profile
+            .get("emailAddress")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_owned();
+        if from.is_empty() {
+            return Err(ConnectorError::Provider(
+                "gmail did not name the mailbox".into(),
+            ));
+        }
+        let message_id = format!(
+            "<{}@{}>",
+            uuid::Uuid::new_v4().simple(),
+            from.rsplit('@').next().unwrap_or("mail")
+        );
+        let raw = mime(&from, mail, &message_id);
+        let mut body = json!({ "raw": URL_SAFE.encode(raw) });
+        if let Some((thread, _)) = &mail.in_reply_to {
+            body["threadId"] = Value::String(thread.clone());
+        }
+        let sent = self
+            .post_json(&session, &format!("{}/messages/send", self.api), &body)
+            .await?;
+        Ok(SentMail {
+            provider_id: sent
+                .get("id")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned(),
+            thread_key: sent
+                .get("threadId")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned(),
+            message_id,
+        })
+    }
+
+    async fn replies(
+        &self,
+        credentials: &Value,
+        thread_key: &str,
+        seen: &(dyn for<'a> Fn(&'a str) -> bool + Sync),
+    ) -> Result<Vec<Inbound>, ConnectorError> {
+        let session = self.open(credentials).await?;
+        let throttle = Pace::default();
+        let profile = self
+            .get(&session, &format!("{}/profile", self.api), &throttle)
+            .await?;
+        let own = profile
+            .get("emailAddress")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        let thread = self
+            .get(
+                &session,
+                &format!("{}/threads/{thread_key}?format=full", self.api),
+                &throttle,
+            )
+            .await?;
+        let mut out = Vec::new();
+        for message in thread
+            .get("messages")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
+            let id = message.get("id").and_then(Value::as_str).unwrap_or("");
+            if id.is_empty() || seen(id) {
+                continue;
+            }
+            let from = header(message, "From").to_owned();
+            // Our own mail in the thread is not a reply.
+            if !own.is_empty() && from.to_ascii_lowercase().contains(&own) {
+                continue;
+            }
+            let Some(payload) = message.get("payload") else {
+                continue;
+            };
+            let (text, html) = bodies(payload);
+            let text = if text.trim().is_empty() {
+                mail::html_to_text(&html)
+            } else {
+                mail::tidy(&text)
+            };
+            let attachments = self
+                .attachments_of(&session, &throttle, id, payload)
+                .await?;
+            let list = |name: &str| -> Vec<String> {
+                header(message, name)
+                    .split(',')
+                    .map(str::trim)
+                    .filter(|a| !a.is_empty())
+                    .map(str::to_owned)
+                    .collect()
+            };
+            out.push(Inbound {
+                provider_id: id.to_owned(),
+                thread_key: thread_key.to_owned(),
+                message_id: header(message, "Message-ID").to_owned(),
+                in_reply_to: header(message, "In-Reply-To").to_owned(),
+                from,
+                to: list("To"),
+                cc: list("Cc"),
+                subject: header(message, "Subject").to_owned(),
+                text,
+                received_at: message
+                    .get("internalDate")
+                    .and_then(Value::as_str)
+                    .and_then(|ms| ms.parse::<i64>().ok())
+                    .and_then(DateTime::<Utc>::from_timestamp_millis),
+                attachments,
+            });
+        }
+        Ok(out)
+    }
+
     async fn start(&self, ctx: &AuthContext) -> Result<String, ConnectorError> {
         if !self.configured() {
             return Err(ConnectorError::Unconfigured(
@@ -511,8 +656,12 @@ impl Connector for Gmail {
                 "google did not say which account this is".into(),
             ));
         }
+        let scope = body
+            .get("scope")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
         Ok(Linked {
-            credentials: json!({ "refresh_token": refresh }),
+            credentials: json!({ "refresh_token": refresh, "scope": scope }),
             external_id: email.clone(),
             label: email,
         })
@@ -915,6 +1064,183 @@ impl Gmail {
     }
 }
 
+impl Gmail {
+    /// Every named part of a message as bytes.
+    async fn attachments_of(
+        &self,
+        session: &Session,
+        throttle: &Pace,
+        id: &str,
+        payload: &Value,
+    ) -> Result<Vec<Attachment>, ConnectorError> {
+        let mut attachments = Vec::new();
+        for part in parts(payload) {
+            let filename = part.get("filename").and_then(Value::as_str).unwrap_or("");
+            let Some(att) = part.pointer("/body/attachmentId").and_then(Value::as_str) else {
+                continue;
+            };
+            if filename.is_empty() {
+                continue;
+            }
+            let blob = self
+                .get(
+                    session,
+                    &format!("{}/messages/{id}/attachments/{att}", self.api),
+                    throttle,
+                )
+                .await?;
+            let Some(data) = blob.get("data").and_then(Value::as_str) else {
+                continue;
+            };
+            let bytes = URL_SAFE
+                .decode(data)
+                .or_else(|_| base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(data))
+                .map_err(|e| ConnectorError::Provider(format!("attachment: {e}")))?;
+            attachments.push(Attachment {
+                filename: filename.to_owned(),
+                content_type: part
+                    .get("mimeType")
+                    .and_then(Value::as_str)
+                    .unwrap_or("application/octet-stream")
+                    .to_owned(),
+                bytes,
+            });
+        }
+        Ok(attachments)
+    }
+}
+
+impl Gmail {
+    /// One authenticated POST of JSON. Google's refusals are classified like
+    /// a GET's; a send is never retried, since a retry could send twice.
+    async fn post_json(
+        &self,
+        session: &Session,
+        url: &str,
+        body: &Value,
+    ) -> Result<Value, ConnectorError> {
+        let token = self.bearer(session).await?;
+        let resp = self
+            .http
+            .post(url)
+            .bearer_auth(token)
+            .json(body)
+            .send()
+            .await
+            .map_err(|e| ConnectorError::Provider(e.to_string()))?;
+        let status = resp.status();
+        if status.is_success() {
+            return resp
+                .json()
+                .await
+                .map_err(|e| ConnectorError::Provider(format!("gmail: {e}")));
+        }
+        let text = resp.text().await.unwrap_or_default();
+        Err(match classify(status, &text) {
+            Refusal::Unlinked(why) => ConnectorError::Unlinked(why),
+            Refusal::Transient(why) | Refusal::Fatal(why) => ConnectorError::Provider(why),
+        })
+    }
+}
+
+/// An RFC 5322 message: text (and HTML beside it when given) with the
+/// attachments as base64 parts. Header values carry no line breaks; a
+/// subject with a non-ASCII letter is encoded as UTF-8 base64.
+#[allow(clippy::format_push_string)]
+fn mime(from: &str, mail: &Outgoing, message_id: &str) -> Vec<u8> {
+    let clean = |v: &str| v.replace(['\r', '\n'], " ");
+    let header_word = |v: &str| {
+        if v.is_ascii() {
+            clean(v)
+        } else {
+            format!(
+                "=?UTF-8?B?{}?=",
+                base64::engine::general_purpose::STANDARD.encode(clean(v))
+            )
+        }
+    };
+    let list = |v: &[String]| v.iter().map(|a| clean(a)).collect::<Vec<_>>().join(", ");
+    let boundary = format!("=_tbd_{}", uuid::Uuid::new_v4().simple());
+    let alt = format!("=_alt_{}", uuid::Uuid::new_v4().simple());
+    let mut out = String::new();
+    out.push_str(&format!("From: {}\r\n", clean(from)));
+    if !mail.to.is_empty() {
+        out.push_str(&format!("To: {}\r\n", list(&mail.to)));
+    }
+    if !mail.cc.is_empty() {
+        out.push_str(&format!("Cc: {}\r\n", list(&mail.cc)));
+    }
+    if !mail.bcc.is_empty() {
+        out.push_str(&format!("Bcc: {}\r\n", list(&mail.bcc)));
+    }
+    out.push_str(&format!("Subject: {}\r\n", header_word(&mail.subject)));
+    out.push_str(&format!("Message-ID: {message_id}\r\n"));
+    if let Some((_, replied)) = &mail.in_reply_to
+        && !replied.is_empty()
+    {
+        out.push_str(&format!(
+            "In-Reply-To: {}\r\nReferences: {}\r\n",
+            clean(replied),
+            clean(replied)
+        ));
+    }
+    out.push_str("MIME-Version: 1.0\r\n");
+    let text_part = |out: &mut String| {
+        out.push_str(
+            "Content-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n",
+        );
+        out.push_str(&wrap76(
+            &base64::engine::general_purpose::STANDARD.encode(&mail.text),
+        ));
+        out.push_str("\r\n");
+    };
+    let body_parts = |out: &mut String| match &mail.html {
+        Some(html) => {
+            out.push_str(&format!(
+                "Content-Type: multipart/alternative; boundary=\"{alt}\"\r\n\r\n"
+            ));
+            out.push_str(&format!("--{alt}\r\n"));
+            text_part(out);
+            out.push_str(&format!("--{alt}\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n"));
+            out.push_str(&wrap76(
+                &base64::engine::general_purpose::STANDARD.encode(html),
+            ));
+            out.push_str(&format!("\r\n--{alt}--\r\n"));
+        }
+        None => text_part(out),
+    };
+    if mail.attachments.is_empty() {
+        body_parts(&mut out);
+    } else {
+        out.push_str(&format!(
+            "Content-Type: multipart/mixed; boundary=\"{boundary}\"\r\n\r\n--{boundary}\r\n"
+        ));
+        body_parts(&mut out);
+        for a in &mail.attachments {
+            let name = clean(&a.filename).replace('"', "");
+            out.push_str(&format!(
+                "--{boundary}\r\nContent-Type: {}; name=\"{name}\"\r\nContent-Disposition: attachment; filename=\"{name}\"\r\nContent-Transfer-Encoding: base64\r\n\r\n",
+                clean(&a.content_type)
+            ));
+            out.push_str(&wrap76(
+                &base64::engine::general_purpose::STANDARD.encode(&a.bytes),
+            ));
+            out.push_str("\r\n");
+        }
+        out.push_str(&format!("--{boundary}--\r\n"));
+    }
+    out.into_bytes()
+}
+
+/// Base64 in lines of 76, as RFC 2045 asks.
+fn wrap76(s: &str) -> String {
+    s.as_bytes()
+        .chunks(76)
+        .map(|c| String::from_utf8_lossy(c).into_owned())
+        .collect::<Vec<_>>()
+        .join("\r\n")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1046,6 +1372,43 @@ mod tests {
             .expect_err("refused twice is unlinked");
         assert!(matches!(err, ConnectorError::Unlinked(_)), "{err}");
         assert_eq!(mints(&server).await, 2, "exactly one re-mint, not a loop");
+    }
+
+    #[test]
+    fn the_send_scope_decides_the_capability_and_a_mail_is_a_proper_mime() {
+        let g = Gmail::new(&Config::default());
+        assert!(!g.capabilities(&json!({ "refresh_token": "r" })).send);
+        assert!(
+            !g.capabilities(
+                &json!({ "scope": "https://www.googleapis.com/auth/gmail.readonly email" })
+            )
+            .send
+        );
+        assert!(g.capabilities(&json!({ "scope": SCOPES })).send);
+        let mail = Outgoing {
+            to: vec!["a@b.hr".into()],
+            cc: vec!["c@b.hr".into()],
+            bcc: vec![],
+            subject: "Računi 8/2026".into(),
+            text: "Bok,\nu privitku.".into(),
+            html: None,
+            attachments: vec![Attachment {
+                filename: "racun.pdf".into(),
+                content_type: "application/pdf".into(),
+                bytes: b"%PDF-x".to_vec(),
+            }],
+            in_reply_to: None,
+        };
+        let raw = String::from_utf8(mime("me@inorbit.hr", &mail, "<id@inorbit.hr>")).unwrap();
+        assert!(raw.starts_with("From: me@inorbit.hr\r\nTo: a@b.hr\r\nCc: c@b.hr\r\n"));
+        assert!(
+            raw.contains("Subject: =?UTF-8?B?"),
+            "a non-ascii subject is encoded"
+        );
+        assert!(raw.contains("Message-ID: <id@inorbit.hr>"));
+        assert!(raw.contains("Content-Type: multipart/mixed; boundary="));
+        assert!(raw.contains("Content-Disposition: attachment; filename=\"racun.pdf\""));
+        assert!(!raw.contains("Bcc:"), "no empty header");
     }
 
     #[test]

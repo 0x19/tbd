@@ -48,6 +48,8 @@ pub struct ConnectorRow {
     pub last_sync_error: Option<String>,
     pub failure: Option<String>,
     pub created_at: DateTime<Utc>,
+    /// The kind said the credential may send, at link time.
+    pub can_send: bool,
 }
 
 #[allow(missing_docs)]
@@ -67,7 +69,7 @@ pub struct RunRow {
 
 const COLUMNS: &str =
     "id, party_id, kind, label, status, config, external_id, linked_at, last_sync_at,
-    last_sync_status, last_sync_error, failure, created_at";
+    last_sync_status, last_sync_error, failure, created_at, can_send";
 
 fn sql(s: &str) -> sqlx::AssertSqlSafe<String> {
     sqlx::AssertSqlSafe(s.to_owned())
@@ -227,10 +229,12 @@ pub async fn complete(
     .map_err(map_err)?;
     let target = existing.map_or(id, |(e,)| e);
     let blob = sealer.seal(linked.credentials.to_string().as_bytes(), target.as_bytes())?;
+    let can_send = kind.capabilities(&linked.credentials).send;
     sqlx::query(
         "update finance.connectors
             set status = 'linked', credentials = $2, external_id = $3, label = $4, linked_at = now(),
-                state = case when id = $5 then state else null end, failure = null, updated_at = now()
+                state = case when id = $5 then state else null end, failure = null, updated_at = now(),
+                can_send = $6
           where id = $1",
     )
     .bind(target)
@@ -238,6 +242,7 @@ pub async fn complete(
     .bind(&linked.external_id)
     .bind(&linked.label)
     .bind(target)
+    .bind(can_send)
     .execute(pool)
     .await
     .map_err(map_err)?;
@@ -249,6 +254,19 @@ pub async fn complete(
             .map_err(map_err)?;
     }
     get(pool, access, target).await
+}
+
+/// The opened credential, for the mail store: it hands it to the kind for
+/// one send or one read of a thread, and never keeps it.
+///
+/// # Errors
+/// The row is pending; the seal; the database.
+pub(crate) async fn open_credentials(
+    pool: &PgPool,
+    sealer: &Sealer,
+    id: Uuid,
+) -> Result<Value, StoreError> {
+    credentials(pool, sealer, id).await
 }
 
 /// The opened credential of a linked connector. Private: only this module
@@ -480,6 +498,13 @@ pub async fn run_sync(
         }
     }
     finish(pool, run_id, id, Ok((&pulled, complete))).await?;
+    // What came back to the threads this mailbox sent in. After the pull's
+    // own bookkeeping: a failure here is logged, never a failed run.
+    match crate::mail::store::import_replies(pool, sealer, kind.as_ref(), row).await {
+        Ok(0) => {}
+        Ok(n) => tracing::info!(connector = %id, replies = n, "mail: replies imported"),
+        Err(e) => tracing::warn!(connector = %id, error = %e, "mail: replies not imported"),
+    }
     Ok(pulled)
 }
 

@@ -11,12 +11,14 @@ pub mod connectors;
 pub mod documents;
 pub mod import;
 pub mod invoice;
+pub mod mail;
 pub mod money;
 pub mod reconcile;
 mod service;
 mod service_connectors;
 mod service_documents;
 mod service_invoices;
+mod service_mail;
 mod service_reconcile;
 pub mod store;
 pub mod sync;
@@ -134,6 +136,7 @@ pub async fn serve_with_bank(
             config.sync.clone(),
             config.provider.redirect_url.clone(),
         )
+        .with_mail(config.mail.clone())
         .with_connectors(config.connectors.clone())
         .map_err(|e| ServeError::Provider(e.to_string()))?;
     serve_built(listener, &config, service, shutdown).await
@@ -159,6 +162,7 @@ pub async fn serve_with_kinds(
     })
     .map_err(|e| ServeError::Store(e.to_string()))?;
     let service = Finance::with_pool(config.ping.clone(), runtime, pool)
+        .with_mail(config.mail.clone())
         .with_connectors(config.connectors.clone())
         .map_err(|e| ServeError::Provider(e.to_string()))?
         .with_connector_kinds(kinds);
@@ -241,6 +245,7 @@ pub async fn serve_with(
                     config.sync.clone(),
                     config.provider.redirect_url.clone(),
                 )
+                .with_mail(config.mail.clone())
                 .with_connectors(config.connectors.clone())
                 .map_err(|e| ServeError::Provider(e.to_string()))?;
             tracing::info!(
@@ -261,6 +266,7 @@ pub async fn serve_with(
             "no provider configured; sync worker not started"
         );
         Finance::with_pool(config.ping.clone(), runtime, pool)
+            .with_mail(config.mail.clone())
             .with_connectors(config.connectors.clone())
             .map_err(|e| ServeError::Provider(e.to_string()))?
     };

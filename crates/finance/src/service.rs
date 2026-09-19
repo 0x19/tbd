@@ -48,8 +48,11 @@ use tbd_proto::finance::v1::{
     UnlinkDocumentResponse,
 };
 use tbd_proto::finance::v1::{
-    ExtractDocumentRequest, ExtractDocumentResponse, UpdateDocumentRequest, UpdateDocumentResponse,
-    UploadDocumentRequest, UploadDocumentResponse,
+    DeleteMailTemplateRequest, DeleteMailTemplateResponse, ExtractDocumentRequest,
+    ExtractDocumentResponse, GetMailRequest, GetMailResponse, ListMailRequest, ListMailResponse,
+    ListMailTemplatesRequest, ListMailTemplatesResponse, SendMailRequest, SendMailResponse,
+    UpdateDocumentRequest, UpdateDocumentResponse, UploadDocumentRequest, UploadDocumentResponse,
+    UpsertMailTemplateRequest, UpsertMailTemplateResponse,
 };
 use tonic::{Code, Request, Response, Status};
 use uuid::Uuid;
@@ -87,6 +90,8 @@ pub struct Finance {
     redirect_url: String,
     /// `[connectors]`, and the sealer built from its key.
     pub(crate) connectors: crate::config::Connectors,
+    /// `[mail]`: the recipient allowlist.
+    pub(crate) mail: crate::config::Mail,
     pub(crate) sealer: Option<Arc<crate::connectors::crypto::Sealer>>,
     /// Kinds to use instead of the registry -- tests inject a mock kind.
     pub(crate) connector_kinds: Option<crate::connectors::KindsFactory>,
@@ -120,6 +125,7 @@ impl Finance {
             sync: SyncConfig::default(),
             redirect_url: String::new(),
             connectors: crate::config::Connectors::default(),
+            mail: crate::config::Mail::default(),
             sealer: None,
             connector_kinds: None,
         }
@@ -138,6 +144,7 @@ impl Finance {
             sync: SyncConfig::default(),
             redirect_url: String::new(),
             connectors: crate::config::Connectors::default(),
+            mail: crate::config::Mail::default(),
             sealer: None,
             connector_kinds: None,
         }
@@ -165,6 +172,7 @@ impl Finance {
             sync: SyncConfig::default(),
             redirect_url: String::new(),
             connectors: crate::config::Connectors::default(),
+            mail: crate::config::Mail::default(),
             sealer: None,
             connector_kinds: None,
         }
@@ -173,6 +181,13 @@ impl Finance {
 
     fn with_grants(mut self, grants: Vec<(String, Vec<Uuid>)>) -> Self {
         self.grants = grants;
+        self
+    }
+
+    /// The `[mail]` section.
+    #[must_use]
+    pub fn with_mail(mut self, mail: crate::config::Mail) -> Self {
+        self.mail = mail;
         self
     }
 
@@ -1112,6 +1127,42 @@ impl FinanceService for Finance {
         r: Request<UploadDocumentRequest>,
     ) -> Result<Response<UploadDocumentResponse>, Status> {
         self.rpc_upload_document(r).await
+    }
+    async fn list_mail_templates(
+        &self,
+        r: Request<ListMailTemplatesRequest>,
+    ) -> Result<Response<ListMailTemplatesResponse>, Status> {
+        self.rpc_list_mail_templates(r).await
+    }
+    async fn upsert_mail_template(
+        &self,
+        r: Request<UpsertMailTemplateRequest>,
+    ) -> Result<Response<UpsertMailTemplateResponse>, Status> {
+        self.rpc_upsert_mail_template(r).await
+    }
+    async fn delete_mail_template(
+        &self,
+        r: Request<DeleteMailTemplateRequest>,
+    ) -> Result<Response<DeleteMailTemplateResponse>, Status> {
+        self.rpc_delete_mail_template(r).await
+    }
+    async fn send_mail(
+        &self,
+        r: Request<SendMailRequest>,
+    ) -> Result<Response<SendMailResponse>, Status> {
+        self.rpc_send_mail(r).await
+    }
+    async fn list_mail(
+        &self,
+        r: Request<ListMailRequest>,
+    ) -> Result<Response<ListMailResponse>, Status> {
+        self.rpc_list_mail(r).await
+    }
+    async fn get_mail(
+        &self,
+        r: Request<GetMailRequest>,
+    ) -> Result<Response<GetMailResponse>, Status> {
+        self.rpc_get_mail(r).await
     }
     type WatchConnectorsStream = Pin<
         Box<

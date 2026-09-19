@@ -292,6 +292,41 @@ service FinanceService {
   rpc ListConnectorRuns(ListConnectorRunsRequest) returns (ListConnectorRunsResponse) {
     option (google.api.http) = {get: "/v1/finance/connectors/{id}/runs"};
   }
+
+  // Mail sent from a linked mailbox whose consent included sending, and
+  // the replies that came back. Templates hold the recurring shape with
+  // helpers the page renders; the service stores what was sent.
+  rpc ListMailTemplates(ListMailTemplatesRequest) returns (ListMailTemplatesResponse) {
+    option (google.api.http) = {get: "/v1/finance/mail/templates"};
+  }
+  rpc UpsertMailTemplate(UpsertMailTemplateRequest) returns (UpsertMailTemplateResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/mail/templates"
+      body: "*"
+    };
+  }
+  rpc DeleteMailTemplate(DeleteMailTemplateRequest) returns (DeleteMailTemplateResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/mail/templates/{id}/delete"
+      body: "*"
+    };
+  }
+  // Send as a connector and record the mail, sent or failed. Refused before
+  // the provider is asked when the connector cannot send, an address is
+  // malformed, or the environment's allowlist excludes one.
+  rpc SendMail(SendMailRequest) returns (SendMailResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/mail/send"
+      body: "*"
+    };
+  }
+  rpc ListMail(ListMailRequest) returns (ListMailResponse) {
+    option (google.api.http) = {get: "/v1/finance/mail"};
+  }
+  // One mail with its thread: what it answers and every reply, oldest first.
+  rpc GetMail(GetMailRequest) returns (GetMailResponse) {
+    option (google.api.http) = {get: "/v1/finance/mail/{id}"};
+  }
   // Receipts and other pulled documents, newest first, searchable.
   rpc ListDocuments(ListDocumentsRequest) returns (ListDocumentsResponse) {
     option (google.api.http) = {get: "/v1/finance/documents"};
@@ -387,6 +422,8 @@ message Connector {
   string last_sync_error = 11;
   string failure = 12;
   string created_at = 13;
+  // The consent included sending: the mail page may use it.
+  bool can_send = 14;
 }
 message ListConnectorsRequest {
   repeated string party_ids = 1;
@@ -441,6 +478,112 @@ message DeleteConnectorRequest {
   string id = 1;
 }
 message DeleteConnectorResponse {}
+message MailTemplate {
+  string id = 1;
+  string party_id = 2;
+  string name = 3;
+  // With helpers: {{Month}}, {{Year}}, {{MonthName}}, {{Company}}, {{Today}}.
+  string subject = 4;
+  string body = 5;
+  repeated string to = 6;
+  repeated string cc = 7;
+  repeated string bcc = 8;
+  string updated_at = 9;
+}
+message ListMailTemplatesRequest {
+  repeated string party_ids = 1;
+}
+message ListMailTemplatesResponse {
+  repeated MailTemplate templates = 1;
+}
+message UpsertMailTemplateRequest {
+  // Empty creates.
+  string id = 1;
+  string party_id = 2;
+  string name = 3;
+  string subject = 4;
+  string body = 5;
+  repeated string to = 6;
+  repeated string cc = 7;
+  repeated string bcc = 8;
+}
+message UpsertMailTemplateResponse {
+  MailTemplate template = 1;
+}
+message DeleteMailTemplateRequest {
+  string id = 1;
+}
+message DeleteMailTemplateResponse {}
+message MailDocument {
+  string document_id = 1;
+  string filename = 2;
+  string content_type = 3;
+  int64 size_bytes = 4;
+}
+message Mail {
+  string id = 1;
+  string party_id = 2;
+  string connector_id = 3;
+  // out or in.
+  string direction = 4;
+  string from = 5;
+  repeated string to = 6;
+  repeated string cc = 7;
+  repeated string bcc = 8;
+  string subject = 9;
+  string body = 10;
+  // sent, failed, received.
+  string status = 11;
+  string error = 12;
+  string sent_at = 13;
+  string received_at = 14;
+  string template_id = 15;
+  // The outgoing mail a reply answers.
+  string parent_id = 16;
+  // Replies held for an outgoing mail.
+  uint32 replies = 17;
+  repeated MailDocument documents = 18;
+  string thread_key = 19;
+}
+message SendMailRequest {
+  string connector_id = 1;
+  string template_id = 2;
+  repeated string to = 3;
+  repeated string cc = 4;
+  repeated string bcc = 5;
+  // Rendered: helpers already filled.
+  string subject = 6;
+  string body = 7;
+  // Optional HTML beside the text.
+  string html = 8;
+  repeated string attachment_document_ids = 9;
+  // A mail of ours to answer in its thread.
+  string in_reply_to_mail_id = 10;
+}
+message SendMailResponse {
+  Mail mail = 1;
+}
+message ListMailRequest {
+  repeated string party_ids = 1;
+  string connector_id = 2;
+  // out, in, or empty.
+  string direction = 3;
+  string q = 4;
+  uint32 limit = 5;
+  uint32 offset = 6;
+}
+message ListMailResponse {
+  repeated Mail mails = 1;
+  uint32 total = 2;
+}
+message GetMailRequest {
+  string id = 1;
+}
+message GetMailResponse {
+  Mail mail = 1;
+  // The whole thread, oldest first; `mail` is among them.
+  repeated Mail thread = 2;
+}
 message ConnectorRun {
   string id = 1;
   string started_at = 2;

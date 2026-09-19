@@ -78,3 +78,10 @@ default_backoff_secs = 21600
 # the finance UI host, where the page completes the link as the signed-in
 # person.
 redirect_url = "https://finance.proximity.is/connectors/callback"
+
+[mail]
+# Sending from a linked mailbox whose consent included it (Gmail: the send
+# scope, asked for at link time). `allow_to` is a safety for environments
+# where a test must never reach a real recipient: empty means anyone; set,
+# a send to any other address is refused before the provider is asked.
+allow_to = []

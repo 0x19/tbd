@@ -12,7 +12,8 @@ use serde_json::{Value, json};
 use sqlx::PgPool;
 use tbd_db::{Capability, PartyId, UserId, create_org, ensure_user, grant};
 use tbd_finance::connectors::{
-    Auth, AuthContext, Connector, ConnectorError, Found, Kind, Linked, Reach,
+    Attachment, Auth, AuthContext, Capabilities, Connector, ConnectorError, Found, Inbound, Kind,
+    Linked, Outgoing, Reach, SentMail,
 };
 use tbd_proto::finance::v1::{
     CompleteConnectorRequest, ConfigureConnectorRequest, DeleteConnectorRequest,
@@ -25,10 +26,10 @@ use uuid::Uuid;
 
 use crate::support::start_with_kinds;
 
-const OWNER: &str = "conn-owner";
-const READER: &str = "conn-reader";
+pub(crate) const OWNER: &str = "conn-owner";
+pub(crate) const READER: &str = "conn-reader";
 
-fn as_caller<T>(subject: &str, message: T) -> Request<T> {
+pub(crate) fn as_caller<T>(subject: &str, message: T) -> Request<T> {
     let claims = json!({ "sub": subject, "scp": ["tbd.finance"] });
     let encoded = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(claims.to_string());
     let mut request = Request::new(message);
@@ -47,6 +48,8 @@ struct MockKind {
     /// The first receipt is a real PDF (our own rendered sample invoice)
     /// rather than a stand-in, so the reader has something to read.
     real: bool,
+    /// Every mail sent through this kind, in order.
+    sent: Arc<Mutex<Vec<Outgoing>>>,
 }
 
 #[async_trait]
@@ -71,11 +74,70 @@ impl Connector for MockKind {
         if code == "bad" {
             return Err(ConnectorError::Provider("refused".into()));
         }
+        // A link made with the code `nosend` lacks the send consent.
+        let scope = if code == "nosend" {
+            "read"
+        } else {
+            "read send"
+        };
         Ok(Linked {
-            credentials: json!({ "refresh_token": "SECRET-REFRESH-TOKEN" }),
+            credentials: json!({ "refresh_token": "SECRET-REFRESH-TOKEN", "scope": scope }),
             external_id: "inbox@example.test".into(),
             label: "inbox@example.test".into(),
         })
+    }
+    fn capabilities(&self, credentials: &Value) -> Capabilities {
+        Capabilities {
+            send: credentials["scope"]
+                .as_str()
+                .is_some_and(|s| s.split(' ').any(|w| w == "send")),
+        }
+    }
+    async fn send(&self, credentials: &Value, mail: &Outgoing) -> Result<SentMail, ConnectorError> {
+        if !self.capabilities(credentials).send {
+            return Err(ConnectorError::Unlinked("no send consent".into()));
+        }
+        if mail.subject.contains("FAIL") {
+            return Err(ConnectorError::Provider("the provider refused".into()));
+        }
+        let mut sent = self.sent.lock().unwrap();
+        sent.push(mail.clone());
+        let n = sent.len();
+        Ok(SentMail {
+            provider_id: format!("sent-{n}"),
+            thread_key: format!("thread-{n}"),
+            message_id: format!("<sent-{n}@example.test>"),
+        })
+    }
+    async fn replies(
+        &self,
+        _credentials: &Value,
+        thread_key: &str,
+        seen: &(dyn for<'a> Fn(&'a str) -> bool + Sync),
+    ) -> Result<Vec<Inbound>, ConnectorError> {
+        // Every thread we sent in has exactly one reply, with a PDF; asked
+        // twice, it is already seen.
+        let id = format!("reply-{thread_key}");
+        if seen(&id) {
+            return Ok(Vec::new());
+        }
+        Ok(vec![Inbound {
+            provider_id: id,
+            thread_key: thread_key.to_owned(),
+            message_id: format!("<reply-{thread_key}@accountant.test>"),
+            in_reply_to: String::new(),
+            from: "Accountant <books@accountant.test>".into(),
+            to: vec!["inbox@example.test".into()],
+            cc: vec![],
+            subject: "Re: your mail".into(),
+            text: "Received, thanks. Attached the confirmation.".into(),
+            received_at: Some(Utc::now()),
+            attachments: vec![Attachment {
+                filename: "confirmation.pdf".into(),
+                content_type: "application/pdf".into(),
+                bytes: format!("%PDF-confirmation-{thread_key}").into_bytes(),
+            }],
+        }])
     }
     async fn test(&self, credentials: &Value) -> Result<String, ConnectorError> {
         if self.refuse {
@@ -134,7 +196,10 @@ impl Connector for MockKind {
 type FinanceClient =
     tbd_proto::finance::v1::finance_service_client::FinanceServiceClient<tonic::transport::Channel>;
 
-async fn sync_and_wait(c: &mut FinanceClient, id: &str) -> tbd_proto::finance::v1::ConnectorRun {
+pub(crate) async fn sync_and_wait(
+    c: &mut FinanceClient,
+    id: &str,
+) -> tbd_proto::finance::v1::ConnectorRun {
     let started = c
         .sync_connector(as_caller(OWNER, SyncConnectorRequest { id: id.to_owned() }))
         .await
@@ -164,7 +229,7 @@ async fn sync_and_wait(c: &mut FinanceClient, id: &str) -> tbd_proto::finance::v
     panic!("run {} never finished", started.id);
 }
 
-async fn seed(pool: &PgPool) -> (Uuid, Uuid) {
+pub(crate) async fn seed(pool: &PgPool) -> (Uuid, Uuid) {
     let owner: UserId = ensure_user(pool, OWNER, None, "Owner").await.unwrap();
     let reader = ensure_user(pool, READER, None, "Reader").await.unwrap();
     let company = create_org(pool, "Inorbit d.o.o.", None, Some("HR"), true)
@@ -201,17 +266,34 @@ fn kinds_with(
     refuse: bool,
     real: bool,
 ) -> (tbd_finance::connectors::KindsFactory, Arc<Mutex<usize>>) {
+    let (factory, pulls, _) = kinds_mail(refuse, real);
+    (factory, pulls)
+}
+
+/// The factory, the pull counter, and the record of what was sent.
+pub(crate) type MailKinds = (
+    tbd_finance::connectors::KindsFactory,
+    Arc<Mutex<usize>>,
+    Arc<Mutex<Vec<Outgoing>>>,
+);
+
+/// The mock kinds with the record of what they sent, for the mail tests.
+pub(crate) fn kinds_mail(refuse: bool, real: bool) -> MailKinds {
     let pulls = Arc::new(Mutex::new(0));
+    let sent = Arc::new(Mutex::new(Vec::new()));
     let p = Arc::clone(&pulls);
+    let s = Arc::clone(&sent);
     (
         Arc::new(move || {
             vec![Box::new(MockKind {
                 pulls: Arc::clone(&p),
                 refuse,
                 real,
+                sent: Arc::clone(&s),
             }) as Box<dyn Connector>]
         }),
         pulls,
+        sent,
     )
 }
 
@@ -227,6 +309,15 @@ fn state_of(url: &str) -> String {
 
 /// Start and complete a mock link for `party` as the owner.
 async fn link(server: &crate::support::Server, party: Uuid) -> tbd_proto::finance::v1::Connector {
+    link_with(server, party, "ok").await
+}
+
+/// Link with a given code: `nosend` yields a mailbox without send consent.
+pub(crate) async fn link_with(
+    server: &crate::support::Server,
+    party: Uuid,
+    code: &str,
+) -> tbd_proto::finance::v1::Connector {
     let mut c = server.client().await;
     let started = c
         .start_connector(as_caller(
@@ -244,7 +335,7 @@ async fn link(server: &crate::support::Server, party: Uuid) -> tbd_proto::financ
         OWNER,
         CompleteConnectorRequest {
             state: state_of(&started.url),
-            code: "ok".into(),
+            code: code.into(),
         },
     ))
     .await

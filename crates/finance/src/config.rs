@@ -37,6 +37,32 @@ pub struct Config {
     /// `[connectors]`
     #[serde(default)]
     pub connectors: Connectors,
+    /// `[mail]`
+    #[serde(default)]
+    pub mail: Mail,
+}
+
+/// `[mail]`: sending from a linked mailbox.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Mail {
+    /// Addresses a mail may go to. Empty means anyone. Set in an environment
+    /// where a test send must never reach a real recipient; a send to anyone
+    /// else is refused before the provider is asked.
+    #[serde(default)]
+    pub allow_to: Vec<String>,
+}
+
+impl Mail {
+    /// Whether `address` may be written to under this configuration.
+    #[must_use]
+    pub fn allows(&self, address: &str) -> bool {
+        self.allow_to.is_empty()
+            || self
+                .allow_to
+                .iter()
+                .any(|a| a.eq_ignore_ascii_case(address.trim()))
+    }
 }
 
 /// `[connectors]`: linked external accounts (mailboxes, vendor portals).

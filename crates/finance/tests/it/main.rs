@@ -11,6 +11,7 @@ mod connectors;
 mod documents;
 mod import;
 mod invoices;
+mod mail;
 mod reconcile;
 mod rpc;
 mod seed;

@@ -1951,6 +1951,313 @@
         }
       }
     },
+    "/v1/finance/mail": {
+      "get": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/ListMail",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/ListMail` on the `finance` backend.",
+        "operationId": "FinanceService.ListMail",
+        "parameters": [
+          {
+            "name": "party_ids",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "explode": true
+          },
+          {
+            "name": "connector_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "direction",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.ListMailResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.ListMailResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/finance/mail/send": {
+      "post": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/SendMail",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/SendMail` on the `finance` backend.",
+        "operationId": "FinanceService.SendMail",
+        "requestBody": {
+          "description": "`tbd.finance.v1.SendMailRequest`; path variables override their fields",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/tbd.finance.v1.SendMailRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.SendMailResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.SendMailResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/finance/mail/templates": {
+      "get": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/ListMailTemplates",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/ListMailTemplates` on the `finance` backend.",
+        "operationId": "FinanceService.ListMailTemplates",
+        "parameters": [
+          {
+            "name": "party_ids",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "explode": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.ListMailTemplatesResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.ListMailTemplatesResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/UpsertMailTemplate",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/UpsertMailTemplate` on the `finance` backend.",
+        "operationId": "FinanceService.UpsertMailTemplate",
+        "requestBody": {
+          "description": "`tbd.finance.v1.UpsertMailTemplateRequest`; path variables override their fields",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/tbd.finance.v1.UpsertMailTemplateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.UpsertMailTemplateResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.UpsertMailTemplateResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/finance/mail/templates/{id}/delete": {
+      "post": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/DeleteMailTemplate",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/DeleteMailTemplate` on the `finance` backend.",
+        "operationId": "FinanceService.DeleteMailTemplate",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "`tbd.finance.v1.DeleteMailTemplateRequest`; path variables override their fields",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/tbd.finance.v1.DeleteMailTemplateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.DeleteMailTemplateResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.DeleteMailTemplateResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/finance/mail/{id}": {
+      "get": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/GetMail",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/GetMail` on the `finance` backend.",
+        "operationId": "FinanceService.GetMail",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.GetMailResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.GetMailResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/finance/parties": {
       "get": {
         "tags": [
@@ -4019,6 +4326,9 @@
         "type": "object",
         "description": "`tbd.finance.v1.Connector`",
         "properties": {
+          "can_send": {
+            "type": "boolean"
+          },
           "config": {
             "type": "string"
           },
@@ -4225,6 +4535,19 @@
         "type": "object",
         "description": "`tbd.finance.v1.DeleteLineTemplateResponse`"
       },
+      "tbd.finance.v1.DeleteMailTemplateRequest": {
+        "type": "object",
+        "description": "`tbd.finance.v1.DeleteMailTemplateRequest`",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.finance.v1.DeleteMailTemplateResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.DeleteMailTemplateResponse`"
+      },
       "tbd.finance.v1.Document": {
         "type": "object",
         "description": "`tbd.finance.v1.Document`",
@@ -4372,6 +4695,21 @@
         "properties": {
           "issuer": {
             "$ref": "#/components/schemas/tbd.finance.v1.IssuerProfile"
+          }
+        }
+      },
+      "tbd.finance.v1.GetMailResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.GetMailResponse`",
+        "properties": {
+          "mail": {
+            "$ref": "#/components/schemas/tbd.finance.v1.Mail"
+          },
+          "thread": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/tbd.finance.v1.Mail"
+            }
           }
         }
       },
@@ -4794,6 +5132,34 @@
           }
         }
       },
+      "tbd.finance.v1.ListMailResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.ListMailResponse`",
+        "properties": {
+          "mails": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/tbd.finance.v1.Mail"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "tbd.finance.v1.ListMailTemplatesResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.ListMailTemplatesResponse`",
+        "properties": {
+          "templates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/tbd.finance.v1.MailTemplate"
+            }
+          }
+        }
+      },
       "tbd.finance.v1.ListPartiesResponse": {
         "type": "object",
         "description": "`tbd.finance.v1.ListPartiesResponse`",
@@ -4833,6 +5199,143 @@
             "items": {
               "$ref": "#/components/schemas/tbd.finance.v1.Transaction"
             }
+          }
+        }
+      },
+      "tbd.finance.v1.Mail": {
+        "type": "object",
+        "description": "`tbd.finance.v1.Mail`",
+        "properties": {
+          "bcc": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "body": {
+            "type": "string"
+          },
+          "cc": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "connector_id": {
+            "type": "string"
+          },
+          "direction": {
+            "type": "string"
+          },
+          "documents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/tbd.finance.v1.MailDocument"
+            }
+          },
+          "error": {
+            "type": "string"
+          },
+          "from": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "parent_id": {
+            "type": "string"
+          },
+          "party_id": {
+            "type": "string"
+          },
+          "received_at": {
+            "type": "string"
+          },
+          "replies": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "sent_at": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "template_id": {
+            "type": "string"
+          },
+          "thread_key": {
+            "type": "string"
+          },
+          "to": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "tbd.finance.v1.MailDocument": {
+        "type": "object",
+        "description": "`tbd.finance.v1.MailDocument`",
+        "properties": {
+          "content_type": {
+            "type": "string"
+          },
+          "document_id": {
+            "type": "string"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "size_bytes": {
+            "type": "string",
+            "format": "int64"
+          }
+        }
+      },
+      "tbd.finance.v1.MailTemplate": {
+        "type": "object",
+        "description": "`tbd.finance.v1.MailTemplate`",
+        "properties": {
+          "bcc": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "body": {
+            "type": "string"
+          },
+          "cc": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "party_id": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "to": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "updated_at": {
+            "type": "string"
           }
         }
       },
@@ -5111,6 +5614,63 @@
           "priority": {
             "type": "integer",
             "format": "int32"
+          }
+        }
+      },
+      "tbd.finance.v1.SendMailRequest": {
+        "type": "object",
+        "description": "`tbd.finance.v1.SendMailRequest`",
+        "properties": {
+          "attachment_document_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "bcc": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "body": {
+            "type": "string"
+          },
+          "cc": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "connector_id": {
+            "type": "string"
+          },
+          "html": {
+            "type": "string"
+          },
+          "in_reply_to_mail_id": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "template_id": {
+            "type": "string"
+          },
+          "to": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "tbd.finance.v1.SendMailResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.SendMailResponse`",
+        "properties": {
+          "mail": {
+            "$ref": "#/components/schemas/tbd.finance.v1.Mail"
           }
         }
       },
@@ -5580,6 +6140,54 @@
         "properties": {
           "template": {
             "$ref": "#/components/schemas/tbd.finance.v1.LineTemplate"
+          }
+        }
+      },
+      "tbd.finance.v1.UpsertMailTemplateRequest": {
+        "type": "object",
+        "description": "`tbd.finance.v1.UpsertMailTemplateRequest`",
+        "properties": {
+          "bcc": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "body": {
+            "type": "string"
+          },
+          "cc": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "party_id": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "to": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "tbd.finance.v1.UpsertMailTemplateResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.UpsertMailTemplateResponse`",
+        "properties": {
+          "template": {
+            "$ref": "#/components/schemas/tbd.finance.v1.MailTemplate"
           }
         }
       },
