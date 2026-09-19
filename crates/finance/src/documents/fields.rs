@@ -85,12 +85,13 @@ pub fn read(text: &str, sender: &str, received: Option<NaiveDate>, filename: &st
 /// thousands with `,`, `.` or a space and carry up to two decimals either way.
 /// A trailing mark must not be the leading mark of the next figure: in
 /// "August 29, 2026 $75.00" and "Dec 24, 2025€ 1,328.02" the year is not
-/// money. `best_money` drops a trailing mark that a figure follows.
+/// money. `best_money` drops a trailing mark that a figure follows. A code
+/// is a whole word: `EUROPA` after a date is not euros.
 static AMOUNT: LazyLock<Regex> = LazyLock::new(|| {
     re(r"(?x)
-        (?:(?P<pre>€|\$|£|EUR|USD|GBP|CHF|HRK|kn)\s?)?
+        (?:(?P<pre>€|\$|£|\b(?:EUR|USD|GBP|CHF|HRK|kn)\b)\s?)?
         (?P<num>\d{1,3}(?:[.,\ ]\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)\b
-        (?:\s?(?P<post>€|\$|£|EUR|USD|GBP|CHF|HRK|kn))?")
+        (?:\s?(?P<post>€|\$|£|\b(?:EUR|USD|GBP|CHF|HRK|kn)\b))?")
 });
 
 /// Labels that name the figure we want, best first. A line's best label
@@ -685,6 +686,8 @@ mod tests {
 
     #[test]
     fn a_year_before_a_dollar_figure_is_not_money() {
+        assert_eq!(best_money("29.04.2026 EUROPA 92 MUSTANG"), None);
+        assert_eq!(best_money("1 EUR=1,1416 USD"), Some((100, "EUR".into())));
         assert_eq!(
             best_money("Amount paid on Dec 24, 2025€ 1,328.02"),
             Some((132_802, "EUR".into()))
