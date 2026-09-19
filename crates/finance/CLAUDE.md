@@ -44,7 +44,10 @@ The finance service. gRPC only. Scaffolded by `tbd new service` (docs/tbd/README
   one file and one line; the UI reads the registry. Credentials are sealed at rest
   (`crypto.rs`, ChaCha20-Poly1305 under `FINANCE_CONNECTOR_KEY`, bound to the row id) and
   only `store.rs` opens them, per call. `gmail.rs` links through Google OAuth (read-only
-  scope) and keeps PDF attachments; a second query (`body_query`, Gmail's own syntax)
+  scope) and keeps PDF attachments; a pull holds a session whose access token is re-minted
+  before Google's hour is up and once more if refused mid-pull (a throttled pull outlives
+  the token; one died at 3,611 s and read as a broken link), so only a refused *refresh*
+  marks the row expired, and a later good pull or test clears that mark; a second query (`body_query`, Gmail's own syntax)
   finds receipt mails with nothing attached, fetches the Stripe-hosted invoice a mail names
   (`/pdf` under the link) or prints the mail (`documents::mail`); a pulled message is never
   pulled twice, identical bytes are one document with several sources. `SyncConnector` opens a run row and

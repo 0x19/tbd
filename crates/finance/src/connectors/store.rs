@@ -280,7 +280,12 @@ pub async fn test(
         .ok_or_else(|| StoreError::UnknownKind(row.kind.clone()))?;
     let creds = credentials(pool, sealer, id).await?;
     match kind.test(&creds).await {
-        Ok(s) => Ok(s),
+        Ok(s) => {
+            // A credential that works is a link that works, whatever an
+            // earlier pull concluded about it.
+            heal(pool, id).await?;
+            Ok(s)
+        }
         Err(e @ ConnectorError::Unlinked(_)) => {
             sqlx::query("update finance.connectors set status = 'expired', updated_at = now() where id = $1")
                 .bind(id)
@@ -637,6 +642,21 @@ async fn store_one(
     Ok(stored)
 }
 
+/// A row marked expired by a pull that turned out to be wrong about it --
+/// a token refused for being old, not the link -- goes back to linked the
+/// moment the credential proves itself again, with the failure cleared.
+async fn heal(pool: &PgPool, id: Uuid) -> Result<(), StoreError> {
+    sqlx::query(
+        "update finance.connectors set status = 'linked', failure = null, updated_at = now()
+          where id = $1 and status = 'expired'",
+    )
+    .bind(id)
+    .execute(pool)
+    .await
+    .map_err(map_err)?;
+    Ok(())
+}
+
 /// Record how a run ended, and on the connector what its last sync was.
 async fn finish(
     pool: &PgPool,
@@ -674,6 +694,7 @@ async fn finish(
             .execute(pool)
             .await
             .map_err(map_err)?;
+            heal(pool, id).await?;
         }
         Err(e) => {
             sqlx::query("update finance.connector_runs set finished_at = now(), outcome = 'error', error = $2 where id = $1")

@@ -34,6 +34,44 @@ pub struct Gmail {
     client_id: String,
     client_secret: String,
     http: reqwest::Client,
+    token_url: String,
+    api: String,
+}
+
+/// Google mints an access token for an hour. A throttled pull of a busy
+/// mailbox runs longer than that -- one did, and died at 3,611 seconds with
+/// "invalid authentication credentials", which read as a broken link -- so a
+/// pull holds a session: the token is re-minted before its hour is up, and
+/// once more if Google refuses it anyway. Only the token endpoint refusing
+/// the *refresh* means the link is gone.
+#[derive(Debug)]
+struct Session {
+    credentials: Value,
+    minted: tokio::sync::Mutex<Minted>,
+}
+
+#[derive(Debug, Clone)]
+struct Minted {
+    token: String,
+    at: std::time::Instant,
+}
+
+/// Re-mint at fifty minutes: ten to spare for a request already waiting
+/// out a quota minute.
+const RENEW_AFTER: std::time::Duration = std::time::Duration::from_mins(50);
+
+impl Session {
+    /// A session on a token already in hand (the code exchange's), with no
+    /// refresh token behind it: a refusal is final.
+    fn with_token(token: String) -> Self {
+        Self {
+            credentials: Value::Null,
+            minted: tokio::sync::Mutex::new(Minted {
+                token,
+                at: std::time::Instant::now(),
+            }),
+        }
+    }
 }
 
 impl Gmail {
@@ -44,7 +82,61 @@ impl Gmail {
             client_id: config.google_client_id.clone(),
             client_secret: config.google_client_secret.clone(),
             http: reqwest::Client::new(),
+            token_url: TOKEN_URL.to_owned(),
+            api: API.to_owned(),
         }
+    }
+
+    /// Google's endpoints replaced by a test's server.
+    #[cfg(test)]
+    fn with_endpoints(token_url: &str, api: &str) -> Self {
+        Self {
+            client_id: "client".into(),
+            client_secret: "secret".into(),
+            http: reqwest::Client::new(),
+            token_url: token_url.to_owned(),
+            api: api.to_owned(),
+        }
+    }
+
+    /// Start a session: mint the first token.
+    async fn open(&self, credentials: &Value) -> Result<Session, ConnectorError> {
+        let token = self.access_token(credentials).await?;
+        Ok(Session {
+            credentials: credentials.clone(),
+            minted: tokio::sync::Mutex::new(Minted {
+                token,
+                at: std::time::Instant::now(),
+            }),
+        })
+    }
+
+    /// The session's token, re-minted first when it is near its hour.
+    async fn bearer(&self, session: &Session) -> Result<String, ConnectorError> {
+        let mut minted = session.minted.lock().await;
+        if minted.at.elapsed() >= RENEW_AFTER && session.credentials.get("refresh_token").is_some()
+        {
+            tracing::info!(
+                age_secs = minted.at.elapsed().as_secs(),
+                "gmail: access token near its hour; re-minting"
+            );
+            *minted = Minted {
+                token: self.access_token(&session.credentials).await?,
+                at: std::time::Instant::now(),
+            };
+        }
+        Ok(minted.token.clone())
+    }
+
+    /// A fresh token after Google refused the one in hand. With no refresh
+    /// token behind the session this fails as unlinked, which is the truth.
+    async fn renew(&self, session: &Session) -> Result<(), ConnectorError> {
+        let mut minted = session.minted.lock().await;
+        *minted = Minted {
+            token: self.access_token(&session.credentials).await?,
+            at: std::time::Instant::now(),
+        };
+        Ok(())
     }
 
     fn configured(&self) -> bool {
@@ -58,7 +150,7 @@ impl Gmail {
             .ok_or_else(|| ConnectorError::Unlinked("no refresh token".into()))?;
         let resp = self
             .http
-            .post(TOKEN_URL)
+            .post(&self.token_url)
             .form(&[
                 ("client_id", self.client_id.as_str()),
                 ("client_secret", self.client_secret.as_str()),
@@ -89,14 +181,14 @@ impl Gmail {
     /// Gmail's pages.
     async fn list_ids(
         &self,
-        token: &str,
+        session: &Session,
         q: &str,
         throttle: &Pace,
     ) -> Result<Vec<String>, ConnectorError> {
         let mut ids = Vec::new();
         let mut page: Option<String> = None;
         loop {
-            let mut url = reqwest::Url::parse(&format!("{API}/messages"))
+            let mut url = reqwest::Url::parse(&format!("{}/messages", self.api))
                 .map_err(|e| ConnectorError::Provider(e.to_string()))?;
             url.query_pairs_mut()
                 .append_pair("q", q)
@@ -104,7 +196,7 @@ impl Gmail {
             if let Some(p) = &page {
                 url.query_pairs_mut().append_pair("pageToken", p);
             }
-            let list = self.get(token, url.as_str(), throttle).await?;
+            let list = self.get(session, url.as_str(), throttle).await?;
             for m in list
                 .get("messages")
                 .and_then(Value::as_array)
@@ -130,14 +222,22 @@ impl Gmail {
     /// Gmail says "slow down" as a 403 with a reason, not a 429, so the
     /// reason decides; a 403 for a missing scope is a link problem instead,
     /// and is not retried. `pace` is the gap kept before each request; a
-    /// quota refusal widens it for the rest of the pull.
-    async fn get(&self, token: &str, url: &str, pace: &Pace) -> Result<Value, ConnectorError> {
+    /// quota refusal widens it for the rest of the pull. A 401 is tried once
+    /// more on a freshly minted token before it means the link is gone.
+    async fn get(
+        &self,
+        session: &Session,
+        url: &str,
+        pace: &Pace,
+    ) -> Result<Value, ConnectorError> {
+        let mut renewed = false;
         for (attempt, wait) in RETRY_WAITS.iter().enumerate() {
             pace.hold().await;
+            let token = self.bearer(session).await?;
             let resp = self
                 .http
                 .get(url)
-                .bearer_auth(token)
+                .bearer_auth(&token)
                 .send()
                 .await
                 .map_err(|e| ConnectorError::Provider(e.to_string()))?;
@@ -150,6 +250,16 @@ impl Gmail {
             }
             let body = resp.text().await.unwrap_or_default();
             match classify(status, &body) {
+                Refusal::Unlinked(why)
+                    if status == reqwest::StatusCode::UNAUTHORIZED && !renewed =>
+                {
+                    // Google refused the token, which is not the same as
+                    // refusing the link: an hour-old token in a long pull
+                    // gets exactly this answer. One re-mint tells them apart.
+                    tracing::info!(why, "gmail: token refused; re-minting once");
+                    renewed = true;
+                    self.renew(session).await?;
+                }
                 Refusal::Transient(why) if attempt + 1 < RETRY_WAITS.len() => {
                     // A per-minute quota clears when the minute does; the
                     // later waits are a full one. And the pull slows down,
@@ -350,7 +460,7 @@ impl Connector for Gmail {
         }
         let resp = self
             .http
-            .post(TOKEN_URL)
+            .post(&self.token_url)
             .form(&[
                 ("client_id", self.client_id.as_str()),
                 ("client_secret", self.client_secret.as_str()),
@@ -384,7 +494,13 @@ impl Connector for Gmail {
             .get("access_token")
             .and_then(Value::as_str)
             .unwrap_or_default();
-        let who = self.get(access, USERINFO_URL, &Pace::default()).await?;
+        let who = self
+            .get(
+                &Session::with_token(access.to_owned()),
+                USERINFO_URL,
+                &Pace::default(),
+            )
+            .await?;
         let email = who
             .get("email")
             .and_then(Value::as_str)
@@ -403,9 +519,9 @@ impl Connector for Gmail {
     }
 
     async fn test(&self, credentials: &Value) -> Result<String, ConnectorError> {
-        let token = self.access_token(credentials).await?;
+        let session = self.open(credentials).await?;
         let profile = self
-            .get(&token, &format!("{API}/profile"), &Pace::default())
+            .get(&session, &format!("{}/profile", self.api), &Pace::default())
             .await?;
         Ok(format!(
             "{} · {} messages",
@@ -428,7 +544,7 @@ impl Connector for Gmail {
         seen: &(dyn for<'a> Fn(&'a str) -> bool + Sync),
         sink: tokio::sync::mpsc::Sender<Found>,
     ) -> Result<Reach, ConnectorError> {
-        let token = self.access_token(credentials).await?;
+        let session = self.open(credentials).await?;
         let throttle = Pace::default();
         let query = config
             .get("query")
@@ -437,7 +553,7 @@ impl Connector for Gmail {
             .map_or_else(|| "has:attachment filename:pdf".to_owned(), str::to_owned);
         let q = format!("{query} after:{}", since.format("%Y/%m/%d"));
 
-        let ids = self.list_ids(&token, &q, &throttle).await?;
+        let ids = self.list_ids(&session, &q, &throttle).await?;
 
         // Listing is cheap and complete; fetching is what is capped. Only
         // messages never pulled count against the cap, so a mailbox drains
@@ -451,8 +567,8 @@ impl Connector for Gmail {
         for id in unseen.into_iter().take(MAX_MESSAGES) {
             let message = self
                 .get(
-                    &token,
-                    &format!("{API}/messages/{id}?format=full"),
+                    &session,
+                    &format!("{}/messages/{id}?format=full", self.api),
                     &throttle,
                 )
                 .await?;
@@ -479,8 +595,8 @@ impl Connector for Gmail {
                 };
                 let blob = self
                     .get(
-                        &token,
-                        &format!("{API}/messages/{id}/attachments/{att}"),
+                        &session,
+                        &format!("{}/messages/{id}/attachments/{att}", self.api),
                         &throttle,
                     )
                     .await?;
@@ -509,7 +625,7 @@ impl Connector for Gmail {
         }
 
         let bodies = self
-            .pull_bodies(&token, config, since, seen, &sink, &throttle)
+            .pull_bodies(&session, config, since, seen, &sink, &throttle)
             .await?;
         Ok(if reach == Reach::Complete && bodies == Reach::Complete {
             Reach::Complete
@@ -525,7 +641,7 @@ impl Gmail {
     /// is printed to one.
     async fn pull_bodies(
         &self,
-        token: &str,
+        session: &Session,
         config: &Value,
         since: DateTime<Utc>,
         seen: &(dyn for<'a> Fn(&'a str) -> bool + Sync),
@@ -533,7 +649,7 @@ impl Gmail {
         throttle: &Pace,
     ) -> Result<Reach, ConnectorError> {
         let mailbox = self
-            .get(token, &format!("{API}/profile"), throttle)
+            .get(session, &format!("{}/profile", self.api), throttle)
             .await
             .ok()
             .and_then(|p| {
@@ -548,7 +664,7 @@ impl Gmail {
             .filter(|q| !q.trim().is_empty())
             .map_or_else(|| BODY_QUERY.to_owned(), str::to_owned);
         let q = format!("{body_query} after:{}", since.format("%Y/%m/%d"));
-        let ids = self.list_ids(token, &q, throttle).await?;
+        let ids = self.list_ids(session, &q, throttle).await?;
         let unseen: Vec<&String> = ids.iter().filter(|id| !seen(id)).collect();
         let reach = if unseen.len() <= MAX_MESSAGES {
             Reach::Complete
@@ -557,7 +673,11 @@ impl Gmail {
         };
         for id in unseen.into_iter().take(MAX_MESSAGES) {
             let message = self
-                .get(token, &format!("{API}/messages/{id}?format=full"), throttle)
+                .get(
+                    session,
+                    &format!("{}/messages/{id}?format=full", self.api),
+                    throttle,
+                )
                 .await?;
             let subject = header(&message, "Subject").to_owned();
             let sender = header(&message, "From").to_owned();
@@ -809,6 +929,123 @@ mod tests {
             }
         })
         .to_string()
+    }
+
+    /// Google's answer to a token it no longer honours -- the exact wording
+    /// an hour-old one gets.
+    fn refused() -> wiremock::ResponseTemplate {
+        wiremock::ResponseTemplate::new(401).set_body_json(serde_json::json!({
+            "error": {"code": 401, "message": "Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.", "status": "UNAUTHENTICATED"}
+        }))
+    }
+
+    fn minted(token: &str) -> wiremock::ResponseTemplate {
+        wiremock::ResponseTemplate::new(200)
+            .set_body_json(serde_json::json!({ "access_token": token, "expires_in": 3599 }))
+    }
+
+    /// A Google that mints `first`, then `second`, and answers the profile
+    /// only to `good`.
+    async fn google(first: &str, second: &str, good: &str) -> wiremock::MockServer {
+        use wiremock::matchers::{header, method, path};
+        let server = wiremock::MockServer::start().await;
+        wiremock::Mock::given(method("POST"))
+            .and(path("/token"))
+            .respond_with(minted(first))
+            .up_to_n_times(1)
+            .mount(&server)
+            .await;
+        wiremock::Mock::given(method("POST"))
+            .and(path("/token"))
+            .respond_with(minted(second))
+            .mount(&server)
+            .await;
+        wiremock::Mock::given(method("GET"))
+            .and(path("/profile"))
+            .and(header("authorization", format!("Bearer {good}").as_str()))
+            .respond_with(wiremock::ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({ "emailAddress": "nevio@inorbit.hr", "messagesTotal": 7 }),
+            ))
+            .mount(&server)
+            .await;
+        wiremock::Mock::given(method("GET"))
+            .and(path("/profile"))
+            .respond_with(refused())
+            .mount(&server)
+            .await;
+        server
+    }
+
+    async fn mints(server: &wiremock::MockServer) -> usize {
+        server
+            .received_requests()
+            .await
+            .unwrap_or_default()
+            .iter()
+            .filter(|r| r.url.path() == "/token")
+            .count()
+    }
+
+    #[tokio::test]
+    async fn a_token_refused_mid_pull_is_re_minted_once_and_the_pull_goes_on() {
+        // The first token is refused the way an hour-old one is; the second
+        // works. The link is fine, and the call must say so.
+        let server = google("t1", "t2", "t2").await;
+        let gmail = Gmail::with_endpoints(&format!("{}/token", server.uri()), &server.uri());
+        let status = gmail
+            .test(&json!({ "refresh_token": "r" }))
+            .await
+            .unwrap_or_else(|e| panic!("a refused token is re-minted, not fatal: {e}"));
+        assert!(status.contains("nevio@inorbit.hr"), "{status}");
+        assert_eq!(mints(&server).await, 2, "the first mint, then one re-mint");
+    }
+
+    #[tokio::test]
+    async fn a_token_near_its_hour_is_re_minted_before_the_request() {
+        let server = google("t1", "t2", "t2").await;
+        let gmail = Gmail::with_endpoints(&format!("{}/token", server.uri()), &server.uri());
+        let session = gmail
+            .open(&json!({ "refresh_token": "r" }))
+            .await
+            .unwrap_or_else(|e| panic!("{e}"));
+        // Fifty-one minutes old: the next request must not go out on it.
+        session.minted.lock().await.at = std::time::Instant::now()
+            .checked_sub(RENEW_AFTER + std::time::Duration::from_secs(60))
+            .unwrap_or_else(|| panic!("the clock started less than an hour ago"));
+        let profile = gmail
+            .get(
+                &session,
+                &format!("{}/profile", server.uri()),
+                &Pace::default(),
+            )
+            .await
+            .unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(profile["messagesTotal"], 7);
+        assert_eq!(mints(&server).await, 2);
+        let refusals = server
+            .received_requests()
+            .await
+            .unwrap_or_default()
+            .iter()
+            .filter(|r| r.url.path() == "/profile")
+            .count();
+        assert_eq!(
+            refusals, 1,
+            "re-minted first, so the old token was never sent"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_token_refused_after_a_fresh_mint_means_the_link_is_gone() {
+        // Google refuses everything: one re-mint, then the truth, no loop.
+        let server = google("t1", "t2", "never").await;
+        let gmail = Gmail::with_endpoints(&format!("{}/token", server.uri()), &server.uri());
+        let err = gmail
+            .test(&json!({ "refresh_token": "r" }))
+            .await
+            .expect_err("refused twice is unlinked");
+        assert!(matches!(err, ConnectorError::Unlinked(_)), "{err}");
+        assert_eq!(mints(&server).await, 2, "exactly one re-mint, not a loop");
     }
 
     #[test]
