@@ -613,6 +613,9 @@ message CounterpartyPolicy {
 message LinkDocumentRequest {
   string transaction_id = 1;
   string document_id = 2;
+  // A receipt whose amount was read and disagrees with the charge is
+  // refused (FAILED_PRECONDITION, saying what was read) unless this is set.
+  bool force = 3;
 }
 message LinkDocumentResponse {
   ReconciliationRow row = 1;

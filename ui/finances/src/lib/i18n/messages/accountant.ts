@@ -41,6 +41,10 @@ export const en: Dict = {
   "accountant.attached": "Attached and linked.",
   "accountant.unlink": "Unlink",
   "accountant.linked": "Linked.",
+  "accountant.mismatch.title": "This receipt does not match the charge",
+  "accountant.mismatch.anyway": "Attach anyway",
+  "accountant.checked": "Linked; the amount agrees with the charge.",
+  "accountant.unread": "Linked; nothing could be read from it to check.",
   "accountant.unlinked": "Unlinked.",
   "accountant.back_to_rules": "Back to the rules.",
   "accountant.policy_set": "{counterparty}: {policy}",
@@ -101,6 +105,9 @@ export const en: Dict = {
   "why.same_days": "same days",
   "why.days_apart": "{days} days apart",
   "why.by_hand": "linked by hand",
+  "why.checked": "amount checked against the charge",
+  "why.forced": "attached against what was read",
+  "why.unread": "nothing read to check",
 };
 
 export const hr: Dict = {
@@ -142,6 +149,10 @@ export const hr: Dict = {
   "accountant.attached": "Priloženo i povezano.",
   "accountant.unlink": "Odveži",
   "accountant.linked": "Povezano.",
+  "accountant.mismatch.title": "Ovaj račun ne odgovara uplati",
+  "accountant.mismatch.anyway": "Svejedno priloži",
+  "accountant.checked": "Povezano; iznos se slaže s uplatom.",
+  "accountant.unread": "Povezano; iz njega se ništa nije moglo pročitati za provjeru.",
   "accountant.unlinked": "Odvezano.",
   "accountant.back_to_rules": "Natrag na pravila.",
   "accountant.policy_set": "{counterparty}: {policy}",
@@ -199,4 +210,7 @@ export const hr: Dict = {
   "why.same_days": "isti dani",
   "why.days_apart": "razmak {days} dana",
   "why.by_hand": "ručno povezano",
+  "why.checked": "iznos provjeren prema uplati",
+  "why.forced": "priloženo unatoč pročitanom",
+  "why.unread": "ništa pročitano za provjeru",
 };

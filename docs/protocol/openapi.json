@@ -4604,6 +4604,9 @@
           "document_id": {
             "type": "string"
           },
+          "force": {
+            "type": "boolean"
+          },
           "transaction_id": {
             "type": "string"
           }

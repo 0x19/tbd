@@ -72,6 +72,8 @@ export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
+    /** The gateway's code word: `failed_precondition`, `not_found`, … */
+    public code = "",
   ) {
     super(message);
   }
@@ -138,14 +140,16 @@ async function call<T>(
   }
   if (!res.ok) {
     let message = `${res.status} ${res.statusText}`;
+    let code = "";
     try {
       const body = (await res.json()) as { error?: string; message?: string };
       if (body.message) message = body.message;
       else if (body.error) message = body.error;
+      code = body.error ?? "";
     } catch {
       // not JSON
     }
-    throw new ApiError(res.status, message);
+    throw new ApiError(res.status, message, code);
   }
   return schema.parse(await res.json());
 }
@@ -283,10 +287,10 @@ export const api = {
   // ---- reconciliation ----
   reconciliation: (party_id: string, month: string) =>
     call(MonthlyReconciliationResponse, `/v1/finance/reconciliation/${party_id}/${month}`),
-  linkDocument: (transaction_id: string, document_id: string) =>
+  linkDocument: (transaction_id: string, document_id: string, force = false) =>
     call(ReconciliationRowResponse, "/v1/finance/reconciliation/link", {
       method: "POST",
-      json: { transaction_id, document_id },
+      json: { transaction_id, document_id, force },
     }),
   unlinkDocument: (transaction_id: string, document_id: string) =>
     call(ReconciliationRowResponse, "/v1/finance/reconciliation/unlink", {

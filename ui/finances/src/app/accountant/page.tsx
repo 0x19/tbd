@@ -32,7 +32,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { UploadReceipt } from "@/components/upload-receipt";
-import { api } from "@/lib/api/client";
+import { api, ApiError } from "@/lib/api/client";
 import { describe, useFetch } from "@/lib/api/hooks";
 import type { LinkedDocument, Reason, ReconciliationRow } from "@/lib/api/schema";
 import { dateOnly, money, monthLong, monthsBefore, thisMonth } from "@/lib/format";
@@ -431,6 +431,7 @@ function Row({
   const tx = r.transaction;
   const [busy, setBusy] = useState(false);
   const [finding, setFinding] = useState(false);
+  const [mismatch, setMismatch] = useState<{ documentId: string; why: string } | null>(null);
   const act = async (f: () => Promise<ReconciliationRow | void>, done?: string) => {
     setBusy(true);
     try {
@@ -443,6 +444,30 @@ function Row({
       setBusy(false);
     }
   };
+  // The safeguard: the service refuses a receipt whose reading disagrees
+  // with the charge; the person sees what was read and may attach anyway.
+  const linkChecked = (documentId: string, force = false) =>
+    act(async () => {
+      try {
+        const row = (await api.linkDocument(tx.id, documentId, force)).row;
+        const reasons = row?.documents.find((d) => d.document_id === documentId)?.why ?? [];
+        const code = reasons.map((w) => w.code);
+        toast.success(
+          code.includes("checked")
+            ? t("accountant.checked")
+            : code.includes("unread")
+              ? t("accountant.unread")
+              : t("accountant.linked"),
+        );
+        return row ?? undefined;
+      } catch (e) {
+        if (e instanceof ApiError && e.code === "failed_precondition") {
+          setMismatch({ documentId, why: e.message });
+          return undefined;
+        }
+        throw e;
+      }
+    });
   const missing = r.need === "receipt" && r.status === "missing";
   const policy = r.policy_id ? r.need : "auto";
   const docLabel = (d: LinkedDocument) =>
@@ -510,12 +535,7 @@ function Row({
                   className="h-6 px-1.5 text-[11px]"
                   disabled={busy}
                   title={`${sayWhys(t, d)} · ${d.confidence}`}
-                  onClick={() =>
-                    void act(
-                      async () => (await api.linkDocument(tx.id, d.document_id)).row,
-                      t("accountant.linked"),
-                    )
-                  }
+                  onClick={() => void linkChecked(d.document_id)}
                 >
                   {t("accountant.use", { doc: docLabel(d) })}
                 </Button>
@@ -539,9 +559,7 @@ function Row({
               className="h-6 px-1.5 text-[11px]"
               disabled={busy}
               label={t("accountant.attach")}
-              onUploaded={(doc) =>
-                void act(async () => (await api.linkDocument(tx.id, doc.id)).row, t("accountant.attached"))
-              }
+              onUploaded={(doc) => void linkChecked(doc.id)}
             />
           ) : null}
         </div>
@@ -552,9 +570,34 @@ function Row({
           initial={tx.counterparty_name.split(/[*\s]/)[0] ?? ""}
           onPick={(id) => {
             setFinding(false);
-            void act(async () => (await api.linkDocument(tx.id, id)).row, t("accountant.linked"));
+            void linkChecked(id);
           }}
         />
+        <Dialog open={mismatch !== null} onOpenChange={(o) => !o && setMismatch(null)}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>{t("accountant.mismatch.title")}</DialogTitle>
+              <DialogDescription>{mismatch?.why}</DialogDescription>
+            </DialogHeader>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" size="sm" onClick={() => setMismatch(null)}>
+                {t("common.cancel")}
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                disabled={busy}
+                onClick={() => {
+                  const id = mismatch?.documentId;
+                  setMismatch(null);
+                  if (id) void linkChecked(id, true);
+                }}
+              >
+                {t("accountant.mismatch.anyway")}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </TableCell>
       <TableCell>
         {r.need === "income" || r.need === "internal" ? (

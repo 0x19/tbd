@@ -160,6 +160,9 @@ impl Why {
             "same_days" => "same days".into(),
             "days_apart" => format!("{} days apart", arg("days").unwrap_or("?")),
             "by_hand" => "linked by hand".into(),
+            "checked" => "amount checked against the charge".into(),
+            "forced" => "attached against what was read".into(),
+            "unread" => "nothing read to check".into(),
             other => other.to_owned(),
         }
     }
@@ -196,6 +199,9 @@ impl Why {
             "same_days" => "same_days",
             "days_apart" => "days_apart",
             "by_hand" => "by_hand",
+            "checked" => "checked",
+            "forced" => "forced",
+            "unread" => "unread",
             _ => "unknown",
         };
         let names: &[&'static str] = match code {
@@ -371,7 +377,7 @@ pub fn classify(tx: &TxFacts, policies: &[Policy]) -> Decision {
     decide(Need::Receipt, Why::new("foreign_transfer"))
 }
 
-fn money(minor: i64) -> String {
+pub(super) fn money(minor: i64) -> String {
     format!("{},{:02}", minor / 100, (minor % 100).abs())
 }
 

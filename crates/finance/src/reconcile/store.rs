@@ -449,13 +449,21 @@ pub async fn one(pool: &PgPool, access: &Access, tx_id: Uuid) -> Result<Row, Sto
 /// A person links a receipt to the transaction that paid it. Both must be
 /// the same party's; a document already linked elsewhere moves.
 ///
+/// A safeguard against the wrong file on the wrong row: when the receipt's
+/// amount was read and agrees with nothing about the charge (not the
+/// original card amount, not the booked one, not within FX tolerance), the
+/// link is refused with what was read, unless `force`. A receipt nothing
+/// could be read from (a photo) is linked and marked `unread`. The link's
+/// reason records which: `checked`, `forced` or `unread`.
+///
 /// # Errors
-/// Not in the grant (not found); the database.
+/// Not in the grant (not found); refused (a person may force); the database.
 pub async fn link(
     pool: &PgPool,
     access: &Access,
     tx_id: Uuid,
     doc_id: Uuid,
+    force: bool,
 ) -> Result<Row, StoreError> {
     let tx = one_transaction(pool, tx_id)
         .await?
@@ -463,16 +471,39 @@ pub async fn link(
             what: "transaction",
         })?;
     access.require(PartyId(tx.party_id), "transaction")?;
-    let doc: Option<(Uuid,)> =
-        sqlx::query_as("select party_id from finance.documents where id = $1 and kind = 'receipt'")
+    let doc: Option<(Uuid, DocRow)> = sqlx::query_as::<_, DocRow>(sql(&format!(
+        "select {DOC_COLUMNS} from finance.documents d where d.id = $1 and d.kind = 'receipt'"
+    )))
+    .bind(doc_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(map_err)?
+    .map(|d| (d.id, d));
+    let Some((_, doc)) = doc else {
+        return Err(DbError::NotFound { what: "document" }.into());
+    };
+    let (doc_party,): (Uuid,) =
+        sqlx::query_as("select party_id from finance.documents where id = $1")
             .bind(doc_id)
-            .fetch_optional(pool)
+            .fetch_one(pool)
             .await
             .map_err(map_err)?;
-    let (doc_party,) = doc.ok_or(DbError::NotFound { what: "document" })?;
     if doc_party != tx.party_id {
         return Err(DbError::NotFound { what: "document" }.into());
     }
+
+    let facts = tx.facts();
+    let verdict = check(&facts, &doc);
+    let reason = match verdict {
+        Check::Agrees => "by_hand|checked",
+        Check::Unread => "by_hand|unread",
+        Check::Disagrees(ref why) => {
+            if !force {
+                return Err(StoreError::Refused(why.clone()));
+            }
+            "by_hand|forced"
+        }
+    };
     let mut txn = pool.begin().await.map_err(map_err)?;
     sqlx::query("delete from finance.transaction_documents where document_id = $1")
         .bind(doc_id)
@@ -481,15 +512,65 @@ pub async fn link(
         .map_err(map_err)?;
     sqlx::query(
         "insert into finance.transaction_documents (transaction_id, document_id, source, confidence, reason)
-         values ($1, $2, 'declared', 100, 'by_hand')",
+         values ($1, $2, 'declared', 100, $3)",
     )
     .bind(tx_id)
     .bind(doc_id)
+    .bind(reason)
     .execute(&mut *txn)
     .await
     .map_err(map_err)?;
     txn.commit().await.map_err(map_err)?;
     one(pool, access, tx_id).await
+}
+
+/// What the safeguard found.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Check {
+    /// The receipt's amount agrees with the charge.
+    Agrees,
+    /// No amount was read; nothing to compare.
+    Unread,
+    /// An amount was read and it is not this charge's, said in words.
+    Disagrees(String),
+}
+
+/// Compare a receipt's reading with the charge, the way the matcher does.
+fn check(tx: &TxFacts, doc: &DocRow) -> Check {
+    let Some(total) = doc.total_minor else {
+        return Check::Unread;
+    };
+    let facts = doc.facts();
+    let agrees = score(tx, &facts).is_some_and(|(_, why)| {
+        why.iter()
+            .any(|w| matches!(w.code, "amount_original" | "amount" | "amount_fx"))
+    });
+    if agrees {
+        return Check::Agrees;
+    }
+    let money = |minor: i64, cur: &str| format!("{} {}", super::money(minor.abs()), cur);
+    let read = format!(
+        "{}{} {}",
+        doc.vendor
+            .as_deref()
+            .filter(|v| !v.is_empty())
+            .map(|v| format!("{v}, "))
+            .unwrap_or_default(),
+        doc.doc_date
+            .map_or_else(|| "no date".into(), |d| d.to_string()),
+        money(total, &facts.currency)
+    );
+    let charge = match super::original_amount(&tx.remittance) {
+        Some((orig, cur)) => format!(
+            "{} ({} charged)",
+            money(tx.amount_minor, &tx.currency),
+            money(orig, &cur)
+        ),
+        None => money(tx.amount_minor, &tx.currency),
+    };
+    Check::Disagrees(format!(
+        "the receipt reads {read}; the charge is {charge}. Attach anyway to link it."
+    ))
 }
 
 /// Undo a link. A person's is removed; the matcher's is kept as rejected,

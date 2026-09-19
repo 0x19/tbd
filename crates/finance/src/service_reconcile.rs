@@ -186,7 +186,7 @@ impl Finance {
         let (mut timer, pool, access, _) = self
             .invoice_context("FinanceService/LinkDocument", &request, &[])
             .await?;
-        let r = store::link(pool, &access, tx, doc)
+        let r = store::link(pool, &access, tx, doc, req.force)
             .await
             .map(|row| LinkDocumentResponse {
                 row: Some(row_proto(&row)),

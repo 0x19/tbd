@@ -27,6 +27,9 @@ pub enum StoreError {
     /// The row is not in a state the call accepts.
     #[error("connector is {0}")]
     State(String),
+    /// A check a person may override refused the call, and says why.
+    #[error("{0}")]
+    Refused(String),
 }
 
 #[allow(missing_docs)]

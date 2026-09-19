@@ -343,13 +343,32 @@ async fn a_policy_and_a_hand_made_link_override_the_rules() {
         .unwrap();
     assert_eq!(o.status, "missing", "an undone match is not remade");
 
-    // Linked by hand to another receipt: declared, and shown first.
+    // Linked by hand to another receipt whose amount is not this charge's:
+    // refused, saying what was read, until the person says anyway.
+    let refused = c
+        .link_document(as_caller(
+            OWNER,
+            LinkDocumentRequest {
+                transaction_id: openai.to_string(),
+                document_id: other.to_string(),
+                force: false,
+            },
+        ))
+        .await
+        .unwrap_err();
+    assert_eq!(refused.code(), Code::FailedPrecondition, "{refused}");
+    assert!(
+        refused.message().contains("1,00 EUR") && refused.message().contains("75,00 USD"),
+        "{}",
+        refused.message()
+    );
     let linked = c
         .link_document(as_caller(
             OWNER,
             LinkDocumentRequest {
                 transaction_id: openai.to_string(),
                 document_id: other.to_string(),
+                force: true,
             },
         ))
         .await
@@ -360,6 +379,10 @@ async fn a_policy_and_a_hand_made_link_override_the_rules() {
     assert_eq!(linked.status, "covered");
     assert_eq!(linked.documents[0].source, "declared");
     assert_eq!(linked.documents[0].confidence, 100);
+    assert_eq!(
+        linked.documents[0].reason,
+        "linked by hand · attached against what was read"
+    );
 }
 
 #[tokio::test]
@@ -387,6 +410,7 @@ async fn a_stranger_finds_nothing_and_a_bad_month_is_refused() {
             LinkDocumentRequest {
                 transaction_id: openai.to_string(),
                 document_id: doc.to_string(),
+                force: false,
             },
         ))
         .await
@@ -403,4 +427,66 @@ async fn a_stranger_finds_nothing_and_a_bad_month_is_refused() {
         .await
         .unwrap_err();
     assert_eq!(bad.code(), Code::FailedPrecondition);
+}
+
+#[tokio::test]
+async fn a_hand_link_is_checked_against_the_charge_and_says_so() {
+    let (server, pool) = start_with_store().await;
+    let (company, account) = seed(&pool).await;
+    let mut client = server.client().await;
+    let (openai, _) = august(&pool, company, account).await;
+    let doc = receipt(&pool, company, "OpenAI", "2026-08-29", 7500, "USD").await;
+    let by = |row: &tbd_proto::finance::v1::ReconciliationRow, id: Uuid| {
+        row.documents
+            .iter()
+            .find(|d| d.document_id == id.to_string())
+            .map(|d| d.reason.clone())
+            .unwrap_or_default()
+    };
+    // The right receipt links without a word, and says it was checked; one
+    // nothing was read from is linked and says so.
+    let checked = client
+        .link_document(as_caller(
+            OWNER,
+            LinkDocumentRequest {
+                transaction_id: openai.to_string(),
+                document_id: doc.to_string(),
+                force: false,
+            },
+        ))
+        .await
+        .unwrap()
+        .into_inner()
+        .row
+        .unwrap();
+    assert_eq!(
+        by(&checked, doc),
+        "linked by hand · amount checked against the charge"
+    );
+    let photo = Uuid::new_v4();
+    sqlx::query(
+        "insert into finance.documents (id, party_id, kind, sha256, content_type, size_bytes, filename, extracted_at)
+         values ($1, $2, 'receipt', $3, 'image/jpeg', 10, 'till.jpg', now())",
+    )
+    .bind(photo)
+    .bind(company)
+    .bind(Uuid::new_v4().simple().to_string())
+    .execute(&pool)
+    .await
+    .unwrap();
+    let unread = client
+        .link_document(as_caller(
+            OWNER,
+            LinkDocumentRequest {
+                transaction_id: openai.to_string(),
+                document_id: photo.to_string(),
+                force: false,
+            },
+        ))
+        .await
+        .unwrap()
+        .into_inner()
+        .row
+        .unwrap();
+    assert_eq!(by(&unread, photo), "linked by hand · nothing read to check");
 }
