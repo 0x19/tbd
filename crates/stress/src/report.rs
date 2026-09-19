@@ -6,7 +6,7 @@ use std::{collections::BTreeMap, fmt::Write as _};
 
 use serde::{Deserialize, Serialize};
 
-use crate::{finding::Finding, metrics::LoadSnapshot};
+use crate::{finding::Finding, metrics::LoadSnapshot, stats::Ci};
 
 /// How often an invariant was evaluated and how often it broke.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -40,6 +40,62 @@ pub struct StressSnapshot {
     pub subjects: u64,
     /// Workers per class.
     pub workers: BTreeMap<String, u32>,
+    /// Where a sweep is, when the campaign is one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sweep: Option<SweepProgress>,
+}
+
+/// Where a running sweep is; point and repeat count from one.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SweepProgress {
+    /// What varies.
+    pub parameter: String,
+    /// The value being measured.
+    pub value: u64,
+    /// Which point.
+    pub point: usize,
+    /// How many points.
+    pub points: usize,
+    /// Which repeat of it.
+    pub repeat: u32,
+    /// How many repeats per point.
+    pub repeats: u32,
+}
+
+/// One measured value of the swept parameter.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PointStats {
+    /// The value.
+    pub value: u64,
+    /// Requests per second the workers achieved, averaged over the repeats.
+    pub achieved_rps: f64,
+    /// Failed over sent, across the repeats.
+    pub error_rate: f64,
+    /// Requests sent across the repeats.
+    pub requests: u64,
+    /// Median latency in milliseconds, with its interval.
+    pub p50: Ci,
+    /// 99th percentile latency in milliseconds, with its interval.
+    pub p99: Ci,
+    /// Measurements taken.
+    pub repeats: u32,
+    /// Findings while this point ran.
+    pub findings: u64,
+}
+
+/// What a sweep measured.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SweepResult {
+    /// The swept parameter.
+    pub parameter: String,
+    /// The points, in the order they ran.
+    pub points: Vec<PointStats>,
+    /// The first point that crossed `[sweep.knee]`, when one did.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub knee: Option<u64>,
+    /// Why that point is the knee.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub knee_reason: Option<String>,
 }
 
 /// The result of one campaign.
@@ -72,6 +128,9 @@ pub struct CampaignResult {
     pub redriven: u64,
     /// Every finding.
     pub findings: Vec<Finding>,
+    /// What a sweep measured, when the campaign had one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sweep: Option<SweepResult>,
     /// `[stop] max_findings` was reached.
     pub stopped_early: bool,
     /// Failure outside the checks: a target unreachable, a task that panicked.
@@ -145,6 +204,9 @@ pub fn render(r: &CampaignResult) -> String {
             r.tolerated, r.redriven
         );
     }
+    if let Some(s) = &r.sweep {
+        let _ = write!(out, "{}", render_sweep(s));
+    }
     for (name, c) in &r.checks {
         let mark = if c.violated > 0 { "!" } else { " " };
         let _ = writeln!(
@@ -166,6 +228,43 @@ pub fn render(r: &CampaignResult) -> String {
     }
     if r.stopped_early {
         let _ = writeln!(out, "      stopped   early: [stop] max_findings reached");
+    }
+    out
+}
+
+/// The sweep table: one line per point with its intervals, and the knee.
+#[must_use]
+pub fn render_sweep(s: &SweepResult) -> String {
+    let mut out = String::new();
+
+    let _ = writeln!(
+        out,
+        "      sweep     {:<14} {:>9} {:>10} {:>11}  {:>22}  {:>22}",
+        s.parameter, "requests", "rps", "errors", "p50 ms (95% CI)", "p99 ms (95% CI)"
+    );
+    for p in &s.points {
+        let knee = if s.knee == Some(p.value) {
+            " <- knee"
+        } else {
+            ""
+        };
+        let _ = writeln!(
+            out,
+            "      point     {:<14} {:>9} {:>10.1} {:>10.2}%  {:>8.2} [{:>6.2} {:>6.2}]  {:>8.2} [{:>6.2} {:>6.2}]{knee}",
+            p.value,
+            p.requests,
+            p.achieved_rps,
+            p.error_rate * 100.0,
+            p.p50.estimate,
+            p.p50.low,
+            p.p50.high,
+            p.p99.estimate,
+            p.p99.low,
+            p.p99.high,
+        );
+    }
+    if let Some(why) = &s.knee_reason {
+        let _ = writeln!(out, "      knee      {why}");
     }
     out
 }

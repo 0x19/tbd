@@ -8,7 +8,7 @@
 #                     x-tbd-backend header, so service replicas are a pure scale-out.
 #   :9901  admin      /ready, /stats/prometheus, /clusters, /config_dump.
 #
-# Clusters resolve by DNS name: `engine`, `protocol`, `humans`, `ledger`, `chaos`, `otel-collector`,
+# Clusters resolve by DNS name: `engine`, `protocol`, `playground`, `finance`, `humans`, `ledger`, `chaos`, `otel-collector`,
 # `hydra`, `kratos`, `auth-ui`, `grafana`, `victoria-logs`, `pyroscope`,
 # `victoria-metrics`.
 #
@@ -209,6 +209,11 @@ static_resources:
                           audiences: [tbd-ui]
                           from_cookies: [tbd_id]
                           payload_in_metadata: jwt
+                          # The finance UI calls the protocol from the browser on its own
+                          # host; the protocol takes its principal from this header the
+                          # same way it does for a bearer token. Envoy strips whatever a
+                          # client sends in it, so its presence means "verified".
+                          forward_payload_header: x-jwt-payload
                           claim_to_headers:
                             - { header_name: x-user-sub, claim_name: sub }
                             - { header_name: x-user-email, claim_name: email }
@@ -307,6 +312,89 @@ static_resources:
                           route: { cluster: kratos, timeout: 15s }
                         - match: { prefix: "/" }
                           route: { cluster: auth-ui, timeout: 15s }
+                    # The company site (ui/www) at the root of the base domain. Public:
+                    # no sign-in, no token, no rate limit. The public edge rewrites the
+                    # apex Host to `www.<domain>` so this one rule serves both the apex
+                    # and the www name; locally it is http://www.localhost:18080/.
+                    - name: www
+                      domains: ["www.*"]
+                      typed_per_filter_config: *ui_open
+                      routes:
+                        # The playground, on the same host as the site so the page
+                        # and its API are same-origin and no CORS is needed. Public
+                        # on purpose: the service takes no identity, accepts no
+                        # address, rate or duration, and clamps every move it does
+                        # accept (crates/playground/src/faults.rs).
+                        #
+                        # The bucket below is the first per-IP limit in this file:
+                        # `remote_address` as a descriptor action gives each client
+                        # address its own bucket, where a bare token_bucket with no
+                        # descriptors would be one bucket shared by everyone.
+                        # 30 requests per 10 s per address, bursting to 60, which is
+                        # generous for a page that holds one stream open and clicks
+                        # a button now and then.
+                        - match: { prefix: "/v1/playground/" }
+                          typed_per_filter_config:
+                            envoy.filters.http.oauth2:
+                              "@type": type.googleapis.com/envoy.config.route.v3.FilterConfig
+                              disabled: true
+                            envoy.filters.http.jwt_authn:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.PerRouteConfig
+                              disabled: true
+                            envoy.filters.http.rbac:
+                              "@type": type.googleapis.com/envoy.config.route.v3.FilterConfig
+                              disabled: true
+                            envoy.filters.http.local_ratelimit:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.local_ratelimit.v3.LocalRateLimit
+                              stat_prefix: playground_ratelimit
+                              token_bucket: { max_tokens: 60, tokens_per_fill: 30, fill_interval: 10s }
+                              filter_enabled: { default_value: { numerator: 100 }, runtime_key: playground_ratelimit_enabled }
+                              filter_enforced: { default_value: { numerator: 100 }, runtime_key: playground_ratelimit_enforced }
+                              status: { code: TooManyRequests }
+                              rate_limited_as_resource_exhausted: true
+                              local_rate_limit_per_downstream_connection: false
+                              descriptors:
+                                # The key must be the one the action emits
+                                # (`remote_address`), and the value is left out so
+                                # one bucket exists per address rather than per
+                                # literal value.
+                                - entries: [{ key: remote_address }]
+                                  token_bucket: { max_tokens: 60, tokens_per_fill: 30, fill_interval: 10s }
+                          route:
+                            # 0s: /v1/playground/events is a stream that stays open.
+                            cluster: protocol
+                            timeout: 0s
+                            rate_limits:
+                              - actions:
+                                  - remote_address: {}
+                        # The multiplexed socket carries the same RPCs, so the page
+                        # can switch transport without a second origin.
+                        - match: { path: "/v1/ws" }
+                          typed_per_filter_config:
+                            envoy.filters.http.oauth2:
+                              "@type": type.googleapis.com/envoy.config.route.v3.FilterConfig
+                              disabled: true
+                            envoy.filters.http.jwt_authn:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.PerRouteConfig
+                              disabled: true
+                            envoy.filters.http.rbac:
+                              "@type": type.googleapis.com/envoy.config.route.v3.FilterConfig
+                              disabled: true
+                          route:
+                            cluster: protocol
+                            timeout: 0s
+                        - match: { prefix: "/" }
+                          route:
+                            cluster: www
+                            timeout: 15s
+                            # Every route here is an idempotent GET of a static
+                            # file. A pod replaced during a deploy resets the
+                            # pooled connection, so retry rather than hand the
+                            # visitor a 503 for a file that exists.
+                            retry_policy:
+                              retry_on: connect-failure,refused-stream,reset,unavailable
+                              num_retries: 2
+                              per_try_timeout: 5s
                     # chaos API on its own host: chaos.api.<domain>/... -> /api/chaos/...
                     - name: chaos-api
                       domains: ["chaos.api.*"]
@@ -366,6 +454,30 @@ static_resources:
                                         path: [{ key: jwt }, { key: scp }]
                                         value: { list_match: { one_of: { string_match: { exact: tbd.api } } } }
                       routes:
+                        # The company's published privacy policy and terms. They exist to be
+                        # read by people who are not signed in — a bank-data provider's
+                        # reviewer, for one — so all three gates come off: oauth2 (which
+                        # would 302 a browser to the sign-in page), jwt_authn and rbac.
+                        # Static files from ui/chaos/public, no API and no data behind them.
+                        - match: { path: "/privacy.html" }
+                          typed_per_filter_config: &public_page
+                            envoy.filters.http.oauth2:
+                              "@type": type.googleapis.com/envoy.config.route.v3.FilterConfig
+                              disabled: true
+                            envoy.filters.http.jwt_authn:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.PerRouteConfig
+                              disabled: true
+                            envoy.filters.http.rbac:
+                              "@type": type.googleapis.com/envoy.config.route.v3.FilterConfig
+                              disabled: true
+                          route:
+                            cluster: chaos
+                            timeout: 15s
+                        - match: { path: "/terms.html" }
+                          typed_per_filter_config: *public_page
+                          route:
+                            cluster: chaos
+                            timeout: 15s
                         - match: { prefix: "/api/chaos/" }
                           route:
                             cluster: chaos
@@ -443,6 +555,76 @@ static_resources:
                           route:
                             cluster: victoria-metrics
                             timeout: 0s
+                    # The finance service's browser surface. Today it holds exactly
+                    # one thing: the bank's OAuth redirect target. The page is static
+                    # and reads the code out of its own URL — nothing here exchanges
+                    # it, so this route mints no consent and stores no secret. It has
+                    # to be open, because the bank redirects a browser that has no
+                    # session with us yet. When the finance service exists, this
+                    # becomes a real UI host behind *ui_gated and the page POSTs the
+                    # code to an authenticated RPC instead of displaying it.
+                    - name: finance
+                      domains: ["finance.*"]
+                      # The finance UI: one person's money. Browser login as on every UI
+                      # host, then a narrower gate than the chaos admin's: an admin, or a
+                      # machine token carrying tbd.finance. Never tbd.api on its own -- a
+                      # token that reads the chaos admin must not read the books.
+                      typed_per_filter_config:
+                        envoy.filters.http.jwt_authn:
+                          "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.PerRouteConfig
+                          requirement_name: ui
+                        envoy.filters.http.rbac:
+                          "@type": type.googleapis.com/envoy.extensions.filters.http.rbac.v3.RBACPerRoute
+                          rbac:
+                            rules:
+                              action: ALLOW
+                              policies:
+                                finance:
+                                  permissions: [{ any: true }]
+                                  principals:
+                                    - metadata:
+                                        filter: envoy.filters.http.jwt_authn
+                                        path: [{ key: jwt }, { key: role }]
+                                        value: { string_match: { exact: admin } }
+                                    - metadata:
+                                        filter: envoy.filters.http.jwt_authn
+                                        path: [{ key: jwt }, { key: scp }]
+                                        value: { list_match: { one_of: { string_match: { exact: tbd.finance } } } }
+                      routes:
+                        # The multiplexed socket: streams stay open.
+                        - match: { path: "/v1/ws" }
+                          route:
+                            cluster: protocol
+                            timeout: 0s
+                        # The finance RPCs through the protocol, same origin as the page.
+                        # The bank's redirect lands on /connect/callback/ (a page below)
+                        # and the page POSTs the code to /v1/finance/connections/complete
+                        # as the signed-in person; nothing here is open.
+                        # Transcoded server-streaming RPCs (SSE) stay open: the
+                        # connectors feed the page draws from is one.
+                        - match: { safe_regex: { regex: "^/v1/.*/events$" } }
+                          route:
+                            cluster: protocol
+                            timeout: 0s
+                        - match: { prefix: "/v1/" }
+                          route:
+                            cluster: protocol
+                            timeout: 60s
+                            retry_policy:
+                              retry_on: connect-failure,refused-stream
+                              num_retries: 1
+                        - match: { path: "/openapi.json" }
+                          route:
+                            cluster: protocol
+                            timeout: 15s
+                        - match: { prefix: "/" }
+                          route:
+                            cluster: finances-ui
+                            timeout: 15s
+                            retry_policy:
+                              retry_on: connect-failure,refused-stream,reset,unavailable
+                              num_retries: 2
+                              per_try_timeout: 5s
                     # The API: api.<domain> publicly, localhost:18080 locally. Every
                     # route needs a bearer token except the health endpoints, which
                     # probes, Envoy's own health checks and uptime monitors call.
@@ -541,6 +723,12 @@ static_resources:
                             cluster: protocol
                             timeout: 0s
                             idle_timeout: 0s
+                        # The multiplexed socket: every public RPC on one connection.
+                        - match: { path: "/v1/ws" }
+                          route:
+                            cluster: protocol
+                            timeout: 0s
+                            idle_timeout: 0s
                         # Server-sent events.
                         - match: { prefix: "/v1/subjects/" }
                           route:
@@ -624,6 +812,32 @@ static_resources:
                         - match: { prefix: "/grpc.health.v1.Health/", grpc: {}, headers: [{ name: x-tbd-backend, string_match: { exact: humans } }] }
                           route:
                             cluster: humans
+                            timeout: 0s
+                            retry_policy: *grpc_retry
+                        # finance, matched by service name; the engine stays the catch-all.
+                        - match: { prefix: "/tbd.finance.v1.FinanceService/", grpc: {} }
+                          route:
+                            cluster: finance
+                            timeout: 0s
+                            retry_policy: *grpc_retry
+                        # finance health: the grpc.health.v1 path is shared, so the protocol
+                        # names the backend it is asking about in x-tbd-backend.
+                        - match: { prefix: "/grpc.health.v1.Health/", grpc: {}, headers: [{ name: x-tbd-backend, string_match: { exact: finance } }] }
+                          route:
+                            cluster: finance
+                            timeout: 0s
+                            retry_policy: *grpc_retry
+                        # playground, matched by service name; the engine stays the catch-all.
+                        - match: { prefix: "/tbd.playground.v1.PlaygroundService/", grpc: {} }
+                          route:
+                            cluster: playground
+                            timeout: 0s
+                            retry_policy: *grpc_retry
+                        # playground health: the grpc.health.v1 path is shared, so the protocol
+                        # names the backend it is asking about in x-tbd-backend.
+                        - match: { prefix: "/grpc.health.v1.Health/", grpc: {}, headers: [{ name: x-tbd-backend, string_match: { exact: playground } }] }
+                          route:
+                            cluster: playground
                             timeout: 0s
                             retry_policy: *grpc_retry
                         - match: { prefix: "/" }
@@ -760,6 +974,68 @@ static_resources:
         base_ejection_time: 30s
         max_ejection_percent: 50
 
+    - name: finance
+      type: STRICT_DNS
+      dns_lookup_family: V4_ONLY
+      dns_refresh_rate: 5s
+      lb_policy: LEAST_REQUEST
+      connect_timeout: 1s
+      typed_extension_protocol_options:
+        envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+          "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+          explicit_http_config:
+            http2_protocol_options: {}
+      load_assignment:
+        cluster_name: finance
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address: { address: finance, port_value: 50054 }
+      health_checks:
+        - timeout: 1s
+          interval: 5s
+          unhealthy_threshold: 2
+          healthy_threshold: 1
+          grpc_health_check:
+            service_name: tbd.finance.v1.FinanceService
+      outlier_detection:
+        consecutive_gateway_failure: 5
+        interval: 5s
+        base_ejection_time: 30s
+        max_ejection_percent: 50
+
+    - name: playground
+      type: STRICT_DNS
+      dns_lookup_family: V4_ONLY
+      dns_refresh_rate: 5s
+      lb_policy: LEAST_REQUEST
+      connect_timeout: 1s
+      typed_extension_protocol_options:
+        envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+          "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+          explicit_http_config:
+            http2_protocol_options: {}
+      load_assignment:
+        cluster_name: playground
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address: { address: playground, port_value: 50055 }
+      health_checks:
+        - timeout: 1s
+          interval: 5s
+          unhealthy_threshold: 2
+          healthy_threshold: 1
+          grpc_health_check:
+            service_name: tbd.playground.v1.PlaygroundService
+      outlier_detection:
+        consecutive_gateway_failure: 5
+        interval: 5s
+        base_ejection_time: 30s
+        max_ejection_percent: 50
+
     - name: chaos
       type: STRICT_DNS
       dns_lookup_family: V4_ONLY
@@ -890,6 +1166,36 @@ static_resources:
               - endpoint:
                   address:
                     socket_address: { address: auth-ui, port_value: 3000 }
+    - name: finances-ui
+      type: STRICT_DNS
+      dns_lookup_family: V4_ONLY
+      dns_refresh_rate: 5s
+      lb_policy: ROUND_ROBIN
+      connect_timeout: 1s
+      load_assignment:
+        cluster_name: finances-ui
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address: { address: finances-ui, port_value: 8080 }
+    - name: www
+      type: STRICT_DNS
+      dns_lookup_family: V4_ONLY
+      dns_refresh_rate: 5s
+      lb_policy: ROUND_ROBIN
+      connect_timeout: 1s
+      load_assignment:
+        cluster_name: www
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address: { address: www, port_value: 8080 }
+      # No active health check on purpose. STRICT_DNS resolves the Service to a
+      # single ClusterIP, so a probe that lands on a pod being replaced ejects
+      # the only endpoint and the whole site answers 503 for an interval. The
+      # readiness probe already keeps unready pods out of the Service.
     - name: otel-collector
       type: STRICT_DNS
       dns_lookup_family: V4_ONLY

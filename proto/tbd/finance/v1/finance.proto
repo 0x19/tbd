@@ -1,0 +1,1220 @@
+syntax = "proto3";
+
+package tbd.finance.v1;
+
+import "google/api/annotations.proto";
+
+// The finance service. Ping is the liveness RPC every service carries; real
+// RPCs are added beside it.
+service FinanceService {
+  // Echo a message. Proves configuration, telemetry and fault injection reach
+  // an RPC.
+  rpc Ping(PingRequest) returns (PingResponse) {
+    option (google.api.http) = {get: "/v1/finance/ping"};
+  }
+
+  // Transactions the caller is allowed to see.
+  //
+  // There is deliberately no party filter in the request. The set of parties a
+  // caller may read is derived from the token Envoy verified, never from
+  // anything the caller sends: a request naming someone else's party could not
+  // be told apart from an honest one. `party_ids` narrows *within* that set and
+  // can only ever shrink it.
+  rpc ListTransactions(ListTransactionsRequest) returns (ListTransactionsResponse) {
+    option (google.api.http) = {get: "/v1/finance/transactions"};
+  }
+
+  // One transaction with everything the bank sent about it, including the
+  // raw record. Outside the caller's grant it is NOT_FOUND, never
+  // PERMISSION_DENIED.
+  rpc GetTransaction(GetTransactionRequest) returns (GetTransactionResponse) {
+    option (google.api.http) = {get: "/v1/finance/transactions/{id}"};
+  }
+
+  // Money in and out by month and category, for the parties the caller may
+  // read. Grouped by currency as well: a cross-currency total is never
+  // computed, because it would need a rate, and a rate needs a date and a
+  // source. Transfers between the caller's own accounts are excluded unless
+  // asked for -- they are real on both sides, but counting them in a combined
+  // view is the same euros twice.
+  rpc MonthlySummary(MonthlySummaryRequest) returns (MonthlySummaryResponse) {
+    option (google.api.http) = {get: "/v1/finance/summary"};
+  }
+
+  // The parties the caller may read: what the personal / business / combined
+  // toggle chooses between. Never more than the grant.
+  rpc ListParties(ListPartiesRequest) returns (ListPartiesResponse) {
+    option (google.api.http) = {get: "/v1/finance/parties"};
+  }
+
+  // Bank accounts and their sync state.
+  rpc ListAccounts(ListAccountsRequest) returns (ListAccountsResponse) {
+    option (google.api.http) = {get: "/v1/finance/accounts"};
+  }
+
+  // Fetch one account from the bank now, from the reserve the scheduler
+  // never spends. Refused without a request when the day's allowance is
+  // gone or the bank has asked us to wait.
+  rpc RefreshAccount(RefreshAccountRequest) returns (RefreshAccountResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/accounts/refresh"
+      body: "*"
+    };
+  }
+
+  // Whether the scheduler fetches this account. Off for an account that
+  // never moves: every scheduled fetch is one of the day's four.
+  rpc SetAccountSync(SetAccountSyncRequest) returns (SetAccountSyncResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/accounts/sync"
+      body: "*"
+    };
+  }
+
+  // Categories for the caller's parties.
+  rpc ListCategories(ListCategoriesRequest) returns (ListCategoriesResponse) {
+    option (google.api.http) = {get: "/v1/finance/categories"};
+  }
+
+  // Set a transaction's category by hand. A person's decision beats every
+  // rule, now and on every later pass.
+  rpc DeclareCategory(DeclareCategoryRequest) returns (DeclareCategoryResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/transactions/declare"
+      body: "*"
+    };
+  }
+
+  // Create or change a category of a party the caller may read. Archiving
+  // one disables its rules and reapplies the rest; rows already declared
+  // under it keep it.
+  rpc UpsertCategory(UpsertCategoryRequest) returns (UpsertCategoryResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/categories"
+      body: "*"
+    };
+  }
+
+  // The rules that categorise transactions, in the order they apply.
+  rpc ListRules(ListRulesRequest) returns (ListRulesResponse) {
+    option (google.api.http) = {get: "/v1/finance/rules"};
+  }
+
+  // Create or change a rule, then reapply every rule for the party. A pass is
+  // a pure function of the rules, so the answer after this call is the same
+  // one the next sync would reach.
+  rpc UpsertRule(UpsertRuleRequest) returns (UpsertRuleResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/rules"
+      body: "*"
+    };
+  }
+
+  // Begin linking a bank: returns the URL the person must visit.
+  rpc StartConnection(StartConnectionRequest) returns (StartConnectionResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/connections"
+      body: "*"
+    };
+  }
+
+  // Finish linking with what the bank's redirect carried. The code travels in
+  // the body, never a query string; a state that is not the caller's is
+  // NOT_FOUND, never PERMISSION_DENIED, which would confirm it exists.
+  rpc CompleteConnection(CompleteConnectionRequest) returns (CompleteConnectionResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/connections/complete"
+      body: "*"
+    };
+  }
+
+  // Every bank link the caller may see, and its state.
+  rpc ListConnections(ListConnectionsRequest) returns (ListConnectionsResponse) {
+    option (google.api.http) = {get: "/v1/finance/connections"};
+  }
+  // ---- invoicing ----------------------------------------------------------
+
+  // The issuing profile of a party: what the footer of a Croatian invoice
+  // must carry. Absent until set; a draft cannot be created without it.
+  rpc GetIssuer(GetIssuerRequest) returns (GetIssuerResponse) {
+    option (google.api.http) = {get: "/v1/finance/issuer"};
+  }
+  rpc UpsertIssuer(UpsertIssuerRequest) returns (UpsertIssuerResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/issuer"
+      body: "*"
+    };
+  }
+
+  // Who we invoice.
+  rpc ListClients(ListClientsRequest) returns (ListClientsResponse) {
+    option (google.api.http) = {get: "/v1/finance/clients"};
+  }
+  rpc UpsertClient(UpsertClientRequest) returns (UpsertClientResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/clients"
+      body: "*"
+    };
+  }
+
+  // Every invoice the caller may see, newest first.
+  rpc ListInvoices(ListInvoicesRequest) returns (ListInvoicesResponse) {
+    option (google.api.http) = {get: "/v1/finance/invoices"};
+  }
+  rpc GetInvoice(GetInvoiceRequest) returns (GetInvoiceResponse) {
+    option (google.api.http) = {get: "/v1/finance/invoices/{id}"};
+  }
+
+  // A new draft for a client, pre-filled from the last approved invoice to
+  // them. No number is taken.
+  rpc CreateInvoice(CreateInvoiceRequest) returns (CreateInvoiceResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/invoices"
+      body: "*"
+    };
+  }
+
+  // Replace a draft's dates, note and lines. Totals are recomputed here,
+  // never trusted from the client.
+  rpc UpdateInvoice(UpdateInvoiceRequest) returns (UpdateInvoiceResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/invoices/{id}/update"
+      body: "*"
+    };
+  }
+
+  // Render the draft as it would be approved now: next number, current
+  // minute, watermarked. Writes nothing. Returns the hash `ApproveInvoice`
+  // must be given back, and the PDF.
+  rpc PreviewInvoice(PreviewInvoiceRequest) returns (PreviewInvoiceResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/invoices/{id}/preview"
+      body: "*"
+    };
+  }
+
+  // Approve: allocate the number, render, store. The content hash must be
+  // the one the preview returned; a draft changed since is
+  // FAILED_PRECONDITION and nothing is written.
+  rpc ApproveInvoice(ApproveInvoiceRequest) returns (ApproveInvoiceResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/invoices/{id}/approve"
+      body: "*"
+    };
+  }
+
+  // Cancel a draft or an approved invoice. An approved one keeps its number.
+  rpc CancelInvoice(CancelInvoiceRequest) returns (CancelInvoiceResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/invoices/{id}/cancel"
+      body: "*"
+    };
+  }
+
+  // The stored PDF of an approved invoice, base64.
+  rpc GetInvoiceDocument(GetInvoiceDocumentRequest) returns (GetInvoiceDocumentResponse) {
+    option (google.api.http) = {get: "/v1/finance/invoices/{id}/document"};
+  }
+
+  // What a client is usually billed for: the rows a draft starts from.
+  rpc ListLineTemplates(ListLineTemplatesRequest) returns (ListLineTemplatesResponse) {
+    option (google.api.http) = {get: "/v1/finance/clients/{client_id}/lines"};
+  }
+  rpc UpsertLineTemplate(UpsertLineTemplateRequest) returns (UpsertLineTemplateResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/clients/{client_id}/lines"
+      body: "*"
+    };
+  }
+  rpc DeleteLineTemplate(DeleteLineTemplateRequest) returns (DeleteLineTemplateResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/clients/{client_id}/lines/delete"
+      body: "*"
+    };
+  }
+  // ---- connectors: linked external accounts documents are pulled from ----
+
+  // Every kind the service knows, whether or not it is configured.
+  rpc ListConnectorKinds(ListConnectorKindsRequest) returns (ListConnectorKindsResponse) {
+    option (google.api.http) = {get: "/v1/finance/connectors/kinds"};
+  }
+  rpc ListConnectors(ListConnectorsRequest) returns (ListConnectorsResponse) {
+    option (google.api.http) = {get: "/v1/finance/connectors"};
+  }
+  // Every connector in view with its latest run, then each one again
+  // whenever it changes: a pull's progress, its outcome, a relink, a
+  // removal. The page draws from this instead of polling.
+  rpc WatchConnectors(WatchConnectorsRequest) returns (stream WatchConnectorsResponse) {
+    option (google.api.http) = {get: "/v1/finance/connectors/events"};
+  }
+  // Begin a link: the URL to send the person to.
+  rpc StartConnector(StartConnectorRequest) returns (StartConnectorResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/connectors"
+      body: "*"
+    };
+  }
+  // Finish with what the provider's redirect carried. The code is in the
+  // body; a state that is not the caller's is NOT_FOUND.
+  rpc CompleteConnector(CompleteConnectorRequest) returns (CompleteConnectorResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/connectors/complete"
+      body: "*"
+    };
+  }
+  // Prove the link still works.
+  rpc TestConnector(TestConnectorRequest) returns (TestConnectorResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/connectors/{id}/test"
+      body: "*"
+    };
+  }
+  // Pull new documents now.
+  rpc SyncConnector(SyncConnectorRequest) returns (SyncConnectorResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/connectors/{id}/sync"
+      body: "*"
+    };
+  }
+  // Change the non-secret settings (the query).
+  rpc ConfigureConnector(ConfigureConnectorRequest) returns (ConfigureConnectorResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/connectors/{id}/configure"
+      body: "*"
+    };
+  }
+  rpc DeleteConnector(DeleteConnectorRequest) returns (DeleteConnectorResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/connectors/{id}/delete"
+      body: "*"
+    };
+  }
+  rpc ListConnectorRuns(ListConnectorRunsRequest) returns (ListConnectorRunsResponse) {
+    option (google.api.http) = {get: "/v1/finance/connectors/{id}/runs"};
+  }
+  // Receipts and other pulled documents, newest first, searchable.
+  rpc ListDocuments(ListDocumentsRequest) returns (ListDocumentsResponse) {
+    option (google.api.http) = {get: "/v1/finance/documents"};
+  }
+  // A month of one party's transactions, each with what the accountant
+  // needs for it and which receipt covers it. Runs the matcher first, so
+  // a receipt pulled since is linked before the page sees it.
+  rpc MonthlyReconciliation(MonthlyReconciliationRequest) returns (MonthlyReconciliationResponse) {
+    option (google.api.http) = {get: "/v1/finance/reconciliation/{party_id}/{month}"};
+  }
+  // A person links a receipt to the transaction that paid it.
+  rpc LinkDocument(LinkDocumentRequest) returns (LinkDocumentResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/reconciliation/link"
+      body: "*"
+    };
+  }
+  rpc UnlinkDocument(UnlinkDocumentRequest) returns (UnlinkDocumentResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/reconciliation/unlink"
+      body: "*"
+    };
+  }
+  // A person's word on a counterparty: what the accountant needs for it.
+  rpc SetCounterpartyPolicy(SetCounterpartyPolicyRequest) returns (SetCounterpartyPolicyResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/reconciliation/policies"
+      body: "*"
+    };
+  }
+  rpc DeleteCounterpartyPolicy(DeleteCounterpartyPolicyRequest) returns (DeleteCounterpartyPolicyResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/reconciliation/policies/{id}/delete"
+      body: "*"
+    };
+  }
+  // Set what a receipt says, by hand. Declared fields survive a re-read.
+  rpc UpdateDocument(UpdateDocumentRequest) returns (UpdateDocumentResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/documents/{id}/update"
+      body: "*"
+    };
+  }
+  // Read the document's text again and refill what was not declared.
+  rpc ExtractDocument(ExtractDocumentRequest) returns (ExtractDocumentResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/documents/{id}/extract"
+      body: "*"
+    };
+  }
+  rpc GetDocument(GetDocumentRequest) returns (GetDocumentResponse) {
+    option (google.api.http) = {get: "/v1/finance/documents/{id}"};
+  }
+
+  // A receipt a person adds by hand: a PDF from a vendor's portal, or a
+  // photo of a paper receipt. Whose it is is the caller's word and final.
+  // The same bytes uploaded twice are one document.
+  rpc UploadDocument(UploadDocumentRequest) returns (UploadDocumentResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/documents/upload"
+      body: "*"
+    };
+  }
+}
+
+message ConnectorKind {
+  string name = 1;
+  string label = 2;
+  string description = 3;
+  // oauth or token.
+  string auth = 4;
+  string consent_note = 5;
+  bool configured = 6;
+}
+message ListConnectorKindsRequest {}
+message ListConnectorKindsResponse {
+  repeated ConnectorKind kinds = 1;
+}
+
+message Connector {
+  string id = 1;
+  string party_id = 2;
+  string kind = 3;
+  string label = 4;
+  // pending, linked, expired, failed, disabled.
+  string status = 5;
+  // The kind's non-secret settings, as JSON text.
+  string config = 6;
+  string external_id = 7;
+  string linked_at = 8;
+  string last_sync_at = 9;
+  string last_sync_status = 10;
+  string last_sync_error = 11;
+  string failure = 12;
+  string created_at = 13;
+}
+message ListConnectorsRequest {
+  repeated string party_ids = 1;
+}
+message ListConnectorsResponse {
+  repeated Connector connectors = 1;
+}
+message StartConnectorRequest {
+  string party_id = 1;
+  string kind = 2;
+}
+message StartConnectorResponse {
+  string connector_id = 1;
+  string url = 2;
+}
+message CompleteConnectorRequest {
+  string state = 1;
+  string code = 2;
+}
+message CompleteConnectorResponse {
+  Connector connector = 1;
+}
+message TestConnectorRequest {
+  string id = 1;
+}
+message TestConnectorResponse {
+  string status = 1;
+}
+message SyncConnectorRequest {
+  string id = 1;
+}
+// The run just opened, `outcome` empty while it pulls. A mailbox takes
+// minutes and a call has seconds, so the pull runs detached; poll
+// ListConnectorRuns for the outcome.
+message SyncConnectorResponse {
+  ConnectorRun run = 1;
+}
+message ConfigureConnectorRequest {
+  string id = 1;
+  // JSON text. Empty: unchanged.
+  string config = 2;
+  // Move the connector, and the documents only it pulled, to another party
+  // in the caller's grant. Empty: unchanged.
+  string party_id = 3;
+  // Empty: unchanged.
+  string label = 4;
+}
+message ConfigureConnectorResponse {
+  Connector connector = 1;
+}
+message DeleteConnectorRequest {
+  string id = 1;
+}
+message DeleteConnectorResponse {}
+message ConnectorRun {
+  string id = 1;
+  string started_at = 2;
+  string finished_at = 3;
+  string trigger = 4;
+  string outcome = 5;
+  uint32 found = 6;
+  uint32 stored = 7;
+  uint32 skipped = 8;
+  string error = 9;
+}
+message WatchConnectorsRequest {
+  repeated string party_ids = 1;
+}
+message WatchConnectorsResponse {
+  Connector connector = 1;
+  // The latest run, if any; `outcome` empty while it pulls.
+  ConnectorRun run = 2;
+  // The connector was removed; only `connector.id` is meaningful.
+  bool deleted = 3;
+}
+message ListConnectorRunsRequest {
+  string id = 1;
+}
+message ListConnectorRunsResponse {
+  repeated ConnectorRun runs = 1;
+}
+
+message Document {
+  string id = 1;
+  string party_id = 2;
+  // invoice or receipt.
+  string kind = 3;
+  string filename = 4;
+  string content_type = 5;
+  int64 size_bytes = 6;
+  string sha256 = 7;
+  string vendor = 8;
+  string doc_date = 9;
+  // Empty when unknown.
+  string total_minor = 10;
+  string currency = 11;
+  string created_at = 12;
+  // Where it came from.
+  repeated DocumentSource sources = 13;
+  string invoice_no = 14;
+  // When the reader last ran; empty if never.
+  string extracted_at = 15;
+  // A person set the fields; a re-read leaves them.
+  bool declared = 16;
+  // How each field was found: `vendor`, `date`, `amount`, `invoice_no` to
+  // `label`, `sender`, `first`, `received`, `declared` or empty; `party` to
+  // `declared`, `payment` (the account that paid it), `text` (the document
+  // names the party) or `mailbox` (the connector's, for want of better).
+  map<string, string> found_by = 17;
+}
+message DocumentSource {
+  string connector_id = 1;
+  string external_ref = 2;
+  string subject = 3;
+  string sender = 4;
+  string received_at = 5;
+}
+message ListDocumentsRequest {
+  repeated string party_ids = 1;
+  // receipt, invoice, or empty for any.
+  string kind = 2;
+  uint32 limit = 3;
+  uint32 offset = 4;
+  // Matches vendor, file name, invoice number, sender, subject and the
+  // document's text, case-insensitively.
+  string q = 5;
+  // Inclusive bounds on the document date, YYYY-MM-DD; a document with no
+  // date falls back to when it was received.
+  string from = 6;
+  string to = 7;
+  // Exact vendor, as listed.
+  string vendor = 8;
+}
+message ListDocumentsResponse {
+  repeated Document documents = 1;
+  // Matches in all, before limit and offset.
+  uint32 total = 2;
+  // Every vendor in view with how many documents it has, for a filter.
+  repeated VendorCount vendors = 3;
+}
+message VendorCount {
+  string vendor = 1;
+  uint32 count = 2;
+}
+message MonthlyReconciliationRequest {
+  string party_id = 1;
+  // YYYY-MM.
+  string month = 2;
+}
+message MonthlyReconciliationResponse {
+  repeated ReconciliationRow rows = 1;
+  ReconciliationSummary summary = 2;
+  repeated CounterpartyPolicy policies = 3;
+}
+message ReconciliationRow {
+  Transaction transaction = 1;
+  // What the accountant needs from us: eracun (the supplier's e-invoice
+  // reaches them), receipt (we supply it), none (tax, salary, bank fee,
+  // cash: nothing exists), personal (not a business cost), income (our
+  // own invoice), internal (a transfer between own accounts).
+  string need = 2;
+  // Why: "HR IBAN", "state budget (HR68)", "card, 75,00 USD", "policy".
+  string need_reason = 3;
+  // For receipt: covered | missing. Otherwise empty.
+  string status = 4;
+  // Receipts linked to it.
+  repeated LinkedDocument documents = 5;
+  // Likely receipts the matcher was not sure enough about, best first.
+  repeated LinkedDocument suggestions = 6;
+  // The policy that decided `need`, if a person set one.
+  string policy_id = 7;
+  // The original amount and currency the card was charged in, when the
+  // bank said so ("75,00 USD"); empty otherwise.
+  string original_amount_minor = 8;
+  string original_currency = 9;
+  // `need_reason` as a code with arguments, for a page in any language:
+  // internal, income, policy, state_budget, payout_person, cash, bank_fee,
+  // domestic_iban, card_original {amount_minor, currency}, card,
+  // foreign_transfer.
+  Reason need_why = 10;
+}
+// A reason as a code with its arguments, so the page can say it in its own
+// language; the English sentence beside it is the same thing spelled out.
+message Reason {
+  string code = 1;
+  map<string, string> args = 2;
+}
+message LinkedDocument {
+  string document_id = 1;
+  string vendor = 2;
+  string doc_date = 3;
+  string total_minor = 4;
+  string currency = 5;
+  string filename = 6;
+  string invoice_no = 7;
+  // declared or inferred; empty for a suggestion.
+  string source = 8;
+  uint32 confidence = 9;
+  string reason = 10;
+  // `reason` as codes: amount_original / amount / amount_fx
+  // {amount_minor, currency}, vendor, same_days, days_apart {days}, by_hand.
+  repeated Reason why = 11;
+}
+message ReconciliationSummary {
+  uint32 transactions = 1;
+  uint32 eracun = 2;
+  uint32 receipt_covered = 3;
+  uint32 receipt_missing = 4;
+  uint32 none = 5;
+  uint32 personal = 6;
+  uint32 income = 7;
+  uint32 internal = 8;
+  // Sum of amounts still missing a receipt, minor units, by currency.
+  map<string, string> missing_minor = 9;
+}
+message CounterpartyPolicy {
+  string id = 1;
+  string party_id = 2;
+  string match = 3;
+  bool exact = 4;
+  string policy = 5;
+  string note = 6;
+}
+message LinkDocumentRequest {
+  string transaction_id = 1;
+  string document_id = 2;
+  // A receipt whose amount was read and disagrees with the charge is
+  // refused (FAILED_PRECONDITION, saying what was read) unless this is set.
+  bool force = 3;
+}
+message LinkDocumentResponse {
+  ReconciliationRow row = 1;
+}
+message UnlinkDocumentRequest {
+  string transaction_id = 1;
+  string document_id = 2;
+}
+message UnlinkDocumentResponse {
+  ReconciliationRow row = 1;
+}
+message SetCounterpartyPolicyRequest {
+  string party_id = 1;
+  // The counterparty name as the bank gives it, or a fragment of it.
+  string match = 2;
+  bool exact = 3;
+  // eracun, receipt, none, personal.
+  string policy = 4;
+  string note = 5;
+}
+message SetCounterpartyPolicyResponse {
+  CounterpartyPolicy policy = 1;
+}
+message DeleteCounterpartyPolicyRequest {
+  string id = 1;
+}
+message DeleteCounterpartyPolicyResponse {}
+message UpdateDocumentRequest {
+  string id = 1;
+  string vendor = 2;
+  // YYYY-MM-DD, or empty to clear.
+  string doc_date = 3;
+  // Minor units as a decimal string, or empty to clear.
+  string total_minor = 4;
+  string currency = 5;
+  string invoice_no = 6;
+  // Whose it is: a party the caller may read, or empty to leave it. Once
+  // set by a person, no re-read decides it again.
+  string party_id = 7;
+}
+message UpdateDocumentResponse {
+  Document document = 1;
+}
+message ExtractDocumentRequest {
+  string id = 1;
+}
+message ExtractDocumentResponse {
+  Document document = 1;
+}
+message GetDocumentRequest {
+  string id = 1;
+}
+message GetDocumentResponse {
+  Document document = 1;
+  bytes bytes = 2;
+}
+
+message UploadDocumentRequest {
+  // A party the caller may read.
+  string party_id = 1;
+  string filename = 2;
+  // application/pdf, image/jpeg or image/png.
+  string content_type = 3;
+  // The file. The gateway takes a body of at most 2 MiB, base64 included.
+  bytes bytes = 4;
+}
+
+message UploadDocumentResponse {
+  Document document = 1;
+}
+
+message LineTemplate {
+  string id = 1;
+  string client_id = 2;
+  int32 position = 3;
+  string description = 4;
+  // fixed: always on a draft with this price. variable: always on a draft,
+  // price pre-filled from the last invoice that carried it. optional:
+  // offered in the editor, off until chosen.
+  string mode = 5;
+  int64 quantity_milli = 6;
+  int64 unit_price_minor = 7;
+  bool enabled = 8;
+}
+message ListLineTemplatesRequest {
+  string client_id = 1;
+}
+message ListLineTemplatesResponse {
+  repeated LineTemplate templates = 1;
+}
+message UpsertLineTemplateRequest {
+  string client_id = 1;
+  // Empty id creates.
+  LineTemplate template = 2;
+}
+message UpsertLineTemplateResponse {
+  LineTemplate template = 1;
+}
+message DeleteLineTemplateRequest {
+  string client_id = 1;
+  string id = 2;
+}
+message DeleteLineTemplateResponse {}
+
+message IssuerProfile {
+  string party_id = 1;
+  string legal_name = 2;
+  repeated string address_lines = 3;
+  string oib = 4;
+  string vat_id = 5;
+  string iban = 6;
+  string swift = 7;
+  string bank_name = 8;
+  string court = 9;
+  string registration_no = 10;
+  string share_capital = 11;
+  string board_member = 12;
+  string issued_by = 13;
+  string place_of_issue = 14;
+  string operator_id = 15;
+  string premises = 16;
+  string device = 17;
+  int32 due_days = 18;
+}
+
+message GetIssuerRequest {
+  string party_id = 1;
+}
+message GetIssuerResponse {
+  // Absent when none has been set.
+  IssuerProfile issuer = 1;
+}
+message UpsertIssuerRequest {
+  IssuerProfile issuer = 1;
+}
+message UpsertIssuerResponse {
+  IssuerProfile issuer = 1;
+}
+
+message ClientProfile {
+  string id = 1;
+  string party_id = 2;
+  string name = 3;
+  repeated string address_lines = 4;
+  string country_code = 5;
+  string tax_id = 6;
+  // standard_hr, reverse_charge_eu, outside_scope_non_eu, exempt_issuer.
+  string vat_treatment = 7;
+  repeated string recipients = 8;
+  string currency = 9;
+  bool archived = 10;
+}
+
+message ListClientsRequest {
+  repeated string party_ids = 1;
+}
+message ListClientsResponse {
+  repeated ClientProfile clients = 1;
+}
+message UpsertClientRequest {
+  // Empty id creates.
+  ClientProfile client = 1;
+}
+message UpsertClientResponse {
+  ClientProfile client = 1;
+}
+
+message InvoiceLine {
+  int32 position = 1;
+  string description = 2;
+  // Thousandths: 1500 is 1.5.
+  int64 quantity_milli = 3;
+  int64 unit_price_minor = 4;
+  // Computed by the service.
+  int64 amount_minor = 5;
+  // The template this line came from; empty for one typed by hand.
+  string template_id = 6;
+}
+
+message Invoice {
+  string id = 1;
+  string party_id = 2;
+  string client_id = 3;
+  // draft, approved, sent, paid, cancelled.
+  string status = 4;
+  // Empty until approved.
+  string number = 5;
+  int32 year = 6;
+  string issued_at = 7;
+  string delivery_date = 8;
+  string due_date = 9;
+  string place_of_issue = 10;
+  string currency = 11;
+  int64 subtotal_minor = 12;
+  int64 vat_minor = 13;
+  int64 total_minor = 14;
+  string vat_treatment = 15;
+  string vat_note = 16;
+  string note = 17;
+  string content_hash = 18;
+  string approved_at = 19;
+  string document_id = 20;
+  string prefilled_from = 21;
+  string cancelled_at = 22;
+  string created_at = 23;
+  string updated_at = 24;
+  repeated InvoiceLine lines = 25;
+}
+
+message ListInvoicesRequest {
+  repeated string party_ids = 1;
+}
+message ListInvoicesResponse {
+  repeated Invoice invoices = 1;
+}
+message GetInvoiceRequest {
+  string id = 1;
+}
+message GetInvoiceResponse {
+  Invoice invoice = 1;
+}
+message CreateInvoiceRequest {
+  string client_id = 1;
+}
+message CreateInvoiceResponse {
+  Invoice invoice = 1;
+}
+message UpdateInvoiceRequest {
+  string id = 1;
+  string delivery_date = 2;
+  string due_date = 3;
+  string place_of_issue = 4;
+  string note = 5;
+  repeated InvoiceLine lines = 6;
+}
+message UpdateInvoiceResponse {
+  Invoice invoice = 1;
+}
+message PreviewInvoiceRequest {
+  string id = 1;
+}
+message PreviewInvoiceResponse {
+  // What ApproveInvoice must be given.
+  string content_hash = 1;
+  // The number the approval would take.
+  string number = 2;
+  // Watermarked PDF.
+  bytes pdf = 3;
+}
+message ApproveInvoiceRequest {
+  string id = 1;
+  string content_hash = 2;
+}
+message ApproveInvoiceResponse {
+  Invoice invoice = 1;
+}
+message CancelInvoiceRequest {
+  string id = 1;
+  string reason = 2;
+}
+message CancelInvoiceResponse {
+  Invoice invoice = 1;
+}
+message GetInvoiceDocumentRequest {
+  string id = 1;
+}
+message GetInvoiceDocumentResponse {
+  string content_type = 1;
+  bytes pdf = 2;
+  string number = 3;
+}
+
+message MonthlySummaryRequest {
+  // Narrow to these parties; same rule as ListTransactions.
+  repeated string party_ids = 1;
+  // Count transfers between the caller's own accounts. Off by default.
+  bool include_internal = 2;
+  // Earliest month, YYYY-MM. Empty means everything.
+  string from_month = 3;
+}
+
+message MonthlySummaryResponse {
+  repeated SummaryRow rows = 1;
+  repeated string party_ids = 2;
+}
+
+message SummaryRow {
+  // YYYY-MM.
+  string month = 1;
+  string party_id = 2;
+  // Empty when nothing has claimed the rows yet.
+  string category_id = 3;
+  string category = 4;
+  // expense, income, transfer, tax, capital; empty when uncategorised.
+  string kind = 5;
+  string currency = 6;
+  // Signed minor units; JSON string.
+  int64 total_minor = 7;
+  uint32 count = 8;
+  // Rows that are transfers between the caller's own accounts. Only present
+  // when the request asked to include them; a single party's view shows an
+  // owner draw as money in, a combined view leaves it out.
+  bool internal = 9;
+}
+
+message ListPartiesRequest {}
+
+message ListPartiesResponse {
+  repeated Party parties = 1;
+}
+
+message Party {
+  string id = 1;
+  // person or org.
+  string kind = 2;
+  string display_name = 3;
+  // own or read.
+  string capability = 4;
+}
+
+message ListAccountsRequest {
+  repeated string party_ids = 1;
+}
+
+message ListAccountsResponse {
+  repeated Account accounts = 1;
+}
+
+message Account {
+  string id = 1;
+  string party_id = 2;
+  string connection_id = 3;
+  string provider = 4;
+  string iban = 5;
+  string currency = 6;
+  string name = 7;
+  bool sync_enabled = 8;
+  // RFC 3339, empty when never.
+  string last_synced_at = 9;
+  // ok, rate_limited, consent_invalid, transport, error; empty when never.
+  string last_sync_status = 10;
+  string last_sync_error = 11;
+  string last_booked_through = 12;
+  // RFC 3339, empty when not backing off.
+  string sync_backoff_until = 13;
+  uint32 sync_budget_used = 14;
+  // Latest balance the bank reported, minor units, per balance type.
+  repeated Balance balances = 15;
+}
+
+message Balance {
+  // The bank's type: CLBD, ITAV, ...
+  string balance_type = 1;
+  int64 amount_minor = 2;
+  string currency = 3;
+  string observed_at = 4;
+}
+
+message RefreshAccountRequest {
+  string account_id = 1;
+}
+
+message RefreshAccountResponse {
+  // ok, rate_limited, consent_invalid, transport, error; or skipped.
+  string outcome = 1;
+  // When skipped: budget_spent, backing_off, no_consent, busy.
+  string skipped = 2;
+  uint32 inserted = 3;
+  uint32 booked = 4;
+  uint32 duplicates = 5;
+  // The call carried the person's address, so the bank did not count it
+  // against the unattended allowance.
+  bool attended = 6;
+}
+
+message SetAccountSyncRequest {
+  string account_id = 1;
+  bool enabled = 2;
+}
+message SetAccountSyncResponse {
+  Account account = 1;
+}
+
+message ListCategoriesRequest {
+  repeated string party_ids = 1;
+}
+
+message ListCategoriesResponse {
+  repeated Category categories = 1;
+}
+
+message Category {
+  string id = 1;
+  string party_id = 2;
+  string slug = 3;
+  string name = 4;
+  string kind = 5;
+  bool deductible = 6;
+  bool archived = 7;
+}
+
+message DeclareCategoryRequest {
+  string transaction_id = 1;
+  string category_id = 2;
+}
+
+message DeclareCategoryResponse {
+  Transaction transaction = 1;
+}
+
+message UpsertCategoryRequest {
+  // Empty creates; otherwise the category to change.
+  string id = 1;
+  string party_id = 2;
+  string name = 3;
+  // expense, income, transfer, tax or capital.
+  string kind = 4;
+  bool deductible = 5;
+  bool archived = 6;
+}
+
+message UpsertCategoryResponse {
+  Category category = 1;
+  // What the pass after the change did, for the whole party.
+  uint32 categorised = 2;
+  uint32 unmatched = 3;
+}
+
+message ListRulesRequest {
+  repeated string party_ids = 1;
+}
+
+message ListRulesResponse {
+  repeated Rule rules = 1;
+}
+
+message Rule {
+  string id = 1;
+  string party_id = 2;
+  int32 priority = 3;
+  string name = 4;
+  string category_id = 5;
+  // Every condition optional; those set must all match. Normalised: upper
+  // case, Croatian diacritics stripped.
+  string match_counterparty_like = 6;
+  string match_counterparty_iban = 7;
+  string match_remittance_like = 8;
+  string match_currency = 9;
+  // CRDT, DBIT or empty.
+  string match_credit_debit = 10;
+  bool enabled = 11;
+  // Rows this rule owns after the last pass.
+  int64 hits = 12;
+}
+
+message UpsertRuleRequest {
+  // Empty creates; otherwise the rule to change.
+  string id = 1;
+  string party_id = 2;
+  int32 priority = 3;
+  string name = 4;
+  string category_id = 5;
+  string match_counterparty_like = 6;
+  string match_counterparty_iban = 7;
+  string match_remittance_like = 8;
+  string match_currency = 9;
+  string match_credit_debit = 10;
+  bool enabled = 11;
+}
+
+message UpsertRuleResponse {
+  Rule rule = 1;
+  // What the pass after the change did, for the whole party.
+  uint32 categorised = 2;
+  uint32 unmatched = 3;
+}
+
+message StartConnectionRequest {
+  string party_id = 1;
+  // business or personal.
+  string psu_type = 2;
+  string aspsp_name = 3;
+  string aspsp_country = 4;
+}
+
+message StartConnectionResponse {
+  string connection_id = 1;
+  string url = 2;
+}
+
+message CompleteConnectionRequest {
+  string state = 1;
+  string code = 2;
+}
+
+message CompleteConnectionResponse {
+  string connection_id = 1;
+  repeated string account_ids = 2;
+}
+
+message ListConnectionsRequest {
+  repeated string party_ids = 1;
+}
+
+message ListConnectionsResponse {
+  repeated Connection connections = 1;
+}
+
+message Connection {
+  string id = 1;
+  string party_id = 2;
+  string provider = 3;
+  string psu_type = 4;
+  string aspsp_name = 5;
+  // pending, authorized, expired, revoked, failed.
+  string status = 6;
+  string valid_until = 7;
+  string authorized_at = 8;
+  uint32 accounts = 9;
+}
+
+message PingRequest {
+  string message = 1;
+}
+
+message PingResponse {
+  string message = 1;
+  // Version of the binary that answered.
+  string version = 2;
+  // True while the service is a placeholder with nothing real behind it.
+  bool stub = 3;
+}
+
+message ListTransactionsRequest {
+  // Narrow to these parties. Ids the caller has no grant for are dropped, not
+  // refused: refusing would confirm which of them exist. Empty means every
+  // party the caller may read.
+  repeated string party_ids = 1;
+  // Page size, 1..=500. Zero means the default.
+  uint32 limit = 2;
+  // YYYY-MM: only that month. Empty means newest first, any month.
+  string month = 3;
+  // Only this category; "none" for uncategorised rows.
+  string category_id = 4;
+  // Only this account.
+  string account_id = 5;
+  // Case-insensitive substring of counterparty or remittance.
+  string search = 6;
+  // Rows before this many are skipped, for paging.
+  uint32 offset = 7;
+}
+
+message ListTransactionsResponse {
+  repeated Transaction transactions = 1;
+  // Parties this answer was drawn from: what the caller may read, after
+  // narrowing. Empty when the caller may read nothing.
+  repeated string party_ids = 2;
+}
+
+message Transaction {
+  string id = 1;
+  string account_id = 2;
+  string party_id = 3;
+  // BOOKED or PENDING.
+  string status = 4;
+  // Minor units, signed: negative is money out. Rendered as a JSON string by
+  // the transcoder, which is what money wants in a browser.
+  int64 amount_minor = 5;
+  string currency = 6;
+  uint32 scale = 7;
+  string booking_date = 8;
+  string counterparty_name = 9;
+  string remittance = 10;
+  string value_date = 11;
+  string counterparty_iban = 12;
+  // Empty when nothing has claimed it.
+  string category_id = 13;
+  string category = 14;
+  // declared (a person) or inferred (a rule); empty when uncategorised.
+  string category_source = 15;
+  // A transfer between the caller's own accounts.
+  bool internal = 16;
+  // The structured reference (Croatian "poziv na broj"), when the bank gave one.
+  string reference_number = 17;
+  // The bank's own id for the entry.
+  string entry_reference = 18;
+  // The rule that claimed it, when `category_source` is inferred.
+  string category_rule_id = 19;
+  // RFC 3339, when it was last categorised.
+  string categorised_at = 20;
+  string account_name = 21;
+  // The bank's record as JSON. Only GetTransaction fills it.
+  string raw = 22;
+}
+
+message GetTransactionRequest {
+  string id = 1;
+}
+
+message GetTransactionResponse {
+  Transaction transaction = 1;
+}

@@ -5,6 +5,8 @@
 [targets]
 protocol = "https://api.example.invalid"
 engine = "https://engine.api.example.invalid"
+playground = "https://engine.api.example.invalid"
+finance = "https://engine.api.example.invalid"
 humans = "https://engine.api.example.invalid"
 # Internal only; not reachable from the edge.
 ledger = "https://engine.api.example.invalid"

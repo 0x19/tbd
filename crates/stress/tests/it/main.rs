@@ -335,3 +335,84 @@ async fn store_faults_are_tolerated_redriven_and_durable() {
     assert_eq!(durability.violated, 0, "{text}");
     ledger.stop().await;
 }
+
+/// A sweep: every value measured `repeat` times, each an independent phase,
+/// with an interval around the estimate and a knee when the bound is crossed.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_sweep_measures_every_point_with_an_interval() {
+    let ledger = Ledger::start().await;
+    let (tx, mut rx) = mpsc::unbounded_channel();
+    let hooks = Hooks {
+        events: Some(tx),
+        cancel: tokio_util::sync::CancellationToken::default(),
+    };
+    let c = campaign(
+        "1s",
+        "[workload.owner.mix]\nappend = 4\ncurrent = 2\nhistory = 2\n[sweep]\nparameter = \"owner.workers\"\nvalues = [1, 2]\nrepeat = 2\npoint_duration = \"500ms\"\n[sweep.knee]\np99_ms = 0.001\n",
+    );
+    let result = tbd_stress::run(&c, vec![ledger.target()], &hooks).await;
+    drop(hooks);
+    let text = tbd_stress::render(&result);
+    assert!(result.passed, "{text}");
+    let sweep = result.sweep.as_ref().expect("a sweep result");
+    assert_eq!(sweep.parameter, "owner.workers");
+    assert_eq!(sweep.points.len(), 2);
+    for p in &sweep.points {
+        assert_eq!(p.repeats, 2, "{text}");
+        assert!(p.requests > 0, "{text}");
+        assert!(p.achieved_rps > 0.0, "{text}");
+        // The estimate sits inside its own interval.
+        assert!(
+            p.p50.low <= p.p50.estimate && p.p50.estimate <= p.p50.high,
+            "{p:?}"
+        );
+        assert!(
+            p.p99.low <= p.p99.estimate && p.p99.estimate <= p.p99.high,
+            "{p:?}"
+        );
+        assert!(p.p99.estimate >= p.p50.estimate, "{p:?}");
+    }
+    // Two workers send more than one in the same time.
+    assert!(
+        sweep.points[1].requests > sweep.points[0].requests,
+        "{text}"
+    );
+    // An impossible bound makes the first point the knee, and says why.
+    assert_eq!(sweep.knee, Some(1));
+    assert!(
+        sweep
+            .knee_reason
+            .as_deref()
+            .unwrap_or_default()
+            .contains("passed the bound"),
+        "{sweep:?}"
+    );
+    // The whole run's load is the total over every phase.
+    let load = result.load.as_ref().unwrap();
+    let swept: u64 = sweep.points.iter().map(|p| p.requests).sum();
+    assert_eq!(load.requests_total, swept, "{text}");
+    // Progress frames carry where the sweep was.
+    let mut positions = Vec::new();
+    while let Ok(e) = rx.try_recv() {
+        if let StressEvent::Stress { snapshot } = e
+            && let Some(s) = snapshot.sweep
+        {
+            positions.push((s.value, s.repeat));
+        }
+    }
+    assert!(positions.iter().any(|(v, _)| *v == 2), "{positions:?}");
+    // Every invariant the owners evaluate still held across the points.
+    for name in OWNER {
+        assert_eq!(
+            result
+                .checks
+                .get(*name)
+                .copied()
+                .unwrap_or_default()
+                .violated,
+            0,
+            "{name}:\n{text}"
+        );
+    }
+    ledger.stop().await;
+}

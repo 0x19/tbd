@@ -1,0 +1,209 @@
+syntax = "proto3";
+
+package tbd.playground.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/timestamp.proto";
+
+// The playground service: one shared sandbox that anyone may try to break.
+//
+// A small stack runs under constant synthetic load with an objective ticking
+// along. Callers spend from a global, refilling budget to inject faults — the
+// same faults the chaos tool injects in CI — and the world heals itself as
+// each one expires. Every RPC is public and unauthenticated by design, so the
+// service clamps every parameter it accepts and never takes a target address
+// from the caller.
+service PlaygroundService {
+  // Echo a message. Proves configuration, telemetry and fault injection reach
+  // an RPC.
+  rpc Ping(PingRequest) returns (PingResponse) {
+    option (google.api.http) = {get: "/v1/playground/ping"};
+  }
+
+  // The world as it stands right now.
+  rpc GetWorld(GetWorldRequest) returns (GetWorldResponse) {
+    option (google.api.http) = {get: "/v1/playground/world"};
+  }
+
+  // The world on every tick, until the caller goes away. Served as server-sent
+  // events over REST and as a subscription over the multiplexed socket.
+  rpc Watch(WatchRequest) returns (stream WatchResponse) {
+    option (google.api.http) = {get: "/v1/playground/events"};
+  }
+
+  // Spend budget on one fault. Refused, with a reason, when the budget is dry
+  // or the move would leave nothing healthy.
+  rpc InjectFault(InjectFaultRequest) returns (InjectFaultResponse) {
+    option (google.api.http) = {
+      post: "/v1/playground/faults"
+      body: "*"
+    };
+  }
+
+  // The fastest breaches recorded so far.
+  rpc Scores(ScoresRequest) returns (ScoresResponse) {
+    option (google.api.http) = {get: "/v1/playground/scores"};
+  }
+}
+
+message PingRequest {
+  string message = 1;
+}
+
+message PingResponse {
+  string message = 1;
+  // Version of the binary that answered.
+  string version = 2;
+  // True while the service is a placeholder with nothing real behind it.
+  bool stub = 3;
+}
+
+message GetWorldRequest {}
+
+message GetWorldResponse {
+  World world = 1;
+}
+
+message WatchRequest {}
+
+message WatchResponse {
+  World world = 1;
+}
+
+// How the sandbox is doing overall.
+enum Health {
+  HEALTH_UNSPECIFIED = 0;
+  // Nothing is wrong and nothing is injected.
+  HEALTH_HEALED = 1;
+  // Something is injected but the objective still holds.
+  HEALTH_DEGRADED = 2;
+  // The objective is broken. Somebody won.
+  HEALTH_BREACHED = 3;
+}
+
+// One move a caller can make. Anything not listed here cannot be injected at
+// all: `hang` never returns and `delayed_failure` nests without bound, so
+// neither is reachable from this surface.
+enum Move {
+  MOVE_UNSPECIFIED = 0;
+  // Add latency to one instance.
+  MOVE_LATENCY = 1;
+  // Fail a share of one instance's requests.
+  MOVE_ERRORS = 2;
+  // Stop one instance; it comes back by itself.
+  MOVE_KILL = 3;
+  // Fail the ledger's store underneath it.
+  MOVE_STALL_STORE = 4;
+}
+
+message World {
+  Health health = 1;
+  Objective objective = 2;
+  Budget budget = 3;
+  Traffic traffic = 4;
+  repeated Instance instances = 5;
+  repeated ActiveFault faults = 6;
+  // How long the world has been in its current health.
+  uint32 held_for_seconds = 7;
+  // Server time, so a client can tell a stalled stream from a quiet one.
+  google.protobuf.Timestamp now = 8;
+  // Seconds of the window that still hold failures. Nothing is injected any
+  // more and the objective is still broken because the failures have not aged
+  // out yet: this is how long until they have.
+  uint32 healing_seconds = 9;
+}
+
+message Instance {
+  string name = 1;
+  // The chaos kind: engine, ledger, and so on.
+  string kind = 2;
+  bool running = 3;
+  // What is wrong with it in words, or empty when nothing is.
+  string ailment = 4;
+  uint64 requests_total = 5;
+  uint64 requests_failed = 6;
+  // Whether the balancer in front of this instance's kind is currently sending
+  // it traffic. False for a kind that is not behind one.
+  bool in_rotation = 7;
+  // Whether the balancer took it out for failing too much. An ejected instance
+  // is still up and still passing its health check — that is the point of it.
+  bool ejected = 8;
+  // Whether anything sits in front of this kind at all, so a page can tell
+  // "not balanced" apart from "out of rotation".
+  bool balanced = 9;
+}
+
+message Objective {
+  // The success rate the sandbox is meant to hold, 0 to 1.
+  double target = 1;
+  // What it is actually holding over the window.
+  double current = 2;
+  // How many seconds the rolling window covers.
+  uint32 window_seconds = 3;
+  // The p99 the sandbox is meant to stay under, in milliseconds. Breaking
+  // either clause breaks the objective.
+  double latency_target_ms = 4;
+  // The mean of the per-second p99s across the window. A mean, not a maximum:
+  // one spiky second should not count as a breach.
+  double latency_current_ms = 5;
+}
+
+message Budget {
+  // What is left to spend.
+  uint32 tokens = 1;
+  uint32 max_tokens = 2;
+  // Seconds until the next token arrives.
+  uint32 refill_in_seconds = 3;
+}
+
+message Traffic {
+  double requests_per_second = 1;
+  double error_rate = 2;
+  double p50_ms = 3;
+  double p99_ms = 4;
+}
+
+message ActiveFault {
+  string id = 1;
+  Move move = 2;
+  string instance = 3;
+  // What it does, in words, for a client that does not know the enum.
+  string description = 4;
+  uint32 expires_in_seconds = 5;
+  // Who injected it, when they said.
+  string actor = 6;
+}
+
+message InjectFaultRequest {
+  Move move = 1;
+  // Which instance to hit. Empty lets the service choose one that suits the
+  // move; a name it does not recognise is refused rather than guessed at.
+  string instance = 2;
+  // An optional name for the leaderboard. Trimmed, capped and sanitised.
+  string actor = 3;
+}
+
+message InjectFaultResponse {
+  // False when the move was refused; `reason` says why and the world is
+  // returned unchanged.
+  bool accepted = 1;
+  string reason = 2;
+  // What the move cost, in budget tokens.
+  uint32 cost = 3;
+  World world = 4;
+}
+
+message ScoresRequest {}
+
+message ScoresResponse {
+  repeated Score scores = 1;
+}
+
+message Score {
+  string actor = 1;
+  // How long the breach took from the last healed moment.
+  double seconds_to_breach = 2;
+  // How many faults were live when it broke.
+  uint32 faults_used = 3;
+  google.protobuf.Timestamp at = 4;
+}

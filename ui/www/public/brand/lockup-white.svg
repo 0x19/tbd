@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 148 32" fill="none" role="img" aria-label="InOrbit">
+  <title>InOrbit</title>
+  <circle cx="18.8" cy="17.3" r="8.7" stroke="#FAFAFA" stroke-width="2.6"/>
+  <rect x="3.7" y="9.8" width="2.8" height="17.5" rx="1.4" fill="#FAFAFA"/>
+  <circle cx="5.1" cy="6.8" r="1.9" fill="#FAFAFA"/>
+  <text x="41" y="22.4" fill="#FAFAFA" font-family="Inter, 'Helvetica Neue', Arial, sans-serif"
+        font-size="21" font-weight="600" letter-spacing="-0.5">InOrbit</text>
+</svg>

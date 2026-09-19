@@ -43,20 +43,43 @@ const KINDS: { value: Kind; label: string; help: string }[] = [
 
 const ERROR_KINDS: ErrorKind[] = ["unavailable", "internal", "overloaded", "timeout"];
 
+/** Where the fault bites: the request adapter, or the service's own store. */
+export type Surface = "service" | "store";
+
+const SURFACES: { value: Surface; label: string; help: string }[] = [
+  {
+    value: "service",
+    label: "the service",
+    help: "The request adapter refuses the call before anything runs.",
+  },
+  {
+    value: "store",
+    label: "its store",
+    help: "The store fails as a database does: a read before it runs, a write after it committed, so the caller loses the acknowledgement of something that stands.",
+  },
+];
+
 /** The same JSON the timeline uses, built from a small form. */
 export function BehaviorDialog({
   open,
   onOpenChange,
   instance,
   current,
+  currentStore,
+  storeFault = false,
   onApply,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   instance: string;
   current: Behavior | null;
-  onApply: (b: Behavior) => Promise<void>;
+  /** The store's behaviour now, for services that have one. */
+  currentStore?: Behavior | null;
+  /** The kind has a store chaos can fail (`set_store_behavior`). */
+  storeFault?: boolean;
+  onApply: (b: Behavior, surface: Surface) => Promise<void>;
 }) {
+  const [surface, setSurface] = useState<Surface>("service");
   const [kind, setKind] = useState<Kind>(current?.type ?? "healthy");
   const [latency, setLatency] = useState("200ms");
   const [jitter, setJitter] = useState("50ms");
@@ -96,7 +119,7 @@ export function BehaviorDialog({
     setBusy(true);
     setErr(null);
     try {
-      await onApply(build());
+      await onApply(build(), surface);
       onOpenChange(false);
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
@@ -107,6 +130,7 @@ export function BehaviorDialog({
 
   const select = (
     <select
+      aria-label="Behaviour"
       className="bg-background h-8 w-full rounded-md border px-2 text-sm"
       value={kind}
       onChange={(e) => setKind(e.target.value as Kind)}
@@ -124,9 +148,32 @@ export function BehaviorDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Behaviour of {instance}</DialogTitle>
-          <DialogDescription>{KINDS.find((k) => k.value === kind)?.help}</DialogDescription>
+          <DialogDescription>
+            {storeFault ? `${SURFACES.find((s) => s.value === surface)?.help} ` : ""}
+            {KINDS.find((k) => k.value === kind)?.help}
+          </DialogDescription>
         </DialogHeader>
         <div className="grid gap-3">
+          {storeFault ? (
+            <Field label="Fault">
+              <select
+                aria-label="What to fault"
+                className="bg-background h-8 w-full rounded-md border px-2 text-sm"
+                value={surface}
+                onChange={(e) => {
+                  const next = e.target.value as Surface;
+                  setSurface(next);
+                  setKind((next === "store" ? currentStore?.type : current?.type) ?? "healthy");
+                }}
+              >
+                {SURFACES.map((s) => (
+                  <option key={s.value} value={s.value}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          ) : null}
           <Field label="Behaviour">{select}</Field>
           {kind === "slow" ? (
             <div className="grid grid-cols-2 gap-3">

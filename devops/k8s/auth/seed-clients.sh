@@ -24,8 +24,9 @@ upsert tbd-ui "{
   \"redirect_uris\": [
     \"https://grafana.$d/oauth2/callback\", \"https://logs.$d/oauth2/callback\",
     \"https://profiles.$d/oauth2/callback\", \"https://metrics.$d/oauth2/callback\",
-    \"https://chaosadmin.$d/oauth2/callback\",
-    \"http://grafana.localhost:18080/oauth2/callback\", \"http://chaos.localhost:18080/oauth2/callback\"
+    \"https://chaosadmin.$d/oauth2/callback\", \"https://finance.$d/oauth2/callback\",
+    \"http://grafana.localhost:18080/oauth2/callback\", \"http://chaos.localhost:18080/oauth2/callback\",
+    \"http://finance.localhost:18080/oauth2/callback\"
   ],
   \"skip_consent\": true, \"skip_logout_consent\": true,
   \"access_token_strategy\": \"jwt\"

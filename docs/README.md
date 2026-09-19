@@ -19,6 +19,9 @@
 | You are working on the `protocol` service | [../crates/protocol/CLAUDE.md](../crates/protocol/CLAUDE.md) |
 | You are working on the `ledger` service | [../crates/ledger/CLAUDE.md](../crates/ledger/CLAUDE.md) |
 | You are working on the `humans` service | [../crates/humans/CLAUDE.md](../crates/humans/CLAUDE.md) |
+| You are working on the `finance` service | [../crates/finance/CLAUDE.md](../crates/finance/CLAUDE.md) |
+| You are working on the `playground` service | [../crates/playground/CLAUDE.md](../crates/playground/CLAUDE.md) |
+| You are changing the public playground or its rules | [playground/README.md](playground/README.md) |
 | A check failed in CI, or you are changing CI | [ci.md](ci.md) |
 | You want metrics, traces, logs, dashboards, or to run the local cluster | [observability.md](observability/README.md) |
 | You want to know how sign-in, tokens and API access work | [auth/README.md](auth/README.md) |

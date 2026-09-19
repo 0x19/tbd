@@ -4,6 +4,8 @@
 [targets]
 protocol = "http://envoy:8080"
 engine = "http://envoy:50051"
+playground = "http://envoy:50051"
+finance = "http://envoy:50051"
 humans = "http://envoy:50051"
 ledger = "http://envoy:50051"
 

@@ -33,9 +33,64 @@ pub struct Campaign {
     /// `[invariants]`: `name = false` switches one off; every name must exist.
     #[serde(default)]
     pub invariants: BTreeMap<String, bool>,
+    /// `[sweep]`: run the campaign once per value of one parameter.
+    #[serde(default)]
+    pub sweep: Option<Sweep>,
     /// `[stop]`.
     #[serde(default)]
     pub stop: Stop,
+}
+
+/// `[sweep]`: the same campaign at every value of one parameter, repeated, so
+/// a difference between two points can be told from noise.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Sweep {
+    /// What varies, one of [`SWEEP_PARAMETERS`].
+    pub parameter: String,
+    /// The values, in the order they run.
+    pub values: Vec<u64>,
+    /// Measurements per value; every repeat is a fresh set of workers and
+    /// subjects, and their latencies pool into the point's interval.
+    #[serde(default = "one")]
+    pub repeat: u32,
+    /// The measured phase of one repeat; replaces `[campaign] duration`.
+    #[serde(default = "default_point_duration", with = "humantime_serde")]
+    pub point_duration: Duration,
+    /// `[sweep.knee]`: where the curve is called broken.
+    #[serde(default)]
+    pub knee: Knee,
+}
+
+/// `[sweep.knee]`: the first point that crosses either bound is the knee.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct Knee {
+    /// A p99 above this, in milliseconds.
+    pub p99_ms: Option<f64>,
+    /// A p99 at least this many times the previous point's.
+    pub factor: Option<f64>,
+}
+
+/// The parameters a sweep may vary. `owner.pace` and `contention.pace` take
+/// milliseconds; everything else is a count.
+pub const SWEEP_PARAMETERS: &[&str] = &[
+    "owner.workers",
+    "owner.subjects",
+    "owner.pace",
+    "contention.workers",
+    "contention.subjects",
+    "contention.pace",
+    "fuzz.workers",
+    "max_in_flight",
+];
+
+fn one() -> u32 {
+    1
+}
+
+fn default_point_duration() -> Duration {
+    Duration::from_secs(5)
 }
 
 /// `[campaign]`.
@@ -567,6 +622,7 @@ impl Campaign {
                 ));
             }
         }
+        self.check_sweep()?;
         for class in &self.faults.tolerate {
             if !crate::client::KNOWN_CLASSES.contains(&class.as_str()) {
                 return Err(format!(
@@ -574,6 +630,57 @@ impl Campaign {
                     crate::client::KNOWN_CLASSES.join(", ")
                 ));
             }
+        }
+        Ok(())
+    }
+
+    /// `[sweep]`, when there is one: the parameter exists, the values suit it,
+    /// and the class it varies is doing work.
+    fn check_sweep(&self) -> Result<(), String> {
+        let Some(s) = &self.sweep else {
+            return Ok(());
+        };
+        let w = &self.workload;
+        if !SWEEP_PARAMETERS.contains(&s.parameter.as_str()) {
+            return Err(format!(
+                "sweep.parameter {:?}: unknown; one of {}",
+                s.parameter,
+                SWEEP_PARAMETERS.join(", ")
+            ));
+        }
+        if s.values.is_empty() {
+            return Err("sweep.values is empty".into());
+        }
+        if s.repeat == 0 {
+            return Err("sweep.repeat must be above zero".into());
+        }
+        if s.point_duration.is_zero() {
+            return Err("sweep.point_duration must be above zero".into());
+        }
+        let counts = !s.parameter.ends_with("pace");
+        if counts && s.values.contains(&0) {
+            return Err(format!(
+                "sweep.values: {} counts from one; only a pace may be zero",
+                s.parameter
+            ));
+        }
+        if s.knee.factor.is_some_and(|f| f <= 1.0) {
+            return Err("sweep.knee.factor must be above one".into());
+        }
+        if s.knee.p99_ms.is_some_and(|m| m <= 0.0) {
+            return Err("sweep.knee.p99_ms must be above zero".into());
+        }
+        // A swept class must be the one doing the work, so the numbers move.
+        let workers = match s.parameter.as_str() {
+            "contention.subjects" | "contention.pace" => w.contention.workers > 0,
+            "owner.subjects" | "owner.pace" => w.owner.workers > 0,
+            _ => true,
+        };
+        if !workers {
+            return Err(format!(
+                "sweep.parameter {:?}: that class has no workers",
+                s.parameter
+            ));
         }
         Ok(())
     }
@@ -598,6 +705,30 @@ impl Campaign {
     #[must_use]
     pub fn has_stack(&self) -> bool {
         !self.stack.is_empty()
+    }
+
+    /// This campaign with the sweep's parameter set to `value` and the measured
+    /// phase cut to one point: what a single sweep point runs.
+    #[must_use]
+    pub fn at_point(&self, value: u64) -> Self {
+        let mut c = self.clone();
+        let Some(sweep) = &self.sweep else { return c };
+        c.campaign.duration = sweep.point_duration;
+        let count = u32::try_from(value).unwrap_or(u32::MAX);
+        match sweep.parameter.as_str() {
+            "owner.workers" => c.workload.owner.workers = count,
+            "owner.subjects" => c.workload.owner.subjects = count,
+            "owner.pace" => c.workload.owner.pace = Duration::from_millis(value),
+            "contention.workers" => c.workload.contention.workers = count,
+            "contention.subjects" => c.workload.contention.subjects = count,
+            "contention.pace" => c.workload.contention.pace = Duration::from_millis(value),
+            "fuzz.workers" => c.workload.fuzz.workers = count,
+            "max_in_flight" => {
+                c.workload.max_in_flight = usize::try_from(value).unwrap_or(usize::MAX);
+            }
+            _ => {}
+        }
+        c
     }
 }
 
@@ -702,6 +833,64 @@ mod tests {
                 .len(),
             9
         );
+    }
+
+    #[test]
+    fn a_sweep_point_is_the_campaign_with_one_value_changed() {
+        let c = Campaign::parse(&format!(
+            "{MINIMAL}[sweep]\nparameter = \"owner.workers\"\nvalues = [1, 4]\nrepeat = 2\npoint_duration = \"500ms\"\n[sweep.knee]\np99_ms = 50\n"
+        ))
+        .unwrap();
+        let s = c.sweep.as_ref().unwrap();
+        assert_eq!(s.values, [1, 4]);
+        assert_eq!(s.repeat, 2);
+        assert_eq!(s.knee.p99_ms, Some(50.0));
+        let point = c.at_point(4);
+        assert_eq!(point.workload.owner.workers, 4);
+        assert_eq!(point.campaign.duration, Duration::from_millis(500));
+        // Everything else is the campaign as written.
+        assert_eq!(point.workload.owner.subjects, c.workload.owner.subjects);
+        // A pace sweeps in milliseconds.
+        let paced = Campaign::parse(&format!(
+            "{MINIMAL}[sweep]\nparameter = \"owner.pace\"\nvalues = [0, 20]\n"
+        ))
+        .unwrap();
+        assert_eq!(
+            paced.at_point(20).workload.owner.pace,
+            Duration::from_millis(20)
+        );
+    }
+
+    #[test]
+    fn a_sweep_is_checked_like_everything_else() {
+        let bad = |sweep: &str| {
+            Campaign::parse(&format!("{MINIMAL}[sweep]\n{sweep}"))
+                .unwrap_err()
+                .to_string()
+        };
+        assert!(bad("parameter = \"nope\"\nvalues = [1]\n").contains("sweep.parameter"));
+        assert!(
+            bad("parameter = \"owner.workers\"\nvalues = []\n").contains("sweep.values is empty")
+        );
+        assert!(
+            bad("parameter = \"owner.workers\"\nvalues = [0, 1]\n").contains("counts from one")
+        );
+        assert!(
+            bad("parameter = \"owner.workers\"\nvalues = [1]\nrepeat = 0\n")
+                .contains("sweep.repeat")
+        );
+        assert!(
+            bad("parameter = \"owner.workers\"\nvalues = [1]\n[sweep.knee]\nfactor = 1.0\n")
+                .contains("factor must be above one")
+        );
+        // A pace may be zero, and a sweep of a class with no workers is refused.
+        assert!(
+            Campaign::parse(&format!(
+                "{MINIMAL}[sweep]\nparameter = \"owner.pace\"\nvalues = [0]\n"
+            ))
+            .is_ok()
+        );
+        assert!(bad("parameter = \"contention.subjects\"\nvalues = [2]\n").contains("no workers"));
     }
 
     #[test]

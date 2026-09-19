@@ -763,11 +763,18 @@ async fn stress_run(args: StressRunArgs, mut config: ChaosConfig) -> anyhow::Res
                 .unwrap_or_default()
         }),
         seed,
+        // One file named by hand is a deliberate run: the long campaigns carry
+        // `skip` so a directory passes them over, not so they cannot be run.
+        run_skipped: false,
         trust: config.trust()?,
     };
     let findings_dir = findings_dir.unwrap_or_else(|| config.paths.findings.clone());
     let paths = expand_paths(files, dir)?;
     anyhow::ensure!(!paths.is_empty(), "no campaign files found");
+    let options = tbd_chaos::stress::RunOptions {
+        run_skipped: paths.len() == 1,
+        ..options
+    };
     let hooks = tbd_chaos::stress::Hooks::default();
     let mut results = Vec::with_capacity(paths.len());
     for path in &paths {

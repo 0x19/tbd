@@ -1,0 +1,56 @@
+# Access control must hold while the service is failing.
+#
+# The bug this hunts is specific and common: a handler that filters correctly on
+# the happy path, and on its error path returns whatever it had -- unfiltered.
+# Under load with faults injected, some fraction of requests take that path.
+#
+# So the assertion is not "no errors". Errors are expected and allowed: half the
+# requests fail for a second. What is *never* allowed is a `contract` failure,
+# which is what the operation raises if the reader is handed a row belonging to
+# the owner's personal party. A leak is a contract break whether the service was
+# healthy at the time or not.
+#
+# max_failed is generous on purpose. Tightening it would make this scenario fail
+# for the wrong reason, and a scenario that fails for the wrong reason gets
+# loosened until it fails for no reason at all.
+
+[scenario]
+name = "finance_access_fault"
+description = "Faults injected mid-run: the reader still never receives the owner's personal transaction"
+
+[stack.finances.finance-1]
+seed = "access"
+
+[load]
+rate = 150
+duration = "3s"
+warmup = "300ms"
+
+[[load.operations]]
+op = "finance_access"
+weight = 1
+
+[[timeline]]
+at = "1s"
+action = "set_behavior"
+service = "finance-1"
+[timeline.behavior]
+type = "error"
+kind = "unavailable"
+rate = 0.5
+
+[[timeline]]
+at = "2s"
+action = "set_behavior"
+service = "finance-1"
+[timeline.behavior]
+type = "healthy"
+
+[assertions]
+# One third of the run at 50% failure is about 17%; allow 35% for a slow runner.
+# A leak is a `contract` error, which no threshold here forgives.
+max_error_rate = 0.35
+min_requests = 300
+
+[assertions.services.finance-1]
+min_requests = 300

@@ -8,6 +8,8 @@ resources:
   - ../../base
   - ../../chaos
   - ../../ledger-db
+  - ../../www
+  - ../../finances
   - envoy-lb.yaml
 images:
   - name: ghcr.io/0x19/tbd-engine
@@ -19,6 +21,14 @@ images:
   - name: ghcr.io/0x19/tbd-ledger
     newTag: dev
   - name: ghcr.io/0x19/tbd-humans
+    newTag: dev
+  - name: ghcr.io/0x19/tbd-www
+    newTag: dev
+  - name: ghcr.io/0x19/tbd-finances-ui
+    newTag: dev
+  - name: ghcr.io/0x19/tbd-finance
+    newTag: dev
+  - name: ghcr.io/0x19/tbd-playground
     newTag: dev
 patches:
   - target:
@@ -54,6 +64,26 @@ patches:
   - target:
       kind: Deployment
       name: humans
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+      - op: replace
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: IfNotPresent
+  - target:
+      kind: Deployment
+      name: finance
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+      - op: replace
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: IfNotPresent
+  - target:
+      kind: Deployment
+      name: playground
     patch: |-
       - op: replace
         path: /spec/replicas

@@ -172,6 +172,10 @@ pub struct RunOptions {
     pub targets: Option<Vec<Target>>,
     /// Overrides `[campaign] seed`.
     pub seed: Option<u64>,
+    /// Run the campaign even when it carries `skip = true`. `skip` means
+    /// "not in a batch": a directory or a glob passes it over, naming the file
+    /// alone, or asking for it through the API, runs it.
+    pub run_skipped: bool,
     /// Trust and bearer for explicit targets.
     pub trust: Trust,
 }
@@ -209,6 +213,7 @@ fn failed(name: &str, error: String) -> CampaignResult {
         tolerated: 0,
         redriven: 0,
         findings: Vec::new(),
+        sweep: None,
         stopped_early: false,
         error: Some(error),
     }
@@ -225,6 +230,9 @@ pub async fn run_campaign_with(
     let mut campaign = file.campaign.clone();
     if let Some(seed) = options.seed {
         campaign.campaign.seed = seed;
+    }
+    if options.run_skipped {
+        campaign.campaign.skip = false;
     }
     if campaign.campaign.skip {
         return tbd_stress::run(&campaign, Vec::new(), &tbd_stress::Hooks::default()).await;

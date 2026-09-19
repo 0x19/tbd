@@ -15,6 +15,7 @@ pub struct Stack {
     pub engine: tbd_engine::Runtime,
     _stop_engine: oneshot::Sender<()>,
     _stop_ledger: oneshot::Sender<()>,
+    _stop_finance: oneshot::Sender<()>,
     _stop_protocol: oneshot::Sender<()>,
 }
 
@@ -47,6 +48,26 @@ pub async fn start() -> Stack {
         .unwrap();
     });
 
+    // An in-process finance with no store: its data RPCs check the caller
+    // before anything else, which is what makes it the backend that proves
+    // the verified identity travels through the gateway.
+    let finance_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let finance_addr = finance_listener.local_addr().unwrap();
+    let finance_dir =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../configs/finance");
+    let (mut finance_config, _) = tbd_finance::Config::load(&finance_dir, "local").unwrap();
+    finance_config.server.listen = finance_addr;
+    finance_config.metrics.listen = None;
+    finance_config.store.url = String::new();
+    let (stop_finance, finance_stopped) = oneshot::channel();
+    tokio::spawn(async move {
+        tbd_finance::serve_on(finance_listener, finance_config, async {
+            let _ = finance_stopped.await;
+        })
+        .await
+        .unwrap();
+    });
+
     let protocol_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let protocol_addr = protocol_listener.local_addr().unwrap();
     let mut protocol_config = tbd_protocol::Config::embedded(
@@ -57,10 +78,17 @@ pub async fn start() -> Stack {
             // Registered and never up, like a scaffolded service before its
             // first deploy: its routes exist and answer `unavailable`.
             ("humans".to_owned(), "http://127.0.0.1:1".to_owned()),
+            ("playground".to_owned(), "http://127.0.0.1:1".to_owned()),
+            ("finance".to_owned(), format!("http://{finance_addr}")),
         ],
     );
-    if let Some(humans) = protocol_config.services.get_mut("humans") {
-        humans.required = false;
+    // Everything but the two backends this harness actually starts is
+    // registered and never up. Derived from the registry rather than listed, so
+    // `tbd new service` only has to add its line above.
+    for (name, service) in &mut protocol_config.services {
+        if name != "engine" && name != "ledger" {
+            service.required = false;
+        }
     }
     // A subject the tests can present as one of our own services.
     protocol_config.principals.services = vec!["svc-ledger".to_owned()];
@@ -80,6 +108,7 @@ pub async fn start() -> Stack {
         engine: runtime,
         _stop_engine: stop_engine,
         _stop_ledger: stop_ledger,
+        _stop_finance: stop_finance,
         _stop_protocol: stop_protocol,
     }
 }

@@ -1,0 +1,46 @@
+# Access control, under load, continuously.
+#
+# Two callers against one running finance instance: an owner who may read a
+# personal party and a company, and a reader granted the company only. The run
+# fails if the reader is ever handed a personal row -- directly, or by naming
+# the forbidden party in the request.
+#
+# This is a scenario rather than only a unit test because the failure it guards
+# is silent: nothing errors, a query returns one row too many, and it looks
+# exactly like working software. Proving it once at build time is not the same
+# as proving it holds while the service is under load.
+#
+# `seed = "access"` gives the instance an in-memory store, so the scenario is
+# hermetic like every other one here: no Postgres, no fixture left behind by an
+# earlier job, runs anywhere `chaos` runs.
+#
+# A leak is an `OpError::Contract`, which no `max_error_rate` forgives -- the
+# bound below is 0.00% regardless, but the distinction matters: this scenario
+# must never be made to pass by loosening a threshold.
+
+[scenario]
+name = "finance_access"
+description = "Two callers, one finance instance: the reader never receives the owner's personal transaction"
+
+[stack.finances.finance-1]
+seed = "access"
+
+[load]
+rate = 150
+duration = "3s"
+warmup = "300ms"
+
+[[load.operations]]
+op = "finance_access"
+weight = 1
+
+[assertions]
+max_error_rate = 0.0
+max_p99_ms = 50
+min_requests = 300
+
+[assertions.services.finance-1]
+# Three RPCs per operation: the owner's read, the reader's read, and the
+# reader naming the forbidden party.
+min_requests = 900
+max_failed = 0

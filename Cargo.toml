@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
 members = ["crates/*"]
-default-members = ["crates/engine", "crates/protocol", "crates/chaos", "crates/ledger", "crates/humans", "crates/stress"]
+default-members = ["crates/engine", "crates/protocol", "crates/chaos", "crates/ledger", "crates/humans", "crates/stress", "crates/finance", "crates/playground"]
 
 [workspace.package]
 version = "0.1.0"
@@ -14,14 +14,18 @@ publish = false
 [workspace.dependencies]
 # internal
 tbd-common   = { path = "crates/common" }
+tbd-db       = { path = "crates/db" }
 tbd-proto    = { path = "crates/proto" }
 tbd-engine   = { path = "crates/engine" }
 tbd-protocol = { path = "crates/protocol" }
 tbd-chaos    = { path = "crates/chaos" }
+tbd-lab      = { path = "crates/lab" }
 tbd-cli      = { path = "crates/cli" }
 tbd-ledger   = { path = "crates/ledger" }
 tbd-stress   = { path = "crates/stress" }
 tbd-humans   = { path = "crates/humans" }
+tbd-finance  = { path = "crates/finance" }
+tbd-playground = { path = "crates/playground" }
 
 # async runtime
 tokio        = { version = "1.53", features = ["rt-multi-thread", "macros", "signal", "net", "sync", "time"] }
@@ -63,6 +67,19 @@ clap = { version = "4.6", features = ["derive", "env"] }
 # errors
 thiserror = "2"
 base64            = "0.22"
+
+# crypto: ring is the one provider (deny.toml bans a second C build). Already in
+# the tree as rustls's backend; named here so the JWT signing can use it directly.
+ring              = "0.17"
+
+# PDF rendering (finance invoices): Typst as an embedded library, no packages,
+# no network, fonts embedded from the crate. MIT.
+typst-as-lib      = { version = "0.16", default-features = false }
+typst             = "0.15"
+# The invoicing period and the time printed on an invoice are Europe/Zagreb.
+chrono-tz         = "0.10"
+typst-pdf         = "0.15"
+typst-layout      = "0.15"
 anyhow    = "1"
 
 # observability
@@ -83,6 +100,10 @@ pyroscope_pprofrs  = "0.2"
 uuid = { version = "1", features = ["v4", "v7", "serde"] }
 chrono          = { version = "0.4", default-features = false, features = ["clock", "std", "serde"] }
 sha2            = "0.10"
+regex           = "1"
+# Text out of supplier PDFs (pure Rust, no poppler in the image). Receipts from
+# Stripe, Google, Hetzner and the like carry real text; scans are out of scope.
+pdf-extract     = "0.12"
 proptest        = "1"
 rand            = "0.9"
 humantime       = "2"
@@ -104,6 +125,7 @@ sqlx = { version = "0.9", default-features = false, features = [
   "runtime-tokio", "tls-rustls-ring-webpki", "postgres", "macros", "migrate", "uuid", "chrono", "json",
 ] }
 testcontainers = { version = "0.27", default-features = false, features = ["ring"] }
+wiremock       = "0.6"
 clickhouse = { version = "0.15", default-features = false, features = ["lz4", "uuid", "chrono"] }
 
 [workspace.lints.rust]

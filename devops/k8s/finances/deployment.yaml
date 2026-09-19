@@ -1,0 +1,65 @@
+# The finance UI (ui/finances): static files on Caddy, the same shape as www.
+# Envoy's `finance.*` virtual host sends the page here and `/v1/` to the
+# protocol; the browser login on that host is the only way in. One replica:
+# this is one person's dashboard, not the public face of the domain.
+# Image: devops/docker/Dockerfile.finances.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: finances-ui
+  labels:
+    app.kubernetes.io/name: finances-ui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: finances-ui
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: finances-ui
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 25
+      containers:
+        - name: caddy
+          # Overlays pin the tag.
+          image: ghcr.io/0x19/tbd-finances-ui:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sleep", "8"]
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 20
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 500m
+              memory: 128Mi
+      volumes:
+        - name: tmp
+          emptyDir: {}

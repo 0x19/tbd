@@ -1,0 +1,91 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: playground
+  labels:
+    app.kubernetes.io/name: playground
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: playground
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9464"
+        prometheus.io/path: /metrics
+      labels:
+        app.kubernetes.io/name: playground
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        # The scoreboard volume is created owned by root; without this the
+        # non-root process cannot write it and the board silently resets on
+        # every redeploy.
+        fsGroup: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: playground
+          # Overlays pin the tag.
+          image: ghcr.io/0x19/tbd-playground:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: grpc
+              containerPort: 50055
+            - name: metrics
+              containerPort: 9464
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: tbd-env
+          env:
+            - name: PLAYGROUND_SCORES
+              value: /var/lib/playground/scores.json
+          livenessProbe:
+            grpc:
+              port: 50055
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          readinessProbe:
+            grpc:
+              port: 50055
+            initialDelaySeconds: 1
+            periodSeconds: 5
+          # This one is not a single service: it runs the public sandbox, which
+          # is two engines, a ledger and a protocol in the same process, under
+          # constant load. A release binary keeps its symbols and the in-process
+          # profiler maps them, so budget for four of them rather than one.
+          resources:
+            requests:
+              cpu: 250m
+              memory: 384Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            # The in-process profiler (pprof-rs) needs a writable temp dir for
+            # its sample buffers; the root filesystem stays read-only.
+            - name: tmp
+              mountPath: /tmp
+            # The scoreboard outlives the pod. The root filesystem is read-only,
+            # so the default relative path cannot be written at all; the service
+            # is pointed at this mount with PLAYGROUND_SCORES.
+            - name: scores
+              mountPath: /var/lib/playground
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi
+        - name: scores
+          persistentVolumeClaim:
+            claimName: playground-scores

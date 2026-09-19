@@ -4,8 +4,9 @@ Public TLS edge for a cluster behind a home or office router. Read `README.md` f
 
 - One Caddyfile, env-driven (`BASE_DOMAIN`, `ACME_EMAIL`, `EDGE_HTTP_PORT`,
   `EDGE_HTTPS_PORT`). Subdomain names are fixed
-  (`api`, `grafana`, `logs`, `profiles`, `metrics`, `chaosadmin`); only the base is
-  configurable, so
+  (`api`, `grafana`, `logs`, `profiles`, `metrics`, `chaosadmin`, `finance`, `auth`),
+  and the base domain itself serves the company site;
+  only the base is configurable, so
   DNS, docs and dashboards can rely on them. Caddy owns certificate issuance and
   renewal; nothing here needs cert-manager or a TLS listener in Envoy.
 - `chaosadmin.` is matched by Envoy's own `chaos.*` / `chaosadmin.*` virtual host, which
@@ -15,6 +16,16 @@ Public TLS edge for a cluster behind a home or office router. Read `README.md` f
   compose does not restart on a bind-mounted config change. The mount is the whole
   `devops/edge` directory at `/etc/caddy`: a single-file bind mount keeps the old inode
   after `sed -i` or an editor save, so Caddy would reload the previous file.
+- `finance.` is Envoy's `finance.*` virtual host. Two routes there are deliberately open
+  (`typed_per_filter_config` disabling oauth2, jwt_authn and rbac): the bank's OAuth
+  callback at `/connect/callback`, which a browser reaches with no session of ours yet,
+  and the published policy pages on `chaosadmin.` (`/privacy.html`, `/terms.html`), which
+  exist to be read by people who are not signed in. Opening a route means all three
+  filters, not one: oauth2 alone would still redirect the browser to the login page.
+- The apex (`{$BASE_DOMAIN}`) is the company site (`ui/www`). It is the one host whose
+  `Host` header the edge rewrites: to `www.{$BASE_DOMAIN}`, because Envoy matches the site
+  on `www.*` and `envoy.yaml` must not learn the domain. `www.` redirects to the apex, so
+  there is a single canonical URL and no duplicate content.
 - The `(gated)` snippet is every non-API host: one `reverse_proxy` to Envoy. There is no
   auth in Caddy at all; Envoy's OAuth2 + JWT filters do it (docs/auth/README.md). Do not
   add basic auth back "as a second layer": it breaks the OAuth2 callback and hides the

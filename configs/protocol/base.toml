@@ -34,6 +34,14 @@ required = false
 url = "http://127.0.0.1:50052"
 service = "tbd.ledger.v1.LedgerService"
 required = false
+[services.finance]
+url = "http://127.0.0.1:50054"
+service = "tbd.finance.v1.FinanceService"
+required = false
+[services.playground]
+url = "http://127.0.0.1:50055"
+service = "tbd.playground.v1.PlaygroundService"
+required = false
 # tbd:services-end (tbd new service inserts above this line; do not edit)
 
 [health]
@@ -42,6 +50,14 @@ required = false
 # timeout, which keeps it inside Envoy's health-check budget.
 probe_interval = "5s"
 probe_timeout = "1s"
+
+[socket]
+# The multiplexed WebSocket at /v1/ws: every public RPC over one connection,
+# calls told apart by the id the client picks. A client may keep max_calls
+# calls in flight; a larger frame than max_frame_bytes is refused by the
+# WebSocket layer, so keep it at or under the REST body cap.
+max_calls = 64
+max_frame_bytes = 262144
 
 [principals]
 # Token subjects that are our own services (callers of kind `service`). Empty

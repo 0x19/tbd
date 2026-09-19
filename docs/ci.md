@@ -18,6 +18,7 @@ name. If you add a check, add it in both places; this page lists the mapping.
 | `chaos:run` | `scenarios` | any scenario under `scenarios/` failing an assertion or timeline action |
 | `stress:run` | `scenarios` | any campaign under `stress/` with a finding or an error (`chaos stress check stress/*.toml` runs first) |
 | `ui:check` | `ui` | `ui/chaos`: prettier drift, an eslint finding (React Compiler rules included), a type error; CI also runs `pnpm build` |
+| `ui:finances:check` | `ui-finances` | `ui/finances`: prettier drift, an eslint finding, a type error; CI also runs `pnpm build` |
 | not in the gate | `docker` | any image failing to build; on `main` also failing to push. The chaos image build runs `pnpm build` first so it carries the UI |
 
 Locally the steps run in that order, cheapest first, so a typo or format slip fails in
@@ -73,6 +74,8 @@ pull request, and pushes them only on `main`, tagged with the short commit SHA a
 - `ghcr.io/<ORG>/tbd-engine`
 - `ghcr.io/<ORG>/tbd-protocol`
 - `ghcr.io/<ORG>/tbd-chaos`
+- `ghcr.io/<ORG>/tbd-playground`
+- `ghcr.io/<ORG>/tbd-finance`
 - `ghcr.io/<ORG>/tbd-humans`
 - `ghcr.io/<ORG>/tbd-ledger`
 

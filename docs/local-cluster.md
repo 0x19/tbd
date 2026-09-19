@@ -30,11 +30,15 @@ steps idempotently and is the template for provisioning a real box the same way.
 | `tbd` | `envoy` | 2 | edge and engine load balancer |
 | `tbd` | `protocol` | 2 | the edge gateway: REST, SSE, GraphQL, WebSocket, gRPC over the backends registered in `configs/protocol` (engine, humans, ledger), reached through Envoy's internal listener; `/readyz` reports each |
 | `tbd` | `engine` | 2 | gRPC compute |
+| `tbd` | `playground` | 1 | gRPC `playground` service, scaffolded by `tbd new service`; a stub until its RPCs land |
+| `tbd` | `finance` | 1 | gRPC `finance` service, scaffolded by `tbd new service`; a stub until its RPCs land |
 | `tbd` | `humans` | 1 | gRPC `humans` service, scaffolded by `tbd new service`; a stub until its RPCs land |
 | `tbd` | `ledger` | 1 | the facts ledger (`docs/ledger/README.md`): Postgres store, outbox into ClickHouse, gRPC facts API |
 | `tbd` | `ledger-postgres` | 1 | Postgres 17 + pgvector for the ledger (StatefulSet, 10Gi); `mise run ledger:psql` |
 | `tbd` | `clickhouse` | 1 | analytics sink for the ledger's outbox (StatefulSet, 10Gi); `mise run ledger:clickhouse` |
 | `tbd` | `chaos` | 1 | `chaos serve`: API and admin UI, behind Envoy at `/api/chaos/v1` and the `chaos.localhost` host |
+| `tbd` | `www` | 1 | the company site (`ui/www`) on Caddy, behind Envoy's `www.localhost` host |
+| `tbd` | `finances-ui` | 1 | the finance UI (`ui/finances`) on Caddy, behind Envoy's `finance.localhost` host and its browser login; `/v1/` on that host goes to the protocol |
 | `auth` | `postgres`, `hydra`, `kratos`, `auth-ui` | 1 each | sign-in and tokens ([auth/README.md](auth/README.md)); `auth.localhost:18080` |
 | `observability` | `victoria-metrics` | 1 | metrics store and scraper |
 | `observability` | `victoria-logs` | 1 | log store |
@@ -55,6 +59,8 @@ on this machine use.
 | 18080 | `tbd/envoy-lb` | Envoy edge: REST, SSE, GraphQL, WebSocket, gRPC |
 | 15051 | `tbd/envoy-lb` | Envoy engine load balancer, gRPC |
 | 18080 | `tbd/envoy-lb` | `/api/chaos/v1/` on the same edge port and the admin UI at `http://chaos.localhost:18080/` ([chaos/ui.md](chaos/ui.md)) |
+| 18080 | `tbd/envoy-lb` | the company site at `http://www.localhost:18080/`; in public the edge serves it at the base domain itself ([../ui/www/README.md](../ui/www/README.md)) |
+| 18080 | `tbd/envoy-lb` | the finance UI at `http://finance.localhost:18080/`, signed in through Ory ([../ui/finances/README.md](../ui/finances/README.md)) |
 | 3000 | `observability/grafana-lb` | Grafana, admin/admin on the LAN (publicly: sign-in through Envoy) |
 | 9090 | `observability/victoria-metrics-lb` | VictoriaMetrics UI and API |
 | 14317 | `observability/otel-collector-lb` | OTLP/gRPC into the collector, for processes on the host |

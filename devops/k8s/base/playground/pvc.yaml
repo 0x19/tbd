@@ -1,0 +1,13 @@
+# The scoreboard, and only the scoreboard. A breach happens at most every few
+# minutes and the file holds twenty rows, so this is the smallest claim the
+# StorageClass will give: the point is that a restart does not erase who was
+# fastest, not that anything here is precious.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: playground-scores
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 64Mi

@@ -72,7 +72,17 @@ the logic belongs in the service. The contract is `docs/protocol/README.md`.
   health included; a non-JSON body is `unsupported_media_type`, a body that does not
   parse is `bad_request` with a `field` detail named `body`.
 - `ws.rs`: bridges a WebSocket to an engine `Session` stream, one session per socket,
-  JSON envelope `{type: data|heartbeat|close|error, ...}` outbound.
+  JSON envelope `{type: data|heartbeat|close|error, ...}` outbound. Frozen: chaos's
+  `ws_echo` check reads it, and its `error` frame keeps `message` where the rest of the
+  gateway says `error`.
+- `mux.rs`: the multiplexed socket at `/v1/ws`. The same public RPCs as REST, addressed
+  by name (`transcoder.rpcs()`), many calls per connection told apart by the client's
+  `id`. One task per call, one loop per connection: the loop owns the socket and the
+  table of calls in flight, so the terminal frame is sent exactly once (the task reports
+  it, or the loop cancelled it), and one bounded channel carries frames from tasks to
+  the loop, which is the backpressure. Limits come from `[socket]`
+  (`max_calls`, `max_frame_bytes`). Each call is a `RequestTimer` with transport `ws`
+  and the RPC name as its route; the connection is a `StreamGuard` of kind `mux`.
 - `grpc.rs`: the protocol's own gRPC (`ProtocolService/Ping`), health and reflection,
   mounted into the axum router via `Routes::into_axum_router`. Health also reports
   every registered backend under its `service` name (`ENGINE_SERVICE` is the engine's),

@@ -34,6 +34,7 @@ const OPTS: SerializeOptions = SerializeOptions::new()
     .skip_default_fields(false);
 
 /// A dynamic message on the wire. The only way one is serialised.
+#[derive(Debug)]
 pub struct Out<'a>(pub &'a DynamicMessage);
 
 impl Serialize for Out<'_> {
@@ -69,11 +70,45 @@ async fn call(
             format!("backend {} is not registered", binding.backend),
         )
     })?;
+    // The identity Envoy verified travels with the call. The backend takes its
+    // principal from this header the same way the protocol does; without it
+    // every access-controlled RPC answers UNAUTHENTICATED, however well the
+    // browser was signed in. Taken before the body is consumed.
+    let payload = request
+        .headers()
+        .get(crate::principal::PAYLOAD_HEADER)
+        .and_then(|v| tonic::metadata::MetadataValue::try_from(v.as_bytes()).ok());
+    // The person's address and browser, as the edge saw them: a backend that
+    // calls a bank on the person's behalf marks the call attended with them.
+    let forwarded: Vec<(
+        &'static str,
+        tonic::metadata::MetadataValue<tonic::metadata::Ascii>,
+    )> = ["x-forwarded-for", "user-agent"]
+        .into_iter()
+        .filter_map(|name| {
+            let v = request.headers().get(name)?;
+            Some((
+                name,
+                tonic::metadata::MetadataValue::try_from(v.as_bytes()).ok()?,
+            ))
+        })
+        .collect();
     let body = match binding.body {
         BodyRule::None => None,
         BodyRule::Whole | BodyRule::Field(_) => Some(read_json_body(request).await?),
     };
     let message = super::bind::request(binding, vars, query, body.as_deref())?;
+    let outbound = |message| {
+        let mut req = tonic::Request::new(message);
+        if let Some(payload) = &payload {
+            req.metadata_mut()
+                .insert(crate::principal::PAYLOAD_HEADER, payload.clone());
+        }
+        for (name, value) in &forwarded {
+            req.metadata_mut().insert(*name, value.clone());
+        }
+        req
+    };
 
     let mut grpc = Grpc::new(backend.transport());
     grpc.ready().await.map_err(|e| {
@@ -85,11 +120,7 @@ async fn call(
     let codec = DynamicCodec::new(binding.method.output());
     if binding.streaming {
         let stream = grpc
-            .server_streaming(
-                tonic::Request::new(message),
-                binding.grpc_path.clone(),
-                codec,
-            )
+            .server_streaming(outbound(message), binding.grpc_path.clone(), codec)
             .await?
             .into_inner();
         let guard = StreamGuard::open("sse");
@@ -108,11 +139,7 @@ async fn call(
             .into_response());
     }
     let response = grpc
-        .unary(
-            tonic::Request::new(message),
-            binding.grpc_path.clone(),
-            codec,
-        )
+        .unary(outbound(message), binding.grpc_path.clone(), codec)
         .await?
         .into_inner();
     let body = match &binding.response_body {

@@ -1,24 +1,19 @@
 "use client";
 
-// The overview's Stack and Environment cards, in the kit's dashboard style: an
-// icon-button title, a donut with a centre label and a legend that doubles as
-// the instance list, and link tiles with an icon box and an external arrow.
+// The overview's header pieces and Stack card, in the kit's dashboard style:
+// the tools as one segmented button group beside Refresh, a context strip with
+// live instance dots, and a status card whose donut legend is the instance list.
 import {
-  ArrowUpRight,
   BookOpen,
-  Bug,
   Crosshair,
-  Database,
   Flame,
-  FlaskConical,
   Gauge,
   LayoutDashboard,
-  ListVideo,
   type LucideIcon,
+  RefreshCw,
   ScrollText,
   Server,
   ShieldCheck,
-  TestTube2,
   Waypoints,
 } from "lucide-react";
 import Link from "next/link";
@@ -28,8 +23,10 @@ import { Cell, Pie, PieChart, type PieSectorShapeProps, Sector } from "recharts"
 import { describeBehavior } from "@/components/instances-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ButtonGroup } from "@/components/ui/button-group";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+import { Separator } from "@/components/ui/separator";
 import type { InstanceInfo, KindDescriptor, Overview } from "@/lib/api/schema";
 import { num } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -282,6 +279,40 @@ export function StackCard({
   );
 }
 
+/**
+ * What validate hits, as short as it can be said: one host for every kind
+ * behind the same Envoy, else the host once and a port per kind, else the
+ * URLs. The scheme never carries information here.
+ */
+function describeTargets(targets: [string, string][], labelOf: (kind: string) => string): React.ReactNode {
+  if (!targets.length) return <span>no validate targets</span>;
+  const bare = targets.map(([k, u]) => [k, u.replace(/^https?:\/\//, "").replace(/\/$/, "")] as const);
+  const kinds = bare.map(([k]) => labelOf(k).toLowerCase()).join(", ");
+  if (new Set(bare.map(([, u]) => u)).size === 1) {
+    return (
+      <span className="truncate">
+        <span className="font-mono">{bare[0]![1]}</span> for {kinds}
+      </span>
+    );
+  }
+  const hosts = new Set(bare.map(([, u]) => u.split(":")[0]));
+  if (hosts.size === 1) {
+    const host = [...hosts][0]!;
+    return (
+      <span className="truncate">
+        <span className="font-mono">{host}</span>{" "}
+        {bare.map(([k, u], n) => (
+          <span key={k}>
+            {n ? " · " : ""}
+            <span className="font-mono">:{u.split(":")[1]}</span> {labelOf(k).toLowerCase()}
+          </span>
+        ))}
+      </span>
+    );
+  }
+  return <span className="truncate font-mono">{bare.map(([k, u]) => `${u} (${k})`).join(" · ")}</span>;
+}
+
 /** "1 engine, 1 ledger, 2 protocols · 3 of 4 running", counted live. */
 function describeStack(stack: InstanceInfo[], labelOf: (kind: string) => string): string {
   const byKind = new Map<string, number>();
@@ -309,183 +340,135 @@ function compact(n: number): string {
   return String(n);
 }
 
-/**
- * Where this environment points: the validate targets per kind, what is on
- * disk with counts, and the observability tools as tiles. Everything a
- * troubleshooter opens from here, one click each.
- */
-export function EnvironmentCard({ overview }: { overview: Overview }) {
-  const links = overview.config.links;
-  const labelOf = (kind: string) => overview.kinds.find((k) => k.name === kind)?.label ?? kind;
-  const targets = Object.entries(overview.config.targets);
-  const sameHost = new Set(targets.map(([, u]) => u)).size === 1;
+/** The observability tools of this environment, in the order a failure is read. */
+export function toolLinks(
+  links: Overview["config"]["links"],
+): { icon: LucideIcon; title: string; href: string }[] {
+  return [
+    { icon: LayoutDashboard, title: "Dashboards", href: links.grafana ? `${links.grafana}/dashboards` : "" },
+    { icon: Waypoints, title: "Traces", href: links.grafana ? `${links.grafana}/explore` : "" },
+    { icon: ScrollText, title: "Logs", href: links.victorialogs },
+    { icon: Gauge, title: "Metrics", href: links.metrics },
+    { icon: Flame, title: "Profiles", href: links.pyroscope },
+    { icon: ShieldCheck, title: "Envoy", href: links.envoy_admin },
+  ].filter((t) => t.href);
+}
 
-  const data: { icon: LucideIcon; title: string; count: string; path: string; href: string }[] = [
-    {
-      icon: FlaskConical,
-      title: "Scenarios",
-      count: String(overview.scenarios),
-      path: overview.config.paths.scenarios,
-      href: "/scenarios/",
-    },
-    {
-      icon: TestTube2,
-      title: "Campaigns",
-      count: String(overview.campaigns),
-      path: overview.config.paths.campaigns,
-      href: "/stress/",
-    },
-    {
-      icon: Bug,
-      title: "Findings",
-      count: overview.findings
-        ? `${overview.findings} in ${overview.finding_signatures} signature${overview.finding_signatures === 1 ? "" : "s"}`
-        : "none",
-      path: overview.config.paths.findings,
-      href: "/findings/",
-    },
-    {
-      icon: ListVideo,
-      title: "Run records",
-      count: String(overview.runs),
-      path: overview.config.paths.results,
-      href: "/runs/",
-    },
+/** The page's action row: the tools as one segmented group, then Refresh. */
+export function OverviewActions({ overview, onRefresh }: { overview: Overview; onRefresh: () => void }) {
+  const tools = toolLinks(overview.config.links);
+  return (
+    <>
+      {tools.length ? (
+        <ButtonGroup>
+          {tools.map((t) => (
+            <Button key={t.title} variant="outline" size="sm" className="gap-1.5" asChild title={t.href}>
+              <a href={t.href} target="_blank" rel="noreferrer">
+                <t.icon />
+                <span className="hidden lg:inline">{t.title}</span>
+              </a>
+            </Button>
+          ))}
+        </ButtonGroup>
+      ) : null}
+      <Button variant="outline" size="sm" className="gap-1.5" onClick={onRefresh}>
+        <RefreshCw /> Refresh
+      </Button>
+    </>
+  );
+}
+
+/**
+ * The context line under the title: which environment this is, every instance
+ * as a live dot, what validate hits, the topology and what is on disk. One
+ * line that says where you are before any number on the page is read.
+ */
+export function EnvironmentStrip({ overview }: { overview: Overview }) {
+  const links = overview.config.links;
+  const stack = overview.stack ?? [];
+  const labelOf = (kind: string) => overview.kinds.find((k) => k.name === kind)?.label ?? kind;
+  const up = stack.filter((i) => i.running).length;
+  const faulted = stack.filter((i) => toneOf(i) === "warn").length;
+  const health: Tone = !overview.stack ? "off" : up < stack.length ? "off" : faulted ? "warn" : "good";
+  const targets = Object.entries(overview.config.targets);
+  const counts = [
+    { label: "scenarios", n: overview.scenarios, href: "/scenarios/" },
+    { label: "campaigns", n: overview.campaigns, href: "/stress/" },
+    { label: "findings", n: overview.findings, href: "/findings/", bad: overview.findings > 0 },
+    { label: "runs", n: overview.runs, href: "/runs/" },
   ];
 
-  const tools: { icon: LucideIcon; title: string; sub: string; href: string }[] = [
-    {
-      icon: LayoutDashboard,
-      title: "Dashboards",
-      sub: host(links.grafana),
-      href: links.grafana ? `${links.grafana}/dashboards` : "",
-    },
-    {
-      icon: Waypoints,
-      title: "Traces",
-      sub: "Grafana Explore · Tempo",
-      href: links.grafana ? `${links.grafana}/explore` : "",
-    },
-    { icon: ScrollText, title: "Logs", sub: host(links.victorialogs), href: links.victorialogs },
-    { icon: Gauge, title: "Metrics", sub: host(links.metrics), href: links.metrics },
-    { icon: Flame, title: "Profiles", sub: host(links.pyroscope), href: links.pyroscope },
-    { icon: ShieldCheck, title: "Envoy admin", sub: host(links.envoy_admin), href: links.envoy_admin },
-  ].filter((t) => t.href);
-
   return (
-    <Card className="flex flex-col">
-      <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
-        <div className="space-y-1.5">
-          <CardTitle className="flex items-center gap-2">
-            <span className="flex size-8 items-center justify-center rounded-lg border">
-              <Crosshair className="size-4" />
+    <div className="bg-card text-card-foreground rounded-xl border shadow-xs">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-3 px-4 py-3 text-sm">
+        <span className="flex items-center gap-2">
+          <span className={cn("size-2 rounded-full", DOT[health])} />
+          <span className="font-semibold">{overview.env}</span>
+          {links.domain ? (
+            <span className="text-muted-foreground font-mono text-xs">{links.domain}</span>
+          ) : null}
+        </span>
+
+        <Separator orientation="vertical" className="hidden h-4 sm:block" />
+
+        {overview.stack ? (
+          <Link
+            href="/stack/"
+            className="hover:text-foreground text-muted-foreground flex items-center gap-2 text-xs"
+          >
+            <span className="flex items-center gap-1">
+              {stack.map((i) => (
+                <span
+                  key={i.name}
+                  className={cn("size-2 rounded-full", DOT[toneOf(i)])}
+                  title={`${i.name} (${labelOf(i.kind)}) · ${stateOf(i)}`}
+                />
+              ))}
             </span>
-            Environment
-          </CardTitle>
-          <CardDescription>
-            <span className="font-medium">{overview.env}</span>
-            {links.domain ? <span className="font-mono text-xs"> · {links.domain}</span> : null}
-          </CardDescription>
-        </div>
-        <Button variant="outline" size="sm" asChild>
-          <Link href="/kb/view/?doc=docs%2Fchaos%2Frunbook">
-            <BookOpen /> Runbook
+            <span>
+              {up}/{stack.length} up{faulted ? `, ${faulted} faulted` : ""}
+            </span>
           </Link>
-        </Button>
-      </CardHeader>
-      <CardContent className="flex flex-1 flex-col gap-5">
-        <section>
-          <Eyebrow>Validate hits</Eyebrow>
-          {sameHost && targets.length > 1 ? (
-            <p className="text-sm">
-              <span className="font-mono text-xs">{targets[0]![1]}</span>
-              <span className="text-muted-foreground text-xs">
-                {" "}
-                for {targets.map(([k]) => labelOf(k).toLowerCase()).join(", ")}
-              </span>
-            </p>
-          ) : (
-            <ul className="grid gap-1 text-xs">
-              {targets.map(([kind, url]) => (
-                <li key={kind} className="flex items-baseline justify-between gap-3">
-                  <span className="text-muted-foreground">{labelOf(kind)}</span>
-                  <span className="truncate font-mono">{url}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+        ) : (
+          <span className="text-muted-foreground text-xs">no stack (--no-stack)</span>
+        )}
 
-        <section>
-          <Eyebrow>On disk</Eyebrow>
-          <div className="grid grid-cols-2 gap-2">
-            {data.map((d) => (
-              <Link
-                key={d.title}
-                href={d.href}
-                className="hover:bg-muted/40 group rounded-lg border px-3 py-2 transition-colors"
-              >
-                <div className="flex items-center gap-2 text-xs">
-                  <d.icon className="text-muted-foreground size-3.5" />
-                  <span className="font-medium">{d.title}</span>
-                  <span className="text-muted-foreground ml-auto tabular-nums">{d.count}</span>
-                </div>
-                <div className="text-muted-foreground mt-1 truncate font-mono text-[10px]" title={d.path}>
-                  {d.path}
-                </div>
-              </Link>
-            ))}
-          </div>
-        </section>
+        <Separator orientation="vertical" className="hidden h-4 sm:block" />
 
-        <section>
-          <Eyebrow>Open</Eyebrow>
-          {tools.length ? (
-            <div className="grid grid-cols-2 gap-2">
-              {tools.map((t) => (
-                <a
-                  key={t.title}
-                  href={t.href}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="hover:bg-muted/40 group flex items-center gap-2.5 rounded-lg border px-3 py-2 transition-colors"
-                >
-                  <span className="bg-muted flex size-8 shrink-0 items-center justify-center rounded-lg">
-                    <t.icon className="size-4" />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-xs font-medium">{t.title}</span>
-                    <span className="text-muted-foreground block truncate font-mono text-[10px]">
-                      {t.sub}
-                    </span>
-                  </span>
-                  <ArrowUpRight className="text-muted-foreground size-3.5 shrink-0 opacity-0 transition-opacity group-hover:opacity-100" />
-                </a>
-              ))}
-            </div>
-          ) : (
-            <p className="text-muted-foreground text-xs">
-              No observability links: set <span className="font-mono">[links]</span> in the chaos config.
-            </p>
-          )}
-        </section>
-        <p className="text-muted-foreground mt-auto flex items-center gap-1.5 text-[11px]">
-          <Database className="size-3" /> Every request carries a trace id; logs, traces and profiles for the
-          same second are one click apart.
-        </p>
-      </CardContent>
-    </Card>
-  );
-}
+        <span
+          className="text-muted-foreground flex min-w-0 flex-1 items-center gap-1.5 text-xs"
+          title={`validate hits ${targets.map(([k, u]) => `${u} (${labelOf(k)})`).join(", ") || "nothing"}`}
+        >
+          <Crosshair className="size-3.5 shrink-0" />
+          {describeTargets(targets, labelOf)}
+        </span>
 
-function Eyebrow({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="text-muted-foreground mb-1.5 text-[11px] font-medium tracking-wide uppercase">
-      {children}
+        <span
+          className="text-muted-foreground hidden items-center gap-1.5 text-xs xl:flex"
+          title="the serve topology"
+        >
+          <Server className="size-3.5 shrink-0" />
+          <span className="font-mono">{overview.config.paths.topology}</span>
+        </span>
+
+        <div className="flex flex-wrap items-center gap-1.5">
+          {counts.map((c) => (
+            <Link
+              key={c.label}
+              href={c.href}
+              className="bg-muted/60 ring-border hover:bg-muted inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs ring-1 transition-colors ring-inset"
+            >
+              <span className={cn("font-medium tabular-nums", c.bad && "text-destructive")}>{c.n}</span>
+              <span className="text-muted-foreground">{c.label}</span>
+            </Link>
+          ))}
+          <Button variant="ghost" size="sm" className="gap-1.5" asChild>
+            <Link href="/kb/view/?doc=docs%2Fchaos%2Frunbook">
+              <BookOpen /> Runbook
+            </Link>
+          </Button>
+        </div>
+      </div>
     </div>
   );
-}
-
-function host(url: string): string {
-  return url.replace(/^https?:\/\//, "").replace(/\/$/, "");
 }

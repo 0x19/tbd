@@ -6,6 +6,7 @@
 //! |-------------|------------------------------------------|
 //! | `/v1/*`     | REST (JSON) and server-sent events       |
 //! | `/v1/<backend>/*` | REST and SSE transcoded from `google.api.http` options in the protos |
+//! | `/v1/ws`    | every public RPC multiplexed over one WebSocket |
 //! | `/ws`       | WebSocket bridged to an engine session   |
 //! | `/graphql`  | GraphQL (POST) and `GraphiQL` (GET)      |
 //! | `/openapi.json` | the `OpenAPI` document for the REST surface |
@@ -23,6 +24,7 @@ mod graphql;
 mod grpc;
 mod http;
 pub mod json;
+pub mod mux;
 mod observe;
 pub mod principal;
 mod state;
@@ -199,6 +201,7 @@ pub fn router(state: &AppState, transcoder: &Transcoder) -> Router {
     Router::new()
         .merge(http::routes())
         .merge(transcoder.router())
+        .merge(mux::routes(transcoder, state.socket()))
         .route(
             "/openapi.json",
             axum::routing::get(move || {

@@ -41,6 +41,18 @@ enum Command {
     /// Inspect or repair scaffolded services.
     #[command(subcommand)]
     Service(ServiceCmd),
+    /// Apply the project's migrations to a database.
+    Migrate(Migrate),
+}
+
+#[derive(Args)]
+struct Migrate {
+    /// Connection URL. A credential, so it is never echoed.
+    #[arg(long, env = "TBD_DATABASE_URL", hide_env_values = true)]
+    database_url: String,
+    /// Report what is applied and what is pending, and write nothing.
+    #[arg(long)]
+    status: bool,
 }
 
 #[derive(Subcommand)]
@@ -111,12 +123,70 @@ fn workspace(repo: Option<&Path>) -> anyhow::Result<Workspace> {
 }
 
 fn run(cli: Cli) -> anyhow::Result<ExitCode> {
+    // Migrations are compiled into the binary, so this one runs anywhere -- a
+    // Kubernetes Job, a container, a laptop outside the repo -- and must not
+    // require a workspace to be discoverable.
+    if let Command::Migrate(args) = &cli.command {
+        return migrate(args);
+    }
+
     let mut ws = workspace(cli.repo.as_deref())?;
     match cli.command {
         Command::New(New::Service(args)) => new_service(&mut ws, &args),
         Command::Service(ServiceCmd::Check { name, fix }) => service_check(&mut ws, &name, fix),
         Command::Service(ServiceCmd::List) => service_list(&mut ws),
+        Command::Migrate(_) => unreachable!("handled above"),
     }
+}
+
+/// Apply every migration in `/migrations`, or report what is pending.
+///
+/// One migrator for the whole project. Services do not migrate on start: two
+/// replicas racing on a shared schema is how a cluster ends up half-migrated,
+/// so they refuse to serve against a database behind them and this is what
+/// moves it forward.
+fn migrate(args: &Migrate) -> anyhow::Result<ExitCode> {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .context("tokio runtime")?;
+
+    runtime.block_on(async {
+        let pool = tbd_db::connect_lazy(&tbd_db::PgOptions {
+            url: args.database_url.clone(),
+            max_connections: 2,
+            ..tbd_db::PgOptions::default()
+        })
+        .context("open the pool")?;
+
+        let expected = tbd_db::expected_migrations();
+        let applied = tbd_db::applied_migrations(&pool)
+            .await
+            .context("read the migration state")?;
+
+        if args.status {
+            println!("applied {applied} of {expected}");
+            for migration in tbd_db::MIGRATOR.iter() {
+                println!("  {:>4}  {}", migration.version, migration.description);
+            }
+            return Ok(if applied < expected {
+                ExitCode::from(1)
+            } else {
+                ExitCode::SUCCESS
+            });
+        }
+
+        if applied >= expected {
+            println!("up to date: {applied} migrations applied");
+            return Ok(ExitCode::SUCCESS);
+        }
+
+        println!("applying {} migration(s)", expected - applied);
+        tbd_db::migrate(&pool).await.context("apply migrations")?;
+        let now = tbd_db::applied_migrations(&pool).await?;
+        println!("applied {now} of {expected}");
+        Ok(ExitCode::SUCCESS)
+    })
 }
 
 fn label(word: &str, colour: fn(&str) -> String) -> String {

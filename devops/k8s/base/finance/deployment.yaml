@@ -1,0 +1,119 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: finance
+  labels:
+    app.kubernetes.io/name: finance
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: finance
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9464"
+        prometheus.io/path: /metrics
+      labels:
+        app.kubernetes.io/name: finance
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: finance
+          # Overlays pin the tag.
+          image: ghcr.io/0x19/tbd-finance:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: grpc
+              containerPort: 50054
+            - name: metrics
+              containerPort: 9464
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: tbd-env
+          env:
+            # The database URL carries a credential: from the finance-db
+            # Secret (mise run finance:secrets), never from the ConfigMap.
+            - name: FINANCE_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: finance-db
+                  key: database-url
+            # The bank credentials are optional on purpose: without them the
+            # service serves reads and the sync worker does not start, which
+            # is what a cluster without a linked bank should do.
+            - name: FINANCE_EB_APPLICATION_ID
+              valueFrom:
+                secretKeyRef:
+                  name: finance-bank
+                  key: application-id
+                  optional: true
+            - name: FINANCE_EB_PRIVATE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: finance-bank
+                  key: private-key
+                  optional: true
+            # Connectors: the key that seals stored credentials, and the
+            # Google OAuth client for Gmail. Optional: without the key nothing
+            # can be linked, and the UI says so.
+            - name: FINANCE_CONNECTOR_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: finance-connectors
+                  key: key
+                  optional: true
+            - name: FINANCE_GOOGLE_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: finance-connectors
+                  key: google-client-id
+                  optional: true
+            - name: FINANCE_GOOGLE_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: finance-connectors
+                  key: google-client-secret
+                  optional: true
+          livenessProbe:
+            grpc:
+              port: 50054
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          readinessProbe:
+            grpc:
+              port: 50054
+            initialDelaySeconds: 1
+            periodSeconds: 5
+          # A release binary keeps its symbols and the in-process profiler maps
+          # them: every service idles at 170 to 290 MB resident. 256Mi was the
+          # first thing a load run hit (OOMKilled at 2000 req/s on the ledger).
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            # The in-process profiler (pprof-rs) needs a writable temp dir for
+            # its sample buffers; the root filesystem stays read-only.
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi

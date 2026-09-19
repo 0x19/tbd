@@ -1,12 +1,13 @@
 "use client";
 
-import { ArrowLeft, Square } from "lucide-react";
+import { ArrowLeft, ScrollText, Square } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { toast } from "sonner";
 
-import { ChartHeadline, Legend, RunChart } from "@/components/charts";
+import { useChaos } from "@/app/providers";
+import { ChartHeadline, Legend, RunChart, SweepChart } from "@/components/charts";
 import { DetailList, HeatGrid, LevelChip, PageTitle, StageBar, StatRow } from "@/components/kit";
 import { BoolBadge, StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
@@ -69,6 +70,7 @@ function stageIndex(phase: string | null, finished: boolean, record: RunRecord |
 /** The kit's detail layout: back, big title with chips, lifecycle strip, stats, chart, tables. */
 function RunView() {
   const id = useSearchParams().get("id");
+  const { overview } = useChaos();
   const live = useRunFeed(id);
   const [cancelling, setCancelling] = useState(false);
   const record = live.record;
@@ -87,6 +89,25 @@ function RunView() {
       setCancelling(false);
     }
   };
+
+  // Logs live in VictoriaLogs, not here: duplicating them into the run record
+  // would mean a second store to keep, size and expire. What the run page owes
+  // the reader is the way in -- the same window, already scoped.
+  //
+  // A scenario's services run in-process inside the chaos pod, so their stdout
+  // is the chaos pod's. Widen by a few seconds either side: the setup and
+  // teardown that explain a failure happen just outside the measured window.
+  const logsBase = overview?.config?.links?.victorialogs ?? "";
+  const logsHref = (() => {
+    if (!logsBase || !record?.started_at) return "";
+    const pad = 5000;
+    const from = new Date(new Date(record.started_at).getTime() - pad).toISOString();
+    const to = new Date(
+      (record.finished_at ? new Date(record.finished_at).getTime() : Date.now()) + pad,
+    ).toISOString();
+    const query = `_time:[${from}, ${to}] app:chaos`;
+    return `${logsBase}?#/?query=${encodeURIComponent(query)}&start=${encodeURIComponent(from)}&end=${encodeURIComponent(to)}`;
+  })();
 
   if (!id) return <p className="text-muted-foreground text-sm">No run id.</p>;
 
@@ -145,6 +166,19 @@ function RunView() {
           )
         }
       >
+        {logsHref ? (
+          <Button
+            variant="outline"
+            size="sm"
+            asChild
+            title="This run's window in VictoriaLogs, padded either side"
+          >
+            <a href={logsHref} target="_blank" rel="noreferrer">
+              <ScrollText />
+              Logs
+            </a>
+          </Button>
+        ) : null}
         {running ? (
           <Button variant="destructive" size="sm" onClick={cancel} disabled={cancelling}>
             <Square /> Cancel run
@@ -302,7 +336,11 @@ function RunView() {
                   </ol>
                 ) : (
                   <p className="text-muted-foreground text-sm">
-                    {record?.kind === "load" ? "Ad-hoc load has no timeline." : "No timeline events yet."}
+                    {record?.kind === "load"
+                      ? "Ad-hoc load has no timeline."
+                      : running
+                        ? "No timeline events yet."
+                        : "This scenario injects nothing: no [[timeline]] block, so there is nothing to show."}
                   </p>
                 )}
               </CardContent>
@@ -342,6 +380,8 @@ function StressView({
   const tolerated = live.stress?.tolerated ?? result?.tolerated ?? 0;
   const redriven = live.stress?.redriven ?? result?.redriven ?? 0;
   const replay = record?.replay ?? null;
+  const sweep = result?.sweep ?? null;
+  const at = live.stress?.sweep ?? null;
   return (
     <>
       <div className="bg-muted/30 rounded-xl border p-4">
@@ -363,6 +403,12 @@ function StressView({
         <StageBar stages={STRESS_STAGES} current={stressStageIndex(live.phase, live.finished, record)} />
       </div>
 
+      {at ? (
+        <div className="bg-muted/30 rounded-xl border px-3 py-2 text-sm">
+          Sweeping {at.parameter}: {at.value} (point {at.point} of {at.points}, measurement {at.repeat} of{" "}
+          {at.repeats})
+        </div>
+      ) : null}
       {replay ? (
         <div
           className={`rounded-lg border px-3 py-2 text-sm ${
@@ -499,6 +545,76 @@ function StressView({
           </CardContent>
         </Card>
       </div>
+
+      {sweep ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Sweep of {sweep.parameter}</CardTitle>
+            <CardDescription>
+              Latency against the swept value, every point measured {sweep.points[0]?.repeats ?? 1} time
+              {(sweep.points[0]?.repeats ?? 1) === 1 ? "" : "s"}. The band is the 95% interval of the p99: two
+              points whose bands overlap did not measure differently.
+              {sweep.knee_reason ? ` The knee: ${sweep.knee_reason}.` : ""}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <SweepChart result={sweep} />
+            <div className="mt-4 overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{sweep.parameter}</TableHead>
+                    <TableHead className="text-right">Requests</TableHead>
+                    <TableHead className="text-right">req/s</TableHead>
+                    <TableHead className="text-right">Errors</TableHead>
+                    <TableHead className="text-right">p50 (95% CI)</TableHead>
+                    <TableHead className="text-right">p99 (95% CI)</TableHead>
+                    <TableHead className="text-right">Findings</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {sweep.points.map((p) => (
+                    <TableRow key={p.value} className={sweep.knee === p.value ? "bg-destructive/5" : ""}>
+                      <TableCell className="font-mono text-xs">
+                        {p.value}
+                        {sweep.knee === p.value ? (
+                          <Badge variant="destructive" className="ml-2 text-[10px]">
+                            knee
+                          </Badge>
+                        ) : null}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">{num(p.requests)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{Math.round(p.achieved_rps)}</TableCell>
+                      <TableCell
+                        className={`text-right tabular-nums ${p.error_rate ? "text-destructive" : ""}`}
+                      >
+                        {pct(p.error_rate)}
+                      </TableCell>
+                      <TableCell className="text-right text-xs tabular-nums">
+                        {ms(p.p50.estimate)}{" "}
+                        <span className="text-muted-foreground">
+                          [{ms(p.p50.low)} {ms(p.p50.high)}]
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right text-xs tabular-nums">
+                        {ms(p.p99.estimate)}{" "}
+                        <span className="text-muted-foreground">
+                          [{ms(p.p99.low)} {ms(p.p99.high)}]
+                        </span>
+                      </TableCell>
+                      <TableCell
+                        className={`text-right tabular-nums ${p.findings ? "text-destructive" : ""}`}
+                      >
+                        {p.findings}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader>

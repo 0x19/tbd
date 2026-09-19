@@ -6,6 +6,8 @@ resources:
   - configmap.yaml
   - engine
   - protocol
+  - playground
+  - finance
   - humans
   - ledger
   - envoy

@@ -335,3 +335,38 @@ async fn a_server_stream_is_served_as_sse() {
     );
     assert!(event["id"].is_string(), "{event}");
 }
+
+// The finance backend checks the caller before anything else. Through the
+// gateway, then, an anonymous request is 401 from the *backend*, and a
+// verified one gets past that check to the next refusal (no store: 503). If
+// the gateway ever stops forwarding the verified identity, both answer 401
+// -- which is exactly what happened the first time a browser signed in.
+#[tokio::test]
+async fn the_verified_identity_reaches_the_backend_over_rest() {
+    let stack = support::start().await;
+    let (anonymous, _) = body(
+        stack
+            .client()
+            .get(stack.url("/v1/finance/transactions"))
+            .send()
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(anonymous, 401, "no identity: the backend refuses");
+
+    let (verified, problem) = body(
+        stack
+            .client()
+            .get(stack.url("/v1/finance/transactions"))
+            .header(JWT, claims("person-1"))
+            .send()
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(
+        verified, 503,
+        "identity forwarded: past the caller check, to the missing store: {problem}"
+    );
+}

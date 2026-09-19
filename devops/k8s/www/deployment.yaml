@@ -1,0 +1,74 @@
+# The company site (ui/www): static files on Caddy. Serves the root of the base
+# domain; Envoy's `www.*` virtual host sends it there, and the public edge
+# rewrites the apex Host to `www.<domain>` so that one rule matches both.
+# Image: devops/docker/Dockerfile.www.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: www
+  labels:
+    app.kubernetes.io/name: www
+spec:
+  # Two, so a rollout never leaves Envoy without a healthy endpoint: the site is
+  # the public face of the domain and a redeploy should not show a 503.
+  replicas: 2
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: www
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: www
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 25
+      containers:
+        - name: caddy
+          # Overlays pin the tag.
+          image: ghcr.io/0x19/tbd-www:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          # Keep serving while the endpoint is removed. Without this Caddy exits
+          # the moment the pod is deleted, but kube-proxy updates its rules a
+          # beat later, so a few requests still arrive at a dead container and
+          # Envoy answers 503 through the Service address.
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sleep", "8"]
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 20
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 500m
+              memory: 128Mi
+      volumes:
+        - name: tmp
+          emptyDir: {}

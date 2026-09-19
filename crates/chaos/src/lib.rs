@@ -14,14 +14,15 @@
 //! `tbd-stress` campaigns around the same stack and timeline.
 
 pub mod api;
-pub mod auth;
 pub mod config;
 pub mod kinds;
-pub mod load;
 pub mod scenario;
-pub mod service;
-pub mod stack;
 pub mod stress;
-pub mod tls;
 pub mod topology;
 pub mod validate;
+
+// The bench these are built on lives in `tbd-lab`, which depends on no service
+// crate so that anything driving services can use it. Re-exported under the
+// paths they have always had, so `crate::stack` and friends keep working here
+// and for anyone who depends on this crate.
+pub use tbd_lab::{auth, load, service, stack, tls};

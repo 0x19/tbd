@@ -48,6 +48,9 @@ pub struct StressResult {
     pub redriven: u64,
     /// The findings, by summary.
     pub findings: Vec<FindingSummary>,
+    /// What a sweep measured, when the campaign had one.
+    #[serde(default)]
+    pub sweep: Option<tbd_stress::report::SweepResult>,
     /// `[stop] max_findings` was reached.
     #[serde(default)]
     pub stopped_early: bool,
@@ -73,6 +76,7 @@ impl From<&CampaignResult> for StressResult {
                 .iter()
                 .map(tbd_stress::Finding::summary)
                 .collect(),
+            sweep: r.sweep.clone(),
             stopped_early: r.stopped_early,
             error: r.error.clone(),
         }
