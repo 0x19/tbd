@@ -33,10 +33,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api/client";
 import { describe, useFetch } from "@/lib/api/hooks";
-import type { Connector, Document, Mail, MailTemplate } from "@/lib/api/schema";
-import { monthLabel, monthsBefore, thisMonth, when } from "@/lib/format";
+import type { Connector, Mail, MailTemplate } from "@/lib/api/schema";
+import { monthLabel, monthLong, monthsBefore, thisMonth, when } from "@/lib/format";
 import { useLang, useT } from "@/lib/i18n";
-import { helpers, render, splitAddresses } from "@/lib/mail-template";
+import { helpers, type Prefill, render, splitAddresses, takePrefill } from "@/lib/mail-template";
+
+type Attached = { id: string; filename: string; vendor: string };
 
 type Draft = {
   connector_id: string;
@@ -47,7 +49,9 @@ type Draft = {
   bcc: string;
   subject: string;
   body: string;
-  attachments: Document[];
+  /** The reconciliation summary, for `{{Summary}}`. */
+  summary: string;
+  attachments: Attached[];
   in_reply_to: Mail | null;
 };
 
@@ -60,9 +64,30 @@ const EMPTY: Draft = {
   bcc: "",
   subject: "",
   body: "",
+  summary: "",
   attachments: [],
   in_reply_to: null,
 };
+
+/** A template's recipients, subject and body over a draft; the summary keeps
+ *  its place if the template names it, else follows the body. */
+function applyTemplate(d: Draft, tpl: MailTemplate | undefined, fallbackSubject: string): Draft {
+  const summaryTail = d.summary ? "{{Summary}}" : "";
+  if (!tpl) {
+    return { ...d, template_id: "", subject: d.subject || fallbackSubject, body: d.body || summaryTail };
+  }
+  const body =
+    tpl.body.includes("{{Summary}}") || !summaryTail ? tpl.body : `${tpl.body.trimEnd()}\n\n${summaryTail}`;
+  return {
+    ...d,
+    template_id: tpl.id,
+    to: tpl.to.join(", "),
+    cc: tpl.cc.join(", "),
+    bcc: tpl.bcc.join(", "),
+    subject: tpl.subject,
+    body,
+  };
+}
 
 export default function MailPage() {
   const t = useT();
@@ -77,6 +102,31 @@ export default function MailPage() {
   const [tab, setTab] = useState("compose");
   const [draft, setDraft] = useState<Draft>(EMPTY);
   const [listVersion, setListVersion] = useState(0);
+
+  // The reconciliation page's handoff, applied once both lists are here.
+  const [prefill, setPrefill] = useState<Prefill | null>(null);
+  useEffect(() => setPrefill(takePrefill()), []);
+  useEffect(() => {
+    if (!prefill || !connectors.data || !templates.data) return;
+    const sender = senders.find((c) => c.party_id === prefill.party_id) ?? senders[0];
+    const tpl = templates.data.templates.find((x) => x.party_id === prefill.party_id);
+    setDraft(
+      applyTemplate(
+        {
+          ...EMPTY,
+          connector_id: sender?.id ?? "",
+          month: prefill.month,
+          summary: prefill.summary,
+          attachments: prefill.attachments,
+        },
+        tpl,
+        t("mail.default_subject"),
+      ),
+    );
+    setTab("compose");
+    toast.info(t("mail.prefilled", { month: monthLong(prefill.month), n: prefill.attachments.length }));
+    setPrefill(null);
+  }, [prefill, connectors.data, templates.data, senders, t]);
 
   const replyTo = (m: Mail) => {
     setDraft({
@@ -123,16 +173,7 @@ export default function MailPage() {
             loading={templates.loading && !templates.data}
             onChanged={templates.reload}
             onUse={(tpl) => {
-              setDraft((d) => ({
-                ...d,
-                template_id: tpl.id,
-                to: tpl.to.join(", "),
-                cc: tpl.cc.join(", "),
-                bcc: tpl.bcc.join(", "),
-                subject: tpl.subject,
-                body: tpl.body,
-                in_reply_to: null,
-              }));
+              setDraft((d) => applyTemplate({ ...d, in_reply_to: null }, tpl, t("mail.default_subject")));
               setTab("compose");
             }}
           />
@@ -167,7 +208,12 @@ function Compose({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [senders.length]);
   const months = useMemo(() => Array.from({ length: 18 }, (_, i) => monthsBefore(thisMonth(), i)), []);
-  const ctx = { month: draft.month, company: sender ? partyName(sender.party_id) : "", lang };
+  const ctx = {
+    month: draft.month,
+    company: sender ? partyName(sender.party_id) : "",
+    lang,
+    summary: draft.summary,
+  };
   const subject = render(draft.subject, ctx);
   const body = render(draft.body, ctx);
   const to = splitAddresses(draft.to);
@@ -254,15 +300,7 @@ function Compose({
                   const tpl = templates.find((x) => x.id === v);
                   setDraft(
                     tpl
-                      ? {
-                          ...draft,
-                          template_id: tpl.id,
-                          to: tpl.to.join(", "),
-                          cc: tpl.cc.join(", "),
-                          bcc: tpl.bcc.join(", "),
-                          subject: tpl.subject,
-                          body: tpl.body,
-                        }
+                      ? applyTemplate(draft, tpl, t("mail.default_subject"))
                       : { ...draft, template_id: "" },
                   );
                 }}
@@ -374,7 +412,7 @@ function Compose({
               {Object.entries(helpers(ctx)).map(([k, v]) => (
                 <div key={k} className="contents">
                   <dt className="font-mono">{`{{${k}}}`}</dt>
-                  <dd className="text-muted-foreground truncate">{v}</dd>
+                  <dd className="text-muted-foreground truncate">{k === "Summary" ? v.split("\n")[0] : v}</dd>
                 </div>
               ))}
             </dl>
@@ -453,9 +491,9 @@ function AttachDialog({
 }: {
   open: boolean;
   partyId: string;
-  chosen: Document[];
+  chosen: Attached[];
   onClose: () => void;
-  onPick: (d: Document) => void;
+  onPick: (d: Attached) => void;
 }) {
   const t = useT();
   const [q, setQ] = useState("");
@@ -486,7 +524,7 @@ function AttachDialog({
                   "hover:bg-muted/50 flex w-full items-center justify-between gap-2 rounded-md border px-2 py-1.5 text-left text-xs " +
                   (on ? "border-primary" : "")
                 }
-                onClick={() => onPick(d)}
+                onClick={() => onPick({ id: d.id, filename: d.filename, vendor: d.vendor })}
               >
                 <span className="truncate">
                   <span className="font-medium">{d.vendor || d.filename}</span>

@@ -13,10 +13,12 @@ import {
   Download,
   FileCheck,
   Link2,
+  Mail,
   Search,
   Unlink,
   XCircle,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -37,6 +39,7 @@ import { describe, useFetch } from "@/lib/api/hooks";
 import type { LinkedDocument, Reason, ReconciliationRow } from "@/lib/api/schema";
 import { dateOnly, money, monthLong, monthsBefore, thisMonth } from "@/lib/format";
 import { useT } from "@/lib/i18n";
+import { stashPrefill } from "@/lib/mail-template";
 import { safeName, zip } from "@/lib/zip";
 
 type T = ReturnType<typeof useT>;
@@ -169,6 +172,17 @@ export default function AccountantPage() {
       t("accountant.bundle.readme_eracun", { n: eracun.length }),
       ...eracun.map(line),
     ].join("\n");
+
+  const router = useRouter();
+  const sendByMail = () => {
+    const seen = new Set<string>();
+    const attachments = covered
+      .flatMap((r) => r.documents)
+      .filter((d) => (seen.has(d.document_id) ? false : (seen.add(d.document_id), true)))
+      .map((d) => ({ id: d.document_id, filename: d.filename, vendor: d.vendor }));
+    stashPrefill({ party_id: chosen, month, summary: summaryText(), attachments });
+    router.push("/mail/");
+  };
 
   const [bundling, setBundling] = useState(false);
   const bundle = async () => {
@@ -343,8 +357,11 @@ export default function AccountantPage() {
         >
           {t("accountant.copy_summary")}
         </Button>
-        <Button size="sm" onClick={() => void bundle()} disabled={bundling || !data.data}>
+        <Button size="sm" variant="outline" onClick={() => void bundle()} disabled={bundling || !data.data}>
           <Download /> {bundling ? t("accountant.bundling") : t("accountant.download_bundle")}
+        </Button>
+        <Button size="sm" onClick={sendByMail} disabled={!data.data}>
+          <Mail /> {t("accountant.send_mail")}
         </Button>
       </div>
 

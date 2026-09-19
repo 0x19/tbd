@@ -64,7 +64,11 @@ same conventions; read `ui/chaos/CLAUDE.md` for what is the kit's and what is ou
   dialog counts recipients, then `SendMail`; sent & replies -- `ListMail` with direction
   and search, a row opens the thread from `GetMail` with Reply prefilling the composer
   (`in_reply_to_mail_id`); templates -- `UpsertMailTemplate`/`DeleteMailTemplate`).
-  The Accountant nav group holds `/reconciliation/` and `/mail/`.
+  "Send to the accountant" on `/reconciliation/` hands the composer the month, the
+  summary text and the covering receipts through `sessionStorage` (`stashPrefill` /
+  `takePrefill`, read once); the composer picks that party's sender and first template,
+  puts the summary where `{{Summary}}` stands or after the body, and attaches the
+  receipts. Nav: Accountant holds `/reconciliation/`, Communication holds `/mail/`.
 - Streams: `useEvents(url, schema, onEvent)` in `hooks.ts` wraps `EventSource` with
   credentials; every `data:` frame is one JSON message. Envoy keeps `/v1/**/events`
   open on the finance host. EventSource cannot send the dev bearer token, so in

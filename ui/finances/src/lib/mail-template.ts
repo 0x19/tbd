@@ -12,7 +12,41 @@ export type TemplateContext = {
   lang: Lang;
   /** Today, for `{{Today}}`; defaults to now. */
   today?: Date;
+  /** The reconciliation page's summary of the month, for `{{Summary}}`. */
+  summary?: string;
 };
+
+/** What the reconciliation page hands the composer: the month, its summary
+ *  and the receipts that cover it. Carried through `sessionStorage`, so a
+ *  reload of the composer does not repeat it and nothing reaches the URL. */
+export type Prefill = {
+  party_id: string;
+  month: string;
+  summary: string;
+  attachments: { id: string; filename: string; vendor: string }[];
+};
+
+const PREFILL_KEY = "finance.mail.prefill";
+
+export function stashPrefill(p: Prefill): void {
+  try {
+    sessionStorage.setItem(PREFILL_KEY, JSON.stringify(p));
+  } catch {
+    // Storage blocked: the composer opens empty, and the page says nothing.
+  }
+}
+
+/** Reads the prefill once; a second read finds nothing. */
+export function takePrefill(): Prefill | null {
+  try {
+    const raw = sessionStorage.getItem(PREFILL_KEY);
+    if (!raw) return null;
+    sessionStorage.removeItem(PREFILL_KEY);
+    return JSON.parse(raw) as Prefill;
+  } catch {
+    return null;
+  }
+}
 
 const MONTHS: Record<Lang, string[]> = {
   en: [
@@ -60,6 +94,7 @@ export function helpers(ctx: TemplateContext): Record<string, string> {
     MonthYear: `${mi + 1}/${y ?? ""}`,
     Company: ctx.company,
     Today: ctx.lang === "hr" ? `${dd}.${mm}.${today.getFullYear()}.` : `${today.getFullYear()}-${mm}-${dd}`,
+    Summary: ctx.summary ?? "",
   };
 }
 

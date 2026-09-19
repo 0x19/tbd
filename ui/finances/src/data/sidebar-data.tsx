@@ -41,10 +41,11 @@ export const navGroups: NavGroup[] = [
   },
   {
     title: "nav.group.accountant",
-    items: [
-      { title: "nav.reconciliation", url: "/reconciliation/", icon: IconChecklist },
-      { title: "nav.mail", url: "/mail/", icon: IconMail },
-    ],
+    items: [{ title: "nav.reconciliation", url: "/reconciliation/", icon: IconChecklist }],
+  },
+  {
+    title: "nav.group.communication",
+    items: [{ title: "nav.mail", url: "/mail/", icon: IconMail }],
   },
   {
     title: "nav.group.invoicing",
