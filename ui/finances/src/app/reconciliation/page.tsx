@@ -36,13 +36,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { UploadReceipt } from "@/components/upload-receipt";
 import { api, ApiError } from "@/lib/api/client";
 import { describe, useFetch } from "@/lib/api/hooks";
-import type { LinkedDocument, Reason, ReconciliationRow } from "@/lib/api/schema";
+import type { LinkedDocument, ReconciliationRow } from "@/lib/api/schema";
+import { amountOf, needLabel, plan, sayWhy, sortRows, summaryText, type T } from "@/lib/bundle";
 import { dateOnly, money, monthLong, monthsBefore, thisMonth } from "@/lib/format";
 import { useT } from "@/lib/i18n";
 import { stashPrefill } from "@/lib/mail-template";
-import { safeName, zip, type ZipEntry } from "@/lib/zip";
-
-type T = ReturnType<typeof useT>;
+import { zip, type ZipEntry } from "@/lib/zip";
 
 const NEED_TONE: Record<string, string> = {
   receipt: "",
@@ -55,13 +54,6 @@ const NEED_TONE: Record<string, string> = {
 
 const POLICIES = ["auto", "eracun", "receipt", "none", "personal"] as const;
 
-const ORDER: Record<string, number> = { receipt: 0, eracun: 2, personal: 3, none: 4, internal: 5, income: 6 };
-
-function sortKey(r: ReconciliationRow): number {
-  if (r.need === "receipt") return r.status === "missing" ? 0 : 1;
-  return ORDER[r.need] ?? 9;
-}
-
 function bytesOf(base64: string): Uint8Array {
   const s = atob(base64);
   const out = new Uint8Array(s.length);
@@ -69,31 +61,9 @@ function bytesOf(base64: string): Uint8Array {
   return out;
 }
 
-function csv(rows: string[][]): string {
-  const cell = (v: string) => (/[",\n;]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
-  return rows.map((r) => r.map(cell).join(";")).join("\r\n") + "\r\n";
-}
-
-function amountOf(r: ReconciliationRow): string {
-  return money(r.transaction.amount_minor, r.transaction.currency);
-}
-
-/** A server reason, in the page's language: the code with its arguments. */
-function sayWhy(t: T, prefix: "need" | "why", r: Reason | null | undefined, fallback: string): string {
-  if (!r) return fallback;
-  const vars: Record<string, string> = { ...r.args };
-  if (r.args.amount_minor) vars.amount = money(r.args.amount_minor, r.args.currency || "EUR");
-  const out = t(`${prefix}.${r.code}`, vars);
-  return out === `${prefix}.${r.code}` ? fallback : out;
-}
-
 function sayWhys(t: T, d: LinkedDocument): string {
   if (!d.why.length) return d.reason;
   return d.why.map((w) => sayWhy(t, "why", w, w.code)).join(" · ");
-}
-
-function needLabel(t: T, need: string): string {
-  return t(`accountant.need.${need}`);
 }
 
 export default function AccountantPage() {
@@ -123,14 +93,8 @@ export default function AccountantPage() {
     setRows((prev) => prev.map((r) => (r.transaction.id === row.transaction.id ? row : r)));
   }, []);
 
-  const sorted = useMemo(
-    () =>
-      [...rows].sort(
-        (a, b) =>
-          sortKey(a) - sortKey(b) || a.transaction.booking_date.localeCompare(b.transaction.booking_date),
-      ),
-    [rows],
-  );
+  const sorted = useMemo(() => sortRows(rows), [rows]);
+  const monthData = useMemo(() => ({ company: chosenName, month, rows }), [chosenName, month, rows]);
   const shown = sorted.filter((r) => {
     if (only === "all") return true;
     if (only === "missing") return r.need === "receipt" && r.status === "missing";
@@ -140,7 +104,6 @@ export default function AccountantPage() {
   });
   const missing = rows.filter((r) => r.need === "receipt" && r.status === "missing");
   const covered = rows.filter((r) => r.need === "receipt" && r.status === "covered");
-  const eracun = rows.filter((r) => r.need === "eracun");
   const missingSum = useMemo(() => {
     const by = new Map<string, bigint>();
     for (const r of missing) {
@@ -151,104 +114,9 @@ export default function AccountantPage() {
     return [...by.entries()].map(([c, m]) => money(m.toString(), c)).join(" + ");
   }, [missing]);
 
-  const line = (r: ReconciliationRow) =>
-    `  ${dateOnly(r.transaction.booking_date)}  ${r.transaction.counterparty_name}  ${amountOf(r)}`;
-  const summaryText = () =>
-    [
-      `${chosenName} · ${monthLong(month)}`,
-      "",
-      t("accountant.bundle.readme_attached", { n: covered.length }),
-      ...covered.map(
-        (r) =>
-          `${line(r)}  → ${r.documents.map((d) => `${d.vendor} ${d.invoice_no || d.filename}`).join(", ")}`,
-      ),
-      "",
-      t("accountant.bundle.readme_missing", { n: missing.length }),
-      ...missing.map(
-        (r) =>
-          `${line(r)}${r.original_amount_minor ? ` (${money(r.original_amount_minor, r.original_currency)})` : ""}`,
-      ),
-      "",
-      t("accountant.bundle.readme_eracun", { n: eracun.length }),
-      ...eracun.map(line),
-    ].join("\n");
-
-  /** The bundle as files: the text ones with their content, the receipts by
-   *  document with the name each takes. The download and the mail share it,
-   *  so what the accountant gets is the same either way. */
-  const plan = () => {
-    const folder = t("accountant.bundle.folder");
-    const used = new Set<string>();
-    const receipts: { document_id: string; name: string }[] = [];
-    const h = (k: string) => t(`accountant.csv.${k}`);
-    const summary: string[][] = [
-      [
-        "date",
-        "counterparty",
-        "amount",
-        "currency",
-        "original",
-        "need",
-        "status",
-        "receipt",
-        "invoice_no",
-        "reason",
-      ].map(h),
-    ];
-    for (const r of sorted) {
-      const files: string[] = [];
-      if (r.need === "receipt") {
-        for (const d of r.documents) {
-          const m = /\.(jpe?g|png)$/i.exec(d.filename);
-          const ext = m ? m[1]!.toLowerCase().replace("jpeg", "jpg") : "pdf";
-          let name = `${folder}/${r.transaction.booking_date}_${safeName(d.vendor || r.transaction.counterparty_name)}_${safeName(money(d.total_minor || r.transaction.amount_minor, d.currency || r.transaction.currency))}.${ext}`;
-          let n = 2;
-          while (used.has(name)) name = name.replace(/(\.[a-z]+)$/, `_${n++}$1`);
-          used.add(name);
-          receipts.push({ document_id: d.document_id, name });
-          files.push(name.slice(folder.length + 1));
-        }
-      }
-      summary.push([
-        dateOnly(r.transaction.booking_date),
-        r.transaction.counterparty_name,
-        amountOf(r),
-        r.transaction.currency,
-        r.original_amount_minor ? money(r.original_amount_minor, r.original_currency) : "",
-        needLabel(t, r.need),
-        r.status ? t(`accountant.status.${r.status}`) : "",
-        files.join(" | "),
-        r.documents
-          .map((d) => d.invoice_no)
-          .filter(Boolean)
-          .join(" | "),
-        sayWhy(t, "need", r.need_why, r.need_reason),
-      ]);
-    }
-    const missingRows = [
-      ["date", "counterparty", "amount", "original", "reason"].map(h),
-      ...missing.map((r) => [
-        dateOnly(r.transaction.booking_date),
-        r.transaction.counterparty_name,
-        amountOf(r),
-        r.original_amount_minor ? money(r.original_amount_minor, r.original_currency) : "",
-        sayWhy(t, "need", r.need_why, r.need_reason),
-      ]),
-    ];
-    return {
-      filename: `${safeName(chosenName.toLowerCase())}-${month}-${t("accountant.bundle.zip_suffix")}.zip`,
-      files: [
-        { name: t("accountant.bundle.readme_file"), text: summaryText() + "\n" },
-        { name: t("accountant.bundle.summary_file"), text: "\uFEFF" + csv(summary) },
-        { name: t("accountant.bundle.missing_file"), text: "\uFEFF" + csv(missingRows) },
-      ],
-      receipts,
-    };
-  };
-
   const router = useRouter();
   const sendByMail = () => {
-    stashPrefill({ party_id: chosen, month, summary: summaryText(), bundle: plan() });
+    stashPrefill({ party_id: chosen, company: chosenName, month, rows });
     router.push("/mail/");
   };
 
@@ -256,7 +124,7 @@ export default function AccountantPage() {
   const bundle = async () => {
     setBundling(true);
     try {
-      const p = plan();
+      const p = plan(t, monthData);
       const enc = new TextEncoder();
       const entries: ZipEntry[] = p.files.map((f) => ({ name: f.name, bytes: enc.encode(f.text) }));
       for (const r of p.receipts) {
@@ -351,7 +219,7 @@ export default function AccountantPage() {
           variant="outline"
           onClick={() => {
             void navigator.clipboard
-              .writeText(summaryText())
+              .writeText(summaryText(t, monthData))
               .then(() => toast.success(t("accountant.copied")));
           }}
           disabled={!data.data}

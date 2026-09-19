@@ -64,13 +64,17 @@ same conventions; read `ui/chaos/CLAUDE.md` for what is the kit's and what is ou
   dialog counts recipients, then `SendMail`; sent & replies -- `ListMail` with direction
   and search, a row opens the thread from `GetMail` with Reply prefilling the composer
   (`in_reply_to_mail_id`); templates -- `UpsertMailTemplate`/`DeleteMailTemplate`).
-  "Send to the accountant" on `/reconciliation/` hands the composer the month, the
-  summary text and the bundle _plan_ (`plan()`: the same files the download zips --
-  README, summary.csv, missing.csv and each receipt's name inside the zip -- without
-  the receipts' bytes) through `sessionStorage` (`stashPrefill` / `takePrefill`, read
-  once); the composer picks that party's sender and first template, puts the summary
-  where `{{Summary}}` stands or after the body, and sends the plan as `bundle`, which
-  the service zips with the receipts' bytes. Nav: Accountant holds `/reconciliation/`,
+  "Send to the accountant" on `/reconciliation/` hands the composer the month's _rows_
+  (`Prefill`, through `sessionStorage`: `stashPrefill` / `takePrefill`, read once), not
+  rendered text. `src/lib/bundle.ts` holds the pure builders both pages share --
+  `summaryText()` (the README and `{{Summary}}`) and `plan()` (the same files the
+  download zips: README, summary.csv, missing.csv and each receipt's name inside the
+  zip, without the receipts' bytes) -- and the composer runs them again on every
+  language change, so the mail, the file names and the zip follow the UI's language at
+  the moment of sending; the default subject does too until something is typed. The
+  composer picks that party's sender and first template, puts the summary where
+  `{{Summary}}` stands or after the body, and sends the plan as `bundle`, which the
+  service zips with the receipts' bytes. Nav: Accountant holds `/reconciliation/`,
   Communication holds `/mail/`.
 - Streams: `useEvents(url, schema, onEvent)` in `hooks.ts` wraps `EventSource` with
   credentials; every `data:` frame is one JSON message. Envoy keeps `/v1/**/events`

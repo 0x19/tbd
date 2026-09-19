@@ -1,6 +1,7 @@
 // Template helpers: `{{Month}}` and friends, filled from a chosen month and
 // the party. Rendered here, on the page; the service stores what was sent.
 
+import type { ReconciliationRow } from "@/lib/api/schema";
 import type { Lang } from "@/lib/i18n";
 
 export type TemplateContext = {
@@ -21,9 +22,12 @@ export type TemplateContext = {
  *  reload of the composer does not repeat it and nothing reaches the URL. */
 export type Prefill = {
   party_id: string;
+  /** The company's display name. */
+  company: string;
   month: string;
-  summary: string;
-  bundle: BundlePlan;
+  /** The month's rows as the service returned them: the composer builds the
+   *  summary and the bundle from these in whatever language it is in. */
+  rows: ReconciliationRow[];
 };
 
 /** The accountant's bundle before any bytes: the text files with their

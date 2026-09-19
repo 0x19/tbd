@@ -45,17 +45,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api/client";
 import { describe, useFetch } from "@/lib/api/hooks";
 import type { Connector, Mail, MailTemplate } from "@/lib/api/schema";
+import { plan, summaryText } from "@/lib/bundle";
 import { monthLabel, monthLong, monthsBefore, thisMonth, when } from "@/lib/format";
 import { useLang, useT } from "@/lib/i18n";
-import {
-  base64Utf8,
-  type BundlePlan,
-  helpers,
-  type Prefill,
-  render,
-  splitAddresses,
-  takePrefill,
-} from "@/lib/mail-template";
+import { base64Utf8, helpers, type Prefill, render, splitAddresses, takePrefill } from "@/lib/mail-template";
 
 type Attached = { id: string; filename: string; vendor: string };
 
@@ -68,11 +61,12 @@ type Draft = {
   bcc: string;
   subject: string;
   body: string;
-  /** The reconciliation summary, for `{{Summary}}`. */
-  summary: string;
   attachments: Attached[];
-  /** The accountant's bundle, zipped by the service on send. */
-  bundle: BundlePlan | null;
+  /** The reconciliation month behind `{{Summary}}` and the bundle; both are
+   *  rebuilt from it in the page's current language. */
+  source: Prefill | null;
+  /** Whether the bundle goes with the mail (the badge's X drops it). */
+  with_bundle: boolean;
   in_reply_to: Mail | null;
 };
 
@@ -85,18 +79,20 @@ const EMPTY: Draft = {
   bcc: "",
   subject: "",
   body: "",
-  summary: "",
   attachments: [],
-  bundle: null,
+  source: null,
+  with_bundle: false,
   in_reply_to: null,
 };
 
 /** A template's recipients, subject and body over a draft; the summary keeps
- *  its place if the template names it, else follows the body. */
-function applyTemplate(d: Draft, tpl: MailTemplate | undefined, fallbackSubject: string): Draft {
-  const summaryTail = d.summary ? "{{Summary}}" : "";
+ *  its place if the template names it, else follows the body. Without a
+ *  template the subject stays empty, and the composer shows the language's
+ *  default until something is typed. */
+function applyTemplate(d: Draft, tpl: MailTemplate | undefined): Draft {
+  const summaryTail = d.source ? "{{Summary}}" : "";
   if (!tpl) {
-    return { ...d, template_id: "", subject: d.subject || fallbackSubject, body: d.body || summaryTail };
+    return { ...d, template_id: "", body: d.body || summaryTail };
   }
   const body =
     tpl.body.includes("{{Summary}}") || !summaryTail ? tpl.body : `${tpl.body.trimEnd()}\n\n${summaryTail}`;
@@ -138,15 +134,14 @@ export default function MailPage() {
           ...EMPTY,
           connector_id: sender?.id ?? "",
           month: prefill.month,
-          summary: prefill.summary,
-          bundle: prefill.bundle,
+          source: prefill,
+          with_bundle: true,
         },
         tpl,
-        t("mail.default_subject"),
       ),
     );
     setTab("compose");
-    toast.info(t("mail.prefilled", { month: monthLong(prefill.month), n: prefill.bundle.receipts.length }));
+    toast.info(t("mail.prefilled", { month: monthLong(prefill.month), n: plan(t, prefill).receipts.length }));
     setPrefill(null);
   }, [prefill, connectors.data, templates.data, senders, t]);
 
@@ -195,7 +190,7 @@ export default function MailPage() {
             loading={templates.loading && !templates.data}
             onChanged={templates.reload}
             onUse={(tpl) => {
-              setDraft((d) => applyTemplate({ ...d, in_reply_to: null }, tpl, t("mail.default_subject")));
+              setDraft((d) => applyTemplate({ ...d, in_reply_to: null }, tpl));
               setTab("compose");
             }}
           />
@@ -230,13 +225,21 @@ function Compose({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [senders.length]);
   const months = useMemo(() => Array.from({ length: 18 }, (_, i) => monthsBefore(thisMonth(), i)), []);
+  // The summary and the bundle follow the language: rebuilt from the rows
+  // whenever `t` changes, so switching the UI switches the mail.
+  const summaryNow = useMemo(() => (draft.source ? summaryText(t, draft.source) : ""), [t, draft.source]);
+  const bundleNow = useMemo(
+    () => (draft.source && draft.with_bundle ? plan(t, draft.source) : null),
+    [t, draft.source, draft.with_bundle],
+  );
   const ctx = {
     month: draft.month,
     company: sender ? partyName(sender.party_id) : "",
     lang,
-    summary: draft.summary,
+    summary: summaryNow,
   };
-  const subject = render(draft.subject, ctx);
+  const subjectRaw = draft.subject || (draft.source ? t("mail.default_subject") : "");
+  const subject = render(subjectRaw, ctx);
   const body = render(draft.body, ctx);
   const to = splitAddresses(draft.to);
   const cc = splitAddresses(draft.cc);
@@ -258,11 +261,11 @@ function Compose({
         html: "",
         attachment_document_ids: draft.attachments.map((d) => d.id),
         in_reply_to_mail_id: draft.in_reply_to?.id ?? "",
-        bundle: draft.bundle
+        bundle: bundleNow
           ? {
-              filename: draft.bundle.filename,
-              files: draft.bundle.files.map((f) => ({ name: f.name, bytes: base64Utf8(f.text) })),
-              receipts: draft.bundle.receipts,
+              filename: bundleNow.filename,
+              files: bundleNow.files.map((f) => ({ name: f.name, bytes: base64Utf8(f.text) })),
+              receipts: bundleNow.receipts,
             }
           : undefined,
       });
@@ -327,11 +330,7 @@ function Compose({
                 value={draft.template_id || "none"}
                 onValueChange={(v) => {
                   const tpl = templates.find((x) => x.id === v);
-                  setDraft(
-                    tpl
-                      ? applyTemplate(draft, tpl, t("mail.default_subject"))
-                      : { ...draft, template_id: "" },
-                  );
+                  setDraft(tpl ? applyTemplate(draft, tpl) : { ...draft, template_id: "" });
                 }}
               >
                 <SelectTrigger>
@@ -385,7 +384,7 @@ function Compose({
           {field(
             t("mail.subject"),
             <Input
-              value={draft.subject}
+              value={subjectRaw}
               onChange={(e) => setDraft({ ...draft, subject: e.target.value })}
               placeholder="Računi {{MonthName}} {{Year}}"
             />,
@@ -402,23 +401,23 @@ function Compose({
           <div>
             <Label className="text-muted-foreground mb-1 block text-xs">{t("mail.attachments")}</Label>
             <div className="flex flex-wrap items-center gap-2">
-              {draft.attachments.length === 0 && !draft.bundle ? (
+              {draft.attachments.length === 0 && !bundleNow ? (
                 <span className="text-muted-foreground text-xs">{t("mail.attached_none")}</span>
               ) : null}
-              {draft.bundle ? (
+              {bundleNow ? (
                 <Badge
                   variant="secondary"
                   className="gap-1 text-[11px]"
-                  title={draft.bundle.receipts.map((r) => r.name).join("\n")}
+                  title={bundleNow.receipts.map((r) => r.name).join("\n")}
                 >
-                  <Archive className="size-3" /> {draft.bundle.filename}
+                  <Archive className="size-3" /> {bundleNow.filename}
                   <span className="text-muted-foreground">
-                    · {t("mail.bundle_contents", { n: draft.bundle.receipts.length })}
+                    · {t("mail.bundle_contents", { n: bundleNow.receipts.length })}
                   </span>
                   <button
                     type="button"
                     aria-label="remove"
-                    onClick={() => setDraft({ ...draft, bundle: null })}
+                    onClick={() => setDraft({ ...draft, with_bundle: false })}
                   >
                     <X className="size-3" />
                   </button>
