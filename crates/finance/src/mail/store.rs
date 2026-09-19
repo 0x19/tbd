@@ -50,6 +50,8 @@ pub struct MailRow {
     pub sent_at: Option<DateTime<Utc>>,
     pub received_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
+    /// The bundle zip's file name, when one went with the mail.
+    pub bundle: Option<String>,
 }
 
 /// A document that went with a mail or came with a reply.
@@ -68,7 +70,7 @@ const TEMPLATE_COLUMNS: &str =
 const MAIL_COLUMNS: &str =
     "id, party_id, connector_id, direction, thread_key, provider_id, message_id, in_reply_to,
     parent_id, template_id, from_addr, to_addrs, cc_addrs, bcc_addrs, subject, body, status, error,
-    sent_at, received_at, created_at";
+    sent_at, received_at, created_at, bundle";
 
 fn sql(s: &str) -> sqlx::AssertSqlSafe<String> {
     sqlx::AssertSqlSafe(s.to_owned())
@@ -257,6 +259,22 @@ pub struct SendInput {
     pub attachment_document_ids: Vec<Uuid>,
     /// A mail of ours (or a reply we hold) to answer in its thread.
     pub in_reply_to_mail_id: Option<Uuid>,
+    /// The accountant's bundle to build and attach as one zip.
+    pub bundle: Option<Bundle>,
+}
+
+/// The accountant's bundle as the page prepared it: the summary files with
+/// their text, and the receipts by document with the name each takes inside
+/// the zip. The service fetches the bytes and writes the zip, so a month of
+/// PDFs never has to fit the gateway's request body.
+#[derive(Debug, Clone, Default)]
+pub struct Bundle {
+    /// The zip's file name.
+    pub filename: String,
+    /// Text files, first in the zip: README, summary, missing.
+    pub files: Vec<(String, Vec<u8>)>,
+    /// Documents in the grant and their names inside the zip.
+    pub receipts: Vec<(Uuid, String)>,
 }
 
 /// Send a mail as a connector and record it, sent or failed. Refused before
@@ -325,6 +343,44 @@ pub async fn send(
         });
         attached.push(*id);
     }
+    // The bundle: one zip of the page's files and the receipts' bytes. Its
+    // receipts are linked to the mail like any attachment.
+    let mut bundle_name = None;
+    if let Some(b) = &input.bundle {
+        let name = b.filename.trim();
+        if name.is_empty() || !name.to_ascii_lowercase().ends_with(".zip") {
+            return Err(StoreError::Refused("the bundle needs a .zip name".into()));
+        }
+        if b.files.is_empty() && b.receipts.is_empty() {
+            return Err(StoreError::Refused("the bundle is empty".into()));
+        }
+        let mut entries: Vec<super::zip::Entry> = b
+            .files
+            .iter()
+            .map(|(n, bytes)| super::zip::Entry {
+                name: n.clone(),
+                bytes: bytes.clone(),
+            })
+            .collect();
+        for (id, entry_name) in &b.receipts {
+            crate::documents::store::get(pool, access, *id).await?;
+            let bytes = crate::documents::store::bytes(pool, *id).await?;
+            entries.push(super::zip::Entry {
+                name: entry_name.clone(),
+                bytes,
+            });
+            if !attached.contains(id) {
+                attached.push(*id);
+            }
+        }
+        let bytes = super::zip::write(&entries).map_err(StoreError::Refused)?;
+        attachments.push(Attachment {
+            filename: name.to_owned(),
+            content_type: "application/zip".into(),
+            bytes,
+        });
+        bundle_name = Some(name.to_owned());
+    }
     // Answering: the thread and message id of what is answered.
     let mut in_reply_to = None;
     let mut parent_id = None;
@@ -370,9 +426,9 @@ pub async fn send(
         "insert into finance.mails
             (id, party_id, connector_id, direction, thread_key, provider_id, message_id, in_reply_to,
              parent_id, template_id, from_addr, to_addrs, cc_addrs, bcc_addrs, subject, body, body_html,
-             status, error, sent_at)
+             status, error, sent_at, bundle)
          values ($1, $2, $3, 'out', $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18,
-                 case when $17 = 'sent' then now() end)",
+                 case when $17 = 'sent' then now() end, $19)",
     )
     .bind(id)
     .bind(connector.party_id)
@@ -392,6 +448,7 @@ pub async fn send(
     .bind(&outgoing.html)
     .bind(status)
     .bind(&error)
+    .bind(&bundle_name)
     .execute(&mut *tx)
     .await
     .map_err(map_err)?;

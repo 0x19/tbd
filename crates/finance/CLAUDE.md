@@ -77,8 +77,13 @@ The finance service. gRPC only. Scaffolded by `tbd new service` (docs/tbd/README
   lists none, so nothing is guarded there; a provider failure is a `failed` row, not an
   error), the list and thread reads, and `import_replies`, which `run_sync` calls at the
   end of every pull: each reply is an `in` row under its parent and its PDF a receipt of
-  the party, never imported twice (`provider_id` unique per connector). `service_mail.rs`
-  holds the RPCs.
+  the party, never imported twice (`provider_id` unique per connector). A send may carry
+  the accountant's *bundle*: the page sends the text files (README, summary, missing)
+  with their bytes and the receipts as document ids with the name each takes, and the
+  service fetches the receipts and writes one stored zip (`zip.rs`, the browser's
+  `zip.ts` in Rust: no dependency, PDFs do not compress), so a month of PDFs never has
+  to fit the gateway's 2 MiB body; the zip's name is on the row (`mails.bundle`) and its
+  receipts are linked like any attachment. `service_mail.rs` holds the RPCs.
 - `documents/`: what a pulled receipt says. `pdf.rs` turns the bytes into text in-process
   (`pdf-extract`, fenced against its panics, off the runtime; no OCR, a scan reads as
   empty and says so). `fields.rs` reads vendor, date, amount and number out of the text

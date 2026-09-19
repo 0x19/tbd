@@ -70,7 +70,7 @@ export const en: Dict = {
   // The bundle.
   "accountant.bundle.readme_attached": "Receipts attached ({n}):",
   "accountant.bundle.readme_missing": "Still missing a receipt ({n}):",
-  "accountant.bundle.readme_eracun": "Domestic suppliers, e-invoiced to you directly ({n}):",
+  "accountant.bundle.readme_eracun": "Domestic suppliers, whose e-invoice reaches you directly ({n}):",
   "accountant.bundle.folder": "receipts",
   "accountant.bundle.summary_file": "summary.csv",
   "accountant.bundle.missing_file": "missing.csv",
@@ -178,7 +178,7 @@ export const hr: Dict = {
   "accountant.status.missing": "nedostaje",
   "accountant.bundle.readme_attached": "Priloženi računi ({n}):",
   "accountant.bundle.readme_missing": "Još nedostaje račun ({n}):",
-  "accountant.bundle.readme_eracun": "Domaći dobavljači, eRačun izravno vama ({n}):",
+  "accountant.bundle.readme_eracun": "Domaći dobavljači, čiji eRačun stiže izravno vama ({n}):",
   "accountant.bundle.folder": "racuni",
   "accountant.bundle.summary_file": "sazetak.csv",
   "accountant.bundle.missing_file": "nedostaje.csv",

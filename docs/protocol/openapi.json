@@ -5215,6 +5215,9 @@
           "body": {
             "type": "string"
           },
+          "bundle": {
+            "type": "string"
+          },
           "cc": {
             "type": "array",
             "items": {
@@ -5275,6 +5278,52 @@
             "items": {
               "type": "string"
             }
+          }
+        }
+      },
+      "tbd.finance.v1.MailBundle": {
+        "type": "object",
+        "description": "`tbd.finance.v1.MailBundle`",
+        "properties": {
+          "filename": {
+            "type": "string"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/tbd.finance.v1.MailBundleFile"
+            }
+          },
+          "receipts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/tbd.finance.v1.MailBundleReceipt"
+            }
+          }
+        }
+      },
+      "tbd.finance.v1.MailBundleFile": {
+        "type": "object",
+        "description": "`tbd.finance.v1.MailBundleFile`",
+        "properties": {
+          "bytes": {
+            "type": "string",
+            "format": "byte"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.finance.v1.MailBundleReceipt": {
+        "type": "object",
+        "description": "`tbd.finance.v1.MailBundleReceipt`",
+        "properties": {
+          "document_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
           }
         }
       },
@@ -5635,6 +5684,9 @@
           },
           "body": {
             "type": "string"
+          },
+          "bundle": {
+            "$ref": "#/components/schemas/tbd.finance.v1.MailBundle"
           },
           "cc": {
             "type": "array",

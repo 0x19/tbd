@@ -544,6 +544,8 @@ message Mail {
   uint32 replies = 17;
   repeated MailDocument documents = 18;
   string thread_key = 19;
+  // The bundle zip's file name, when one went with the mail.
+  string bundle = 20;
 }
 message SendMailRequest {
   string connector_id = 1;
@@ -559,6 +561,23 @@ message SendMailRequest {
   repeated string attachment_document_ids = 9;
   // A mail of ours to answer in its thread.
   string in_reply_to_mail_id = 10;
+  // The accountant's bundle, built by the service into one zip attachment.
+  MailBundle bundle = 11;
+}
+// The bundle as the page prepared it: small text files with their bytes,
+// and the receipts by document with the name each takes inside the zip.
+message MailBundle {
+  string filename = 1;
+  repeated MailBundleFile files = 2;
+  repeated MailBundleReceipt receipts = 3;
+}
+message MailBundleFile {
+  string name = 1;
+  bytes bytes = 2;
+}
+message MailBundleReceipt {
+  string document_id = 1;
+  string name = 2;
 }
 message SendMailResponse {
   Mail mail = 1;

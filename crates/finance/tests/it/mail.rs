@@ -4,7 +4,8 @@
 
 use tbd_proto::finance::v1::{
     DeleteMailTemplateRequest, GetMailRequest, ListMailRequest, ListMailTemplatesRequest,
-    SendMailRequest, UploadDocumentRequest, UpsertMailTemplateRequest,
+    MailBundle, MailBundleFile, MailBundleReceipt, SendMailRequest, UploadDocumentRequest,
+    UpsertMailTemplateRequest,
 };
 use tonic::Code;
 
@@ -243,4 +244,98 @@ async fn a_send_is_guarded_recorded_and_answered() {
         .unwrap_err();
     assert_eq!(e.code(), Code::FailedPrecondition, "{e}");
     assert!(e.message().contains("allow sending"), "{}", e.message());
+}
+
+#[tokio::test]
+async fn a_bundle_goes_out_as_one_zip_of_the_pages_files_and_the_receipts() {
+    let (factory, _, sent) = kinds_mail(false, false);
+    let (server, pool) = start_with_kinds(factory).await;
+    let (_, company) = seed(&pool).await;
+    let mailbox = link_with(&server, company, "ok").await;
+    let mut c = server.client().await;
+    let doc = c
+        .upload_document(as_caller(
+            OWNER,
+            UploadDocumentRequest {
+                party_id: company.to_string(),
+                filename: "hetzner.pdf".into(),
+                content_type: "application/pdf".into(),
+                bytes: b"%PDF-1.4 hetzner".to_vec(),
+            },
+        ))
+        .await
+        .unwrap()
+        .into_inner()
+        .document
+        .unwrap();
+    let bundle = |filename: &str| MailBundle {
+        filename: filename.into(),
+        files: vec![MailBundleFile {
+            name: "PROCITAJ.txt".into(),
+            bytes: "Inorbit d.o.o. \u{b7} kolovoz 2026.\n".as_bytes().to_vec(),
+        }],
+        receipts: vec![MailBundleReceipt {
+            document_id: doc.id.clone(),
+            name: "racuni/2026-08-06_Hetzner_55_00_EUR.pdf".into(),
+        }],
+    };
+    let mail = |b: MailBundle| SendMailRequest {
+        connector_id: mailbox.id.clone(),
+        to: vec!["nevio@inorbit.hr".into()],
+        subject: "Ra\u{10d}uni kolovoz 2026".into(),
+        body: "u privitku paket".into(),
+        bundle: Some(b),
+        ..SendMailRequest::default()
+    };
+
+    // A bundle that is not a zip by name is refused before the provider is asked.
+    let e = c
+        .send_mail(as_caller(OWNER, mail(bundle("paket.tar"))))
+        .await
+        .unwrap_err();
+    assert_eq!(e.code(), Code::FailedPrecondition, "{e}");
+    assert!(sent.lock().unwrap().is_empty());
+
+    let out = c
+        .send_mail(as_caller(
+            OWNER,
+            mail(bundle("inorbit-2026-08-knjigovodja.zip")),
+        ))
+        .await
+        .unwrap()
+        .into_inner()
+        .mail
+        .unwrap();
+    assert_eq!(out.status, "sent");
+    assert_eq!(out.bundle, "inorbit-2026-08-knjigovodja.zip");
+    assert_eq!(
+        out.documents
+            .iter()
+            .map(|d| d.filename.as_str())
+            .collect::<Vec<_>>(),
+        vec!["hetzner.pdf"],
+        "the receipt inside the zip is linked to the mail"
+    );
+    let went = sent.lock().unwrap();
+    assert_eq!(went.len(), 1);
+    let zip = &went[0].attachments;
+    assert_eq!(
+        zip.len(),
+        1,
+        "one attachment: the zip, not the receipts loose"
+    );
+    assert_eq!(zip[0].filename, "inorbit-2026-08-knjigovodja.zip");
+    assert_eq!(zip[0].content_type, "application/zip");
+    assert_eq!(&zip[0].bytes[..4], b"PK\x03\x04");
+    let text = String::from_utf8_lossy(&zip[0].bytes);
+    assert!(text.contains("PROCITAJ.txt"), "the page's README is inside");
+    assert!(text.contains("kolovoz 2026"), "with its text");
+    assert!(
+        text.contains("racuni/2026-08-06_Hetzner_55_00_EUR.pdf"),
+        "the receipt under its bundle name"
+    );
+    assert!(
+        text.contains("%PDF-1.4 hetzner"),
+        "with the document's bytes"
+    );
 }

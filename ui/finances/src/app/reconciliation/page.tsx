@@ -40,7 +40,7 @@ import type { LinkedDocument, Reason, ReconciliationRow } from "@/lib/api/schema
 import { dateOnly, money, monthLong, monthsBefore, thisMonth } from "@/lib/format";
 import { useT } from "@/lib/i18n";
 import { stashPrefill } from "@/lib/mail-template";
-import { safeName, zip } from "@/lib/zip";
+import { safeName, zip, type ZipEntry } from "@/lib/zip";
 
 type T = ReturnType<typeof useT>;
 
@@ -173,14 +173,82 @@ export default function AccountantPage() {
       ...eracun.map(line),
     ].join("\n");
 
+  /** The bundle as files: the text ones with their content, the receipts by
+   *  document with the name each takes. The download and the mail share it,
+   *  so what the accountant gets is the same either way. */
+  const plan = () => {
+    const folder = t("accountant.bundle.folder");
+    const used = new Set<string>();
+    const receipts: { document_id: string; name: string }[] = [];
+    const h = (k: string) => t(`accountant.csv.${k}`);
+    const summary: string[][] = [
+      [
+        "date",
+        "counterparty",
+        "amount",
+        "currency",
+        "original",
+        "need",
+        "status",
+        "receipt",
+        "invoice_no",
+        "reason",
+      ].map(h),
+    ];
+    for (const r of sorted) {
+      const files: string[] = [];
+      if (r.need === "receipt") {
+        for (const d of r.documents) {
+          const m = /\.(jpe?g|png)$/i.exec(d.filename);
+          const ext = m ? m[1]!.toLowerCase().replace("jpeg", "jpg") : "pdf";
+          let name = `${folder}/${r.transaction.booking_date}_${safeName(d.vendor || r.transaction.counterparty_name)}_${safeName(money(d.total_minor || r.transaction.amount_minor, d.currency || r.transaction.currency))}.${ext}`;
+          let n = 2;
+          while (used.has(name)) name = name.replace(/(\.[a-z]+)$/, `_${n++}$1`);
+          used.add(name);
+          receipts.push({ document_id: d.document_id, name });
+          files.push(name.slice(folder.length + 1));
+        }
+      }
+      summary.push([
+        dateOnly(r.transaction.booking_date),
+        r.transaction.counterparty_name,
+        amountOf(r),
+        r.transaction.currency,
+        r.original_amount_minor ? money(r.original_amount_minor, r.original_currency) : "",
+        needLabel(t, r.need),
+        r.status ? t(`accountant.status.${r.status}`) : "",
+        files.join(" | "),
+        r.documents
+          .map((d) => d.invoice_no)
+          .filter(Boolean)
+          .join(" | "),
+        sayWhy(t, "need", r.need_why, r.need_reason),
+      ]);
+    }
+    const missingRows = [
+      ["date", "counterparty", "amount", "original", "reason"].map(h),
+      ...missing.map((r) => [
+        dateOnly(r.transaction.booking_date),
+        r.transaction.counterparty_name,
+        amountOf(r),
+        r.original_amount_minor ? money(r.original_amount_minor, r.original_currency) : "",
+        sayWhy(t, "need", r.need_why, r.need_reason),
+      ]),
+    ];
+    return {
+      filename: `${safeName(chosenName.toLowerCase())}-${month}-${t("accountant.bundle.zip_suffix")}.zip`,
+      files: [
+        { name: t("accountant.bundle.readme_file"), text: summaryText() + "\n" },
+        { name: t("accountant.bundle.summary_file"), text: "\uFEFF" + csv(summary) },
+        { name: t("accountant.bundle.missing_file"), text: "\uFEFF" + csv(missingRows) },
+      ],
+      receipts,
+    };
+  };
+
   const router = useRouter();
   const sendByMail = () => {
-    const seen = new Set<string>();
-    const attachments = covered
-      .flatMap((r) => r.documents)
-      .filter((d) => (seen.has(d.document_id) ? false : (seen.add(d.document_id), true)))
-      .map((d) => ({ id: d.document_id, filename: d.filename, vendor: d.vendor }));
-    stashPrefill({ party_id: chosen, month, summary: summaryText(), attachments });
+    stashPrefill({ party_id: chosen, month, summary: summaryText(), bundle: plan() });
     router.push("/mail/");
   };
 
@@ -188,84 +256,17 @@ export default function AccountantPage() {
   const bundle = async () => {
     setBundling(true);
     try {
-      const folder = t("accountant.bundle.folder");
-      const entries: { name: string; bytes: Uint8Array }[] = [];
-      const used = new Set<string>();
-      const h = (k: string) => t(`accountant.csv.${k}`);
-      const summary: string[][] = [
-        [
-          "date",
-          "counterparty",
-          "amount",
-          "currency",
-          "original",
-          "need",
-          "status",
-          "receipt",
-          "invoice_no",
-          "reason",
-        ].map(h),
-      ];
-      for (const r of sorted) {
-        const files: string[] = [];
-        if (r.need === "receipt") {
-          for (const d of r.documents) {
-            const got = await api.document(d.document_id);
-            const ext =
-              got.document?.content_type === "image/jpeg"
-                ? "jpg"
-                : got.document?.content_type === "image/png"
-                  ? "png"
-                  : "pdf";
-            let name = `${folder}/${r.transaction.booking_date}_${safeName(d.vendor || r.transaction.counterparty_name)}_${safeName(money(d.total_minor || r.transaction.amount_minor, d.currency || r.transaction.currency))}.${ext}`;
-            let n = 2;
-            while (used.has(name)) name = name.replace(/(\.[a-z]+)$/, `_${n++}$1`);
-            used.add(name);
-            entries.push({ name, bytes: bytesOf(got.bytes) });
-            files.push(name.slice(folder.length + 1));
-          }
-        }
-        summary.push([
-          dateOnly(r.transaction.booking_date),
-          r.transaction.counterparty_name,
-          amountOf(r),
-          r.transaction.currency,
-          r.original_amount_minor ? money(r.original_amount_minor, r.original_currency) : "",
-          needLabel(t, r.need),
-          r.status ? t(`accountant.status.${r.status}`) : "",
-          files.join(" | "),
-          r.documents
-            .map((d) => d.invoice_no)
-            .filter(Boolean)
-            .join(" | "),
-          sayWhy(t, "need", r.need_why, r.need_reason),
-        ]);
-      }
+      const p = plan();
       const enc = new TextEncoder();
-      entries.unshift(
-        { name: t("accountant.bundle.readme_file"), bytes: enc.encode(summaryText() + "\n") },
-        { name: t("accountant.bundle.summary_file"), bytes: enc.encode("﻿" + csv(summary)) },
-        {
-          name: t("accountant.bundle.missing_file"),
-          bytes: enc.encode(
-            "﻿" +
-              csv([
-                ["date", "counterparty", "amount", "original", "reason"].map(h),
-                ...missing.map((r) => [
-                  dateOnly(r.transaction.booking_date),
-                  r.transaction.counterparty_name,
-                  amountOf(r),
-                  r.original_amount_minor ? money(r.original_amount_minor, r.original_currency) : "",
-                  sayWhy(t, "need", r.need_why, r.need_reason),
-                ]),
-              ]),
-          ),
-        },
-      );
+      const entries: ZipEntry[] = p.files.map((f) => ({ name: f.name, bytes: enc.encode(f.text) }));
+      for (const r of p.receipts) {
+        const got = await api.document(r.document_id);
+        entries.push({ name: r.name, bytes: bytesOf(got.bytes) });
+      }
       const blob = zip(entries);
       const a = window.document.createElement("a");
       a.href = URL.createObjectURL(blob);
-      a.download = `${safeName(chosenName.toLowerCase())}-${month}-${t("accountant.bundle.zip_suffix")}.zip`;
+      a.download = p.filename;
       a.click();
       setTimeout(() => URL.revokeObjectURL(a.href), 60_000);
       toast.success(t("accountant.bundled", { covered: covered.length, missing: missing.length }));

@@ -23,8 +23,23 @@ export type Prefill = {
   party_id: string;
   month: string;
   summary: string;
-  attachments: { id: string; filename: string; vendor: string }[];
+  bundle: BundlePlan;
 };
+
+/** The accountant's bundle before any bytes: the text files with their
+ *  content and the receipts by document with the name each takes inside the
+ *  zip. The download zips it in the browser; a mail hands it to the service,
+ *  which fetches the receipts and zips them there. */
+export type BundlePlan = {
+  filename: string;
+  files: { name: string; text: string }[];
+  receipts: { document_id: string; name: string }[];
+};
+
+/** UTF-8 text as base64, the way the gateway wants `bytes`. */
+export function base64Utf8(s: string): string {
+  return btoa(Array.from(new TextEncoder().encode(s), (b) => String.fromCharCode(b)).join(""));
+}
 
 const PREFILL_KEY = "finance.mail.prefill";
 

@@ -6,7 +6,18 @@
 // service refuses a send the environment's allowlist excludes; the page
 // only asks for confirmation.
 
-import { Mail as MailIcon, Paperclip, Pencil, Plus, Reply, Search, Send, Trash2, X } from "lucide-react";
+import {
+  Archive,
+  Mail as MailIcon,
+  Paperclip,
+  Pencil,
+  Plus,
+  Reply,
+  Search,
+  Send,
+  Trash2,
+  X,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -36,7 +47,15 @@ import { describe, useFetch } from "@/lib/api/hooks";
 import type { Connector, Mail, MailTemplate } from "@/lib/api/schema";
 import { monthLabel, monthLong, monthsBefore, thisMonth, when } from "@/lib/format";
 import { useLang, useT } from "@/lib/i18n";
-import { helpers, type Prefill, render, splitAddresses, takePrefill } from "@/lib/mail-template";
+import {
+  base64Utf8,
+  type BundlePlan,
+  helpers,
+  type Prefill,
+  render,
+  splitAddresses,
+  takePrefill,
+} from "@/lib/mail-template";
 
 type Attached = { id: string; filename: string; vendor: string };
 
@@ -52,6 +71,8 @@ type Draft = {
   /** The reconciliation summary, for `{{Summary}}`. */
   summary: string;
   attachments: Attached[];
+  /** The accountant's bundle, zipped by the service on send. */
+  bundle: BundlePlan | null;
   in_reply_to: Mail | null;
 };
 
@@ -66,6 +87,7 @@ const EMPTY: Draft = {
   body: "",
   summary: "",
   attachments: [],
+  bundle: null,
   in_reply_to: null,
 };
 
@@ -117,14 +139,14 @@ export default function MailPage() {
           connector_id: sender?.id ?? "",
           month: prefill.month,
           summary: prefill.summary,
-          attachments: prefill.attachments,
+          bundle: prefill.bundle,
         },
         tpl,
         t("mail.default_subject"),
       ),
     );
     setTab("compose");
-    toast.info(t("mail.prefilled", { month: monthLong(prefill.month), n: prefill.attachments.length }));
+    toast.info(t("mail.prefilled", { month: monthLong(prefill.month), n: prefill.bundle.receipts.length }));
     setPrefill(null);
   }, [prefill, connectors.data, templates.data, senders, t]);
 
@@ -236,6 +258,13 @@ function Compose({
         html: "",
         attachment_document_ids: draft.attachments.map((d) => d.id),
         in_reply_to_mail_id: draft.in_reply_to?.id ?? "",
+        bundle: draft.bundle
+          ? {
+              filename: draft.bundle.filename,
+              files: draft.bundle.files.map((f) => ({ name: f.name, bytes: base64Utf8(f.text) })),
+              receipts: draft.bundle.receipts,
+            }
+          : undefined,
       });
       if (r.mail?.status === "sent") {
         toast.success(t("mail.sent"));
@@ -373,8 +402,27 @@ function Compose({
           <div>
             <Label className="text-muted-foreground mb-1 block text-xs">{t("mail.attachments")}</Label>
             <div className="flex flex-wrap items-center gap-2">
-              {draft.attachments.length === 0 ? (
+              {draft.attachments.length === 0 && !draft.bundle ? (
                 <span className="text-muted-foreground text-xs">{t("mail.attached_none")}</span>
+              ) : null}
+              {draft.bundle ? (
+                <Badge
+                  variant="secondary"
+                  className="gap-1 text-[11px]"
+                  title={draft.bundle.receipts.map((r) => r.name).join("\n")}
+                >
+                  <Archive className="size-3" /> {draft.bundle.filename}
+                  <span className="text-muted-foreground">
+                    · {t("mail.bundle_contents", { n: draft.bundle.receipts.length })}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label="remove"
+                    onClick={() => setDraft({ ...draft, bundle: null })}
+                  >
+                    <X className="size-3" />
+                  </button>
+                </Badge>
               ) : null}
               {draft.attachments.map((d) => (
                 <Badge key={d.id} variant="secondary" className="gap-1 text-[11px]">
@@ -615,7 +663,11 @@ function SentList({
                     </TableCell>
                     <TableCell className="max-w-80 truncate">
                       {m.subject}
-                      {m.documents.length ? (
+                      {m.bundle ? (
+                        <span className="text-muted-foreground ml-1 text-xs" title={m.bundle}>
+                          <Archive className="inline size-3" /> {m.documents.length}
+                        </span>
+                      ) : m.documents.length ? (
                         <span className="text-muted-foreground ml-1 text-xs">
                           <Paperclip className="inline size-3" /> {m.documents.length}
                         </span>
@@ -705,6 +757,16 @@ function ThreadSheet({
             </div>
             {m.error ? <p className="text-destructive mb-2 text-xs">{m.error}</p> : null}
             <pre className="font-sans text-sm whitespace-pre-wrap">{m.body}</pre>
+            {m.bundle ? (
+              <p className="mt-2 text-xs">
+                <Archive className="mr-1 inline size-3" />
+                {m.bundle}
+                <span className="text-muted-foreground">
+                  {" "}
+                  · {t("mail.bundle_contents", { n: m.documents.length })}
+                </span>
+              </p>
+            ) : null}
             {m.documents.length ? (
               <div className="mt-2 flex flex-wrap gap-1">
                 {m.documents.map((d) => (

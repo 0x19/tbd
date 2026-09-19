@@ -15,3 +15,4 @@
 //! addresses.
 
 pub mod store;
+pub mod zip;

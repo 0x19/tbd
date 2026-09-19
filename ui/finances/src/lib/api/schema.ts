@@ -389,6 +389,8 @@ export const Mail = z.object({
   replies: z.number(),
   documents: z.array(MailDocument),
   thread_key: z.string(),
+  // The bundle zip's file name, when one went with the mail.
+  bundle: z.string(),
 });
 export type Mail = z.infer<typeof Mail>;
 export const SendMailResponse = z.object({ mail: Mail.nullable().optional() });

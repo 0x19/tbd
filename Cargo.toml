@@ -67,6 +67,7 @@ clap = { version = "4.6", features = ["derive", "env"] }
 # errors
 thiserror = "2"
 base64            = "0.22"
+crc32fast         = "1.5"
 
 # crypto: ring is the one provider (deny.toml bans a second C build). Already in
 # the tree as rustls's backend; named here so the JWT signing can use it directly.

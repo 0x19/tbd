@@ -74,6 +74,7 @@ fn mail_proto(m: MailRow, replies: i64, docs: Vec<MailDocRow>) -> Mail {
             })
             .collect(),
         thread_key: m.thread_key.unwrap_or_default(),
+        bundle: m.bundle.unwrap_or_default(),
     }
 }
 
@@ -154,6 +155,20 @@ impl Finance {
             html: Some(req.html).filter(|h| !h.trim().is_empty()),
             attachment_document_ids,
             in_reply_to_mail_id: opt_uuid(&req.in_reply_to_mail_id, "in_reply_to_mail_id")?,
+            bundle: match req.bundle {
+                None => None,
+                Some(b) => {
+                    let mut receipts = Vec::with_capacity(b.receipts.len());
+                    for r in &b.receipts {
+                        receipts.push((uuid(&r.document_id, "bundle.receipts")?, r.name.clone()));
+                    }
+                    Some(store::Bundle {
+                        filename: b.filename,
+                        files: b.files.into_iter().map(|f| (f.name, f.bytes)).collect(),
+                        receipts,
+                    })
+                }
+            },
         };
         let sealer = self.sealer()?;
         let kinds = self.kinds();

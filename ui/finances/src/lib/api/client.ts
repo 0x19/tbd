@@ -311,6 +311,13 @@ export const api = {
     html: string;
     attachment_document_ids: string[];
     in_reply_to_mail_id: string;
+    // The accountant's bundle: the service builds the zip, so the receipts
+    // travel as ids and only the text files as (base64) bytes.
+    bundle?: {
+      filename: string;
+      files: { name: string; bytes: string }[];
+      receipts: { document_id: string; name: string }[];
+    };
   }) => call(SendMailResponse, "/v1/finance/mail/send", { method: "POST", json: m }),
   mail: (p: {
     party_ids: string[];
