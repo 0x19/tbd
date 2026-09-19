@@ -6186,6 +6186,7 @@ dependencies = [
  "chrono",
  "chrono-tz",
  "clap",
+ "crc32fast",
  "metrics",
  "pdf-extract",
  "rand 0.9.5",
