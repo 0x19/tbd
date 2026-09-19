@@ -207,3 +207,16 @@ export function monthsEnding(last: string, n: number): string[] {
   const [y, m] = last.split("-").map(Number) as [number, number];
   return Array.from({ length: n }, (_, i) => ym(y, m - 1 - (n - 1 - i)));
 }
+
+/** Money out per month in categories of one `kind` (say `tax`), minor units,
+ *  positive, for one currency; months with none are absent. */
+export function outflowOfKind(rows: SummaryRow[], currency: string, kind: string): Map<string, bigint> {
+  const m = new Map<string, bigint>();
+  for (const r of rows) {
+    if (r.currency !== currency || r.kind !== kind) continue;
+    const v = BigInt(r.total_minor);
+    if (v >= ZERO) continue;
+    m.set(r.month, (m.get(r.month) ?? ZERO) - v);
+  }
+  return m;
+}

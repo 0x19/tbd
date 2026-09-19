@@ -34,6 +34,7 @@ import {
   currencies,
   monthsEnding,
   type MonthTotals,
+  outflowOfKind,
   percentChange,
   type Period,
   periodBounds,
@@ -94,6 +95,16 @@ export default function OverviewPage() {
     [months, miniRun, last],
   );
   const yearMonths = useMemo(() => months.filter((m) => period.months.includes(m.month)), [months, period]);
+  // Taxes and contributions: the one outflow worth its own card for a company.
+  const taxByMonth = useMemo(() => outflowOfKind(rows, ccy, "tax"), [rows, ccy]);
+  const sumTax = (run: string[]) => run.reduce((s, m) => s + (taxByMonth.get(m) ?? 0n), 0n);
+  const taxes = {
+    window: miniRun.map((m) => taxByMonth.get(m) ?? 0n),
+    before: sumTax(monthsEnding(monthsBefore(miniRun[0] ?? last, 1), miniRun.length)),
+    period: sumTax(period.months),
+    ytd: sumTax(monthsEnding(last, Number(last.slice(5, 7)))),
+    any: taxByMonth.size > 0,
+  };
 
   const bounds = periodBounds(period);
   const accounts = useFetch(() => api.accounts(partyIds), 60_000, [key]);
@@ -185,7 +196,7 @@ export default function OverviewPage() {
                     value: money((prev.in - prev.out).toString(), ccy, { sign: true }),
                   })
                 : undefined,
-              hint: t("overview.net_hint"),
+              hint: t(includeInternal ? "overview.net_hint_internal" : "overview.net_hint"),
             },
             {
               icon: Receipt,
@@ -221,7 +232,15 @@ export default function OverviewPage() {
         </div>
       </div>
 
-      <MiniCards window={miniWindow} before={miniBefore} currency={ccy} loading={loading} />
+      <MiniCards
+        window={miniWindow}
+        before={miniBefore}
+        period={period}
+        cur={cur}
+        taxes={taxes}
+        currency={ccy}
+        loading={loading}
+      />
 
       {period.kind === "year" ? (
         <YearTable months={yearMonths} currency={ccy} onPick={pickMonth} loading={loading} />
