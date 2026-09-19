@@ -25,6 +25,11 @@ export const en: Dict = {
   "connectors.moved_to": "Moved to {party}, with the receipts only it pulled.",
   "connectors.pulling": "Pulling…",
   "connectors.pull_now": "Pull now",
+  "connectors.relink": "Link again",
+  "connectors.allow_sending": "Allow sending",
+  "connectors.relink_opening": "Opening Google…",
+  "connectors.relink_title":
+    "Consent again on Google's side, for the same mailbox. Needed when a permission is asked for after the mailbox was linked, such as sending; a refresh can renew a token but never widen it. The mailbox keeps its history and its documents.",
   "connectors.test_title": "Prove the link still works",
   "connectors.testing": "Testing…",
   "connectors.test": "Test",
@@ -77,6 +82,11 @@ export const hr: Dict = {
   "connectors.moved_to": "Premješteno na {party}, zajedno s računima koje je povukla samo ova poveznica.",
   "connectors.pulling": "Povlači se…",
   "connectors.pull_now": "Povuci sada",
+  "connectors.relink": "Poveži ponovno",
+  "connectors.allow_sending": "Dopusti slanje",
+  "connectors.relink_opening": "Otvaram Google…",
+  "connectors.relink_title":
+    "Ponovna privola na Googleovoj strani, za isti sandučić. Treba kad se dozvola zatraži nakon povezivanja, kao slanje; osvježavanje može obnoviti token, ali ga nikad ne proširuje. Sandučić zadržava povijest i dokumente.",
   "connectors.test_title": "Provjeri radi li veza još uvijek",
   "connectors.testing": "Provjerava se…",
   "connectors.test": "Provjeri",

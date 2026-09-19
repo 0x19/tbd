@@ -6,7 +6,7 @@
 // nothing polls while the stream is up. The kinds come from the server's
 // registry; a kind the server is not configured for is shown, greyed, with
 // what is missing -- not hidden.
-import { History, Loader2, Plus, RefreshCw, Trash2, Wrench } from "lucide-react";
+import { History, KeyRound, Loader2, Plus, RefreshCw, Trash2, Wrench } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -339,6 +339,32 @@ function ConnectorRow({
             ) : (
               <span className="text-muted-foreground mr-2 text-xs">{partyName(c.party_id)}</span>
             )}
+            <Button
+              // Consent again on Google's side for the same mailbox. This is
+              // how a permission asked for later -- sending -- reaches a
+              // mailbox linked before it; a refresh can renew a token, never
+              // widen it. The callback merges into this row, so the history
+              // and the documents stay. Loud while sending is not allowed.
+              variant={c.can_send ? "ghost" : "outline"}
+              size="sm"
+              className={c.can_send ? undefined : "border-amber-500/50 text-amber-700 dark:text-amber-300"}
+              disabled={busy !== "" || c.status === "pending"}
+              onClick={() =>
+                void act("relink", async () => {
+                  const r = await api.startConnector(c.party_id, c.kind);
+                  window.location.href = r.url;
+                  return "";
+                })
+              }
+              title={t("connectors.relink_title")}
+            >
+              <KeyRound />{" "}
+              {busy === "relink"
+                ? t("connectors.relink_opening")
+                : c.can_send
+                  ? t("connectors.relink")
+                  : t("connectors.allow_sending")}
+            </Button>
             <Button
               variant="outline"
               size="sm"
