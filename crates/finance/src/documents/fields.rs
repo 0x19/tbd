@@ -84,13 +84,13 @@ pub fn read(text: &str, sender: &str, received: Option<NaiveDate>, filename: &st
 /// An amount with a currency mark before or after it. The number may group
 /// thousands with `,`, `.` or a space and carry up to two decimals either way.
 /// A trailing mark must not be the leading mark of the next figure: in
-/// "August 29, 2026 $75.00" the year is not 2,026 dollars, so a mark that a
-/// digit follows is not this number's.
+/// "August 29, 2026 $75.00" and "Dec 24, 2025€ 1,328.02" the year is not
+/// money. `best_money` drops a trailing mark that a figure follows.
 static AMOUNT: LazyLock<Regex> = LazyLock::new(|| {
     re(r"(?x)
         (?:(?P<pre>€|\$|£|EUR|USD|GBP|CHF|HRK|kn)\s?)?
         (?P<num>\d{1,3}(?:[.,\ ]\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)\b
-        (?:\s?(?P<post>€|\$|£|EUR|USD|GBP|CHF|HRK|kn)(?:[^\d.,]|$))?")
+        (?:\s?(?P<post>€|\$|£|EUR|USD|GBP|CHF|HRK|kn))?")
 });
 
 /// Labels that name the figure we want, best first. A line's best label
@@ -168,7 +168,15 @@ fn best_money(line: &str) -> Option<(i64, String)> {
         .captures_iter(line)
         .filter_map(|c| {
             let pre = c.name("pre").map(|m| m.as_str());
-            let post = c.name("post").map(|m| m.as_str());
+            // A mark with a figure after it belongs to that figure.
+            let post = c
+                .name("post")
+                .filter(|m| {
+                    !line[m.end()..]
+                        .trim_start()
+                        .starts_with(|ch: char| ch.is_ascii_digit())
+                })
+                .map(|m| m.as_str());
             // An explicit code beats a symbol: "$50.00 USD" is dollars,
             // and "€ 12,00 EUR" agrees with itself.
             let currency = [post, pre]
@@ -677,6 +685,10 @@ mod tests {
 
     #[test]
     fn a_year_before_a_dollar_figure_is_not_money() {
+        assert_eq!(
+            best_money("Amount paid on Dec 24, 2025€ 1,328.02"),
+            Some((132_802, "EUR".into()))
+        );
         assert_eq!(
             best_money("Visa - 9355 August 29, 2026 $75.00 2278 6704"),
             Some((7_500, "USD".into()))
