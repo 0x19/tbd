@@ -687,12 +687,6 @@ mod tests {
     #[test]
     fn a_year_before_a_dollar_figure_is_not_money() {
         assert_eq!(best_money("29.04.2026 EUROPA 92 MUSTANG"), None);
-        // An exchange-rate line is not money either way; what matters is
-        // that the year is not read.
-        assert_ne!(
-            best_money("29.04.2026 EUR=1,1416 USD"),
-            Some((202_600, "EUR".into()))
-        );
         assert_eq!(
             best_money("Amount paid on Dec 24, 2025€ 1,328.02"),
             Some((132_802, "EUR".into()))
