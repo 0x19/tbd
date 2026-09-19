@@ -4,7 +4,9 @@
 use sqlx::PgPool;
 use tbd_db::{Capability, PartyId, UserId, create_org, ensure_user, grant};
 use tbd_finance::documents::party::{self, By};
-use tbd_proto::finance::v1::{ExtractDocumentRequest, UpdateDocumentRequest};
+use tbd_proto::finance::v1::{
+    ExtractDocumentRequest, ListDocumentsRequest, UpdateDocumentRequest, UploadDocumentRequest,
+};
 use tonic::{Code, Request, metadata::MetadataValue};
 use uuid::Uuid;
 
@@ -248,4 +250,112 @@ async fn a_declared_party_is_final_and_only_within_the_grant() {
         .await
         .unwrap();
     assert_eq!(party_of(&pool, doc).await, (w.company, "declared".into()));
+}
+
+#[tokio::test]
+async fn an_upload_is_the_persons_document_once_and_within_the_grant() {
+    let (server, pool) = start_with_store().await;
+    let w = seed(&pool).await;
+    let mut client = server.client().await;
+    let upload = |party: Uuid, bytes: &[u8], content_type: &str| UploadDocumentRequest {
+        party_id: party.to_string(),
+        filename: "OpenAI August.pdf".into(),
+        content_type: content_type.into(),
+        bytes: bytes.to_vec(),
+    };
+
+    // A party outside the reader's grant does not exist.
+    let e = client
+        .upload_document(as_caller(
+            READER,
+            upload(w.person, b"%PDF-1.4 x", "application/pdf"),
+        ))
+        .await
+        .unwrap_err();
+    assert_eq!(e.code(), Code::NotFound, "{e}");
+    // A file that is not what it says it is.
+    let e = client
+        .upload_document(as_caller(
+            OWNER,
+            upload(w.company, b"hello", "application/pdf"),
+        ))
+        .await
+        .unwrap_err();
+    assert_eq!(e.code(), Code::InvalidArgument, "{e}");
+    let e = client
+        .upload_document(as_caller(
+            OWNER,
+            upload(w.company, b"%PDF-1.4 x", "text/html"),
+        ))
+        .await
+        .unwrap_err();
+    assert_eq!(e.code(), Code::InvalidArgument, "{e}");
+
+    // Stored, read (unreadable bytes still count as read), party declared.
+    let doc = client
+        .upload_document(as_caller(
+            OWNER,
+            upload(w.company, b"%PDF-1.4 not really", "application/pdf"),
+        ))
+        .await
+        .unwrap()
+        .into_inner()
+        .document
+        .unwrap();
+    assert_eq!(doc.party_id, w.company.to_string());
+    assert_eq!(doc.filename, "OpenAI August.pdf");
+    assert_eq!(
+        doc.found_by.get("party").map(String::as_str),
+        Some("declared")
+    );
+    assert!(!doc.extracted_at.is_empty(), "the reader ran");
+    assert_eq!(doc.sources.len(), 1);
+    assert!(doc.sources[0].external_ref.starts_with("upload:"));
+
+    // The same bytes again are the same document, and a payment on the
+    // personal side does not move it: the party was the person's word.
+    debit(&pool, w.person, w.person_account, "2026-08-20", 500).await;
+    let again = client
+        .upload_document(as_caller(
+            OWNER,
+            upload(w.company, b"%PDF-1.4 not really", "application/pdf"),
+        ))
+        .await
+        .unwrap()
+        .into_inner()
+        .document
+        .unwrap();
+    assert_eq!(again.id, doc.id);
+    assert_eq!(
+        party_of(&pool, doc.id.parse().unwrap()).await,
+        (w.company, "declared".into())
+    );
+
+    // A photo of a paper receipt is a document too, and the listing has it.
+    let photo = client
+        .upload_document(as_caller(
+            OWNER,
+            UploadDocumentRequest {
+                filename: "till.png".into(),
+                ..upload(w.company, b"\x89PNG\r\n", "image/png")
+            },
+        ))
+        .await
+        .unwrap()
+        .into_inner()
+        .document
+        .unwrap();
+    assert_eq!(photo.content_type, "image/png");
+    let listed = client
+        .list_documents(as_caller(
+            OWNER,
+            ListDocumentsRequest {
+                q: "openai".into(),
+                ..ListDocumentsRequest::default()
+            },
+        ))
+        .await
+        .unwrap()
+        .into_inner();
+    assert_eq!(listed.total, 1, "the file name is searchable");
 }

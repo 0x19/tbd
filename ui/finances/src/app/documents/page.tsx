@@ -20,6 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { UploadReceipt } from "@/components/upload-receipt";
 import { api, pdfUrl } from "@/lib/api/client";
 import { describe, useFetch } from "@/lib/api/hooks";
 import type { Document } from "@/lib/api/schema";
@@ -119,6 +120,7 @@ export default function DocumentsPage() {
     [key, term, vendor, month],
   );
   const [openId, setOpenId] = useState<string | null>(null);
+  const [uploadParty, setUploadParty] = useState("");
   const rows = useMemo(() => docs.data?.documents ?? [], [docs.data]);
   const sums = useMemo(() => {
     const by = new Map<string, bigint>();
@@ -135,6 +137,29 @@ export default function DocumentsPage() {
     <>
       <PageTitle title={t("documents.title")} description={t("documents.description")}>
         <ScopeToggle className="md:hidden" />
+        <div className="flex items-center gap-2">
+          {partyIds.length > 1 ? (
+            <Select value={uploadParty} onValueChange={setUploadParty}>
+              <SelectTrigger className="w-44">
+                <SelectValue placeholder={t("documents.upload_for")} />
+              </SelectTrigger>
+              <SelectContent>
+                {partyIds.map((id) => (
+                  <SelectItem key={id} value={id}>
+                    {partyName(id)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : null}
+          <UploadReceipt
+            partyId={uploadParty || partyIds[0] || ""}
+            onUploaded={(doc) => {
+              docs.reload();
+              setOpenId(doc.id);
+            }}
+          />
+        </div>
       </PageTitle>
 
       <div className="flex flex-wrap items-center gap-2">

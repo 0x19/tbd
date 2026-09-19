@@ -1297,6 +1297,49 @@
         }
       }
     },
+    "/v1/finance/documents/upload": {
+      "post": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/UploadDocument",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/UploadDocument` on the `finance` backend.",
+        "operationId": "FinanceService.UploadDocument",
+        "requestBody": {
+          "description": "`tbd.finance.v1.UploadDocumentRequest`; path variables override their fields",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/tbd.finance.v1.UploadDocumentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.UploadDocumentResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.UploadDocumentResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/finance/documents/{id}": {
       "get": {
         "tags": [
@@ -5408,6 +5451,34 @@
         "properties": {
           "invoice": {
             "$ref": "#/components/schemas/tbd.finance.v1.Invoice"
+          }
+        }
+      },
+      "tbd.finance.v1.UploadDocumentRequest": {
+        "type": "object",
+        "description": "`tbd.finance.v1.UploadDocumentRequest`",
+        "properties": {
+          "bytes": {
+            "type": "string",
+            "format": "byte"
+          },
+          "content_type": {
+            "type": "string"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "party_id": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.finance.v1.UploadDocumentResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.UploadDocumentResponse`",
+        "properties": {
+          "document": {
+            "$ref": "#/components/schemas/tbd.finance.v1.Document"
           }
         }
       },

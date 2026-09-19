@@ -79,7 +79,10 @@ The finance service. gRPC only. Scaffolded by `tbd new service` (docs/tbd/README
   beats a person's name), else the mailbox; a person's choice through `UpdateDocument` is
   final, `extracted.party` records which, and a re-read keeps it. `mail.rs` prints a
   receipt mail that carried no file to a PDF (the same Typst engine and fonts as the
-  invoice), so the accountant gets a page. `service_documents.rs` holds the RPCs.
+  invoice), so the accountant gets a page. `UploadDocument` takes what no connector can
+  reach -- a PDF from a vendor's portal, a photo of a paper receipt -- as the caller's
+  party, declared, deduplicated on the bytes, and read at once; a source row with no
+  connector (`upload:<sha>`) says where it came from. `service_documents.rs` holds the RPCs.
 - `reconcile/`: the accountant's month. `mod.rs` is two pure rule sets with their tests
   on the real August statement: *need* (what the accountant needs from us: `eracun` for an
   HR IBAN, since domestic B2B is e-invoiced; `none` for state-budget references (HR68),

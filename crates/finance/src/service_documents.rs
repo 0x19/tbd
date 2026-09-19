@@ -5,7 +5,7 @@ use chrono::NaiveDate;
 use tbd_proto::finance::v1::{
     Document, DocumentSource, ExtractDocumentRequest, ExtractDocumentResponse, GetDocumentRequest,
     GetDocumentResponse, ListDocumentsRequest, ListDocumentsResponse, UpdateDocumentRequest,
-    UpdateDocumentResponse, VendorCount,
+    UpdateDocumentResponse, UploadDocumentRequest, UploadDocumentResponse, VendorCount,
 };
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
@@ -13,7 +13,7 @@ use uuid::Uuid;
 use crate::{
     documents::{
         self,
-        store::{self, Declared, DocumentRow, Filter, SourceRow},
+        store::{self, Declared, DocumentRow, Filter, SourceRow, Upload},
     },
     service::Finance,
 };
@@ -186,6 +186,68 @@ impl Finance {
         let r = store::update(pool, &access, id, &declared)
             .await
             .map(|(d, s)| UpdateDocumentResponse {
+                document: Some(document_proto(d, s)),
+            });
+        self.done_c(&mut timer, r)
+    }
+
+    pub(crate) async fn rpc_upload_document(
+        &self,
+        request: Request<UploadDocumentRequest>,
+    ) -> Result<Response<UploadDocumentResponse>, Status> {
+        let req = request.get_ref();
+        let party_id = uuid(&req.party_id, "party_id")?;
+        let content_type = req.content_type.trim().to_ascii_lowercase();
+        if !matches!(
+            content_type.as_str(),
+            "application/pdf" | "image/jpeg" | "image/png"
+        ) {
+            return Err(Status::invalid_argument(
+                "content_type: want application/pdf, image/jpeg or image/png",
+            ));
+        }
+        if req.bytes.is_empty() {
+            return Err(Status::invalid_argument("bytes: empty"));
+        }
+        if content_type == "application/pdf" && !req.bytes.starts_with(b"%PDF") {
+            return Err(Status::invalid_argument("bytes: not a pdf"));
+        }
+        let filename: String = req
+            .filename
+            .trim()
+            .chars()
+            .filter(|c| !c.is_control() && *c != '/' && *c != '\\')
+            .take(120)
+            .collect();
+        let filename = if filename.is_empty() {
+            let ext = match content_type.as_str() {
+                "image/jpeg" => "jpg",
+                "image/png" => "png",
+                _ => "pdf",
+            };
+            format!("receipt.{ext}")
+        } else {
+            filename
+        };
+        let up = Upload {
+            party_id,
+            filename,
+            content_type,
+            bytes: req.bytes.clone(),
+        };
+        let (mut timer, pool, access, _) = self
+            .invoice_context("FinanceService/UploadDocument", &request, &[])
+            .await?;
+        let (id, new) = match store::upload(pool, &access, &up).await {
+            Ok(v) => v,
+            Err(e) => return self.done_c(&mut timer, Err(e)),
+        };
+        if new && let Err(e) = documents::read(pool, id).await {
+            return self.done_c(&mut timer, Err(e));
+        }
+        let r = store::get(pool, &access, id)
+            .await
+            .map(|(d, s)| UploadDocumentResponse {
                 document: Some(document_proto(d, s)),
             });
         self.done_c(&mut timer, r)

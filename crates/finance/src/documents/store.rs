@@ -202,6 +202,84 @@ pub async fn get(
     Ok((doc, sources))
 }
 
+/// What a person hands in.
+#[derive(Debug, Clone)]
+pub struct Upload {
+    /// A party the caller may read.
+    pub party_id: Uuid,
+    /// As named by the person, kept for the page and the bundle.
+    pub filename: String,
+    /// `application/pdf`, `image/jpeg` or `image/png`.
+    pub content_type: String,
+    /// The file.
+    pub bytes: Vec<u8>,
+}
+
+/// Store a document a person uploaded. The same bytes for the same party
+/// are one document, so a second upload returns the first. The party is
+/// the caller's word: recorded as declared, so no re-read moves it. The
+/// caller runs the reader afterwards.
+///
+/// # Errors
+/// The party is outside the grant (not found); the database.
+pub async fn upload(
+    pool: &PgPool,
+    access: &Access,
+    up: &Upload,
+) -> Result<(Uuid, bool), StoreError> {
+    use sha2::{Digest, Sha256};
+    access.require(PartyId(up.party_id), "party_id")?;
+    let mut hasher = Sha256::new();
+    hasher.update(&up.bytes);
+    let sha = format!("{:x}", hasher.finalize());
+    let existing: Option<(Uuid,)> =
+        sqlx::query_as("select id from finance.documents where party_id = $1 and sha256 = $2")
+            .bind(up.party_id)
+            .bind(&sha)
+            .fetch_optional(pool)
+            .await
+            .map_err(map_err)?;
+    if let Some((id,)) = existing {
+        return Ok((id, false));
+    }
+    let id = Uuid::new_v4();
+    let mut tx = pool.begin().await.map_err(map_err)?;
+    sqlx::query(
+        "insert into finance.documents
+            (id, party_id, kind, sha256, content_type, size_bytes, filename, extracted)
+         values ($1, $2, 'receipt', $3, $4, $5, $6, '{\"party\": \"declared\"}'::jsonb)",
+    )
+    .bind(id)
+    .bind(up.party_id)
+    .bind(&sha)
+    .bind(&up.content_type)
+    .bind(i64::try_from(up.bytes.len()).unwrap_or(i64::MAX))
+    .bind(&up.filename)
+    .execute(&mut *tx)
+    .await
+    .map_err(map_err)?;
+    sqlx::query("insert into finance.document_blobs (document_id, bytes) values ($1, $2)")
+        .bind(id)
+        .bind(&up.bytes)
+        .execute(&mut *tx)
+        .await
+        .map_err(map_err)?;
+    // A source with no connector: the page shows where it came from, and
+    // the listing's search reaches the file name through the subject.
+    sqlx::query(
+        "insert into finance.document_sources (document_id, connector_id, external_ref, subject, sender, received_at)
+         values ($1, null, $2, $3, '', now())",
+    )
+    .bind(id)
+    .bind(format!("upload:{sha}"))
+    .bind(&up.filename)
+    .execute(&mut *tx)
+    .await
+    .map_err(map_err)?;
+    tx.commit().await.map_err(map_err)?;
+    Ok((id, true))
+}
+
 /// The document's bytes. The caller has checked the grant through [`get`].
 ///
 /// # Errors

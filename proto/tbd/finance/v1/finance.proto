@@ -345,6 +345,16 @@ service FinanceService {
   rpc GetDocument(GetDocumentRequest) returns (GetDocumentResponse) {
     option (google.api.http) = {get: "/v1/finance/documents/{id}"};
   }
+
+  // A receipt a person adds by hand: a PDF from a vendor's portal, or a
+  // photo of a paper receipt. Whose it is is the caller's word and final.
+  // The same bytes uploaded twice are one document.
+  rpc UploadDocument(UploadDocumentRequest) returns (UploadDocumentResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/documents/upload"
+      body: "*"
+    };
+  }
 }
 
 message ConnectorKind {
@@ -658,6 +668,20 @@ message GetDocumentRequest {
 message GetDocumentResponse {
   Document document = 1;
   bytes bytes = 2;
+}
+
+message UploadDocumentRequest {
+  // A party the caller may read.
+  string party_id = 1;
+  string filename = 2;
+  // application/pdf, image/jpeg or image/png.
+  string content_type = 3;
+  // The file. The gateway takes a body of at most 2 MiB, base64 included.
+  bytes bytes = 4;
+}
+
+message UploadDocumentResponse {
+  Document document = 1;
 }
 
 message LineTemplate {

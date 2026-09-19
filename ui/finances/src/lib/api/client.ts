@@ -275,6 +275,11 @@ export const api = {
     offset?: number;
   }) => call(ListDocumentsResponse, `/v1/finance/documents${query({ kind: "receipt", limit: 100, ...p })}`),
   document: (id: string) => call(GetDocumentResponse, `/v1/finance/documents/${id}`),
+  uploadDocument: (party_id: string, filename: string, content_type: string, bytes: string) =>
+    call(DocumentResponse, "/v1/finance/documents/upload", {
+      method: "POST",
+      json: { party_id, filename, content_type, bytes },
+    }),
   // ---- reconciliation ----
   reconciliation: (party_id: string, month: string) =>
     call(MonthlyReconciliationResponse, `/v1/finance/reconciliation/${party_id}/${month}`),

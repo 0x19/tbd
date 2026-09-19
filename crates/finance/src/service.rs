@@ -49,6 +49,7 @@ use tbd_proto::finance::v1::{
 };
 use tbd_proto::finance::v1::{
     ExtractDocumentRequest, ExtractDocumentResponse, UpdateDocumentRequest, UpdateDocumentResponse,
+    UploadDocumentRequest, UploadDocumentResponse,
 };
 use tonic::{Code, Request, Response, Status};
 use uuid::Uuid;
@@ -1105,6 +1106,12 @@ impl FinanceService for Finance {
         r: Request<ExtractDocumentRequest>,
     ) -> Result<Response<ExtractDocumentResponse>, Status> {
         self.rpc_extract_document(r).await
+    }
+    async fn upload_document(
+        &self,
+        r: Request<UploadDocumentRequest>,
+    ) -> Result<Response<UploadDocumentResponse>, Status> {
+        self.rpc_upload_document(r).await
     }
     type WatchConnectorsStream = Pin<
         Box<

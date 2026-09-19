@@ -46,10 +46,12 @@ same conventions; read `ui/chaos/CLAUDE.md` for what is the kit's and what is ou
   `ListDocuments`; a row opens a sheet with the PDF inline, the fields with how each was
   found (`found_by`), an editor that declares corrections through `UpdateDocument`
   (including whose it is: `party_id`; `found_by.party` says whether the account that
-  paid, the text or the mailbox decided), and
-  "Read again" = `ExtractDocument`), `/accountant/` (the company's month from
+  paid, the text or the mailbox decided), "Read again" = `ExtractDocument`, and
+  "Upload" = `UploadDocument` through `upload-receipt.tsx`, which shrinks a photo to fit
+  the gateway's 2 MiB body and refuses a larger PDF with the size), `/accountant/` (the company's month from
   `MonthlyReconciliation`: each transaction's need and its receipt; a policy select per
-  counterparty = `SetCounterpartyPolicy`, suggestions and "Find" = `LinkDocument`; the
+  counterparty = `SetCounterpartyPolicy`, suggestions and "Find" = `LinkDocument`, "Attach"
+  on a missing row = `UploadDocument` then `LinkDocument`; the
   bundle -- receipts, summary.csv, missing.csv, README -- is zipped in the browser by
   `src/lib/zip.ts`, since a month of PDFs would not fit one gRPC message).
 - Streams: `useEvents(url, schema, onEvent)` in `hooks.ts` wraps `EventSource` with

@@ -31,6 +31,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { UploadReceipt } from "@/components/upload-receipt";
 import { api } from "@/lib/api/client";
 import { describe, useFetch } from "@/lib/api/hooks";
 import type { LinkedDocument, Reason, ReconciliationRow } from "@/lib/api/schema";
@@ -196,9 +197,15 @@ export default function AccountantPage() {
         if (r.need === "receipt") {
           for (const d of r.documents) {
             const got = await api.document(d.document_id);
-            let name = `${folder}/${r.transaction.booking_date}_${safeName(d.vendor || r.transaction.counterparty_name)}_${safeName(money(d.total_minor || r.transaction.amount_minor, d.currency || r.transaction.currency))}.pdf`;
+            const ext =
+              got.document?.content_type === "image/jpeg"
+                ? "jpg"
+                : got.document?.content_type === "image/png"
+                  ? "png"
+                  : "pdf";
+            let name = `${folder}/${r.transaction.booking_date}_${safeName(d.vendor || r.transaction.counterparty_name)}_${safeName(money(d.total_minor || r.transaction.amount_minor, d.currency || r.transaction.currency))}.${ext}`;
             let n = 2;
-            while (used.has(name)) name = name.replace(/(\.pdf)$/, `_${n++}$1`);
+            while (used.has(name)) name = name.replace(/(\.[a-z]+)$/, `_${n++}$1`);
             used.add(name);
             entries.push({ name, bytes: bytesOf(got.bytes) });
             files.push(name.slice(folder.length + 1));
@@ -524,6 +531,18 @@ function Row({
             >
               <Search className="size-3" /> {t("accountant.find")}
             </Button>
+          ) : null}
+          {missing ? (
+            <UploadReceipt
+              partyId={party}
+              variant="ghost"
+              className="h-6 px-1.5 text-[11px]"
+              disabled={busy}
+              label={t("accountant.attach")}
+              onUploaded={(doc) =>
+                void act(async () => (await api.linkDocument(tx.id, doc.id)).row, t("accountant.attached"))
+              }
+            />
           ) : null}
         </div>
         <FindDialog
