@@ -344,7 +344,10 @@ function ConnectorRow({
             <Button
               variant="ghost"
               size="sm"
-              disabled={busy !== "" || c.status !== "linked"}
+              // An expired row is the one a test is for: the credential may
+              // still work (a pull can misjudge a refused token), and a test
+              // that succeeds links it again. A pull stays a linked row's.
+              disabled={busy !== "" || !["linked", "expired"].includes(c.status)}
               onClick={() =>
                 void act("test", async () =>
                   t("connectors.test_ok", { status: (await api.testConnector(c.id)).status }),
