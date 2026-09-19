@@ -72,23 +72,30 @@ export function summaryText(t: T, m: MonthData): string {
   const eracun = rows.filter((r) => r.need === "eracun");
   const line = (r: ReconciliationRow) =>
     `  ${dateOnly(r.transaction.booking_date)}  ${r.transaction.counterparty_name}  ${amountOf(r)}`;
+  // A person's note follows its row, indented, in every section.
+  const noted = (text: string, r: ReconciliationRow) =>
+    r.note ? `${text}\n      ${t("accountant.bundle.note")}: ${r.note.replace(/\s*\n\s*/g, " ")}` : text;
   return [
     `${m.company} · ${monthLong(m.month)}`,
     "",
     t("accountant.bundle.readme_attached", { n: covered.length }),
-    ...covered.map(
-      (r) =>
+    ...covered.map((r) =>
+      noted(
         `${line(r)}  → ${r.documents.map((d) => `${d.vendor} ${d.invoice_no || d.filename}`).join(", ")}`,
+        r,
+      ),
     ),
     "",
     t("accountant.bundle.readme_missing", { n: missing.length }),
-    ...missing.map(
-      (r) =>
+    ...missing.map((r) =>
+      noted(
         `${line(r)}${r.original_amount_minor ? ` (${money(r.original_amount_minor, r.original_currency)})` : ""}`,
+        r,
+      ),
     ),
     "",
     t("accountant.bundle.readme_eracun", { n: eracun.length }),
-    ...eracun.map(line),
+    ...eracun.map((r) => noted(line(r), r)),
   ].join("\n");
 }
 
@@ -114,6 +121,7 @@ export function plan(t: T, m: MonthData): BundlePlan {
       "receipt",
       "invoice_no",
       "reason",
+      "note",
     ].map(h),
   ];
   for (const r of rows) {
@@ -144,16 +152,18 @@ export function plan(t: T, m: MonthData): BundlePlan {
         .filter(Boolean)
         .join(" | "),
       sayWhy(t, "need", r.need_why, r.need_reason),
+      r.note,
     ]);
   }
   const missingRows = [
-    ["date", "counterparty", "amount", "original", "reason"].map(h),
+    ["date", "counterparty", "amount", "original", "reason", "note"].map(h),
     ...missing.map((r) => [
       dateOnly(r.transaction.booking_date),
       r.transaction.counterparty_name,
       amountOf(r),
       r.original_amount_minor ? money(r.original_amount_minor, r.original_currency) : "",
       sayWhy(t, "need", r.need_why, r.need_reason),
+      r.note,
     ]),
   ];
   return {

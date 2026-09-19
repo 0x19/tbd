@@ -346,6 +346,11 @@ export const api = {
       method: "POST",
       json: { transaction_id, document_id },
     }),
+  setNote: (transaction_id: string, note: string) =>
+    call(ReconciliationRowResponse, "/v1/finance/reconciliation/note", {
+      method: "POST",
+      json: { transaction_id, note },
+    }),
   setPolicy: (p: { party_id: string; match: string; exact: boolean; policy: string; note: string }) =>
     call(CounterpartyPolicyResponse, "/v1/finance/reconciliation/policies", { method: "POST", json: p }),
   deletePolicy: (id: string) =>

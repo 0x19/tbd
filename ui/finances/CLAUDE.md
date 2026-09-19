@@ -51,7 +51,9 @@ same conventions; read `ui/chaos/CLAUDE.md` for what is the kit's and what is ou
   the gateway's 2 MiB body and refuses a larger PDF with the size), `/reconciliation/` (the company's month from
   `MonthlyReconciliation`: each transaction's need and its receipt; a policy select per
   counterparty = `SetCounterpartyPolicy`, suggestions and "Find" = `LinkDocument`, "Attach"
-  on a missing row = `UploadDocument` then `LinkDocument`. Every hand-made link goes
+  on a missing row = `UploadDocument` then `LinkDocument`; a note under the counterparty
+  (`SetTransactionNote`, Enter saves, Escape cancels, empty removes) follows its row into
+  the README, both CSVs and the mail's summary. Every hand-made link goes
   through one flow: a `failed_precondition` from the service means the receipt's reading
   disagrees with the charge, and a dialog shows the service's words with "Attach anyway"
   (`force`); the toast says whether the amount was checked or nothing could be read; the

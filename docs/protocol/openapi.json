@@ -2375,6 +2375,49 @@
         }
       }
     },
+    "/v1/finance/reconciliation/note": {
+      "post": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/SetTransactionNote",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/SetTransactionNote` on the `finance` backend.",
+        "operationId": "FinanceService.SetTransactionNote",
+        "requestBody": {
+          "description": "`tbd.finance.v1.SetTransactionNoteRequest`; path variables override their fields",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/tbd.finance.v1.SetTransactionNoteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.SetTransactionNoteResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.SetTransactionNoteResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/finance/reconciliation/policies": {
       "post": {
         "tags": [
@@ -5519,6 +5562,9 @@
           "need_why": {
             "$ref": "#/components/schemas/tbd.finance.v1.Reason"
           },
+          "note": {
+            "type": "string"
+          },
           "original_amount_minor": {
             "type": "string"
           },
@@ -5774,6 +5820,27 @@
         "properties": {
           "policy": {
             "$ref": "#/components/schemas/tbd.finance.v1.CounterpartyPolicy"
+          }
+        }
+      },
+      "tbd.finance.v1.SetTransactionNoteRequest": {
+        "type": "object",
+        "description": "`tbd.finance.v1.SetTransactionNoteRequest`",
+        "properties": {
+          "note": {
+            "type": "string"
+          },
+          "transaction_id": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.finance.v1.SetTransactionNoteResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.SetTransactionNoteResponse`",
+        "properties": {
+          "row": {
+            "$ref": "#/components/schemas/tbd.finance.v1.ReconciliationRow"
           }
         }
       },

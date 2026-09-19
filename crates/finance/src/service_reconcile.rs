@@ -6,8 +6,8 @@ use tbd_proto::finance::v1::{
     CounterpartyPolicy, DeleteCounterpartyPolicyRequest, DeleteCounterpartyPolicyResponse,
     LinkDocumentRequest, LinkDocumentResponse, LinkedDocument, MonthlyReconciliationRequest,
     MonthlyReconciliationResponse, Reason, ReconciliationRow, ReconciliationSummary,
-    SetCounterpartyPolicyRequest, SetCounterpartyPolicyResponse, Transaction,
-    UnlinkDocumentRequest, UnlinkDocumentResponse,
+    SetCounterpartyPolicyRequest, SetCounterpartyPolicyResponse, SetTransactionNoteRequest,
+    SetTransactionNoteResponse, Transaction, UnlinkDocumentRequest, UnlinkDocumentResponse,
 };
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
@@ -114,6 +114,7 @@ fn row_proto(r: &Row) -> ReconciliationRow {
             .as_ref()
             .map(|(_, c)| c.clone())
             .unwrap_or_default(),
+        note: r.note.clone(),
     }
 }
 
@@ -207,6 +208,23 @@ impl Finance {
         let r = store::unlink(pool, &access, tx, doc)
             .await
             .map(|row| UnlinkDocumentResponse {
+                row: Some(row_proto(&row)),
+            });
+        self.done_c(&mut timer, r)
+    }
+
+    pub(crate) async fn rpc_set_transaction_note(
+        &self,
+        request: Request<SetTransactionNoteRequest>,
+    ) -> Result<Response<SetTransactionNoteResponse>, Status> {
+        let req = request.get_ref().clone();
+        let tx = uuid(&req.transaction_id, "transaction_id")?;
+        let (mut timer, pool, access, _) = self
+            .invoice_context("FinanceService/SetTransactionNote", &request, &[])
+            .await?;
+        let r = store::set_note(pool, &access, tx, &req.note)
+            .await
+            .map(|row| SetTransactionNoteResponse {
                 row: Some(row_proto(&row)),
             });
         self.done_c(&mut timer, r)

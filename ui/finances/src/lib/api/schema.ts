@@ -492,6 +492,8 @@ export const ReconciliationRow = z.object({
   original_amount_minor: z.string(),
   original_currency: z.string(),
   need_why: Reason.nullable().optional(),
+  // A person's note for the accountant; "" when none.
+  note: z.string(),
 });
 export type ReconciliationRow = z.infer<typeof ReconciliationRow>;
 export const CounterpartyPolicy = z.object({

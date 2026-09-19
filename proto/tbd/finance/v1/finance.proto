@@ -350,6 +350,13 @@ service FinanceService {
       body: "*"
     };
   }
+  // A person's note on a transaction for the accountant; empty removes it.
+  rpc SetTransactionNote(SetTransactionNoteRequest) returns (SetTransactionNoteResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/reconciliation/note"
+      body: "*"
+    };
+  }
   // A person's word on a counterparty: what the accountant needs for it.
   rpc SetCounterpartyPolicy(SetCounterpartyPolicyRequest) returns (SetCounterpartyPolicyResponse) {
     option (google.api.http) = {
@@ -729,6 +736,9 @@ message ReconciliationRow {
   // domestic_iban, card_original {amount_minor, currency}, card,
   // foreign_transfer.
   Reason need_why = 10;
+  // A person's note for the accountant; goes into the month's README,
+  // summary and mail. Empty when none.
+  string note = 11;
 }
 // A reason as a code with its arguments, so the page can say it in its own
 // language; the English sentence beside it is the same thing spelled out.
@@ -787,6 +797,14 @@ message UnlinkDocumentRequest {
   string document_id = 2;
 }
 message UnlinkDocumentResponse {
+  ReconciliationRow row = 1;
+}
+message SetTransactionNoteRequest {
+  string transaction_id = 1;
+  // At most 2,000 characters; empty removes the note.
+  string note = 2;
+}
+message SetTransactionNoteResponse {
   ReconciliationRow row = 1;
 }
 message SetCounterpartyPolicyRequest {

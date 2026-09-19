@@ -8,9 +8,10 @@ use sqlx::PgPool;
 use tbd_db::{Capability, PartyId, create_org, ensure_user, grant};
 use tbd_proto::finance::v1::{
     LinkDocumentRequest, MonthlyReconciliationRequest, MonthlyReconciliationResponse,
-    SetCounterpartyPolicyRequest, UnlinkDocumentRequest,
+    SetCounterpartyPolicyRequest, SetTransactionNoteRequest, UnlinkDocumentRequest,
+    finance_service_client::FinanceServiceClient,
 };
-use tonic::{Code, Request, metadata::MetadataValue};
+use tonic::{Code, Request, metadata::MetadataValue, transport::Channel};
 use uuid::Uuid;
 
 use crate::support::start_with_store;
@@ -343,6 +344,8 @@ async fn a_policy_and_a_hand_made_link_override_the_rules() {
         .unwrap();
     assert_eq!(o.status, "missing", "an undone match is not remade");
 
+    note_round_trip(&mut c, &server, company, openai).await;
+
     // Linked by hand to another receipt whose amount is not this charge's:
     // refused, saying what was read, until the person says anyway.
     let refused = c
@@ -489,4 +492,50 @@ async fn a_hand_link_is_checked_against_the_charge_and_says_so() {
         .row
         .unwrap();
     assert_eq!(by(&unread, photo), "linked by hand · nothing read to check");
+}
+
+/// A note for the accountant on the row that is missing its receipt: it
+/// comes back with the row, with the month, and empty removes it.
+async fn note_round_trip(
+    client: &mut FinanceServiceClient<Channel>,
+    server: &crate::support::Server,
+    company: Uuid,
+    openai: Uuid,
+) {
+    let note_of = |text: String| SetTransactionNoteRequest {
+        transaction_id: openai.to_string(),
+        note: text,
+    };
+    let noted = client
+        .set_transaction_note(as_caller(
+            OWNER,
+            note_of("  OpenAI ne šalje račun; tražen preko portala.  ".into()),
+        ))
+        .await
+        .unwrap()
+        .into_inner()
+        .row
+        .unwrap();
+    assert_eq!(noted.note, "OpenAI ne šalje račun; tražen preko portala.");
+    assert_eq!(noted.status, "missing", "a note changes nothing else");
+    let listed = month(server, company).await;
+    let row = listed
+        .rows
+        .iter()
+        .find(|x| x.transaction.as_ref().unwrap().id == openai.to_string())
+        .unwrap();
+    assert_eq!(row.note, "OpenAI ne šalje račun; tražen preko portala.");
+    let e = client
+        .set_transaction_note(as_caller(OWNER, note_of("x".repeat(2001))))
+        .await
+        .unwrap_err();
+    assert_eq!(e.code(), Code::FailedPrecondition, "{e}");
+    let cleared = client
+        .set_transaction_note(as_caller(OWNER, note_of("   ".into())))
+        .await
+        .unwrap()
+        .into_inner()
+        .row
+        .unwrap();
+    assert_eq!(cleared.note, "");
 }

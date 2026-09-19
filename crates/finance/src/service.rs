@@ -44,8 +44,8 @@ use tbd_proto::finance::v1::{
 use tbd_proto::finance::v1::{
     DeleteCounterpartyPolicyRequest, DeleteCounterpartyPolicyResponse, LinkDocumentRequest,
     LinkDocumentResponse, MonthlyReconciliationRequest, MonthlyReconciliationResponse,
-    SetCounterpartyPolicyRequest, SetCounterpartyPolicyResponse, UnlinkDocumentRequest,
-    UnlinkDocumentResponse,
+    SetCounterpartyPolicyRequest, SetCounterpartyPolicyResponse, SetTransactionNoteRequest,
+    SetTransactionNoteResponse, UnlinkDocumentRequest, UnlinkDocumentResponse,
 };
 use tbd_proto::finance::v1::{
     DeleteMailTemplateRequest, DeleteMailTemplateResponse, ExtractDocumentRequest,
@@ -1097,6 +1097,13 @@ impl FinanceService for Finance {
         r: Request<UnlinkDocumentRequest>,
     ) -> Result<Response<UnlinkDocumentResponse>, Status> {
         self.rpc_unlink_document(r).await
+    }
+
+    async fn set_transaction_note(
+        &self,
+        r: Request<SetTransactionNoteRequest>,
+    ) -> Result<Response<SetTransactionNoteResponse>, Status> {
+        self.rpc_set_transaction_note(r).await
     }
     async fn set_counterparty_policy(
         &self,

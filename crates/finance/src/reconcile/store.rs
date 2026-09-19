@@ -127,6 +127,8 @@ pub struct Row {
     pub suggestions: Vec<(DocRow, u8, Vec<Why>)>,
     /// The card's original charge, when the bank wrote it.
     pub original: Option<(i64, String)>,
+    /// A person's note for the accountant; empty when none.
+    pub note: String,
 }
 
 impl Row {
@@ -274,6 +276,22 @@ async fn one_transaction(pool: &PgPool, id: Uuid) -> Result<Option<TxRow>, Store
     .map_err(map_err)?)
 }
 
+/// The notes on these transactions, by transaction.
+async fn notes(
+    pool: &PgPool,
+    tx_ids: &[Uuid],
+) -> Result<std::collections::HashMap<Uuid, String>, StoreError> {
+    Ok(sqlx::query_as::<_, (Uuid, String)>(
+        "select transaction_id, note from finance.transaction_notes where transaction_id = any($1)",
+    )
+    .bind(tx_ids)
+    .fetch_all(pool)
+    .await
+    .map_err(map_err)?
+    .into_iter()
+    .collect())
+}
+
 async fn links(pool: &PgPool, tx_ids: &[Uuid]) -> Result<Vec<LinkRow>, StoreError> {
     Ok(sqlx::query_as::<_, LinkRow>(sql(&format!(
         "select l.transaction_id, l.source, l.confidence, l.reason, {DOC_COLUMNS}
@@ -329,6 +347,7 @@ pub async fn month(
     let rules: Vec<Policy> = policy_rows.iter().filter_map(PolicyRow::rule).collect();
     let ids: Vec<Uuid> = txs.iter().map(|t| t.id).collect();
     let mut linked = links(pool, &ids).await?;
+    let mut noted = notes(pool, &ids).await?;
     // What a person undid stays undone: those pairs are not scored.
     let rejected: std::collections::HashSet<(Uuid, Uuid)> = linked
         .extract_if(.., |l| l.source == "rejected")
@@ -344,12 +363,14 @@ pub async fn month(
             let documents = linked
                 .extract_if(.., |l| l.transaction_id == tx.id)
                 .collect();
+            let note = noted.remove(&tx.id).unwrap_or_default();
             Row {
                 tx,
                 decision,
                 documents,
                 suggestions: Vec::new(),
                 original,
+                note,
             }
         })
         .collect();
@@ -437,13 +458,55 @@ pub async fn one(pool: &PgPool, access: &Access, tx_id: Uuid) -> Result<Row, Sto
         .into_iter()
         .filter(|l| l.source != "rejected")
         .collect();
+    let note = notes(pool, &[tx.id])
+        .await?
+        .remove(&tx.id)
+        .unwrap_or_default();
     Ok(Row {
         tx,
         decision,
         documents,
         suggestions: Vec::new(),
         original,
+        note,
     })
+}
+
+/// A person's note on a transaction for the accountant. Empty removes it.
+///
+/// # Errors
+/// Not in the grant (not found); a note over 2,000 characters; the database.
+pub async fn set_note(
+    pool: &PgPool,
+    access: &Access,
+    tx_id: Uuid,
+    note: &str,
+) -> Result<Row, StoreError> {
+    let row = one(pool, access, tx_id).await?;
+    let note = note.trim();
+    if note.chars().count() > 2000 {
+        return Err(StoreError::State("note: at most 2,000 characters".into()));
+    }
+    if note.is_empty() {
+        sqlx::query("delete from finance.transaction_notes where transaction_id = $1")
+            .bind(tx_id)
+            .execute(pool)
+            .await
+            .map_err(map_err)?;
+    } else {
+        sqlx::query(
+            "insert into finance.transaction_notes (transaction_id, party_id, note)
+             values ($1, $2, $3)
+             on conflict (transaction_id) do update set note = excluded.note, updated_at = clock_timestamp()",
+        )
+        .bind(tx_id)
+        .bind(row.tx.party_id)
+        .bind(note)
+        .execute(pool)
+        .await
+        .map_err(map_err)?;
+    }
+    one(pool, access, tx_id).await
 }
 
 /// A person links a receipt to the transaction that paid it. Both must be

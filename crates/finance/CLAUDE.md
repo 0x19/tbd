@@ -119,8 +119,11 @@ The finance service. gRPC only. Scaffolded by `tbd new service` (docs/tbd/README
   `forced` or `unread` (a photo nothing was read from), so the bundle can say which. `store.rs` runs the matcher greedily, best pairs first, each side once. A
   reason is a `Why`: a code with arguments (`card_original` with the amount, `days_apart`
   with the days), stored on the link as `code:arg|code`, sent as `Reason` for the page to
-  say in its language, and spelled out in English beside it for other callers.
-  `service_reconcile.rs` holds the RPCs.
+  say in its language, and spelled out in English beside it for other callers. A person's
+  note on a transaction for the accountant (`transaction_notes`, one per transaction,
+  `SetTransactionNote`, empty removes it) rides on the row as `note`; the page puts it
+  under the row in the README, the CSVs and the mail. `service_reconcile.rs` holds the
+  RPCs.
 - `categorise.rs` + `seeds/rules.sql`: a pass clears every `inferred` categorisation and
   reapplies rules in priority order; `declared` always survives. A text condition is a
   substring unless anchored (`^INA ` pins the start, ` BAR$` the end): unanchored `INA `

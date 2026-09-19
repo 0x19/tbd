@@ -15,6 +15,7 @@ import {
   Link2,
   Mail,
   Search,
+  StickyNote,
   Unlink,
   XCircle,
 } from "lucide-react";
@@ -33,6 +34,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
 import { UploadReceipt } from "@/components/upload-receipt";
 import { api, ApiError } from "@/lib/api/client";
 import { describe, useFetch } from "@/lib/api/hooks";
@@ -356,6 +358,16 @@ function Row({
     });
   const missing = r.need === "receipt" && r.status === "missing";
   const policy = r.policy_id ? r.need : "auto";
+  const [editingNote, setEditingNote] = useState(false);
+  const [noteText, setNoteText] = useState(r.note);
+  const saveNote = () => {
+    setEditingNote(false);
+    if (noteText.trim() === r.note) return;
+    void act(
+      async () => (await api.setNote(tx.id, noteText)).row,
+      noteText.trim() ? t("accountant.note_saved") : t("accountant.note_removed"),
+    );
+  };
   const docLabel = (d: LinkedDocument) =>
     `${d.vendor || d.filename} · ${d.total_minor ? money(d.total_minor, d.currency || "EUR") : "?"}`;
   return (
@@ -366,6 +378,46 @@ function Row({
         <div className="text-muted-foreground max-w-72 truncate text-[11px]" title={tx.remittance}>
           {tx.remittance.replace(/^HR\d\d \| /, "")}
         </div>
+        {editingNote ? (
+          <Textarea
+            autoFocus
+            rows={2}
+            value={noteText}
+            placeholder={t("accountant.note_placeholder")}
+            onChange={(e) => setNoteText(e.target.value)}
+            onBlur={saveNote}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                setNoteText(r.note);
+                setEditingNote(false);
+              } else if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                saveNote();
+              }
+            }}
+            className="mt-1 min-h-0 text-[11px]"
+          />
+        ) : (
+          <button
+            type="button"
+            className={
+              "mt-0.5 flex max-w-72 items-start gap-1 text-left text-[11px] " +
+              (r.note
+                ? "text-amber-700 dark:text-amber-300"
+                : "text-muted-foreground/60 hover:text-muted-foreground")
+            }
+            title={r.note || t("accountant.note")}
+            onClick={() => {
+              setNoteText(r.note);
+              setEditingNote(true);
+            }}
+          >
+            <StickyNote className="mt-0.5 size-3 shrink-0" />
+            <span className={r.note ? "whitespace-pre-wrap" : "truncate"}>
+              {r.note || t("accountant.note")}
+            </span>
+          </button>
+        )}
       </TableCell>
       <TableCell className="text-right font-mono whitespace-nowrap tabular-nums">
         {amountOf(r)}
