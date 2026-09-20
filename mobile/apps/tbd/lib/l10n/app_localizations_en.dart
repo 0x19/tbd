@@ -52,9 +52,6 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get helloStub => 'stub';
-
-  @override
   String get helloRefresh => 'Ask again';
 
   @override
@@ -68,9 +65,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsApi => 'API';
-
-  @override
-  String get settingsVersion => 'Version';
 
   @override
   String get signOut => 'Sign out';
@@ -97,4 +91,21 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get retry => 'Try again';
+
+  @override
+  String get helloBody => 'The backend, over both doors, on one token.';
+
+  @override
+  String get helloLoading => 'Asking…';
+
+  @override
+  String helloVersion(String version) {
+    return 'protocol $version';
+  }
+
+  @override
+  String get settingsExpires => 'Token expires';
+
+  @override
+  String get openSettings => 'Settings';
 }

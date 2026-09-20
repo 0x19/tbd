@@ -70,6 +70,8 @@ final grpcEdgeProvider = Provider<GrpcEdge>((ref) {
 
 /// The protocol's own calls.
 final protocolApiProvider = Provider<ProtocolApi>(
-  (ref) =>
-      ProtocolApi(ref.watch(apiClientProvider), ref.watch(grpcEdgeProvider)),
+  (ref) => EdgeProtocolApi(
+    ref.watch(apiClientProvider),
+    ref.watch(grpcEdgeProvider),
+  ),
 );

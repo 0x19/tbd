@@ -22,6 +22,8 @@ dependencies:
     path: ../../packages/tbd_auth
   tbd_core:
     path: ../../packages/tbd_core
+  tbd_proto:
+    path: ../../packages/tbd_proto
   tbd_ui:
     path: ../../packages/tbd_ui
 

@@ -12,13 +12,11 @@
   "helloRest": "REST /v1/me",
   "helloGrpc": "gRPC ProtocolService/Ping",
   "helloMillis": "{ms} ms",
-  "helloStub": "stub",
   "helloRefresh": "Pitaj ponovno",
   "settingsTitle": "Postavke",
   "settingsEnvironment": "Okruženje",
   "settingsIssuer": "Davatelj identiteta",
   "settingsApi": "API",
-  "settingsVersion": "Verzija",
   "signOut": "Odjava",
   "errorNetwork": "Poslužitelj nije dostupan.",
   "errorUnauthenticated": "Sesija je istekla. Prijavite se ponovno.",
@@ -26,5 +24,10 @@
   "errorServer": "Poslužitelj je odgovorio greškom ({status}).",
   "errorCancelled": "Prekinuto.",
   "errorConfig": "Aplikacija je izgrađena bez konfiguracije.",
-  "retry": "Pokušaj ponovno"
+  "retry": "Pokušaj ponovno",
+  "helloBody": "Pozadina, kroz oba ulaza, s jednim tokenom.",
+  "helloLoading": "Pitam…",
+  "helloVersion": "protokol {version}",
+  "settingsExpires": "Token istječe",
+  "openSettings": "Postavke"
 }

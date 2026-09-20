@@ -11,10 +11,14 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  tbd_api:
+    path: ../tbd_api
   tbd_auth:
     path: ../tbd_auth
   tbd_core:
     path: ../tbd_core
+  tbd_proto:
+    path: ../tbd_proto
 
 dev_dependencies:
   very_good_analysis: ^11.0.0

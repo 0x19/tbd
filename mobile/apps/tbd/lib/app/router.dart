@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:tbd_auth/tbd_auth.dart';
 import 'package:tbd_mobile/features/auth/sign_in_view.dart';
 import 'package:tbd_mobile/features/home/home_view.dart';
+import 'package:tbd_mobile/features/settings/settings_view.dart';
 
 /// Where a route lives; features add theirs here.
 abstract final class Routes {
@@ -14,6 +15,9 @@ abstract final class Routes {
 
   /// While the store is being read.
   static const splash = '/splash';
+
+  /// Where the build points; sign out.
+  static const settings = '/settings';
 }
 
 /// The router, guarded by the session: a signed-out person sees sign-in
@@ -39,5 +43,6 @@ GoRouter buildRouter(Session session) => GoRouter(
     ),
     GoRoute(path: Routes.signIn, builder: (_, _) => const SignInView()),
     GoRoute(path: Routes.home, builder: (_, _) => const HomeView()),
+    GoRoute(path: Routes.settings, builder: (_, _) => const SettingsView()),
   ],
 );

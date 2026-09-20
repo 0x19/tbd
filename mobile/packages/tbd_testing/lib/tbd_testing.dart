@@ -3,4 +3,5 @@
 library;
 
 export 'src/fake_auth_repository.dart';
+export 'src/fake_protocol_api.dart';
 export 'src/jwt.dart';

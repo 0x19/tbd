@@ -52,9 +52,6 @@ class AppLocalizationsHr extends AppLocalizations {
   }
 
   @override
-  String get helloStub => 'stub';
-
-  @override
   String get helloRefresh => 'Pitaj ponovno';
 
   @override
@@ -68,9 +65,6 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get settingsApi => 'API';
-
-  @override
-  String get settingsVersion => 'Verzija';
 
   @override
   String get signOut => 'Odjava';
@@ -97,4 +91,21 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get retry => 'Pokušaj ponovno';
+
+  @override
+  String get helloBody => 'Pozadina, kroz oba ulaza, s jednim tokenom.';
+
+  @override
+  String get helloLoading => 'Pitam…';
+
+  @override
+  String helloVersion(String version) {
+    return 'protokol $version';
+  }
+
+  @override
+  String get settingsExpires => 'Token istječe';
+
+  @override
+  String get openSettings => 'Postavke';
 }

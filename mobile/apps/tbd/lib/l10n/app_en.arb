@@ -8,27 +8,61 @@
   "signInCancelled": "Sign-in was cancelled.",
   "helloTitle": "Hello",
   "helloName": "Hello, {name}",
-  "@helloName": { "placeholders": { "name": { "type": "String" } } },
+  "@helloName": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "helloRole": "Role: {role}",
-  "@helloRole": { "placeholders": { "role": { "type": "String" } } },
+  "@helloRole": {
+    "placeholders": {
+      "role": {
+        "type": "String"
+      }
+    }
+  },
   "helloRest": "REST /v1/me",
   "helloGrpc": "gRPC ProtocolService/Ping",
   "helloMillis": "{ms} ms",
-  "@helloMillis": { "placeholders": { "ms": { "type": "int" } } },
-  "helloStub": "stub",
+  "@helloMillis": {
+    "placeholders": {
+      "ms": {
+        "type": "int"
+      }
+    }
+  },
   "helloRefresh": "Ask again",
   "settingsTitle": "Settings",
   "settingsEnvironment": "Environment",
   "settingsIssuer": "Identity provider",
   "settingsApi": "API",
-  "settingsVersion": "Version",
   "signOut": "Sign out",
   "errorNetwork": "The server could not be reached.",
   "errorUnauthenticated": "The session ended. Sign in again.",
   "errorForbidden": "This account may not do that.",
   "errorServer": "The server answered with an error ({status}).",
-  "@errorServer": { "placeholders": { "status": { "type": "int" } } },
+  "@errorServer": {
+    "placeholders": {
+      "status": {
+        "type": "int"
+      }
+    }
+  },
   "errorCancelled": "Cancelled.",
   "errorConfig": "The app was built without its configuration.",
-  "retry": "Try again"
+  "retry": "Try again",
+  "helloBody": "The backend, over both doors, on one token.",
+  "helloLoading": "Asking…",
+  "helloVersion": "protocol {version}",
+  "settingsExpires": "Token expires",
+  "openSettings": "Settings",
+  "@helloVersion": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  }
 }

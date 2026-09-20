@@ -170,12 +170,6 @@ abstract class AppLocalizations {
   /// **'{ms} ms'**
   String helloMillis(int ms);
 
-  /// No description provided for @helloStub.
-  ///
-  /// In en, this message translates to:
-  /// **'stub'**
-  String get helloStub;
-
   /// No description provided for @helloRefresh.
   ///
   /// In en, this message translates to:
@@ -205,12 +199,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'API'**
   String get settingsApi;
-
-  /// No description provided for @settingsVersion.
-  ///
-  /// In en, this message translates to:
-  /// **'Version'**
-  String get settingsVersion;
 
   /// No description provided for @signOut.
   ///
@@ -259,6 +247,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Try again'**
   String get retry;
+
+  /// No description provided for @helloBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The backend, over both doors, on one token.'**
+  String get helloBody;
+
+  /// No description provided for @helloLoading.
+  ///
+  /// In en, this message translates to:
+  /// **'Asking…'**
+  String get helloLoading;
+
+  /// No description provided for @helloVersion.
+  ///
+  /// In en, this message translates to:
+  /// **'protocol {version}'**
+  String helloVersion(String version);
+
+  /// No description provided for @settingsExpires.
+  ///
+  /// In en, this message translates to:
+  /// **'Token expires'**
+  String get settingsExpires;
+
+  /// No description provided for @openSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Settings'**
+  String get openSettings;
 }
 
 class _AppLocalizationsDelegate

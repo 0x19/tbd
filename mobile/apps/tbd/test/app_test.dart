@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tbd_api/tbd_api.dart';
 import 'package:tbd_auth/tbd_auth.dart';
 import 'package:tbd_core/tbd_core.dart';
 import 'package:tbd_mobile/app/app.dart';
 import 'package:tbd_mobile/app/providers.dart';
 import 'package:tbd_mobile/app/router.dart';
+import 'package:tbd_proto/tbd_proto.dart';
 import 'package:tbd_testing/tbd_testing.dart';
 
 final env = Env.fromDefines(
@@ -26,7 +28,7 @@ final env = Env.fromDefines(
       '',
 );
 
-(Widget, FakeAuthRepository, Session) app() {
+(Widget, FakeAuthRepository, Session) app({FakeProtocolApi? protocol}) {
   final repo = FakeAuthRepository(
     token: 'access',
     idToken: fakeJwt({
@@ -40,6 +42,7 @@ final env = Env.fromDefines(
     overrides: [
       envProvider.overrideWithValue(env),
       sessionProvider.overrideWithValue(session),
+      protocolApiProvider.overrideWithValue(protocol ?? FakeProtocolApi()),
     ],
     child: App(router: buildRouter(session)),
   );
@@ -61,10 +64,18 @@ void main() {
     await tester.tap(find.byType(FilledButton));
     await tester.pumpAndSettle();
     expect(find.text('Hello, Nevio'), findsOneWidget);
-    expect(find.text('n@example.test'), findsOneWidget);
     expect(repo.signIns, 1);
+    // Both hellos from the backend, with their times.
+    expect(find.text('u-1'), findsOneWidget);
+    expect(find.text('Role: admin'), findsOneWidget);
+    expect(find.text('pong'), findsOneWidget);
+    expect(find.text('protocol 0.1.0-test'), findsOneWidget);
+    expect(find.textContaining(' ms'), findsNWidgets(2));
 
-    await tester.tap(find.byIcon(Icons.logout));
+    await tester.tap(find.byIcon(Icons.settings_outlined));
+    await tester.pumpAndSettle();
+    expect(find.text('auth.test'), findsOneWidget);
+    await tester.tap(find.text('Sign out'));
     await tester.pumpAndSettle();
     expect(find.byType(FilledButton), findsOneWidget);
     expect(repo.ended, 1);
@@ -81,6 +92,28 @@ void main() {
     await tester.tap(find.byType(FilledButton));
     await tester.pumpAndSettle();
     expect(find.text('Prijava je prekinuta.'), findsOneWidget);
+  });
+
+  testWidgets('a failed hello is a sentence, not a crash', (tester) async {
+    final protocol = FakeProtocolApi(
+      me: const Err<Me>(NetworkError('down')),
+      ping: const Err<PingResponse>(ServerError('boom', status: 13)),
+    );
+    final (widget, _, session) = app(protocol: protocol);
+    await tester.pumpWidget(widget);
+    await session.restore();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(FilledButton));
+    await tester.pumpAndSettle();
+    expect(find.text('The server could not be reached.'), findsOneWidget);
+    expect(
+      find.text('The server answered with an error (13).'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Ask again'));
+    await tester.pumpAndSettle();
+    expect(protocol.meCalls, 2);
+    expect(protocol.pingCalls, 2);
   });
 
   testWidgets('a stored session skips sign-in', (tester) async {
