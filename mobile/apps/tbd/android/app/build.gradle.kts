@@ -15,11 +15,11 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "hr.inorbit.tbd_mobile"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
+        // The redirect scheme AppAuth's RedirectUriReceiverActivity answers to:
+        // the scheme of auth.redirect_uri in configs/mobile/base.json.
+        manifestPlaceholders["appAuthRedirectScheme"] = "tbd"
         targetSdk = flutter.targetSdkVersion
         // Uses the version code from pubspec.yaml. When using split APKs, 1000 * ABI_VERSION
         // is added automatically by Flutter. (https://developer.android.com/studio/build/configure-apk-splits#configure-APK-versions)
@@ -31,8 +31,8 @@ android {
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
+            // Debug keys until a store listing exists, so `flutter run --release`
+            // works; the release signing config comes with the first listing.
             signingConfig = signingConfigs.getByName("debug")
         }
     }

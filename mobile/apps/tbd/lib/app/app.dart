@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:go_router/go_router.dart';
 import 'package:tbd_mobile/l10n/app_localizations.dart';
 import 'package:tbd_ui/tbd_ui.dart';
 
@@ -7,13 +8,13 @@ import 'package:tbd_ui/tbd_ui.dart';
 /// languages, and the router. Products add routes and features; they do not
 /// touch this.
 class App extends StatelessWidget {
-  const App({required this.home, super.key});
+  const App({required this.router, super.key});
 
-  final Widget home;
+  final GoRouter router;
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return MaterialApp.router(
       onGenerateTitle: (context) => AppLocalizations.of(context).appTitle,
       theme: TbdTheme.light(),
       darkTheme: TbdTheme.dark(),
@@ -24,7 +25,7 @@ class App extends StatelessWidget {
         GlobalCupertinoLocalizations.delegate,
       ],
       supportedLocales: AppLocalizations.supportedLocales,
-      home: home,
+      routerConfig: router,
     );
   }
 }

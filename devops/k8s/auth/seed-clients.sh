@@ -53,7 +53,8 @@ upsert tbd-chaos "{
   \"token_endpoint_auth_method\": \"client_secret_basic\",
   \"access_token_strategy\": \"jwt\"
 }"
-# The future first-party app: public client, PKCE, no consent screen.
+# The first-party app (/mobile): public client, PKCE, no consent screen; the
+# post-logout URI is where the browser returns after RP-initiated logout.
 upsert tbd-app "{
   \"client_id\": \"tbd-app\", \"client_name\": \"tbd app\",
   \"grant_types\": [\"authorization_code\", \"refresh_token\"],
@@ -62,6 +63,7 @@ upsert tbd-app "{
   \"audience\": [\"tbd-api\"],
   \"token_endpoint_auth_method\": \"none\",
   \"redirect_uris\": [\"tbd://callback\", \"http://localhost:3001/callback\", \"http://127.0.0.1:3001/callback\"],
+  \"post_logout_redirect_uris\": [\"tbd://signed-out\"],
   \"skip_consent\": true, \"skip_logout_consent\": true,
   \"access_token_strategy\": \"jwt\"
 }"

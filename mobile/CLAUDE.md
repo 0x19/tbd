@@ -58,9 +58,23 @@ this file is what to keep true while changing it.
   platform is `flutter create --platforms` on the app.
 
 Layout: `apps/tbd/lib/{main.dart, app/, features/, l10n/}`; `packages/tbd_core` (Env,
-Result, AppError, Tracer, Clock; pure Dart), `tbd_auth`, `tbd_api`, `tbd_proto`,
-`tbd_ui`, `tbd_testing`; `tool/{env,theme,openapi_check}.dart`; `buf.gen.yaml`;
+Result, AppError, Tracer, Clock; pure Dart), `tbd_auth` (AuthRepository with the AppAuth
+implementation, TokenStore with the secure one, Session: the one owner of tokens and
+the client's TokenSource), `tbd_api` (ApiClient and its interceptors, SSE, GrpcEdge,
+ProtocolApi, Me), `tbd_proto`, `tbd_ui`, `tbd_testing` (FakeAuthRepository, every
+failure mode a knob; `fakeJwt`); `tool/{env,theme,openapi_check}.dart`; `buf.gen.yaml`;
 `melos.yaml` (scripts only, the mise tasks are the entry point).
+
+The app: `app/providers.dart` is the dependency graph (two roots overridden at bootstrap
+or in a test, `envProvider` and `sessionProvider`; everything else derived);
+`app/router.dart` is go_router with the session as `refreshListenable` and one redirect
+(unknown → splash, signed out → sign-in, signed in never sees sign-in);
+`app/errors.dart` turns an `AppError` into the sentence a person reads. A feature is a
+view (a `ConsumerWidget`) and a view model (a `Notifier` that projects the session or
+a repository and holds the actions). The `tbd://` scheme is registered in
+`android/app/build.gradle.kts` (`appAuthRedirectScheme`) and `ios/Runner/Info.plist`
+(`CFBundleURLTypes`); the client `tbd-app` in `devops/k8s/auth/seed-clients.sh` lists
+`tbd://callback` and `tbd://signed-out`.
 
 Checks: `mise run mobile:check` (format, analyze, the two drift checks, every package's
 tests) is part of `mise run ci`; `mobile:gen` regenerates; `mobile:run <env>` and

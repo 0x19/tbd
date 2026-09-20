@@ -41,7 +41,7 @@ issuer**, so the URL a client uses must be the one the stack was deployed with.
 |---|---|---|---|---|
 | `tbd-ui` | Envoy's OAuth2 filter on the browser hosts (grafana, logs, profiles, metrics, chaosadmin) | authorization code + refresh | `openid offline_access email profile`, audience `tbd-ui` | confidential, `client_secret_post`; no consent screen (first party) |
 | `tbd-chaos` | the chaos tool, CI, scripts | client credentials | `tbd.api`, audience `tbd-api` | confidential, `client_secret_basic` |
-| `tbd-app` | the future first-party app | authorization code with PKCE + refresh | `openid offline_access email profile tbd.api`, audience `tbd-api` | public client, `tbd://callback` and `localhost:3001`; no consent screen |
+| `tbd-app` | the mobile app (`/mobile`, `docs/mobile/README.md`) | authorization code with PKCE + refresh | `openid offline_access email profile tbd.api`, audience `tbd-api` | public client, `tbd://callback` and `localhost:3001`, post-logout `tbd://signed-out`; no consent screen. A public client must send `audience=tbd-api` on the authorization request, or Hydra mints a token the API rejects |
 
 Secrets live only in the `auth-secrets` Kubernetes Secret, created once by
 `mise run auth:secrets` with random values, never written to disk or git. Read one back

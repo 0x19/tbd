@@ -1,5 +1,5 @@
 name: tbd_testing
-description: What tests share - fakes for the repositories, fixtures, pump helpers. Never imported by app code.
+description: What tests share - a fake identity provider with every failure mode as a knob, fixtures, helpers. Never imported by app code.
 version: 0.1.0
 publish_to: none
 resolution: workspace
@@ -10,8 +10,6 @@ environment:
 
 dependencies:
   flutter:
-    sdk: flutter
-  flutter_test:
     sdk: flutter
   tbd_auth:
     path: ../tbd_auth

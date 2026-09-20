@@ -1,6 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
-        android:label="tbd_mobile"
+        android:label="tbd"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
