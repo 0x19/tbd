@@ -558,6 +558,13 @@ run = [
   'sh -c "command -v xcodebuild >/dev/null && flutter build ios --release --no-codesign --dart-define-from-file=../../build/env.${usage_env:-prod}.json || echo \"ios: no xcodebuild on this machine, skipped\""',
 ]
 
+[tasks."mobile:testflight"]
+usage = 'arg "[env]" help="prod | local (default prod)"'
+description = "On a Mac with Xcode: build, sign through the App Store Connect API key and upload to TestFlight (the same script CI runs; needs APP_STORE_CONNECT_* and APPLE_TEAM_ID in the environment)"
+dir = "mobile"
+depends = ["mobile:setup"]
+run = 'MOBILE_ENV="${usage_env:-prod}" BUILD_NUMBER="${BUILD_NUMBER:-$(date +%Y%m%d%H%M)}" sh tool/testflight.sh'
+
 [tasks."mobile:e2e"]
 usage = 'arg "[env]" help="local | prod (default local)"'
 description = "Integration test against the edge configs/mobile/<env>.json names, signed in through the fake with MOBILE_TOKEN (mise run auth:token): mise run mobile:e2e local"

@@ -54,6 +54,11 @@ this file is what to keep true while changing it.
   `tool/` do not have to (their `analysis_options.yaml` says so). `dart format` at 80.
 - **Stubs say so.** `Ping` answers `stub: true` and the screen prints "stub" next to it;
   a placeholder never looks like a measurement, here as everywhere in this tree.
+- **Release is the script, on CI.** `tool/testflight.sh` is the one way an iOS build
+  is signed and uploaded (`mobile ios` workflow on a macOS runner, or
+  `mise run mobile:testflight` on a Mac): automatic signing with an App Store Connect
+  API key from secrets, `ExportOptions.plist` with `destination: upload`. No certificate,
+  profile or key is ever committed; the bundle id is `hr.inorbit.tbd` on both platforms.
 - **Platform code stays in `apps/`.** Packages have no `android/` or `ios/`; a new
   platform is `flutter create --platforms` on the app.
 

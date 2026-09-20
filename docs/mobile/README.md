@@ -95,10 +95,16 @@ of `mise run ci` and the `mobile` job in CI ([ci.md](../ci.md)). `mise run mobil
 through the fake with a machine token from `mise run auth:token`; it needs a device or
 emulator, so it is not in the gate.
 
+Release is the `mobile ios` workflow: a macOS runner builds, signs through an App Store
+Connect API key (Xcode's cloud-managed certificate, nothing in a keychain or the tree)
+and uploads to TestFlight, on demand or on a `mobile-v*` tag. The Apple-side setup and
+the secrets are in [`mobile/README.md`](../../mobile/README.md). Android is
+`mise run mobile:build`; a Play listing is not set up.
+
 ## Not done, deliberately
 
 Product screens, chaos scenarios that fault the app's backend, push, offline
-persistence, OTLP export from the device, a store signing config, and social sign-in
+persistence, OTLP export from the device, a Play listing, and social sign-in
 buttons on the phone (Kratos already offers them on the login page the app opens; Sign
 in with Apple becomes mandatory the day a Google button appears on iOS,
 [auth/README.md](../auth/README.md)).

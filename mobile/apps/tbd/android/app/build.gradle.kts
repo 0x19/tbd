@@ -15,7 +15,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "hr.inorbit.tbd_mobile"
+        applicationId = "hr.inorbit.tbd"
         minSdk = flutter.minSdkVersion
         // The redirect scheme AppAuth's RedirectUriReceiverActivity answers to:
         // the scheme of auth.redirect_uri in configs/mobile/base.json.

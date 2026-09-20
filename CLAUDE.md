@@ -32,7 +32,8 @@ earlier idea material for a product direction, not a spec; do not "fix" it.
   (format, analyze, the `Me` and theme drift checks, every package's tests; in `ci`),
   `mobile:gen` (protos, the theme from the web kit's CSS, l10n), `mobile:env <env>` /
   `mobile:config <env>` (merge `configs/mobile/`), `mobile:run <env>`, `mobile:build <env>`,
-  `mobile:e2e <env>` (against a real edge with `MOBILE_TOKEN`). `mobile/CLAUDE.md` holds the
+  `mobile:e2e <env>` (against a real edge with `MOBILE_TOKEN`), `mobile:testflight` (a
+  Mac with Xcode; CI's `mobile ios` workflow is the same script). `mobile/CLAUDE.md` holds the
   invariants, `docs/mobile/README.md` the architecture.
 - New services come from the CLI: `mise run tbd -- new service <name>` scaffolds a gRPC
   service (crate, proto, configs, k8s, chaos adapter) and registers it in every shared

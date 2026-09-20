@@ -24,6 +24,10 @@
 	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<!-- Only HTTPS and standard OS crypto: exempt from export compliance, so
+	     TestFlight does not ask on every build. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<!-- The redirect scheme the sign-in browser returns on: the scheme of
 	     auth.redirect_uri in configs/mobile/base.json. -->
 	<key>CFBundleURLTypes</key>
