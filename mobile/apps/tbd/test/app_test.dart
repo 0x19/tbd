@@ -17,7 +17,7 @@ final env = Env.fromDefines(
         'auth.issuer': 'https://auth.test',
         'auth.client_id': 'tbd-app',
         'auth.redirect_uri': 'tbd://callback',
-        'auth.post_logout_redirect_uri': 'tbd://signed-out',
+        'auth.post_logout_redirect_uri': 'tbd://callback/signed-out',
         'auth.scopes': 'openid tbd.api',
         'auth.audience': 'tbd-api',
         'api.base_url': 'https://api.test',

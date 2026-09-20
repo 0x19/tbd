@@ -5,7 +5,7 @@
     "issuer": "https://auth.example.invalid",
     "client_id": "tbd-app",
     "redirect_uri": "tbd://callback",
-    "post_logout_redirect_uri": "tbd://signed-out",
+    "post_logout_redirect_uri": "tbd://callback/signed-out",
     "scopes": "openid offline_access email profile tbd.api",
     "audience": "tbd-api"
   },

@@ -74,7 +74,7 @@ view (a `ConsumerWidget`) and a view model (a `Notifier` that projects the sessi
 a repository and holds the actions). The `tbd://` scheme is registered in
 `android/app/build.gradle.kts` (`appAuthRedirectScheme`) and `ios/Runner/Info.plist`
 (`CFBundleURLTypes`); the client `tbd-app` in `devops/k8s/auth/seed-clients.sh` lists
-`tbd://callback` and `tbd://signed-out`.
+`tbd://callback` and `tbd://callback/signed-out`.
 
 Checks: `mise run mobile:check` (format, analyze, the two drift checks, every package's
 tests) is part of `mise run ci`; `mobile:gen` regenerates; `mobile:run <env>` and

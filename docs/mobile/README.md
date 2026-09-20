@@ -72,7 +72,7 @@ Envoy, Dart, one token.
 
 **Sign-out.** The store is cleared first, so the app is signed out whatever follows;
 then Hydra's RP-initiated logout runs in the browser with the ID token hint and returns
-on `tbd://signed-out`, ending the browser session at `auth.<domain>` too.
+on `tbd://callback/signed-out`, ending the browser session at `auth.<domain>` too.
 
 ## What is where
 

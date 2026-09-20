@@ -54,7 +54,8 @@ upsert tbd-chaos "{
   \"access_token_strategy\": \"jwt\"
 }"
 # The first-party app (/mobile): public client, PKCE, no consent screen; the
-# post-logout URI is where the browser returns after RP-initiated logout.
+# post-logout URI is where the browser returns after RP-initiated logout; Hydra
+# requires it to share scheme and host with a redirect URI, hence tbd://callback/....
 upsert tbd-app "{
   \"client_id\": \"tbd-app\", \"client_name\": \"tbd app\",
   \"grant_types\": [\"authorization_code\", \"refresh_token\"],
@@ -63,7 +64,7 @@ upsert tbd-app "{
   \"audience\": [\"tbd-api\"],
   \"token_endpoint_auth_method\": \"none\",
   \"redirect_uris\": [\"tbd://callback\", \"http://localhost:3001/callback\", \"http://127.0.0.1:3001/callback\"],
-  \"post_logout_redirect_uris\": [\"tbd://signed-out\"],
+  \"post_logout_redirect_uris\": [\"tbd://callback/signed-out\"],
   \"skip_consent\": true, \"skip_logout_consent\": true,
   \"access_token_strategy\": \"jwt\"
 }"

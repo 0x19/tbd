@@ -41,7 +41,7 @@ issuer**, so the URL a client uses must be the one the stack was deployed with.
 |---|---|---|---|---|
 | `tbd-ui` | Envoy's OAuth2 filter on the browser hosts (grafana, logs, profiles, metrics, chaosadmin) | authorization code + refresh | `openid offline_access email profile`, audience `tbd-ui` | confidential, `client_secret_post`; no consent screen (first party) |
 | `tbd-chaos` | the chaos tool, CI, scripts | client credentials | `tbd.api`, audience `tbd-api` | confidential, `client_secret_basic` |
-| `tbd-app` | the mobile app (`/mobile`, `docs/mobile/README.md`) | authorization code with PKCE + refresh | `openid offline_access email profile tbd.api`, audience `tbd-api` | public client, `tbd://callback` and `localhost:3001`, post-logout `tbd://signed-out`; no consent screen. A public client must send `audience=tbd-api` on the authorization request, or Hydra mints a token the API rejects |
+| `tbd-app` | the mobile app (`/mobile`, `docs/mobile/README.md`) | authorization code with PKCE + refresh | `openid offline_access email profile tbd.api`, audience `tbd-api` | public client, `tbd://callback` and `localhost:3001`, post-logout `tbd://callback/signed-out`; no consent screen. A public client must send `audience=tbd-api` on the authorization request, or Hydra mints a token the API rejects |
 
 Secrets live only in the `auth-secrets` Kubernetes Secret, created once by
 `mise run auth:secrets` with random values, never written to disk or git. Read one back
@@ -290,7 +290,7 @@ the Kratos session and returns to `/login`. The same page answers Hydra's own
 RP-initiated logout (`/oauth2/sessions/logout`, which sends a `logout_challenge`).
 The mobile app ends its session the same way: it clears its secure store, then runs
 `/oauth2/sessions/logout` in the system browser with the ID token hint and returns on
-`tbd://signed-out`, which `seed-clients.sh` registers as the client's post-logout URI.
+`tbd://callback/signed-out`, which `seed-clients.sh` registers as the client's post-logout URI.
 Per-host `/oauth2/signout` only clears that host's cookies; the other hosts follow within
 five minutes, when their short-lived tokens (client `tbd-ui`: five-minute access and ID
 tokens, 30-day refresh tokens, set by `seed-clients.sh`) fail to refresh.

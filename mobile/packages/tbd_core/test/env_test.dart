@@ -7,7 +7,7 @@ void main() {
     'auth.issuer': 'https://auth.example.test',
     'auth.client_id': 'tbd-app',
     'auth.redirect_uri': 'tbd://callback',
-    'auth.post_logout_redirect_uri': 'tbd://signed-out',
+    'auth.post_logout_redirect_uri': 'tbd://callback/signed-out',
     'auth.scopes': 'openid offline_access email profile tbd.api',
     'auth.audience': 'tbd-api',
     'api.base_url': 'https://api.example.test',
