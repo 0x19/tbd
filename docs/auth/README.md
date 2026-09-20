@@ -86,7 +86,9 @@ Hydra redirects to `/login?login_challenge=...`; Kratos recognises the challenge
 person in (or reuses the session) and hands the challenge back to Hydra; the consent step
 is skipped for first-party clients; Hydra redirects to the client's `redirect_uri` with a
 `code`; the client exchanges it at `/oauth2/token` for an access token (JWT), an ID token
-and a refresh token.
+and a refresh token. The mobile app does exactly this through AppAuth in the system
+browser with PKCE ([mobile/README.md](../mobile/README.md)); being a public client it
+must also send `audience=tbd-api`, or the token it gets is not one the API accepts.
 
 **A machine gets a token** (client credentials):
 
@@ -252,7 +254,8 @@ that host's `/oauth2/signout`; "Sign out everywhere" is `https://auth.<domain>/l
   password is an operator task (`kratos` admin API). After running it, rebuild the sign-in
   UI image so its pages offer the flows (`auth:ui-build-args` picks the flag up).
 - **Apple sign-in** is not wired (needs key-based credentials); Apple requires it once
-  the iOS app offers Google.
+  the iOS app offers Google. The app in `/mobile` opens the login page as it is, so the
+  day a Google button shows there, the iOS build needs Apple beside it.
 - **Google's app is in Testing** in Google Auth Platform: only listed test users can use
   the button until it is published.
 - **Look and feel.** The pages render Ory Elements' flows through the same shadcn kit
@@ -285,6 +288,9 @@ Hydra login session and consent for them (their refresh tokens die, so each UI h
 cookie stops refreshing and Envoy sends the browser back to sign in), then the page ends
 the Kratos session and returns to `/login`. The same page answers Hydra's own
 RP-initiated logout (`/oauth2/sessions/logout`, which sends a `logout_challenge`).
+The mobile app ends its session the same way: it clears its secure store, then runs
+`/oauth2/sessions/logout` in the system browser with the ID token hint and returns on
+`tbd://signed-out`, which `seed-clients.sh` registers as the client's post-logout URI.
 Per-host `/oauth2/signout` only clears that host's cookies; the other hosts follow within
 five minutes, when their short-lived tokens (client `tbd-ui`: five-minute access and ID
 tokens, 30-day refresh tokens, set by `seed-clients.sh`) fail to refresh.

@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use tbd_common::fault::Behavior;
 use tbd_finance::{
     Config, Runtime,
-    config::{Metrics, Ping, Provider, Server, Store, Sync},
+    config::{Connectors, Mail, Metrics, Ping, Provider, Server, Store, Sync},
     store::{MemoryStore, Transaction},
 };
 use tbd_proto::finance::v1::{PingRequest, finance_service_client::FinanceServiceClient};
@@ -218,6 +218,9 @@ impl Service for Finance {
             // no sync, which is what a stack under test wants.
             provider: Provider::default(),
             sync: Sync::default(),
+            // Likewise no mailbox connectors and no outgoing mail.
+            connectors: Connectors::default(),
+            mail: Mail::default(),
         };
         let runtime = Runtime {
             fault: tbd_common::fault::FaultHandle::new(self.behavior.clone()),

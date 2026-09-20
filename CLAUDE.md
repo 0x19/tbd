@@ -28,6 +28,12 @@ earlier idea material for a product direction, not a spec; do not "fix" it.
   sign-in pages are `ui/auth` (Next.js on Ory Elements, `ui:auth:check` in `ci`). Envoy gates every host (`devops/envoy/envoy.yaml`); against a deployed
   stack `chaos validate` and load need `CHAOS_AUTH_*` or `--token`. Docs:
   `docs/auth/README.md`.
+- Mobile (`/mobile`, Flutter, pinned in `mise.toml`): `mise run mobile:setup`, `mobile:check`
+  (format, analyze, the `Me` and theme drift checks, every package's tests; in `ci`),
+  `mobile:gen` (protos, the theme from the web kit's CSS, l10n), `mobile:env <env>` /
+  `mobile:config <env>` (merge `configs/mobile/`), `mobile:run <env>`, `mobile:build <env>`,
+  `mobile:e2e <env>` (against a real edge with `MOBILE_TOKEN`). `mobile/CLAUDE.md` holds the
+  invariants, `docs/mobile/README.md` the architecture.
 - New services come from the CLI: `mise run tbd -- new service <name>` scaffolds a gRPC
   service (crate, proto, configs, k8s, chaos adapter) and registers it in every shared
   file; `tbd service check <name>` verifies that; `mise run tbd:selfcheck` is the CI
@@ -35,7 +41,10 @@ earlier idea material for a product direction, not a spec; do not "fix" it.
   against the real tree, so reformatting a shared file is a CLI change too.
 - Binaries read layered config from `configs/<binary>/base.toml` + `<TBD_ENV>.toml`
   (`tbd_common::config`); every key lives in `base.toml`, env files carry differences,
-  flags and env vars override. `chaos config` prints the effective result.
+  flags and env vars override. `chaos config` prints the effective result. The one
+  deviation is `configs/mobile/` (JSON, because the app reads JSON): `base.json` holds
+  every key, `<env>.json` the differences, `mise run mobile:env` merges them into the
+  `--dart-define-from-file` the app is built with; `mobile:config` prints the result.
 - Protos compile without `protoc` (`protox` in `crates/proto/build.rs`); edit `/proto`
   and rebuild. `buf lint proto` runs in `mise run lint` with buf's STANDARD rules:
   directory matches package (`proto/tbd/engine/v1/`), services end in `Service`,
@@ -68,6 +77,10 @@ earlier idea material for a product direction, not a spec; do not "fix" it.
   `x-jwt-payload`; handlers take `Principal` (`crates/protocol/src/principal.rs`). A new
   route or host is gated in `envoy.yaml` by naming a JWT requirement; health paths stay
   open. Secrets live only in Kubernetes Secrets created by mise tasks, never in files.
+- The mobile app is a bearer client of `api.<domain>`, never a browser-session client:
+  tokens live only in the platform's secure store, sign-in is the SSO's pages in the
+  system browser (PKCE, client `tbd-app`, `audience=tbd-api`), and no URL or client id is
+  a literal in Dart; the theme is generated from the web kit's CSS, not copied.
 - `envoy.yaml` has exactly one placeholder, `__AUTH_PUBLIC_URL__`; anything else that
   differs per environment goes through DNS names or ConfigMaps, not more placeholders.
 

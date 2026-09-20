@@ -423,7 +423,7 @@ async fn numbers_are_consecutive_and_a_cancelled_invoice_keeps_its_number() {
 }
 
 #[tokio::test]
-async fn the_reader_sees_the_companys_invoices_but_cannot_draft_or_approve() {
+async fn the_reader_sees_the_companies_invoices_but_cannot_draft_or_approve() {
     let (server, pool) = start_with_store().await;
     let w = seed(&pool).await;
     let (id, client_id) = draft(&server, w.company).await;

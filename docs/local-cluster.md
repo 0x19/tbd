@@ -146,6 +146,14 @@ internet ─443─▶ FRITZ!Box (port forward) ─▶ host: Caddy (TLS) ─▶ E
    `https://`/`wss://` target is verified against the public roots; a private CA (a
    staging edge, Caddy's `tls internal`) needs `--ca-cert root.crt`.
 
+**From a phone.** The mobile app (`/mobile`) reaches the cluster the same way: a phone
+or an emulator cannot resolve `*.localhost`, so `configs/mobile/local.json` names
+`auth.<base>` and `api.<base>` through this edge, and the issuer in a token is the one
+the stack was deployed with. For an offline loop against k3d on the same machine,
+forward Envoy's edge port into the Android emulator (`adb reverse tcp:18080 tcp:18080`)
+and point a copy of `local.json` at `http://localhost:18080` and `localhost:18080`
+(plaintext gRPC below 443); the issuer must still match what Hydra was deployed with.
+
 What stays private: the OTLP port and the engine load balancer. Grafana, VictoriaLogs,
 Pyroscope, VictoriaMetrics and the chaos admin UI are reachable on their subdomains only
 after signing in at `auth.<domain>` (Envoy's OAuth2 login, [auth/README.md](auth/README.md));

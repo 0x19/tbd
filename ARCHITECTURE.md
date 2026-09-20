@@ -13,7 +13,7 @@ never before.
                               ▲ scrape            ▲ OTLP              ▲ stdout JSON
                               │                   │                   │
  clients ──REST/SSE/GraphQL/WS/gRPC──▶  envoy :8080  ──▶  protocol  ──▶  envoy :50051  ──▶  engine
-                                        (edge)          (translate)     (engine LB)      (compute)
+ (browsers, programs, the phone)        (edge)          (translate)     (engine LB)      (compute)
                                         gRPC by service name goes straight to the engine
                                           │ verifies every token (JWKS)
                       ┌───────────────────┴──────────────────────────────────────────────┐
@@ -26,7 +26,9 @@ Three processes plus Envoy. Envoy is the only thing anything talks to: clients h
 edge, protocol instances reach engines through its engine load balancer. Envoy is also
 the only thing that authenticates: bearer JWTs from Hydra on the API, a browser login
 (OAuth2 filter) on the UI hosts, nothing behind it checks a token
-([docs/auth/README.md](docs/auth/README.md)). The protocol
+([docs/auth/README.md](docs/auth/README.md)). The phone app (`/mobile`) is a bearer
+client like any program: PKCE through the system browser, then `api.<domain>` with the
+token, REST and gRPC alike ([docs/mobile/README.md](docs/mobile/README.md)). The protocol
 owns every client-facing surface and no business logic. The engine owns compute and
 speaks only gRPC. Services share generated types (`tbd-proto`) and plumbing
 (`tbd-common`), nothing else. Every request is traced end to end and measured at every
@@ -46,6 +48,7 @@ hop; the same observability stack runs locally and in production.
 | `tbd-protocol` | axum router: REST, SSE, WebSocket bridge, GraphQL, protocol gRPC; a registry of traced, measured gRPC backends from `[services]` in `configs/protocol`; the descriptor-driven transcoder that serves every `google.api.http`-annotated RPC over REST or SSE | common, proto |
 | `tbd-cli` | the `tbd` binary: scaffolds services from embedded templates and registers them in every shared file; owns no runtime code | clap, toml |
 | `tbd-stress` | stress campaigns against the ledger: closed-loop workers with a client-side model per subject, the contract as invariant checkers, findings with the trace that led there; the load metrics type chaos reports | proto, tonic |
+| `/mobile` (Dart) | the Flutter workspace: `tbd_core` (Env, Result, errors, trace ids), `tbd_api` (the client for the edge), `tbd_auth` (PKCE, secure store, session), `tbd_proto` (buf-generated from `/proto`), `tbd_ui` (the web kit's tokens, generated), `apps/tbd` | the edge only, over HTTPS and gRPC; never a service directly |
 | `tbd-chaos` | `chaos` binary: runs the services in-process, validates, loads, injects faults, runs stress campaigns around its stack and timeline; `chaos serve` exposes all of it as an HTTP API and serves the admin UI from `ui/chaos` | everything above |
 
 Each service crate is `lib.rs` + thin `main.rs`. `serve_on(listener, config, shutdown)`

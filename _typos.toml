@@ -2,12 +2,32 @@
 extend-ignore-re = ["[0-9a-f]{7,40}"]
 
 [files]
-extend-exclude = ["target/", "Cargo.lock", "docs/design/"]
+extend-exclude = [
+  "target/",
+  "Cargo.lock",
+  "docs/design/",
+  # The finance UI's dictionaries are bilingual by design (en and hr side by side).
+  "ui/finances/src/lib/i18n/messages/",
+  # Merchant names as printed on bank statements; a rule must match them as spelled.
+  "crates/finance/seeds/rules.sql",
+  # mobile: buf-generated Dart (protobuf's own accessor names) and Xcode's storyboard ids.
+  "mobile/packages/tbd_proto/lib/gen/",
+  "mobile/apps/*/ios/",
+]
 
 [default.extend-identifiers]
 UPnP = "UPnP"
+OTFs = "OTFs"
+# Loop indices in a comparator, not "it".
+iy = "iy"
+ix = "ix"
 
 [default.extend-words]
-# A merchant name as it appears on bank statements; a categorisation rule
-# must match it as spelled, not as spelled correctly.
-tabacco = "tabacco"
+# Year-over-year, the finance overview's second chart.
+yoy = "yoy"
+# Croatian, where an English page carries a Croatian word on purpose: "tema" (theme)
+# in the plural-rule comment, "paket" (package) in a mail fixture.
+tema = "tema"
+paket = "paket"
+# A date regex's ordinal suffixes (1st, 2nd, 3rd).
+nd = "nd"

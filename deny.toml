@@ -7,7 +7,13 @@ exclude-unpublished = true
 [advisories]
 unmaintained = "workspace"
 ignore = [
-  # { id = "RUSTSEC-0000-0000", reason = "..." },
+  # quick-xml 0.38 reaches us only through typst-library -> hayagriva -> citationberg
+  # (the invoice renderer's citation support), and citationberg 0.7.0, the newest, pins
+  # it there. Both advisories are denial of service on attacker-supplied XML; the only
+  # XML that parser ever sees is the CSL styles bundled in the crate, never a caller's
+  # bytes. Drop these the day citationberg moves to quick-xml >= 0.41.
+  { id = "RUSTSEC-2026-0194", reason = "quick-xml via citationberg; parses bundled CSL styles only, no untrusted XML" },
+  { id = "RUSTSEC-2026-0195", reason = "quick-xml via citationberg; parses bundled CSL styles only, no untrusted XML" },
 ]
 
 [licenses]

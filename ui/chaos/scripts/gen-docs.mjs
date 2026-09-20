@@ -38,8 +38,8 @@ const CATEGORIES = [
   {
     id: "services",
     title: "Services",
-    description: "The contract of every service and the identity stack in front of them.",
-    match: (p) => /^docs\/(protocol|ledger|auth|tbd|humans|engine)\//.test(p),
+    description: "The contract of every service, the identity stack in front of them, and the mobile client.",
+    match: (p) => /^docs\/(protocol|ledger|auth|tbd|humans|engine|mobile)\//.test(p),
   },
   {
     id: "deployment",
