@@ -1,0 +1,21 @@
+{
+  "_comment": "Mobile app configuration, shared layer. configs/mobile/<env>.json is merged over this file key by key (mise run mobile:env <env>), the way tbd_common::config layers TOML; every key is listed here so an environment file only needs what it changes. The app is a public OAuth client: nothing here is secret, and nothing here may be a literal in code.",
+  "env": "base",
+  "auth": {
+    "issuer": "https://auth.example.invalid",
+    "client_id": "tbd-app",
+    "redirect_uri": "tbd://callback",
+    "post_logout_redirect_uri": "tbd://signed-out",
+    "scopes": "openid offline_access email profile tbd.api",
+    "audience": "tbd-api"
+  },
+  "api": {
+    "base_url": "https://api.example.invalid",
+    "grpc_authority": "api.example.invalid:443",
+    "timeout_ms": 10000
+  },
+  "telemetry": {
+    "otlp_endpoint": "",
+    "service_name": "tbd-mobile"
+  }
+}

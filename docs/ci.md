@@ -19,6 +19,7 @@ name. If you add a check, add it in both places; this page lists the mapping.
 | `stress:run` | `scenarios` | any campaign under `stress/` with a finding or an error (`chaos stress check stress/*.toml` runs first) |
 | `ui:check` | `ui` | `ui/chaos`: prettier drift, an eslint finding (React Compiler rules included), a type error; CI also runs `pnpm build` |
 | `ui:finances:check` | `ui-finances` | `ui/finances`: prettier drift, an eslint finding, a type error; CI also runs `pnpm build` |
+| `mobile:check` | `mobile` | `mobile/`: `dart format` drift, any `dart analyze --fatal-infos` finding (very_good_analysis, strict), the `Me` type drifting from `docs/protocol/openapi.json` (`tool/openapi_check.dart`), `packages/tbd_ui/lib/src/tokens.g.dart` drifting from the web kit's `globals.css` (`tool/theme.dart --check`; `mise run mobile:gen` regenerates), any failing `flutter test` in the app or a package |
 | not in the gate | `docker` | any image failing to build; on `main` also failing to push. The chaos image build runs `pnpm build` first so it carries the UI |
 
 Locally the steps run in that order, cheapest first, so a typo or format slip fails in
@@ -57,6 +58,8 @@ commands above still work if those tools are on `PATH`.
 | `doc` | usually a `[`Name`]` link to a private or renamed item |
 | `scenarios` | run `mise run chaos:run` locally; the report says which assertion failed and by how much. See [chaos/scenarios.md](chaos/scenarios.md). A `kinds.md` diff: `mise run chaos:docs` and commit |
 | `ui` prettier | `cd ui/chaos && pnpm format` |
+| `mobile` format | `cd mobile && dart format .` |
+| `mobile` tokens or l10n stale | `mise run mobile:gen` and commit the generated files |
 | `ui` eslint `set-state-in-effect` | derive the value or move the `setState` into the callback that learns the news; see `src/lib/api/hooks.ts` |
 
 `mise run tbd:selfcheck` sits between `test` and `doc`: it scaffolds a throwaway
@@ -97,3 +100,5 @@ pull request, and pushes them only on `main`, tagged with the short commit SHA a
 `rust-toolchain.toml` pins the exact Rust version; CI reads it, so a bump is one commit.
 `Cargo.lock` is committed and CI passes `--locked`, so a dependency change without a
 lockfile update fails in `lint` and `test` rather than silently resolving differently.
+`mise.toml` pins Flutter (`[tools] flutter`); the `mobile` job installs that version
+through mise, and `mobile/pubspec.lock` (one lock for the whole pub workspace) is committed.

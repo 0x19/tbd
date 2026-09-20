@@ -225,6 +225,18 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm build
 
+  mobile:
+    name: mobile (format + analyze + drift checks + tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      # Flutter comes from mise.toml's pin, the same version every machine runs.
+      - uses: jdx/mise-action@v4
+        with:
+          install_args: flutter
+          cache: true
+      - run: mise run mobile:check
+
   proto:
     name: buf lint + format
     runs-on: ubuntu-latest

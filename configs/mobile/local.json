@@ -1,0 +1,6 @@
+{
+  "_comment": "The local cluster, reached through its public edge: a phone or an emulator cannot resolve *.localhost, and the issuer in a token must be the one the stack was deployed with (docs/auth/README.md). For a fully offline loop on an emulator, point these at the k3d edge with adb reverse (mobile/README.md).",
+  "env": "local",
+  "auth": { "issuer": "https://auth.proximity.is" },
+  "api": { "base_url": "https://api.proximity.is", "grpc_authority": "api.proximity.is:443" }
+}

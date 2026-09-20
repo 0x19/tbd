@@ -1,0 +1,15 @@
+name: tbd_core
+description: What every product's app shares below the features - configuration, results and errors, telemetry, time. No Flutter, no platform code.
+version: 0.1.0
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ^3.12.0
+
+dependencies:
+  meta: ^1.19.0
+
+dev_dependencies:
+  test: ^1.26.0
+  very_good_analysis: ^11.0.0

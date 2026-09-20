@@ -1,0 +1,24 @@
+# Melos: scripts across the workspace. Dependency resolution is pub's
+# (pubspec.yaml `workspace:`); this file only runs things. The mise tasks
+# (`mise run mobile:*`, the repo's one entry point) are what CI runs; these
+# exist for anyone with melos on the path.
+name: tbd_mobile
+
+scripts:
+  format:
+    description: Format every package; CI runs it with --set-exit-if-changed.
+    run: dart format --set-exit-if-changed .
+  analyze:
+    description: Analyze every package with the workspace's analysis_options.
+    run: dart analyze --fatal-infos .
+  test:
+    description: Unit and widget tests in every package that has any.
+    exec: flutter test
+    packageFilters:
+      dirExists: test
+  gen:
+    description: Regenerate Dart from /proto (buf), the theme tokens from the web sheet, and the l10n classes.
+    run: |
+      buf generate --template mobile/buf.gen.yaml proto
+      dart run tool/theme.dart
+      cd apps/tbd && flutter gen-l10n

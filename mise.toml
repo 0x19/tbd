@@ -39,6 +39,9 @@ uv = "latest"
 # ui/chaos (Next.js). node is pinned to the line the kit targets; pnpm is its package manager.
 node = "24"
 pnpm = "latest"
+# /mobile (Flutter workspace). Pinned: a pub workspace needs Flutter >= 3.38, and every
+# task runs flutter through mise so the machine and CI agree.
+flutter = "3.47.5"
 
 # ---------------------------------------------------------------- build ----
 
@@ -258,6 +261,7 @@ run = [
   "mise run ui:auth:check",
   "mise run ui:www:check",
   "mise run ui:finances:check",
+  "mise run mobile:check",
 ]
 
 # ------------------------------------------------------------- scaffold ----
@@ -491,6 +495,78 @@ pnpm typecheck
 [tasks."ui:auth:build"]
 description = "Build the sign-in UI image (ghcr.io/0x19/tbd-auth-ui:dev)"
 run = "docker build -f devops/docker/Dockerfile.auth-ui $(mise run -q auth:ui-build-args) -t $IMAGE_REGISTRY/tbd-auth-ui:dev ."
+
+# ------------------------------------------------------------- mobile ----
+# The Flutter workspace under /mobile (mobile/CLAUDE.md). Flutter is pinned in
+# [tools]; every task runs it through mise so the version is the same everywhere.
+
+[tasks."mobile:setup"]
+description = "Fetch the workspace's Dart dependencies (pub workspace: one lock file)"
+dir = "mobile"
+run = "flutter pub get"
+
+[tasks."mobile:env"]
+usage = 'arg "[env]" help="local | prod (default local)"'
+description = "Merge configs/mobile/base.json with configs/mobile/<env>.json into mobile/build/env.<env>.json: mise run mobile:env local"
+dir = "mobile"
+run = 'dart run tool/env.dart "${usage_env:-local}"'
+
+[tasks."mobile:config"]
+usage = 'arg "[env]" help="local | prod (default local)"'
+description = "Print the effective mobile configuration for an environment, like `chaos config`: mise run mobile:config prod"
+dir = "mobile"
+run = 'dart run tool/env.dart "${usage_env:-local}" --print'
+
+[tasks."mobile:gen"]
+description = "Regenerate Dart from /proto (buf, remote Dart plugin), the theme tokens from the web kit's globals.css, and the app's l10n classes"
+run = [
+  "buf generate --template mobile/buf.gen.yaml proto",
+  "cd mobile && dart run tool/theme.dart",
+  "cd mobile/apps/tbd && flutter gen-l10n",
+]
+
+[tasks."mobile:check"]
+description = "Format check, analyze (fatal infos), the Me <-> openapi.json and theme <-> globals.css drift checks, and every package's tests; part of ci"
+dir = "mobile"
+depends = ["mobile:setup"]
+run = [
+  "dart format --set-exit-if-changed .",
+  "dart analyze --fatal-infos .",
+  "dart run tool/openapi_check.dart",
+  "dart run tool/theme.dart --check",
+  "sh -c 'for p in apps/tbd packages/*; do [ -d $p/test ] || continue; echo \"== $p\"; (cd $p && flutter test) || exit 1; done'",
+]
+
+[tasks."mobile:run"]
+usage = 'arg "[env]" help="local | prod (default local)"'
+description = "Run the app on the connected device or emulator against an environment: mise run mobile:run local"
+dir = "mobile/apps/tbd"
+depends = ["mobile:setup"]
+run = [
+  'dart run ../../tool/env.dart "${usage_env:-local}"',
+  'flutter run --dart-define-from-file=../../build/env.${usage_env:-local}.json',
+]
+
+[tasks."mobile:build"]
+usage = 'arg "[env]" help="local | prod (default prod)"'
+description = "Release builds: an Android APK, and iOS without code signing: mise run mobile:build prod"
+dir = "mobile/apps/tbd"
+depends = ["mobile:setup"]
+run = [
+  'dart run ../../tool/env.dart "${usage_env:-prod}"',
+  'flutter build apk --release --dart-define-from-file=../../build/env.${usage_env:-prod}.json',
+  'sh -c "command -v xcodebuild >/dev/null && flutter build ios --release --no-codesign --dart-define-from-file=../../build/env.${usage_env:-prod}.json || echo \"ios: no xcodebuild on this machine, skipped\""',
+]
+
+[tasks."mobile:e2e"]
+usage = 'arg "[env]" help="local | prod (default local)"'
+description = "Integration test against the edge configs/mobile/<env>.json names, signed in through the fake with MOBILE_TOKEN (mise run auth:token): mise run mobile:e2e local"
+dir = "mobile/apps/tbd"
+depends = ["mobile:setup"]
+run = [
+  'dart run ../../tool/env.dart "${usage_env:-local}"',
+  'flutter test integration_test --dart-define-from-file=../../build/env.${usage_env:-local}.json --dart-define=MOBILE_TOKEN="${MOBILE_TOKEN:-}"',
+]
 
 [tasks."ui:finances:install"]
 hide = true

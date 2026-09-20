@@ -1,0 +1,11 @@
+# The workspace's lints (mobile/analysis_options.yaml). An app's widgets are
+# not a library: their public members need no doc comments.
+analyzer:
+  exclude:
+    - android/**
+    - ios/**
+include: ../../analysis_options.yaml
+
+linter:
+  rules:
+    public_member_api_docs: false

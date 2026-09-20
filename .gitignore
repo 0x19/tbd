@@ -72,3 +72,13 @@ devops/k8s/overlays/local/edge.env
 ui/chaos/.next/
 ui/chaos/out/
 devops/k8s/auth/auth.env
+
+# mobile (Flutter workspace): merged env files, build output, pub caches
+mobile/build/
+mobile/**/.dart_tool/
+mobile/**/build/
+mobile/apps/*/.flutter-plugins-dependencies
+mobile/apps/*/ios/Pods/
+mobile/apps/*/ios/.symlinks/
+mobile/apps/*/android/.gradle/
+mobile/apps/*/android/local.properties

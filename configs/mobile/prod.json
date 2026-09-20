@@ -1,0 +1,6 @@
+{
+  "_comment": "Production: the domain the identity stack is deployed with. Replace before a store release; a mismatched issuer makes every token invalid.",
+  "env": "prod",
+  "auth": { "issuer": "https://auth.example.invalid" },
+  "api": { "base_url": "https://api.example.invalid", "grpc_authority": "api.example.invalid:443" }
+}

@@ -1,0 +1,21 @@
+name: tbd_api
+description: The one client every feature reaches the edge through - dio with the bearer, traceparent, timeout and retry interceptors, problem+json to typed errors, SSE and WebSocket helpers, a gRPC channel - and the few hand-written types the REST surface has that the protos do not.
+version: 0.1.0
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ^3.12.0
+
+dependencies:
+  dio: ^5.11.0
+  grpc: ^5.1.0
+  meta: ^1.19.0
+  tbd_core:
+    path: ../tbd_core
+  tbd_proto:
+    path: ../tbd_proto
+
+dev_dependencies:
+  test: ^1.26.0
+  very_good_analysis: ^11.0.0
