@@ -49,7 +49,9 @@ same conventions; read `ui/chaos/CLAUDE.md` for what is the kit's and what is ou
   URL with `history.replaceState`, never a router navigation, since a query-only
   `router.replace` did not re-render; one client select filters the list and is the
   client "New draft" is for, opening on the company's default client (`is_default`,
-  set on `/clients/`) when the URL names none, else the client invoiced last;
+  set on `/clients/`) when the URL names none, else the client invoiced last; the
+  "New draft" button is split, its menu starting a draft for any client and switching
+  the default (`SetDefaultClient`) without leaving the page;
   a row duplicates into a new draft, a draft row deletes after a confirm dialog, `n`
   starts a draft; the view edits a
   draft's client, VAT treatment, currency and series beside its dates and lines; on an
@@ -131,8 +133,18 @@ same conventions; read `ui/chaos/CLAUDE.md` for what is the kit's and what is ou
   the moment of sending; the default subject does too until something is typed. The
   composer picks that party's sender and first template, puts the summary where
   `{{Summary}}` stands or after the body, and sends the plan as `bundle`, which the
-  service zips with the receipts' bytes. Nav: Accountant holds `/reconciliation/`,
+  service zips with the receipts' bytes. Nav: Accountant holds `/reconciliation/` and `/filings/`,
   Communication holds `/mail/`.
+- `/filings/`: the company's ePorezna forms (`docs/finance/filings.md`). `ListFilings`
+  with the form and year in the URL; one card per form, rows with the period and the
+  form's headline figures (labels `filings.<form>.<key>`, unknown keys shown by key),
+  a red chip when the reader did not finish; `upload-filing.tsx` takes several `.xml`
+  files at once and posts each as `text/xml` through `UploadDocument`, one toast per
+  file with the server's sentence when refused (it names both OIBs); a row opens
+  `components/filings/filing-sheet.tsx` (`GetFiling`: the header, every value with its
+  label, one table per kind of row, Read again = `ExtractDocument`, Download XML =
+  `GetDocument`). Sums on the strip are `BigInt` over `decimalToMinor` of the headline
+  strings; nothing is rounded.
 - Streams: `useEvents(url, schema, onEvent)` in `hooks.ts` wraps `EventSource` with
   credentials; every `data:` frame is one JSON message. Envoy keeps `/v1/**/events`
   open on the finance host. EventSource cannot send the dev bearer token, so in

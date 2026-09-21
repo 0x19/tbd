@@ -8,12 +8,14 @@
 import {
   AlertTriangle,
   ArrowUpDown,
+  ChevronDown,
   Copy,
   Download,
   FileText,
   Plus,
   Search,
   Send,
+  Star,
   Trash2,
   Wallet,
   X,
@@ -40,6 +42,14 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -236,8 +246,8 @@ function Invoices() {
     };
   }, [all, today]);
 
-  const create = async () => {
-    const chosen = draftClient;
+  const create = async (clientId: string = draftClient) => {
+    const chosen = clientId;
     if (!chosen) return;
     setBusy(true);
     try {
@@ -251,6 +261,16 @@ function Invoices() {
   useEffect(() => {
     createRef.current = () => void create();
   });
+
+  const makeDefault = async (id: string, name: string) => {
+    try {
+      await api.setDefaultClient(id);
+      toast.success(t("invoices.default_set", { client: name }));
+      clients.reload();
+    } catch (e) {
+      toast.error(describe(e));
+    }
+  };
 
   const duplicate = async (i: Invoice) => {
     try {
@@ -332,12 +352,58 @@ function Invoices() {
     <>
       <PageTitle title={t("invoices.title")} description={t("invoices.description")}>
         <ScopeToggle className="md:hidden" />
-        <Button size="sm" onClick={() => void create()} disabled={busy || !draftClient}>
-          <Plus />{" "}
-          {draftClient
-            ? t("invoices.new_draft_for", { client: clientName(draftClient) })
-            : t("invoices.new_draft")}
-        </Button>
+        <div className="flex">
+          <Button
+            size="sm"
+            className="rounded-r-none"
+            onClick={() => void create()}
+            disabled={busy || !draftClient}
+          >
+            <Plus />{" "}
+            {draftClient
+              ? t("invoices.new_draft_for", { client: clientName(draftClient) })
+              : t("invoices.new_draft")}
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                size="sm"
+                className="rounded-l-none border-l border-l-white/20 px-2"
+                aria-label={t("invoices.new_draft_choose")}
+                disabled={busy || clientList.length === 0}
+              >
+                <ChevronDown />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-64">
+              <DropdownMenuLabel>{t("invoices.new_draft_choose")}</DropdownMenuLabel>
+              {clientList.map((c) => (
+                <DropdownMenuItem key={`draft-${c.id}`} onSelect={() => void create(c.id)}>
+                  <Plus className="size-3.5" />
+                  {c.name}
+                  {c.is_default ? <Star className="ml-auto size-3.5 fill-current" /> : null}
+                </DropdownMenuItem>
+              ))}
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel>{t("invoices.default_choose")}</DropdownMenuLabel>
+              {clientList.map((c) => (
+                <DropdownMenuItem
+                  key={`default-${c.id}`}
+                  disabled={c.is_default}
+                  onSelect={() => void makeDefault(c.id, c.name)}
+                >
+                  <Star className={cn("size-3.5", c.is_default && "fill-current")} />
+                  {c.name}
+                  {c.is_default ? (
+                    <span className="text-muted-foreground ml-auto text-xs">
+                      {t("invoices.default_mark")}
+                    </span>
+                  ) : null}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </PageTitle>
 
       {clients.data && clientList.length === 0 ? (
