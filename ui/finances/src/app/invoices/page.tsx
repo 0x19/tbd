@@ -5,7 +5,19 @@
 // amount, filters in the URL so a view can be shared, and the numbers that
 // matter at the top: what is outstanding, what is overdue, what this year
 // has billed.
-import { AlertTriangle, ArrowUpDown, Download, FileText, Plus, Search, Send, Wallet, X } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowUpDown,
+  Copy,
+  Download,
+  FileText,
+  Plus,
+  Search,
+  Send,
+  Trash2,
+  Wallet,
+  X,
+} from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
@@ -15,6 +27,16 @@ import { useFinance } from "@/app/providers";
 import { KpiStrip, PageTitle } from "@/components/kit";
 import { ScopeToggle } from "@/components/scope-toggle";
 import { StatusBadge } from "@/components/status-badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -88,6 +110,7 @@ function Invoices() {
   };
 
   // `/` focuses search, `n` starts a draft, like the kit's lists.
+  const createRef = useRef<() => void>(() => {});
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null;
@@ -95,6 +118,9 @@ function Invoices() {
       if (e.key === "/") {
         e.preventDefault();
         searchRef.current?.focus();
+      } else if (e.key === "n" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        createRef.current();
       }
     };
     window.addEventListener("keydown", onKey);
@@ -176,6 +202,34 @@ function Invoices() {
     } catch (e) {
       toast.error(describe(e));
       setBusy(false);
+    }
+  };
+  useEffect(() => {
+    createRef.current = () => void create();
+  });
+
+  const duplicate = async (i: Invoice) => {
+    try {
+      const r = await api.createInvoice("", i.id);
+      toast.success(t("invoices.duplicated", { number: i.number || t("invoices.draft_title") }));
+      router.push(`/invoices/view/?id=${r.invoice!.id}`);
+    } catch (e) {
+      toast.error(describe(e));
+    }
+  };
+
+  // A draft is deleted, never cancelled; the dialog holds the one to delete.
+  const [deleting, setDeleting] = useState<Invoice | null>(null);
+  const remove = async () => {
+    if (!deleting) return;
+    try {
+      await api.deleteInvoice(deleting.id);
+      toast.success(t("invoices.deleted"));
+      invoices.reload();
+    } catch (e) {
+      toast.error(describe(e));
+    } finally {
+      setDeleting(null);
     }
   };
 
@@ -448,30 +502,54 @@ function Invoices() {
                         {money(i.total_minor, i.currency)}
                       </TableCell>
                       <TableCell onClick={(e) => e.stopPropagation()}>
-                        {i.document_id ? (
-                          <span className="flex justify-end gap-0.5">
+                        <span className="flex justify-end gap-0.5">
+                          {i.document_id ? (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="size-8"
+                                aria-label={t("invoices.download_pdf")}
+                                title={t("invoices.download_pdf")}
+                                onClick={() => void download(i)}
+                              >
+                                <Download />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="size-8"
+                                aria-label={t("invoices.send_mail")}
+                                title={t("invoices.send_mail")}
+                                onClick={() => sendByMail(i)}
+                              >
+                                <Send />
+                              </Button>
+                            </>
+                          ) : null}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-8"
+                            aria-label={t("invoices.duplicate")}
+                            title={t("invoices.duplicate")}
+                            onClick={() => void duplicate(i)}
+                          >
+                            <Copy />
+                          </Button>
+                          {i.status === "draft" ? (
                             <Button
                               variant="ghost"
                               size="icon"
                               className="size-8"
-                              aria-label={t("invoices.download_pdf")}
-                              title={t("invoices.download_pdf")}
-                              onClick={() => void download(i)}
+                              aria-label={t("invoices.delete_draft")}
+                              title={t("invoices.delete_draft")}
+                              onClick={() => setDeleting(i)}
                             >
-                              <Download />
+                              <Trash2 />
                             </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="size-8"
-                              aria-label={t("invoices.send_mail")}
-                              title={t("invoices.send_mail")}
-                              onClick={() => sendByMail(i)}
-                            >
-                              <Send />
-                            </Button>
-                          </span>
-                        ) : null}
+                          ) : null}
+                        </span>
                       </TableCell>
                     </TableRow>
                   );
@@ -504,6 +582,18 @@ function Invoices() {
           </div>
         ) : null}
       </Card>
+      <AlertDialog open={deleting !== null} onOpenChange={(o) => !o && setDeleting(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("invoices.delete_title")}</AlertDialogTitle>
+            <AlertDialogDescription>{t("invoices.delete_confirm")}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void remove()}>{t("invoices.delete_draft")}</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

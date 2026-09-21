@@ -41,10 +41,15 @@ The finance service. gRPC only. Scaffolded by `tbd new service` (docs/tbd/README
   `Psu-Ip-Address` is counted like any other, so an attended refresh is labelled but not
   exempt. `tick(now)` is a pure step for tests; `run` loops it.
 - `invoice/`: drafts, previews, approvals (`store.rs`), the gapless counter
-  (`numbering.rs`, a locked row, never a sequence), integer totals (`totals.rs`), and
+  (`numbering.rs`, a locked row per `(party, year, premises, device)`, never a
+  sequence; the year is the year of approval), integer totals (`totals.rs`), and
   the Typst renderer (`render.rs`: template, Inter and the mark compiled in; PDF id
   and date pinned, so a render is a pure function of the document). The approval
-  names the preview's content hash; a changed draft is FAILED_PRECONDITION. See
+  names the preview's content hash; a changed draft is FAILED_PRECONDITION. A draft's
+  header (client of the same party, currency, VAT treatment, series) changes through
+  `UpdateInvoice` until approval; a draft is deleted (`DeleteInvoice`), never
+  cancelled, and `CancelInvoice` refuses one; `CreateInvoice{from_invoice_id}`
+  duplicates any invoice's header and lines into a draft dated today. See
   `docs/finance/invoice.md`. `service_invoices.rs` holds the RPCs.
 - `connectors/`: linked external accounts documents are pulled from (mailboxes today,
   portals later). `mod.rs` is the registry and the `Connector` trait -- adding a kind is

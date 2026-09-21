@@ -30,6 +30,12 @@ const STYLE: Record<string, string> = {
   failed: BAD,
   consent_invalid: BAD,
   error: BAD,
+  // Invoices: a draft is quiet, an issued one is solid, paid is good, cancelled is bad.
+  draft: MUTED,
+  approved: SOLID,
+  sent: SOLID,
+  paid: GOOD,
+  cancelled: BAD,
 };
 
 export function StatusBadge({ status, className }: { status: string; className?: string }) {

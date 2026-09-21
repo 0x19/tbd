@@ -175,7 +175,8 @@ service FinanceService {
   }
 
   // A new draft for a client, pre-filled from the last approved invoice to
-  // them. No number is taken.
+  // them; or, with from_invoice_id, a duplicate of that invoice's header and
+  // lines, dated today. No number is taken.
   rpc CreateInvoice(CreateInvoiceRequest) returns (CreateInvoiceResponse) {
     option (google.api.http) = {
       post: "/v1/finance/invoices"
@@ -183,7 +184,8 @@ service FinanceService {
     };
   }
 
-  // Replace a draft's dates, note and lines. Totals are recomputed here,
+  // Replace a draft's dates, note, lines and header (client of the same
+  // party, currency, VAT treatment, series). Totals are recomputed here,
   // never trusted from the client.
   rpc UpdateInvoice(UpdateInvoiceRequest) returns (UpdateInvoiceResponse) {
     option (google.api.http) = {
@@ -212,10 +214,17 @@ service FinanceService {
     };
   }
 
-  // Cancel a draft or an approved invoice. An approved one keeps its number.
+  // Cancel an issued invoice. It keeps its number; a draft is deleted instead.
   rpc CancelInvoice(CancelInvoiceRequest) returns (CancelInvoiceResponse) {
     option (google.api.http) = {
       post: "/v1/finance/invoices/{id}/cancel"
+      body: "*"
+    };
+  }
+  // Delete a draft. It took no number, so nothing remains.
+  rpc DeleteInvoice(DeleteInvoiceRequest) returns (DeleteInvoiceResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/invoices/{id}/delete"
       body: "*"
     };
   }
@@ -1021,6 +1030,9 @@ message Invoice {
   string created_at = 23;
   string updated_at = 24;
   repeated InvoiceLine lines = 25;
+  // The series the number is (or will be) in: the middle of the number.
+  string premises = 26;
+  string device = 27;
 }
 
 message ListInvoicesRequest {
@@ -1036,7 +1048,9 @@ message GetInvoiceResponse {
   Invoice invoice = 1;
 }
 message CreateInvoiceRequest {
+  // Either, or both: the client to bill, the invoice to duplicate.
   string client_id = 1;
+  string from_invoice_id = 2;
 }
 message CreateInvoiceResponse {
   Invoice invoice = 1;
@@ -1048,6 +1062,12 @@ message UpdateInvoiceRequest {
   string place_of_issue = 4;
   string note = 5;
   repeated InvoiceLine lines = 6;
+  // The header; empty keeps what the draft has.
+  string client_id = 7;
+  string currency = 8;
+  string vat_treatment = 9;
+  string premises = 10;
+  string device = 11;
 }
 message UpdateInvoiceResponse {
   Invoice invoice = 1;
@@ -1070,6 +1090,10 @@ message ApproveInvoiceRequest {
 message ApproveInvoiceResponse {
   Invoice invoice = 1;
 }
+message DeleteInvoiceRequest {
+  string id = 1;
+}
+message DeleteInvoiceResponse {}
 message CancelInvoiceRequest {
   string id = 1;
   string reason = 2;
