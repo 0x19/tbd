@@ -27,6 +27,12 @@ pub enum InvoiceError {
     /// The draft changed since the preview the approver saw.
     #[error("the draft changed since it was previewed; preview again")]
     StaleDraft,
+    /// A draft is deleted, not cancelled: it took no number.
+    #[error("a draft is deleted, not cancelled")]
+    IsDraft,
+    /// A header value that is not one.
+    #[error("{0}")]
+    Invalid(String),
     /// The issuing party has no issuer profile yet.
     #[error("no issuer profile for this party; set one first")]
     NoIssuer,
@@ -219,6 +225,13 @@ pub struct DraftInput {
     pub place_of_issue: String,
     pub note: String,
     pub lines: Vec<LineInput>,
+    /// The header, each `None` meaning "as it is": the client (same party),
+    /// the currency, the VAT treatment (its note follows), the series.
+    pub client_id: Option<Uuid>,
+    pub currency: Option<String>,
+    pub vat_treatment: Option<VatTreatment>,
+    pub premises: Option<String>,
+    pub device: Option<String>,
 }
 
 /// One line as written.
@@ -602,15 +615,26 @@ fn today() -> NaiveDate {
 
 /// A new draft for a client, pre-filled from the last approved invoice to
 /// them when there is one -- "same as last month" is what a monthly invoice
-/// almost always is.
+/// almost always is. With `source`, a duplicate instead: that invoice's
+/// header (client, currency, VAT treatment, series, place, note) and lines,
+/// dated today; the source may be in any status.
 ///
 /// # Errors
-/// The database; the client is outside the grant; the party has no issuer.
+/// The database; the client or source is outside the grant; the party has
+/// no issuer.
 pub async fn create_draft(
     pool: &PgPool,
     access: &Access,
-    client_id: Uuid,
+    client_id: Option<Uuid>,
+    source: Option<Uuid>,
 ) -> Result<InvoiceRow, InvoiceError> {
+    let source = match source {
+        Some(id) => Some(invoice(pool, access, id).await?),
+        None => None,
+    };
+    let client_id = client_id
+        .or_else(|| source.as_ref().map(|(s, _)| s.client_id))
+        .ok_or(DbError::NotFound { what: "client" })?;
     let client = sqlx::query_as::<_, ClientRow>(sql(&format!(
         "select {CLIENT_COLUMNS} from finance.clients where id = $1"
     )))
@@ -620,26 +644,37 @@ pub async fn create_draft(
     .map_err(map_err)?
     .ok_or(DbError::NotFound { what: "client" })?;
     access.require(PartyId(client.party_id), "client")?;
+    if let Some((s, _)) = &source
+        && s.party_id != client.party_id
+    {
+        return Err(DbError::NotFound { what: "invoice" }.into());
+    }
     let issuer = issuer(pool, access, client.party_id)
         .await?
         .ok_or(InvoiceError::NoIssuer)?;
-    let treatment =
-        VatTreatment::parse(&client.vat_treatment).unwrap_or(VatTreatment::OutsideScopeNonEu);
 
-    let previous = sqlx::query_as::<_, InvoiceRow>(sql(&format!(
-        "select {INVOICE_COLUMNS} from finance.invoices
-          where client_id = $1 and status in ('approved', 'sent', 'paid')
-          order by issued_at desc limit 1"
-    )))
-    .bind(client_id)
-    .fetch_optional(pool)
-    .await
-    .map_err(map_err)?;
-    let previous_lines = match &previous {
-        Some(p) => lines_of(pool, p.id).await?,
-        None => Vec::new(),
+    let previous = match &source {
+        Some((s, _)) => Some(s.clone()),
+        None => sqlx::query_as::<_, InvoiceRow>(sql(&format!(
+            "select {INVOICE_COLUMNS} from finance.invoices
+              where client_id = $1 and status in ('approved', 'sent', 'paid')
+              order by issued_at desc limit 1"
+        )))
+        .bind(client_id)
+        .fetch_optional(pool)
+        .await
+        .map_err(map_err)?,
     };
-    let inputs = starting_lines(pool, client_id, &previous_lines).await?;
+    let inputs = starting_inputs(pool, client_id, source.as_ref(), previous.as_ref()).await?;
+    let start = Start::of(source.as_ref().map(|(s, _)| s), &client, &issuer);
+    let (treatment, currency, premises, device, place, note) = (
+        start.treatment,
+        start.currency,
+        start.premises,
+        start.device,
+        start.place,
+        start.note,
+    );
 
     let id = Uuid::new_v4();
     let day = today();
@@ -647,22 +682,23 @@ pub async fn create_draft(
     let mut tx = pool.begin().await.map_err(map_err)?;
     sqlx::query(
         "insert into finance.invoices (id, party_id, client_id, status, year, premises, device, delivery_date,
-            due_date, place_of_issue, currency, vat_treatment, vat_note, prefilled_from)
-         values ($1,$2,$3,'draft',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)",
+            due_date, place_of_issue, currency, vat_treatment, vat_note, prefilled_from, note)
+         values ($1,$2,$3,'draft',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)",
     )
     .bind(id)
     .bind(client.party_id)
     .bind(client_id)
     .bind(day.year())
-    .bind(&issuer.premises)
-    .bind(&issuer.device)
+    .bind(premises)
+    .bind(device)
     .bind(day)
     .bind(due)
-    .bind(&issuer.place_of_issue)
-    .bind(&client.currency)
+    .bind(place)
+    .bind(currency)
     .bind(treatment.as_str())
     .bind(treatment.note())
     .bind(previous.as_ref().map(|p| p.id))
+    .bind(note)
     .execute(&mut *tx)
     .await
     .map_err(map_err)?;
@@ -672,11 +708,90 @@ pub async fn create_draft(
         id,
         access.user(),
         "created",
-        serde_json::json!({ "prefilled_from": previous.map(|p| p.id) }),
+        if source.is_some() {
+            serde_json::json!({ "duplicated_from": previous.map(|p| p.id) })
+        } else {
+            serde_json::json!({ "prefilled_from": previous.map(|p| p.id) })
+        },
     )
     .await?;
     tx.commit().await.map_err(map_err)?;
     invoice(pool, access, id).await.map(|(row, _)| row)
+}
+
+/// What a new draft's header starts as: a duplicate keeps its source's, a
+/// fresh draft takes the client's and the issuer's.
+struct Start<'a> {
+    treatment: VatTreatment,
+    currency: &'a str,
+    premises: &'a str,
+    device: &'a str,
+    place: &'a str,
+    note: &'a str,
+}
+
+impl<'a> Start<'a> {
+    fn of(source: Option<&'a InvoiceRow>, client: &'a ClientRow, issuer: &'a IssuerRow) -> Self {
+        let treatment = source
+            .map(|s| s.vat_treatment.as_str())
+            .and_then(VatTreatment::parse)
+            .or_else(|| VatTreatment::parse(&client.vat_treatment))
+            .unwrap_or(VatTreatment::OutsideScopeNonEu);
+        Self {
+            treatment,
+            currency: source.map_or(client.currency.as_str(), |s| s.currency.as_str()),
+            premises: source.map_or(issuer.premises.as_str(), |s| s.premises.as_str()),
+            device: source.map_or(issuer.device.as_str(), |s| s.device.as_str()),
+            place: source.map_or(issuer.place_of_issue.as_str(), |s| {
+                s.place_of_issue.as_str()
+            }),
+            note: source.map_or("", |s| s.note.as_str()),
+        }
+    }
+}
+
+/// The lines a new draft starts with: a duplicate's own, else the templates
+/// and the last invoice.
+async fn starting_inputs(
+    pool: &PgPool,
+    client_id: Uuid,
+    source: Option<&(InvoiceRow, Vec<LineRow>)>,
+    previous: Option<&InvoiceRow>,
+) -> Result<Vec<LineInput>, InvoiceError> {
+    if let Some((_, lines)) = source {
+        return Ok(lines
+            .iter()
+            .map(|l| LineInput {
+                description: l.description.clone(),
+                quantity_milli: l.quantity_milli,
+                unit_price_minor: l.unit_price_minor,
+                template_id: l.template_id,
+            })
+            .collect());
+    }
+    let previous_lines = match previous {
+        Some(p) => lines_of(pool, p.id).await?,
+        None => Vec::new(),
+    };
+    starting_lines(pool, client_id, &previous_lines).await
+}
+
+/// Delete a draft. Only a draft: an invoice that took a number is
+/// cancelled and keeps it.
+///
+/// # Errors
+/// The database; not in the view; not a draft.
+pub async fn delete_draft(pool: &PgPool, access: &Access, id: Uuid) -> Result<(), InvoiceError> {
+    let (row, _) = invoice(pool, access, id).await?;
+    if row.status != "draft" {
+        return Err(InvoiceError::NotDraft(row.status));
+    }
+    sqlx::query("delete from finance.invoices where id = $1 and status = 'draft'")
+        .bind(id)
+        .execute(pool)
+        .await
+        .map_err(map_err)?;
+    Ok(())
 }
 
 /// The rows a new draft starts with.
@@ -743,12 +858,59 @@ pub async fn update_draft(
     if row.status != "draft" {
         return Err(InvoiceError::NotDraft(row.status));
     }
-    let treatment =
-        VatTreatment::parse(&row.vat_treatment).unwrap_or(VatTreatment::OutsideScopeNonEu);
+    let treatment = input
+        .vat_treatment
+        .or_else(|| VatTreatment::parse(&row.vat_treatment))
+        .unwrap_or(VatTreatment::OutsideScopeNonEu);
+    // A new client must be the same party's: a draft never changes issuer.
+    let client_id = match input.client_id {
+        Some(c) if c != row.client_id => {
+            let (party,): (Uuid,) =
+                sqlx::query_as("select party_id from finance.clients where id = $1")
+                    .bind(c)
+                    .fetch_optional(pool)
+                    .await
+                    .map_err(map_err)?
+                    .ok_or(DbError::NotFound { what: "client" })?;
+            if party != row.party_id {
+                return Err(DbError::NotFound { what: "client" }.into());
+            }
+            c
+        }
+        _ => row.client_id,
+    };
+    let currency = match input.currency.as_deref().map(str::trim) {
+        Some(c) if !c.is_empty() => {
+            if c.len() != 3 || !c.chars().all(|ch| ch.is_ascii_alphabetic()) {
+                return Err(InvoiceError::Invalid(format!(
+                    "currency: not a code: {c:?}"
+                )));
+            }
+            c.to_ascii_uppercase()
+        }
+        _ => row.currency.clone(),
+    };
+    let series = |given: Option<&String>, current: &str| -> Result<String, InvoiceError> {
+        match given.map(|s| s.trim()) {
+            Some(s) if !s.is_empty() => {
+                if s.len() > 20 || !s.chars().all(|ch| ch.is_ascii_alphanumeric()) {
+                    return Err(InvoiceError::Invalid(format!(
+                        "series: letters and digits only: {s:?}"
+                    )));
+                }
+                Ok(s.to_owned())
+            }
+            _ => Ok(current.to_owned()),
+        }
+    };
+    let premises = series(input.premises.as_ref(), &row.premises)?;
+    let device = series(input.device.as_ref(), &row.device)?;
     let mut tx = pool.begin().await.map_err(map_err)?;
     sqlx::query(
         "update finance.invoices
-            set delivery_date = $2, due_date = $3, place_of_issue = $4, note = $5, updated_at = clock_timestamp()
+            set delivery_date = $2, due_date = $3, place_of_issue = $4, note = $5, client_id = $6,
+                currency = $7, vat_treatment = $8, vat_note = $9, premises = $10, device = $11,
+                updated_at = clock_timestamp()
           where id = $1 and status = 'draft'",
     )
     .bind(id)
@@ -756,6 +918,12 @@ pub async fn update_draft(
     .bind(input.due_date)
     .bind(input.place_of_issue.trim())
     .bind(input.note.trim())
+    .bind(client_id)
+    .bind(&currency)
+    .bind(treatment.as_str())
+    .bind(treatment.note())
+    .bind(&premises)
+    .bind(&device)
     .execute(&mut *tx)
     .await
     .map_err(map_err)?;
@@ -947,9 +1115,12 @@ fn country_name(code: &str) -> String {
 /// # Errors
 /// The database; not in the view; the renderer.
 pub async fn preview(pool: &PgPool, access: &Access, id: Uuid) -> Result<Preview, InvoiceError> {
-    let (row, lines) = invoice(pool, access, id).await?;
+    let (mut row, lines) = invoice(pool, access, id).await?;
     let next = if row.status == "draft" {
-        Some(numbering::peek(pool, row.party_id, row.year).await?)
+        // The number belongs to the year it is taken in, whatever year the
+        // draft was written in.
+        row.year = today().year();
+        Some(numbering::peek(pool, &series_of(&row)).await?)
     } else {
         None
     };
@@ -971,6 +1142,16 @@ pub async fn preview(pool: &PgPool, access: &Access, id: Uuid) -> Result<Preview
         content_hash,
         pdf,
     })
+}
+
+/// The numbering stream a draft approves into.
+fn series_of(row: &InvoiceRow) -> numbering::Series<'_> {
+    numbering::Series {
+        party: row.party_id,
+        year: row.year,
+        premises: &row.premises,
+        device: &row.device,
+    }
 }
 
 fn minute(t: DateTime<Utc>) -> DateTime<Utc> {
@@ -1011,13 +1192,16 @@ pub async fn approve(
     id: Uuid,
     content_hash: &str,
 ) -> Result<Approved, InvoiceError> {
-    let (row, lines) = invoice(pool, access, id).await?;
+    let (mut row, lines) = invoice(pool, access, id).await?;
     if row.status != "draft" {
         return Err(InvoiceError::NotDraft(row.status));
     }
     if lines.is_empty() {
         return Err(InvoiceError::NoLines);
     }
+    // The year of approval, not of the draft: a December draft approved in
+    // January is January's invoice and takes January's counter.
+    row.year = today().year();
     let mut tx = pool.begin().await.map_err(map_err)?;
     // Lock the draft: two approvals of one invoice serialise here, and the
     // second sees `approved` and is refused.
@@ -1030,7 +1214,7 @@ pub async fn approve(
     if status != "draft" {
         return Err(InvoiceError::NotDraft(status));
     }
-    let ordinal = numbering::allocate(&mut tx, row.party_id, row.year).await?;
+    let ordinal = numbering::allocate(&mut tx, &series_of(&row)).await?;
     let issued_at = minute(Utc::now());
     let mut doc = document_of(pool, &row, &lines, issued_at, Some(ordinal)).await?;
     if doc.content_hash()? != content_hash {
@@ -1071,7 +1255,7 @@ pub async fn approve(
     sqlx::query(
         "update finance.invoices
             set status = 'approved', ordinal = $2, issued_at = $3, approved_at = $3, approved_by = $4,
-                content_hash = $5, document_id = $6, vat_note = $7, updated_at = clock_timestamp()
+                content_hash = $5, document_id = $6, vat_note = $7, year = $8, updated_at = clock_timestamp()
           where id = $1",
     )
     .bind(id)
@@ -1081,6 +1265,7 @@ pub async fn approve(
     .bind(&final_hash)
     .bind(document_id)
     .bind(&doc.vat_note)
+    .bind(row.year)
     .execute(&mut *tx)
     .await
     .map_err(map_err)?;
@@ -1115,11 +1300,11 @@ async fn invoice_after(
     Ok((row, lines))
 }
 
-/// Cancel. A draft simply ends; an approved invoice keeps its number --
-/// gapless means 1..n with no holes, not that every number is live.
+/// Cancel an issued invoice. It keeps its number -- gapless means 1..n with
+/// no holes, not that every number is live. A draft is deleted instead.
 ///
 /// # Errors
-/// The database; not in the view; already cancelled or paid.
+/// The database; not in the view; a draft; already cancelled or paid.
 pub async fn cancel(
     pool: &PgPool,
     access: &Access,
@@ -1127,6 +1312,9 @@ pub async fn cancel(
     reason: &str,
 ) -> Result<InvoiceRow, InvoiceError> {
     let (row, _) = invoice(pool, access, id).await?;
+    if row.status == "draft" {
+        return Err(InvoiceError::IsDraft);
+    }
     if row.status == "cancelled" || row.status == "paid" {
         return Err(InvoiceError::NotDraft(row.status));
     }

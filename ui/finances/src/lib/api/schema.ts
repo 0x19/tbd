@@ -183,7 +183,13 @@ export const Connection = z.object({
   valid_until: z.string(),
   authorized_at: z.string(),
   accounts: z.number(),
+  // Why it is failed or revoked: "code exchange refused", "removed by you", "replaced by a newer consent".
+  failure: z.string(),
+  created_at: z.string(),
+  // The consent that took this one's accounts over, when one did.
+  replaced_by: z.string(),
 });
+export const DeleteConnectionResponse = z.object({});
 export type Connection = z.infer<typeof Connection>;
 export const ListConnectionsResponse = z.object({ connections: z.array(Connection) });
 
@@ -282,6 +288,9 @@ export const Invoice = z.object({
   created_at: z.string(),
   updated_at: z.string(),
   lines: z.array(InvoiceLine),
+  // The series the number is (or will be) in.
+  premises: z.string(),
+  device: z.string(),
 });
 export type Invoice = z.infer<typeof Invoice>;
 export const ListInvoicesResponse = z.object({ invoices: z.array(Invoice) });

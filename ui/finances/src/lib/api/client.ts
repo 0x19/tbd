@@ -9,6 +9,7 @@ import {
   ConnectorResponse,
   CounterpartyPolicyResponse,
   DeclareCategoryResponse,
+  DeleteConnectionResponse,
   DeleteLineTemplateResponse,
   DeleteMailTemplateResponse,
   DocumentResponse,
@@ -206,6 +207,8 @@ export const api = {
       method: "POST",
       json: { party_id, psu_type },
     }),
+  deleteConnection: (id: string) =>
+    call(DeleteConnectionResponse, `/v1/finance/connections/${id}/delete`, { method: "POST", json: {} }),
   completeConnection: (state: string, code: string) =>
     call(CompleteConnectionResponse, "/v1/finance/connections/complete", {
       method: "POST",
@@ -222,8 +225,9 @@ export const api = {
   invoices: (party_ids: string[]) =>
     call(ListInvoicesResponse, `/v1/finance/invoices${query({ party_ids })}`),
   invoice: (id: string) => call(InvoiceResponse, `/v1/finance/invoices/${id}`),
-  createInvoice: (client_id: string) =>
-    call(InvoiceResponse, "/v1/finance/invoices", { method: "POST", json: { client_id } }),
+  // A draft for a client, or a duplicate of an invoice (either id may be empty).
+  createInvoice: (client_id: string, from_invoice_id = "") =>
+    call(InvoiceResponse, "/v1/finance/invoices", { method: "POST", json: { client_id, from_invoice_id } }),
   updateInvoice: (
     id: string,
     draft: {
@@ -232,8 +236,16 @@ export const api = {
       place_of_issue: string;
       note: string;
       lines: InvoiceLine[];
+      // The header; empty keeps what the draft has.
+      client_id?: string;
+      currency?: string;
+      vat_treatment?: string;
+      premises?: string;
+      device?: string;
     },
   ) => call(InvoiceResponse, `/v1/finance/invoices/${id}/update`, { method: "POST", json: draft }),
+  deleteInvoice: (id: string) =>
+    call(z.object({}), `/v1/finance/invoices/${id}/delete`, { method: "POST", json: {} }),
   previewInvoice: (id: string) =>
     call(PreviewInvoiceResponse, `/v1/finance/invoices/${id}/preview`, { method: "POST", json: {} }),
   approveInvoice: (id: string, content_hash: string) =>
