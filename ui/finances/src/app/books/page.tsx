@@ -99,10 +99,13 @@ function Books() {
   );
   const data = tb.data;
   const fiscalYear = data?.fiscal_year ?? (year || new Date().getFullYear());
+  // The years with books, plus the last five so an opening can be imported
+  // into a year that has nothing yet.
   const years = useMemo(() => {
+    const now = new Date().getFullYear();
     const ys = new Set<number>(data?.years ?? []);
     ys.add(fiscalYear);
-    ys.add(new Date().getFullYear());
+    for (let y = now; y >= now - 5; y--) ys.add(y);
     return [...ys].sort((a, b) => b - a);
   }, [data?.years, fiscalYear]);
   const rows = data?.rows ?? [];
