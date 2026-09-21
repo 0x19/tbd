@@ -18,6 +18,7 @@ extracted from those files; nothing is estimated.
 | [system.md](system.md) | What the finance service, ledger and chaos tool can do today and the gaps to a double-entry ledger with statutory reporting. |
 | [plan.md](plan.md) | The architecture and the phased plan: ledger core, posting rules, statements, tax return, exports (GFI-POD xls, PDF), dashboard, chaos replay. |
 | [chaos.md](chaos.md) | The chaos scenario families that replay 2025 and compare every position to the filings, and how the tool is extended to carry them. |
+| [email.md](email.md) | The email to the accountant asking only for what nobody else holds, and the list of what we fetch ourselves from ePorezna and FINA first. |
 | [product.md](product.md) | What this becomes for other companies and their accountants, and what has to be true before it is sold. |
 
 Conventions: amounts are EUR with two decimals as filed; account numbers are the

@@ -15,6 +15,7 @@ extend-exclude = [
   # The accountant's 2025 filings quoted verbatim: Croatian account and position names.
   "docs/accountant/gfi-2025.md",
   "docs/accountant/rules.md",
+  "docs/accountant/email.md",
   "docs/accountant/expected/",
   # mobile: buf-generated Dart (protobuf's own accessor names) and Xcode's storyboard ids.
   "mobile/packages/tbd_proto/lib/gen/",
