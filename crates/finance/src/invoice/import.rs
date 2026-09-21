@@ -462,6 +462,9 @@ fn client_block(
 /// `inorbit-31-08-2026-9-1-1-tenderly.pdf` names its client last.
 fn client_hint(source: &str) -> Option<String> {
     let stem = Path::new(source).file_stem()?.to_str()?;
+    // A downloaded copy is "name (1)"; the copy suffix is not the client.
+    let stem = Regex::new(r"\s*\(\d+\)$")
+        .map_or_else(|_| stem.to_owned(), |re| re.replace(stem, "").into_owned());
     let last = stem.rsplit('-').next()?;
     if last.is_empty() || !last.chars().all(char::is_alphabetic) {
         return None;

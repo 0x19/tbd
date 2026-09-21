@@ -79,6 +79,7 @@ pub async fn read(pool: &PgPool, id: Uuid) -> Result<(), StoreError> {
                 duplicates = done.imported.duplicates,
                 already_in_feed = done.already_in_feed,
                 unresolved_days = done.unresolved_days,
+                undirected = done.undirected,
                 "statement read into bank transactions"
             );
         } else {

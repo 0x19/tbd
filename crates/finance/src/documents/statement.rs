@@ -54,6 +54,10 @@ pub struct Statement {
     /// Days whose entries could not be told apart as credits and debits
     /// from the day's totals; their entries are left out.
     pub unresolved_days: usize,
+    /// Entries that no day's totals followed (a statement laid out without
+    /// them, as the personal account's is): their direction is unknown, so
+    /// they are left out and counted here.
+    pub undirected: usize,
 }
 
 /// Whether the text is one of these statements at all.
@@ -154,6 +158,7 @@ pub fn parse(text: &str) -> Option<Statement> {
         }
         i += 1;
     }
+    let undirected = day.len();
     Some(Statement {
         iban,
         currency,
@@ -161,6 +166,7 @@ pub fn parse(text: &str) -> Option<Statement> {
         to,
         entries,
         unresolved_days,
+        undirected,
     })
 }
 
@@ -318,6 +324,8 @@ pub struct Ingested {
     /// Entries the feed already held for that day and amount.
     pub already_in_feed: usize,
     pub unresolved_days: usize,
+    /// Entries left out because nothing said which way they went.
+    pub undirected: usize,
 }
 
 /// Read the statement's entries into the account it names, when that
@@ -400,6 +408,7 @@ pub async fn ingest(
         imported,
         already_in_feed,
         unresolved_days: st.unresolved_days,
+        undirected: st.undirected,
     }))
 }
 
@@ -668,6 +677,15 @@ S t a n j e 2.601,34 9.167,00
         let st = parse(&text).unwrap();
         assert_eq!(st.unresolved_days, 1);
         assert_eq!(st.entries.len(), 4);
+        // Without any day totals nothing says which way an entry went.
+        let flat: String = JULY
+            .lines()
+            .filter(|l| !l.starts_with("Stanje na dan") && !l.starts_with("S t a n j e"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let st = parse(&flat).unwrap();
+        assert_eq!(st.entries.len(), 0);
+        assert_eq!(st.undirected, 7);
         assert!(!is_statement("Račun br. 5\nIBAN: HR12"));
         assert_eq!(parse("nothing"), None);
     }
