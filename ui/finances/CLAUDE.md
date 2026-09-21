@@ -45,8 +45,11 @@ same conventions; read `ui/chaos/CLAUDE.md` for what is the kit's and what is ou
   holds fetch and switch with every outcome's toast, shared with `/accounts/`),
   `/connect/callback/` (the
   registered redirect: reads `state`+`code` from its URL, POSTs `CompleteConnection`,
-  then scrubs the URL), `/invoices/` (drafts, preview, approve, PDF; a row duplicates into a new draft,
-  a draft row deletes after a confirm dialog, `n` starts a draft; the view edits a
+  then scrubs the URL), `/invoices/` (drafts, preview, approve, PDF; one client select filters the list and
+  is the client "New draft" is for; a pin beside it makes that client the default the
+  list opens on, kept in `localStorage` and applied to the URL on the first load only;
+  a row duplicates into a new draft, a draft row deletes after a confirm dialog, `n`
+  starts a draft; the view edits a
   draft's client, VAT treatment, currency and series beside its dates and lines; on an
   issued invoice `components/invoices/payments-card.tsx` lists what settled it -- the
   matcher's bank matches and hand records -- with Undo = `UnlinkPayment` and "Record
@@ -57,7 +60,8 @@ same conventions; read `ui/chaos/CLAUDE.md` for what is the kit's and what is ou
   (one flat list drawn from the `WatchConnectors` SSE feed via `useEvents`: a pull's
   progress and outcome, a relink, a removal arrive as events; `useFetch` polls only
   while the feed is down. Link a mailbox chooses the kind (a `token` kind such as
-  e-računi turns the dialog into a credential step: three fields, `CompleteConnector`
+  Moj-eRačun or e-računi turns the dialog into a credential step: the kind's fields from
+  `TOKEN_FIELDS`, labels `connectors.token.<kind>.<field>`, `CompleteConnector`
   with the pasted JSON as `code` and the `state` the start returned; an `eracuni` row
   has a _Source_ select in place of Gmail's filter), the **purpose** -- read
   receipts, send mail only, or both; `StartConnector.purpose` decides the consent Google

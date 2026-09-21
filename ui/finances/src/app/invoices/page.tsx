@@ -11,6 +11,7 @@ import {
   Copy,
   Download,
   FileText,
+  Pin,
   Plus,
   Search,
   Send,
@@ -67,6 +68,7 @@ const TABS: { id: Tab; label: string; match: (i: Invoice) => boolean }[] = [
   { id: "cancelled", label: "invoices.tab.cancelled", match: (i) => i.status === "cancelled" },
 ];
 type SortKey = "issued" | "due" | "total" | "number";
+const DEFAULT_CLIENT_KEY = "finance.invoices.client";
 
 export default function InvoicesPage() {
   return (
@@ -105,8 +107,26 @@ function Invoices() {
   const dir = params.get("dir") === "asc" ? "asc" : "desc";
   const [search, setSearch] = useState(q);
   const searchRef = useRef<HTMLInputElement>(null);
-  const [newClient, setNewClient] = useState("");
   const [busy, setBusy] = useState(false);
+  // The client the list opens on: pinned once, kept in the browser. Applied
+  // to the URL on the first load only, so "All" chosen by hand stays.
+  const [defaultClient, setDefaultClient] = useState<string>(() => {
+    try {
+      return window.localStorage.getItem(DEFAULT_CLIENT_KEY) ?? "";
+    } catch {
+      return "";
+    }
+  });
+  const pin = (id: string) => {
+    setDefaultClient(id);
+    try {
+      if (id) window.localStorage.setItem(DEFAULT_CLIENT_KEY, id);
+      else window.localStorage.removeItem(DEFAULT_CLIENT_KEY);
+    } catch {
+      // No storage: the pin lasts this visit.
+    }
+  };
+  const appliedDefault = useRef(false);
 
   const set = (patch: Record<string, string>) => {
     const next = new URLSearchParams(params.toString());
@@ -137,6 +157,17 @@ function Invoices() {
   }, []);
 
   const clientList = useMemo(() => clients.data?.clients.filter((c) => !c.archived) ?? [], [clients.data]);
+  useEffect(() => {
+    if (appliedDefault.current || !clients.data) return;
+    appliedDefault.current = true;
+    if (!params.get("client") && defaultClient && clientList.some((c) => c.id === defaultClient)) {
+      set({ client: defaultClient });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clients.data]);
+  // The client a new draft is for: the one the list is on, else the default,
+  // else the first.
+  const draftClient = clientFilter || defaultClient || clientList[0]?.id || "";
   const clientName = (id: string) => clients.data?.clients.find((c) => c.id === id)?.name ?? "—";
   const all = useMemo(() => invoices.data?.invoices ?? [], [invoices.data]);
   const years = useMemo(() => [...new Set(all.map((i) => String(i.year)))].sort().reverse(), [all]);
@@ -204,7 +235,7 @@ function Invoices() {
   }, [all, today]);
 
   const create = async () => {
-    const chosen = newClient || clientList[0]?.id;
+    const chosen = draftClient;
     if (!chosen) return;
     setBusy(true);
     try {
@@ -299,20 +330,11 @@ function Invoices() {
     <>
       <PageTitle title={t("invoices.title")} description={t("invoices.description")}>
         <ScopeToggle className="md:hidden" />
-        <Select value={newClient || clientList[0]?.id || ""} onValueChange={setNewClient}>
-          <SelectTrigger className="w-44">
-            <SelectValue placeholder={t("invoices.client")} />
-          </SelectTrigger>
-          <SelectContent>
-            {clientList.map((c) => (
-              <SelectItem key={c.id} value={c.id}>
-                {c.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Button size="sm" onClick={() => void create()} disabled={busy || clientList.length === 0}>
-          <Plus /> {t("invoices.new_draft")}
+        <Button size="sm" onClick={() => void create()} disabled={busy || !draftClient}>
+          <Plus />{" "}
+          {draftClient
+            ? t("invoices.new_draft_for", { client: clientName(draftClient) })
+            : t("invoices.new_draft")}
         </Button>
       </PageTitle>
 
@@ -403,23 +425,50 @@ function Invoices() {
                 className="w-64 pl-8"
               />
             </form>
-            {clientList.length > 1 ? (
-              <Select
-                value={clientFilter || "any"}
-                onValueChange={(v) => set({ client: v === "any" ? "" : v })}
-              >
-                <SelectTrigger className="w-40">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="any">{t("invoices.any_client")}</SelectItem>
-                  {clientList.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            {clientList.length > 0 ? (
+              <span className="flex items-center gap-1">
+                <Select
+                  value={clientFilter || "any"}
+                  onValueChange={(v) => set({ client: v === "any" ? "" : v })}
+                >
+                  <SelectTrigger className="w-44">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="any">{t("invoices.all_clients")}</SelectItem>
+                    {clientList.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.name}
+                        {c.id === defaultClient ? ` · ${t("invoices.default_mark")}` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {clientFilter ? (
+                  <Button
+                    variant={defaultClient === clientFilter ? "secondary" : "ghost"}
+                    size="icon"
+                    className="size-8"
+                    aria-label={t("invoices.default_client")}
+                    title={
+                      defaultClient === clientFilter
+                        ? t("invoices.default_client_is", { client: clientName(clientFilter) })
+                        : t("invoices.default_client")
+                    }
+                    onClick={() => {
+                      if (defaultClient === clientFilter) {
+                        pin("");
+                        toast.success(t("invoices.default_client_cleared"));
+                      } else {
+                        pin(clientFilter);
+                        toast.success(t("invoices.default_client_set", { client: clientName(clientFilter) }));
+                      }
+                    }}
+                  >
+                    {defaultClient === clientFilter ? <Pin className="fill-current" /> : <Pin />}
+                  </Button>
+                ) : null}
+              </span>
             ) : null}
             {years.length > 1 ? (
               <Select value={yearFilter || "any"} onValueChange={(v) => set({ year: v === "any" ? "" : v })}>
