@@ -1,8 +1,8 @@
 # CONFIDENTIALITY AND DATA PROTECTION AGREEMENT
 
-made in ______________________ on ____ ____________ 20____ between:
+made in Viškovo on ____ ____________ 20____ between:
 
-**1. Inorbit d.o.o.**, with its registered seat at ______________________________________________, Croatia, personal identification number (OIB) 38846238650, represented by its director Nevio Vesić (the **Company**),
+**1. INORBIT d.o.o.** (full name: INORBIT društvo s ograničenom odgovornošću za usluge), with its registered seat at Benčani 15A, Saršoni, 51216 Viškovo, Croatia, entered in the court register of the Commercial Court in Rijeka under registration number (MBS) 081116183, personal identification number (OIB) 38846238650, represented by its director Nevio Vesić (the **Company**),
 
 **2. Nevio Vesić**, ______________________________________________ (address), OIB ______________________, in his own name (the **Director**; the Company and the Director together the **Disclosing Parties**),
 
@@ -122,11 +122,11 @@ h) make available to the Company the information needed to demonstrate complianc
 
 7.2. The Disclosing Parties may seek an injunction against a continuing breach (interim measure) without having to prove irreparable harm, the Parties agreeing that monetary compensation alone would not be adequate protection.
 
-7.3. [Optional, strike if not agreed] For each individual breach of the confidentiality obligation the Recipient shall pay the Disclosing Parties a contractual penalty of EUR ______________, without prejudice to the right to damages exceeding that amount.
+7.3. For each individual breach of an obligation under Articles 2, 3 or 4 of this Agreement the Recipient shall pay the Disclosing Parties a contractual penalty of EUR 10,000.00 (ten thousand euro), whether or not damage has occurred and irrespective of its amount (Article 355 of the Croatian Obligations Act). If the damage exceeds the contractual penalty, the Disclosing Parties are entitled to the difference up to full compensation. No penalty is due where the breach arose from a cause for which the Recipient is not responsible.
 
 ## Article 8. Final provisions
 
-8.1. This Agreement is governed by the law of the Republic of Croatia. The court with subject-matter jurisdiction in ______________________ has jurisdiction over disputes.
+8.1. This Agreement is governed by the law of the Republic of Croatia. The court with subject-matter jurisdiction in Rijeka has jurisdiction over disputes.
 
 8.2. This Agreement is made in Croatian and English. In case of discrepancy the Croatian version prevails.
 
@@ -142,7 +142,7 @@ h) make available to the Company the information needed to demonstrate complianc
 
 | For the Company | The Director, in his own name | For the Recipient |
 |---|---|---|
-| Inorbit d.o.o. | Nevio Vesić | ______________________ |
+| INORBIT d.o.o. | Nevio Vesić | ______________________ |
 | &nbsp; | &nbsp; | &nbsp; |
 | _____________________________ | _____________________________ | _____________________________ |
 | Nevio Vesić, director | | ______________________ (name and title) |

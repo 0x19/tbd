@@ -1,8 +1,8 @@
 # UGOVOR O POVJERLJIVOSTI I ZAŠTITI PODATAKA
 
-sklopljen u ______________________ dana ____. ____. 20____. između:
+sklopljen u Viškovu dana ____. ____. 20____. između:
 
-**1. Inorbit d.o.o.**, sa sjedištem u ______________________________________________, OIB 38846238650, koje zastupa direktor Nevio Vesić (dalje: **Društvo**),
+**1. INORBIT d.o.o.** (puni naziv: INORBIT društvo s ograničenom odgovornošću za usluge), sa sjedištem u Saršonima, Benčani 15A, 51216 Viškovo, upisano u sudski registar Trgovačkog suda u Rijeci pod MBS 081116183, OIB 38846238650, koje zastupa direktor Nevio Vesić (dalje: **Društvo**),
 
 **2. Nevio Vesić**, ______________________________________________ (adresa), OIB ______________________, u vlastito ime (dalje: **Direktor**; Društvo i Direktor zajedno: **Strane koje otkrivaju**),
 
@@ -122,11 +122,11 @@ h) Društvu stavlja na raspolaganje informacije potrebne za dokazivanje ispunjav
 
 7.2. Strane koje otkrivaju ovlaštene su zahtijevati i sudsku zabranu daljnje povrede (privremenu mjeru), bez obveze dokazivanja nenadoknadive štete, jer Ugovorne strane suglasno utvrđuju da novčana naknada sama po sebi ne bi bila dostatna zaštita.
 
-7.3. [Neobvezno, precrtati ako se ne ugovara] Za svaku pojedinu povredu obveze povjerljivosti Primatelj će Stranama koje otkrivaju platiti ugovornu kaznu u iznosu od ______________ EUR, što ne isključuje pravo na naknadu štete koja premašuje taj iznos.
+7.3. Za svaku pojedinu povredu obveza iz članaka 2., 3. ili 4. ovog Ugovora Primatelj će Stranama koje otkrivaju platiti ugovornu kaznu u iznosu od 10.000,00 EUR (deset tisuća eura), bez obzira na to je li šteta nastala i u kojem iznosu (članak 355. Zakona o obveznim odnosima). Ako šteta premašuje iznos ugovorne kazne, Strane koje otkrivaju imaju pravo na razliku do potpune naknade štete. Ugovorna kazna ne dospijeva ako je do povrede došlo iz uzroka za koji Primatelj ne odgovara.
 
 ## Članak 8. Završne odredbe
 
-8.1. Na ovaj Ugovor primjenjuje se pravo Republike Hrvatske. Za sporove je nadležan stvarno nadležni sud u ______________________.
+8.1. Na ovaj Ugovor primjenjuje se pravo Republike Hrvatske. Za sporove je nadležan stvarno nadležni sud u Rijeci.
 
 8.2. Ovaj Ugovor sastavljen je na hrvatskom i engleskom jeziku. U slučaju neslaganja mjerodavna je hrvatska verzija.
 
@@ -142,7 +142,7 @@ h) Društvu stavlja na raspolaganje informacije potrebne za dokazivanje ispunjav
 
 | Za Društvo | Direktor, u vlastito ime | Za Primatelja |
 |---|---|---|
-| Inorbit d.o.o. | Nevio Vesić | ______________________ |
+| INORBIT d.o.o. | Nevio Vesić | ______________________ |
 | &nbsp; | &nbsp; | &nbsp; |
 | _____________________________ | _____________________________ | _____________________________ |
 | Nevio Vesić, direktor | | ______________________ (ime i funkcija) |

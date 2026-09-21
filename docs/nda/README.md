@@ -20,13 +20,29 @@ What it covers, and why it is not a generic NDA:
 - **Credentials.** Clause 2.3.a) makes an account in the finance UI personal and asks
   for multi-factor authentication, which matches how delegated readers are granted.
 - **Term**: five years after the engagement, unlimited for personal data and trade
-  secrets. The contractual penalty (7.3) is optional; strike it or fill the amount.
+  secrets.
+- **Contractual penalty** (7.3): EUR 10,000 per breach of the confidentiality, data
+  protection or return obligations, plus any damage above that (Obligations Act,
+  art. 355). The figure is the one that recurs in European NDA practice (the German
+  federal BMWK portal reports about EUR 5,000 as the everyday figure and up to
+  EUR 25,000 for larger counterparties; Croatian sample clauses use EUR 10,000), and
+  it sits well inside what a court leaves untouched under art. 354, which reduces a
+  penalty "disproportionate to the value and significance of the object of the
+  obligation" on the debtor's request. A six-figure penalty against a small
+  bookkeeping firm for a micro company's books would be cut down on request, and the
+  accountant would likely refuse to sign it; the damages route in 7.1 and 7.3 covers
+  the large-loss case anyway. Sources: zakon.hr (ZOO art. 350-356),
+  existenzgruendungsportal.de (BMWK), katastor.hr, ipdraughts.wordpress.com.
+
+The company data (full name, seat, MBS, court) is filled from the court register as
+mirrored by companywall.hr and fininfo.hr on 2026-09-21; check the MBS against the
+company's own registration decision before signing.
 
 Before sending:
 
-1. Fill the blanks: the company's registered address, the director's address and
-   OIB, the accountant's details, the court's seat (normally where the company sits),
-   the penalty or its deletion, place and date.
+1. Fill the remaining blanks: the director's private address and OIB, the
+   accountant's details, and the date; change the place of signing if it is not
+   Viškovo.
 2. Have a Croatian lawyer read it once. It was drafted with care from the Croatian
    Obligations Act, the GDPR and the trade-secrets act in mind, but it is not legal
    advice, and the accountant may have their own engagement terms to reconcile.
