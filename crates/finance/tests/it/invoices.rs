@@ -9,9 +9,8 @@ use sqlx::PgPool;
 use tbd_db::{Capability, PartyId, UserId, create_org, ensure_user, grant};
 use tbd_proto::finance::v1::{
     ApproveInvoiceRequest, CancelInvoiceRequest, ClientProfile, CreateInvoiceRequest,
-    DeleteInvoiceRequest, GetInvoiceDocumentRequest, GetInvoiceRequest, InvoiceLine, IssuerProfile,
-    ListInvoicesRequest, PreviewInvoiceRequest, UpdateInvoiceRequest, UpsertClientRequest,
-    UpsertIssuerRequest,
+    GetInvoiceDocumentRequest, InvoiceLine, IssuerProfile, ListInvoicesRequest,
+    PreviewInvoiceRequest, UpdateInvoiceRequest, UpsertClientRequest, UpsertIssuerRequest,
 };
 use tonic::{Code, Request, metadata::MetadataValue};
 use uuid::Uuid;
@@ -162,7 +161,6 @@ async fn draft(server: &Server, party: Uuid) -> (String, String) {
             OWNER,
             CreateInvoiceRequest {
                 client_id: cl.id.clone(),
-                ..Default::default()
             },
         ))
         .await
@@ -182,7 +180,6 @@ async fn draft(server: &Server, party: Uuid) -> (String, String) {
                 place_of_issue: "Viškovo".into(),
                 note: String::new(),
                 lines: lines(),
-                ..Default::default()
             },
         ))
         .await
@@ -278,7 +275,10 @@ async fn a_draft_changed_after_the_preview_is_refused_and_takes_no_number() {
     let mut changed = lines();
     changed[1].unit_price_minor += 1;
     let inv = c
-        .get_invoice(as_caller(OWNER, GetInvoiceRequest { id: id.clone() }))
+        .get_invoice(as_caller(
+            OWNER,
+            tbd_proto::finance::v1::GetInvoiceRequest { id: id.clone() },
+        ))
         .await
         .unwrap()
         .into_inner()
@@ -293,7 +293,6 @@ async fn a_draft_changed_after_the_preview_is_refused_and_takes_no_number() {
             place_of_issue: inv.place_of_issue,
             note: String::new(),
             lines: changed,
-            ..Default::default()
         },
     ))
     .await
@@ -366,7 +365,6 @@ async fn numbers_are_consecutive_and_a_cancelled_invoice_keeps_its_number() {
             OWNER,
             CreateInvoiceRequest {
                 client_id: client_id.clone(),
-                ..Default::default()
             },
         ))
         .await
@@ -379,13 +377,7 @@ async fn numbers_are_consecutive_and_a_cancelled_invoice_keeps_its_number() {
     assert_eq!(b_draft.prefilled_from, a.id);
     let b = approve(&server, b_draft.id).await;
     let c_draft = c
-        .create_invoice(as_caller(
-            OWNER,
-            CreateInvoiceRequest {
-                client_id,
-                ..Default::default()
-            },
-        ))
+        .create_invoice(as_caller(OWNER, CreateInvoiceRequest { client_id }))
         .await
         .unwrap()
         .into_inner()
@@ -532,7 +524,6 @@ async fn a_draft_starts_from_the_templates_with_last_months_variable_price() {
             OWNER,
             CreateInvoiceRequest {
                 client_id: client_id.clone(),
-                ..Default::default()
             },
         ))
         .await
@@ -571,215 +562,4 @@ async fn a_draft_starts_from_the_templates_with_last_months_variable_price() {
         .await
         .unwrap_err();
     assert_eq!(e.code(), Code::NotFound);
-}
-
-/// A draft is deleted, not cancelled; its header may change while it is a
-/// draft; a duplicate starts from any invoice; each series counts on its own.
-#[tokio::test]
-#[allow(clippy::too_many_lines)]
-async fn a_draft_is_deleted_its_header_edited_and_a_series_counts_alone() {
-    let (server, pool) = start_with_store().await;
-    let w = seed(&pool).await;
-    let (first, client_id) = draft(&server, w.company).await;
-    let mut c = server.client().await;
-    let year = chrono::Utc::now().format("%Y").to_string();
-
-    // A draft cannot be cancelled: it took no number, so it is deleted.
-    let e = c
-        .cancel_invoice(as_caller(
-            OWNER,
-            CancelInvoiceRequest {
-                id: first.clone(),
-                reason: "x".into(),
-            },
-        ))
-        .await
-        .unwrap_err();
-    assert_eq!(e.code(), Code::FailedPrecondition, "{e}");
-
-    // The header of a draft: a second client of the same party, the
-    // currency, the VAT treatment with its note, the series.
-    let other = c
-        .upsert_client(as_caller(
-            OWNER,
-            UpsertClientRequest {
-                client: Some(ClientProfile {
-                    name: "Bolt d.o.o.".into(),
-                    country_code: "HR".into(),
-                    vat_treatment: "standard_hr".into(),
-                    ..client(w.company)
-                }),
-            },
-        ))
-        .await
-        .unwrap()
-        .into_inner()
-        .client
-        .unwrap();
-    let inv = c
-        .get_invoice(as_caller(OWNER, GetInvoiceRequest { id: first.clone() }))
-        .await
-        .unwrap()
-        .into_inner()
-        .invoice
-        .unwrap();
-    let edited = c
-        .update_invoice(as_caller(
-            OWNER,
-            UpdateInvoiceRequest {
-                id: first.clone(),
-                delivery_date: inv.delivery_date.clone(),
-                due_date: inv.due_date.clone(),
-                place_of_issue: "Rijeka".into(),
-                note: String::new(),
-                lines: lines(),
-                client_id: other.id.clone(),
-                currency: "usd".into(),
-                vat_treatment: "standard_hr".into(),
-                premises: "2".into(),
-                device: "1".into(),
-            },
-        ))
-        .await
-        .unwrap()
-        .into_inner()
-        .invoice
-        .unwrap();
-    assert_eq!(edited.client_id, other.id);
-    assert_eq!(edited.currency, "USD");
-    assert_eq!(edited.vat_treatment, "standard_hr");
-    assert_eq!(
-        edited.vat_minor, 362_521,
-        "25 % of 1,450,082 rounded half up"
-    );
-    assert_eq!(edited.total_minor, 1_450_082 + 362_521);
-    assert!(
-        edited.vat_note.is_empty(),
-        "standard VAT carries no exemption note"
-    );
-
-    // A bad treatment or currency is refused and changes nothing.
-    let e = c
-        .update_invoice(as_caller(
-            OWNER,
-            UpdateInvoiceRequest {
-                id: first.clone(),
-                delivery_date: inv.delivery_date.clone(),
-                due_date: inv.due_date.clone(),
-                lines: lines(),
-                vat_treatment: "vat_free".into(),
-                ..Default::default()
-            },
-        ))
-        .await
-        .unwrap_err();
-    assert_eq!(e.code(), Code::InvalidArgument, "{e}");
-    let e = c
-        .update_invoice(as_caller(
-            OWNER,
-            UpdateInvoiceRequest {
-                id: first.clone(),
-                delivery_date: inv.delivery_date.clone(),
-                due_date: inv.due_date.clone(),
-                lines: lines(),
-                currency: "EURO".into(),
-                ..Default::default()
-            },
-        ))
-        .await
-        .unwrap_err();
-    assert_eq!(e.code(), Code::InvalidArgument, "{e}");
-
-    // Premises 2 numbers from 1 on its own; premises 1 too.
-    let on_two = approve(&server, first.clone()).await;
-    assert_eq!(on_two.number, format!("1-2-1-{year}"));
-    let fresh = c
-        .create_invoice(as_caller(
-            OWNER,
-            CreateInvoiceRequest {
-                client_id: client_id.clone(),
-                ..Default::default()
-            },
-        ))
-        .await
-        .unwrap()
-        .into_inner()
-        .invoice
-        .unwrap();
-    // Tenderly has no issued invoice yet (the first went to Bolt), so the
-    // draft starts empty; give it the lines.
-    c.update_invoice(as_caller(
-        OWNER,
-        UpdateInvoiceRequest {
-            id: fresh.id.clone(),
-            delivery_date: fresh.delivery_date.clone(),
-            due_date: fresh.due_date.clone(),
-            lines: lines(),
-            ..Default::default()
-        },
-    ))
-    .await
-    .unwrap();
-    let on_one = approve(&server, fresh.id.clone()).await;
-    assert_eq!(on_one.number, format!("1-1-1-{year}"), "its own counter");
-
-    // A duplicate of an issued invoice: same header and lines, a draft dated
-    // today, no number.
-    let dup = c
-        .create_invoice(as_caller(
-            OWNER,
-            CreateInvoiceRequest {
-                from_invoice_id: on_two.id.clone(),
-                ..Default::default()
-            },
-        ))
-        .await
-        .unwrap()
-        .into_inner()
-        .invoice
-        .unwrap();
-    assert_eq!(dup.status, "draft");
-    assert_eq!(dup.number, "");
-    assert_eq!(dup.client_id, other.id);
-    assert_eq!(dup.currency, "USD");
-    assert_eq!(dup.vat_treatment, "standard_hr");
-    assert_eq!(dup.place_of_issue, "Rijeka");
-    assert_eq!(dup.lines.len(), 2);
-    assert_eq!(dup.total_minor, on_two.total_minor);
-    assert_eq!(dup.prefilled_from, on_two.id);
-
-    // Deleting: a draft goes, an issued invoice does not.
-    c.delete_invoice(as_caller(
-        OWNER,
-        DeleteInvoiceRequest { id: dup.id.clone() },
-    ))
-    .await
-    .unwrap();
-    let e = c
-        .get_invoice(as_caller(OWNER, GetInvoiceRequest { id: dup.id.clone() }))
-        .await
-        .unwrap_err();
-    assert_eq!(e.code(), Code::NotFound, "{e}");
-    let e = c
-        .delete_invoice(as_caller(
-            OWNER,
-            DeleteInvoiceRequest {
-                id: on_two.id.clone(),
-            },
-        ))
-        .await
-        .unwrap_err();
-    assert_eq!(e.code(), Code::FailedPrecondition, "{e}");
-    let list = c
-        .list_invoices(as_caller(OWNER, ListInvoicesRequest::default()))
-        .await
-        .unwrap()
-        .into_inner()
-        .invoices;
-    assert_eq!(list.len(), 2, "two issued, the draft gone");
-    let (n,): (i64,) = sqlx::query_as("select count(*) from finance.invoice_lines")
-        .fetch_one(&pool)
-        .await
-        .unwrap();
-    assert_eq!(n, 4, "the deleted draft's lines went with it");
 }

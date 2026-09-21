@@ -33,12 +33,19 @@ same conventions; read `ui/chaos/CLAUDE.md` for what is the kit's and what is ou
   `MonthlySummary`, edited through `category-dialog.tsx` = `UpsertCategory`; rules
   grouped by category with search and the claims-nothing filter; `rule-dialog.tsx`
   saves through `UpsertRule`, which reapplies at once),
-  `/accounts/` (balances, sync state, "Fetch now" = `RefreshAccount`), `/connections/`
-  (`StartConnection` sends the browser to the bank), `/connect/callback/` (the
+  `/accounts/` (balances, sync state, "Fetch now" = `RefreshAccount`; a card links to
+  its bank), `/connections/` ("Banks": a strip -- banks connected, accounts fetched,
+  the consent ending soonest, fetches left today -- and one `consent-card.tsx` per
+  consent with its life in a sentence (`src/lib/banking.ts`: `consentState`, `nextFetch`,
+  `fetchesLeft`, pure over the wire rows) and its accounts under it: balance, last and
+  next fetch, fetches today of four, the last outcome, the schedule switch, Fetch now;
+  Renew = `StartConnection` with the card's party and login (the callback moves the
+  accounts), Fetch all, Remove = `DeleteConnection` after a confirm; `link-dialog.tsx`
+  chooses party and login and says what the bank will ask; `use-account-actions.ts`
+  holds fetch and switch with every outcome's toast, shared with `/accounts/`),
+  `/connect/callback/` (the
   registered redirect: reads `state`+`code` from its URL, POSTs `CompleteConnection`,
-  then scrubs the URL), `/invoices/` (drafts, preview, approve, PDF; a row duplicates into a new draft,
-  a draft row deletes after a confirm dialog, `n` starts a draft; the view edits a
-  draft's client, VAT treatment, currency and series beside its dates and lines), `/clients/` (a table; a sheet per
+  then scrubs the URL), `/invoices/` (drafts, preview, approve, PDF), `/clients/` (a table; a sheet per
   client with its details and line templates), `/issuer/` (one form in sections), `/connectors/`
   (one flat list drawn from the `WatchConnectors` SSE feed via `useEvents`: a pull's
   progress and outcome, a relink, a removal arrive as events; `useFetch` polls only

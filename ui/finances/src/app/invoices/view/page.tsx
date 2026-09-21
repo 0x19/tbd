@@ -3,7 +3,7 @@
 // One invoice: a draft is edited here, previewed as the PDF it would become,
 // and approved with the hash of exactly that preview. An approved invoice is
 // the immutable record: its PDF, its number, who approved it.
-import { Check, Copy, Download, ExternalLink, Eye, Maximize2, Plus, Send, Trash2, X } from "lucide-react";
+import { Check, Download, ExternalLink, Eye, Maximize2, Plus, Send, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
@@ -12,22 +12,11 @@ import { toast } from "sonner";
 import { useFinance } from "@/app/providers";
 import { PageTitle } from "@/components/kit";
 import { StatusBadge } from "@/components/status-badge";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { api, pdfUrl } from "@/lib/api/client";
@@ -85,10 +74,7 @@ function toMinor(text: string, scale: number): string {
 const VAT_LABEL: Record<string, string> = {
   standard_hr: "invoices.vat.standard_hr",
   reverse_charge_eu: "invoices.vat.reverse_charge_eu",
-  outside_scope_non_eu: "invoices.vat.outside_scope_non_eu",
-  exempt_issuer: "invoices.vat.exempt_issuer",
 };
-const TREATMENTS = ["standard_hr", "reverse_charge_eu", "outside_scope_non_eu", "exempt_issuer"];
 const MODE_LABEL: Record<string, string> = {
   fixed: "invoices.mode.fixed",
   variable: "invoices.mode.variable",
@@ -152,19 +138,9 @@ function InvoiceView() {
   const [due, setDue] = useState("");
   const [place, setPlace] = useState("");
   const [note, setNote] = useState("");
-  // The header a draft may still change: client (same party), currency,
-  // VAT treatment, series.
-  const [clientId, setClientId] = useState("");
-  const [currency, setCurrency] = useState("");
-  const [treatment, setTreatment] = useState("");
-  const [premises, setPremises] = useState("");
-  const [device, setDevice] = useState("");
-  const [deleting, setDeleting] = useState(false);
   const [lines, setLines] = useState<EditLine[]>([]);
   const [dirty, setDirty] = useState(false);
-  const [busy, setBusy] = useState<"" | "save" | "preview" | "approve" | "cancel" | "duplicate" | "delete">(
-    "",
-  );
+  const [busy, setBusy] = useState<"" | "save" | "preview" | "approve" | "cancel">("");
   const [preview, setPreview] = useState<{ url: string; hash: string; number: string; at: number } | null>(
     null,
   );
@@ -186,11 +162,6 @@ function InvoiceView() {
     setDue(inv.due_date);
     setPlace(inv.place_of_issue);
     setNote(inv.note);
-    setClientId(inv.client_id);
-    setCurrency(inv.currency);
-    setTreatment(inv.vat_treatment);
-    setPremises(inv.premises);
-    setDevice(inv.device);
     setLines(inv.lines.map(toEdit));
     setDirty(false);
     setPreview(null);
@@ -226,10 +197,10 @@ function InvoiceView() {
       const half = n < 0n ? -500n : 500n;
       subtotal += (n + half) / 1000n;
     }
-    const rate = treatment === "standard_hr" ? 2500n : 0n;
+    const rate = inv?.vat_treatment === "standard_hr" ? 2500n : 0n;
     const vat = (subtotal * rate + 5000n) / 10000n;
     return { subtotal, vat, total: subtotal + vat };
-  }, [lines, treatment]);
+  }, [lines, inv?.vat_treatment]);
 
   const save = async (): Promise<Invoice | null> => {
     if (!inv) return null;
@@ -241,11 +212,6 @@ function InvoiceView() {
         place_of_issue: place,
         note,
         lines: toApiLines(lines),
-        client_id: clientId,
-        currency,
-        vat_treatment: treatment,
-        premises,
-        device,
       });
       setDirty(false);
       loaded.setData(r);
@@ -333,7 +299,10 @@ function InvoiceView() {
 
   const cancel = async () => {
     if (!inv) return;
-    const reason = window.prompt(t("invoices.cancel_confirm"), "");
+    const reason = window.prompt(
+      inv.status === "draft" ? t("invoices.discard_confirm") : t("invoices.cancel_confirm"),
+      "",
+    );
     if (reason === null) return;
     setBusy("cancel");
     try {
@@ -342,33 +311,6 @@ function InvoiceView() {
     } catch (e) {
       toast.error(describe(e));
     } finally {
-      setBusy("");
-    }
-  };
-
-  // A draft is deleted, never cancelled: it took no number.
-  const remove = async () => {
-    if (!inv) return;
-    setBusy("delete");
-    try {
-      await api.deleteInvoice(inv.id);
-      toast.success(t("invoices.deleted"));
-      router.push("/invoices/");
-    } catch (e) {
-      toast.error(describe(e));
-      setBusy("");
-    }
-  };
-
-  const duplicate = async () => {
-    if (!inv) return;
-    setBusy("duplicate");
-    try {
-      const r = await api.createInvoice("", inv.id);
-      toast.success(t("invoices.duplicated", { number: inv.number || t("invoices.draft_title") }));
-      router.push(`/invoices/view/?id=${r.invoice!.id}`);
-    } catch (e) {
-      toast.error(describe(e));
       setBusy("");
     }
   };
@@ -429,32 +371,12 @@ function InvoiceView() {
             </Button>
           </>
         ) : null}
-        <Button variant="outline" size="sm" onClick={() => void duplicate()} disabled={busy !== ""}>
-          <Copy /> {t("invoices.duplicate")}
-        </Button>
-        {inv.status === "approved" ? (
+        {inv.status === "draft" || inv.status === "approved" ? (
           <Button variant="ghost" size="sm" onClick={() => void cancel()} disabled={busy !== ""}>
-            <X /> {t("invoices.cancel_invoice")}
-          </Button>
-        ) : null}
-        {editable ? (
-          <Button variant="ghost" size="sm" onClick={() => setDeleting(true)} disabled={busy !== ""}>
-            <Trash2 /> {t("invoices.delete_draft")}
+            <X /> {inv.status === "draft" ? t("invoices.discard") : t("invoices.cancel_invoice")}
           </Button>
         ) : null}
       </PageTitle>
-      <AlertDialog open={deleting} onOpenChange={setDeleting}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t("invoices.delete_title")}</AlertDialogTitle>
-            <AlertDialogDescription>{t("invoices.delete_confirm")}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
-            <AlertDialogAction onClick={() => void remove()}>{t("invoices.delete_draft")}</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       <div className="grid gap-6 xl:grid-cols-5">
         <div className="space-y-6 xl:col-span-3">
@@ -470,59 +392,6 @@ function InvoiceView() {
               </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-3">
-              {editable ? (
-                <>
-                  <Field label={t("invoices.client")}>
-                    <Select value={clientId} onValueChange={(v) => edit(setClientId)(v)}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(clients.data?.clients ?? [])
-                          .filter((c) => !c.archived || c.id === clientId)
-                          .map((c) => (
-                            <SelectItem key={c.id} value={c.id}>
-                              {c.name}
-                            </SelectItem>
-                          ))}
-                      </SelectContent>
-                    </Select>
-                  </Field>
-                  <Field label={t("invoices.vat_treatment")}>
-                    <Select value={treatment} onValueChange={(v) => edit(setTreatment)(v)}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {TREATMENTS.map((v) => (
-                          <SelectItem key={v} value={v}>
-                            {t(VAT_LABEL[v]!)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </Field>
-                  <div className="grid grid-cols-3 gap-2">
-                    <Field label={t("invoices.currency")}>
-                      <Input
-                        value={currency}
-                        maxLength={3}
-                        onChange={(e) => edit(setCurrency)(e.target.value.toUpperCase())}
-                      />
-                    </Field>
-                    <Field
-                      label={t("invoices.series")}
-                      className="col-span-2"
-                      hint={t("invoices.series_hint")}
-                    >
-                      <div className="flex gap-1">
-                        <Input value={premises} onChange={(e) => edit(setPremises)(e.target.value)} />
-                        <Input value={device} onChange={(e) => edit(setDevice)(e.target.value)} />
-                      </div>
-                    </Field>
-                  </div>
-                </>
-              ) : null}
               <Field label={t("invoices.delivery_date")}>
                 <Input
                   type="date"
@@ -813,18 +682,14 @@ function Field({
   label,
   children,
   className,
-  hint,
 }: {
   label: string;
   children: React.ReactNode;
   className?: string;
-  hint?: string;
 }) {
   return (
     <div className={className}>
-      <Label className="text-muted-foreground mb-1.5 block text-xs" title={hint}>
-        {label}
-      </Label>
+      <Label className="text-muted-foreground mb-1.5 block text-xs">{label}</Label>
       {children}
     </div>
   );

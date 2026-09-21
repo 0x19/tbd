@@ -1,10 +1,10 @@
 "use client";
 
 import { RefreshCw } from "lucide-react";
-import { useState } from "react";
-import { toast } from "sonner";
+import Link from "next/link";
 
 import { useFinance } from "@/app/providers";
+import { useAccountActions } from "@/components/banking/use-account-actions";
 import { PageTitle } from "@/components/kit";
 import { ScopeToggle } from "@/components/scope-toggle";
 import { StatusBadge } from "@/components/status-badge";
@@ -13,10 +13,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { api } from "@/lib/api/client";
-import { describe, useFetch } from "@/lib/api/hooks";
+import { useFetch } from "@/lib/api/hooks";
 import type { Account } from "@/lib/api/schema";
+import { isStale } from "@/lib/banking";
 import { ago, money, when } from "@/lib/format";
-import { useLang, useT } from "@/lib/i18n";
+import { useT } from "@/lib/i18n";
 
 export default function AccountsPage() {
   const t = useT();
@@ -49,50 +50,11 @@ export default function AccountsPage() {
 
 function AccountCard({ a, onChanged }: { a: Account; onChanged: () => void }) {
   const t = useT();
-  const { lang } = useLang();
-  const [busy, setBusy] = useState(false);
-  const [toggling, setToggling] = useState(false);
-  const setSync = async (enabled: boolean) => {
-    setToggling(true);
-    try {
-      await api.setAccountSync(a.id, enabled);
-      toast.success(enabled ? t("banking.sync_on_toast") : t("banking.sync_off_toast"));
-      onChanged();
-    } catch (e) {
-      toast.error(describe(e));
-    } finally {
-      setToggling(false);
-    }
-  };
+  const { busy, refresh, setSync, hhmm } = useAccountActions(onChanged);
   const closing = a.balances.find((b) => b.balance_type === "CLBD") ?? a.balances[0];
-  const stale = a.last_synced_at ? Date.now() - new Date(a.last_synced_at).getTime() > 9 * 3600_000 : true;
+  const stale = isStale(a);
   const backoffUntil = a.sync_backoff_until ? new Date(a.sync_backoff_until) : null;
   const backingOff = backoffUntil !== null && backoffUntil.getTime() > Date.now();
-  const hhmm = (d: Date) =>
-    d.toLocaleTimeString(lang === "hr" ? "hr-HR" : "en-GB", { hour: "2-digit", minute: "2-digit" });
-  const refresh = async () => {
-    setBusy(true);
-    try {
-      const r = await api.refresh(a.id);
-      if (r.outcome === "ok")
-        toast.success(
-          t("banking.fetched_toast", { inserted: r.inserted, booked: r.booked, duplicates: r.duplicates }),
-        );
-      else if (r.outcome === "skipped" && r.skipped === "backing_off" && backoffUntil)
-        toast.warning(t("banking.backing_off_toast", { time: hhmm(backoffUntil) }));
-      else if (r.outcome === "skipped" && r.skipped === "budget_spent")
-        toast.warning(t("banking.budget_spent_toast"));
-      else if (r.outcome === "skipped")
-        toast.warning(t("banking.not_fetched_toast", { reason: r.skipped.replace(/_/g, " ") }));
-      else if (r.outcome === "rate_limited") toast.error(t("banking.rate_limited_toast"));
-      else toast.error(t("banking.bank_answered_toast", { outcome: r.outcome.replace(/_/g, " ") }));
-      onChanged();
-    } catch (e) {
-      toast.error(describe(e));
-    } finally {
-      setBusy(false);
-    }
-  };
   return (
     <Card>
       <CardHeader className="flex flex-row items-start justify-between gap-2">
@@ -123,41 +85,40 @@ function AccountCard({ a, onChanged }: { a: Account; onChanged: () => void }) {
           {backingOff && backoffUntil ? (
             <>
               <dt>{t("banking.bank_asked_to_wait")}</dt>
-              <dd className="text-amber-600">{t("banking.until_time", { time: hhmm(backoffUntil) })}</dd>
+              <dd>{t("banking.until_time", { time: hhmm(backoffUntil) })}</dd>
             </>
           ) : null}
           {a.last_sync_error ? (
             <>
               <dt>{t("banking.last_error")}</dt>
-              <dd className="text-destructive col-span-2 truncate">{a.last_sync_error}</dd>
+              <dd className="text-destructive truncate" title={a.last_sync_error}>
+                {a.last_sync_error}
+              </dd>
             </>
           ) : null}
         </dl>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => void refresh()}
-          disabled={busy || !a.connection_id || backingOff || a.sync_budget_used >= 4}
-          title={
-            backingOff && backoffUntil
-              ? t("banking.wait_until_hint", { time: hhmm(backoffUntil) })
-              : a.sync_budget_used >= 4
-                ? t("banking.budget_spent_hint")
-                : t("banking.one_kept_hint")
-          }
-        >
-          <RefreshCw className={busy ? "animate-spin" : undefined} />{" "}
-          {busy ? t("banking.fetching") : t("banking.fetch_now")}
-        </Button>
-        <label className="text-muted-foreground flex items-center gap-2 text-xs">
-          <Switch
-            checked={a.sync_enabled}
-            disabled={toggling}
-            onCheckedChange={(v) => void setSync(v)}
-            aria-label={t("banking.fetch_on_schedule")}
-          />
-          {a.sync_enabled ? t("banking.scheduled_on") : t("banking.scheduled_off")}
-        </label>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <label className="flex items-center gap-2 text-xs">
+            <Switch
+              checked={a.sync_enabled}
+              disabled={busy !== ""}
+              onCheckedChange={(v) => void setSync(a, v)}
+              aria-label={t("banking.fetch_on_schedule")}
+            />
+            {a.sync_enabled ? t("banking.scheduled_on") : t("banking.scheduled_off")}
+          </label>
+          <div className="flex items-center gap-1">
+            {a.connection_id ? (
+              <Button asChild variant="ghost" size="sm">
+                <Link href={`/connections/#${a.connection_id}`}>{t("banking.open_bank")}</Link>
+              </Button>
+            ) : null}
+            <Button variant="outline" size="sm" disabled={busy !== ""} onClick={() => void refresh(a)}>
+              <RefreshCw className={busy === `refresh:${a.id}` ? "animate-spin" : undefined} />{" "}
+              {busy === `refresh:${a.id}` ? t("banking.fetching") : t("banking.fetch_now")}
+            </Button>
+          </div>
+        </div>
       </CardContent>
     </Card>
   );

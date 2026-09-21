@@ -89,6 +89,9 @@ pub struct ConnectionRow {
     pub valid_until: Option<DateTime<Utc>>,
     pub authorized_at: Option<DateTime<Utc>>,
     pub accounts: i64,
+    pub failure: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub replaced_by: Option<Uuid>,
 }
 
 /// What a rule looks like when a person writes it.
@@ -242,7 +245,8 @@ pub async fn connections(pool: &PgPool, view: &Access) -> Result<Vec<ConnectionR
     sqlx::query_as::<_, ConnectionRow>(
         "select c.id, c.party_id, c.provider, c.psu_type, c.aspsp_name, c.status,
                 c.valid_until, c.authorized_at,
-                (select count(*) from finance.accounts a where a.connection_id = c.id) as accounts
+                (select count(*) from finance.accounts a where a.connection_id = c.id) as accounts,
+                c.failure, c.created_at, c.replaced_by
            from finance.connections c where c.party_id = any($1)
           order by c.created_at desc",
     )
@@ -305,6 +309,24 @@ pub async fn connection_party_by_state(
     let row: Option<(Uuid,)> =
         sqlx::query_as("select party_id from finance.connections where state = $1")
             .bind(state)
+            .fetch_optional(pool)
+            .await
+            .map_err(map_err)?;
+    let party = row
+        .map(|(p,)| p)
+        .ok_or(DbError::NotFound { what: "connection" })?;
+    access.require(PartyId(party), "connection")?;
+    Ok(party)
+}
+
+/// The party of a connection, if the caller may know it.
+///
+/// # Errors
+/// Not-found for an unknown id or one outside the grant.
+pub async fn connection_party(pool: &PgPool, access: &Access, id: Uuid) -> Result<Uuid, DbError> {
+    let row: Option<(Uuid,)> =
+        sqlx::query_as("select party_id from finance.connections where id = $1")
+            .bind(id)
             .fetch_optional(pool)
             .await
             .map_err(map_err)?;

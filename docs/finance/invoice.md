@@ -10,19 +10,12 @@ given. The code is `crates/finance/src/invoice/`; the template is
 draft ──preview──▶ (hash, PDF)          nothing written
 draft ──approve(hash)──▶ approved        number taken, PDF stored, hash recorded
 approved ──cancel──▶ cancelled           keeps its number
-draft ──delete──▶ (gone)                 never had one; nothing remains
-any ──duplicate──▶ draft                 the header and lines, dated today
+draft ──discard──▶ cancelled             never had one
 ```
 
 - A **number** is `ordinal-premises-device-year`, e.g. `10-1-1-2026`, allocated
   at approval from `finance.invoice_numbers` under its row lock, inside the
-  approving transaction. Gapless per year **and per series**: the counter is one
-  per `(party, year, premises, device)`, so a second premises numbers from 1 on
-  its own. The year is the year of approval, whatever year the draft was written
-  in. Never a sequence.
-- A **draft's header** may change until it is approved: the client (of the same
-  party), the currency, the VAT treatment (its note follows) and the series. A
-  draft that is not wanted is deleted; only an issued invoice is cancelled.
+  approving transaction. Gapless per year. Never a sequence.
 - A **preview** renders the draft with the number it *would* take and the current
   minute, watermarked `PREVIEW`, and returns the SHA-256 of the canonical document.
   The minute is truncated so an approval that follows within it computes the same

@@ -24,8 +24,15 @@ The finance service. gRPC only. Scaffolded by `tbd new service` (docs/tbd/README
 - `banking/`: `Provider` trait (hands back JSON *unparsed*, see above), the Enable
   Banking client (`ring` RS256, pages by repeating the date window because Erste 422s a
   continuation key sent alone), `Mock` with every failure mode and a call counter,
-  `connect.rs` (consent: `state` is ours and single-use, a foreign party gets `NotFound`),
-  `adopt.rs` (one-time migration of the prototype's consents).
+  `connect.rs` (consent: `state` is ours and single-use, a foreign party gets `NotFound`;
+  `complete` upserts accounts on `(party, iban, currency)` onto the new consent, so a
+  renewal takes them over, and then revokes the earlier authorized consent of the same
+  login left with none, `replaced_by` pointing at the new one; `remove` deletes a
+  pending or failed consent and revokes an authorized one -- "removed by you", accounts
+  kept with `sync_enabled = false`, the loop stops on its own since it fetches only under
+  an authorized consent; `sweep_abandoned` drops pending rows older than an hour, at
+  start and before a new consent), `adopt.rs` (one-time migration of the prototype's
+  consents).
 - `sync.rs`: the worker. Budget, backoff and watermark are columns on the account, decided
   under `for update skip locked` and committed *before* the network call. Three of four
   daily fetches are the scheduler's; the fourth is a person's. Measured on Erste
@@ -34,15 +41,10 @@ The finance service. gRPC only. Scaffolded by `tbd new service` (docs/tbd/README
   `Psu-Ip-Address` is counted like any other, so an attended refresh is labelled but not
   exempt. `tick(now)` is a pure step for tests; `run` loops it.
 - `invoice/`: drafts, previews, approvals (`store.rs`), the gapless counter
-  (`numbering.rs`, a locked row per `(party, year, premises, device)`, never a
-  sequence; the year is the year of approval), integer totals (`totals.rs`), and
+  (`numbering.rs`, a locked row, never a sequence), integer totals (`totals.rs`), and
   the Typst renderer (`render.rs`: template, Inter and the mark compiled in; PDF id
   and date pinned, so a render is a pure function of the document). The approval
-  names the preview's content hash; a changed draft is FAILED_PRECONDITION. A draft's
-  header (client of the same party, currency, VAT treatment, series) changes through
-  `UpdateInvoice` until approval; a draft is deleted (`DeleteInvoice`), never
-  cancelled, and `CancelInvoice` refuses one; `CreateInvoice{from_invoice_id}`
-  duplicates any invoice's header and lines into a draft dated today. See
+  names the preview's content hash; a changed draft is FAILED_PRECONDITION. See
   `docs/finance/invoice.md`. `service_invoices.rs` holds the RPCs.
 - `connectors/`: linked external accounts documents are pulled from (mailboxes today,
   portals later). `mod.rs` is the registry and the `Connector` trait -- adding a kind is

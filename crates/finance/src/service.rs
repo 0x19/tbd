@@ -19,18 +19,18 @@ use tbd_proto::finance::v1::{
     CancelInvoiceResponse, Category, CompleteConnectionRequest, CompleteConnectionResponse,
     CompleteConnectorRequest, CompleteConnectorResponse, ConfigureConnectorRequest,
     ConfigureConnectorResponse, Connection, CreateInvoiceRequest, CreateInvoiceResponse,
-    DeclareCategoryRequest, DeclareCategoryResponse, DeleteConnectorRequest,
-    DeleteConnectorResponse, DeleteLineTemplateRequest, DeleteLineTemplateResponse,
-    GetDocumentRequest, GetDocumentResponse, GetInvoiceDocumentRequest, GetInvoiceDocumentResponse,
-    GetInvoiceRequest, GetInvoiceResponse, GetIssuerRequest, GetIssuerResponse,
-    GetTransactionRequest, GetTransactionResponse, ListAccountsRequest, ListAccountsResponse,
-    ListCategoriesRequest, ListCategoriesResponse, ListClientsRequest, ListClientsResponse,
-    ListConnectionsRequest, ListConnectionsResponse, ListConnectorKindsRequest,
-    ListConnectorKindsResponse, ListConnectorRunsRequest, ListConnectorRunsResponse,
-    ListConnectorsRequest, ListConnectorsResponse, ListDocumentsRequest, ListDocumentsResponse,
-    ListInvoicesRequest, ListInvoicesResponse, ListLineTemplatesRequest, ListLineTemplatesResponse,
-    ListPartiesRequest, ListPartiesResponse, ListRulesRequest, ListRulesResponse,
-    ListTransactionsRequest, ListTransactionsResponse, MonthlySummaryRequest,
+    DeclareCategoryRequest, DeclareCategoryResponse, DeleteConnectionRequest,
+    DeleteConnectionResponse, DeleteConnectorRequest, DeleteConnectorResponse,
+    DeleteLineTemplateRequest, DeleteLineTemplateResponse, GetDocumentRequest, GetDocumentResponse,
+    GetInvoiceDocumentRequest, GetInvoiceDocumentResponse, GetInvoiceRequest, GetInvoiceResponse,
+    GetIssuerRequest, GetIssuerResponse, GetTransactionRequest, GetTransactionResponse,
+    ListAccountsRequest, ListAccountsResponse, ListCategoriesRequest, ListCategoriesResponse,
+    ListClientsRequest, ListClientsResponse, ListConnectionsRequest, ListConnectionsResponse,
+    ListConnectorKindsRequest, ListConnectorKindsResponse, ListConnectorRunsRequest,
+    ListConnectorRunsResponse, ListConnectorsRequest, ListConnectorsResponse, ListDocumentsRequest,
+    ListDocumentsResponse, ListInvoicesRequest, ListInvoicesResponse, ListLineTemplatesRequest,
+    ListLineTemplatesResponse, ListPartiesRequest, ListPartiesResponse, ListRulesRequest,
+    ListRulesResponse, ListTransactionsRequest, ListTransactionsResponse, MonthlySummaryRequest,
     MonthlySummaryResponse, Party, PingRequest, PingResponse, PreviewInvoiceRequest,
     PreviewInvoiceResponse, RefreshAccountRequest, RefreshAccountResponse, Rule,
     SetAccountSyncRequest, SetAccountSyncResponse, StartConnectionRequest, StartConnectionResponse,
@@ -42,11 +42,10 @@ use tbd_proto::finance::v1::{
     WatchConnectorsRequest, WatchConnectorsResponse, finance_service_server::FinanceService,
 };
 use tbd_proto::finance::v1::{
-    DeleteCounterpartyPolicyRequest, DeleteCounterpartyPolicyResponse, DeleteInvoiceRequest,
-    DeleteInvoiceResponse, LinkDocumentRequest, LinkDocumentResponse, MonthlyReconciliationRequest,
-    MonthlyReconciliationResponse, SetCounterpartyPolicyRequest, SetCounterpartyPolicyResponse,
-    SetTransactionNoteRequest, SetTransactionNoteResponse, UnlinkDocumentRequest,
-    UnlinkDocumentResponse,
+    DeleteCounterpartyPolicyRequest, DeleteCounterpartyPolicyResponse, LinkDocumentRequest,
+    LinkDocumentResponse, MonthlyReconciliationRequest, MonthlyReconciliationResponse,
+    SetCounterpartyPolicyRequest, SetCounterpartyPolicyResponse, SetTransactionNoteRequest,
+    SetTransactionNoteResponse, UnlinkDocumentRequest, UnlinkDocumentResponse,
 };
 use tbd_proto::finance::v1::{
     DeleteMailTemplateRequest, DeleteMailTemplateResponse, ExtractDocumentRequest,
@@ -973,9 +972,34 @@ impl FinanceService for Finance {
                     valid_until: c.valid_until.map(|t| t.to_rfc3339()).unwrap_or_default(),
                     authorized_at: c.authorized_at.map(|t| t.to_rfc3339()).unwrap_or_default(),
                     accounts: u32::try_from(c.accounts).unwrap_or(u32::MAX),
+                    failure: c.failure.unwrap_or_default(),
+                    created_at: c.created_at.to_rfc3339(),
+                    replaced_by: c.replaced_by.map(|u| u.to_string()).unwrap_or_default(),
                 })
                 .collect(),
         }))
+    }
+
+    async fn delete_connection(
+        &self,
+        request: Request<DeleteConnectionRequest>,
+    ) -> Result<Response<DeleteConnectionResponse>, Status> {
+        let mut timer = self.admit("FinanceService/DeleteConnection").await?;
+        let Ok(id) = Uuid::parse_str(&request.get_ref().id) else {
+            return Err(self.reject(&mut timer, Status::invalid_argument("id: not a uuid")));
+        };
+        let (pool, access, _) = match self.read_context(&request, &[]).await {
+            Ok(c) => c,
+            Err(status) => return Err(self.reject(&mut timer, status)),
+        };
+        let party = match money::connection_party(pool, &access, id).await {
+            Ok(p) => p,
+            Err(e) => return Err(self.reject(&mut timer, status_of(e))),
+        };
+        match connect::remove(pool, party, id).await {
+            Ok(()) => Ok(Response::new(DeleteConnectionResponse {})),
+            Err(e) => Err(self.reject(&mut timer, connect_status(e))),
+        }
     }
 
     async fn get_issuer(
@@ -1043,12 +1067,6 @@ impl FinanceService for Finance {
         r: Request<CancelInvoiceRequest>,
     ) -> Result<Response<CancelInvoiceResponse>, Status> {
         self.rpc_cancel_invoice(r).await
-    }
-    async fn delete_invoice(
-        &self,
-        r: Request<DeleteInvoiceRequest>,
-    ) -> Result<Response<DeleteInvoiceResponse>, Status> {
-        self.rpc_delete_invoice(r).await
     }
     async fn get_invoice_document(
         &self,

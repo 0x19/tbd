@@ -132,6 +132,15 @@ service FinanceService {
   rpc ListConnections(ListConnectionsRequest) returns (ListConnectionsResponse) {
     option (google.api.http) = {get: "/v1/finance/connections"};
   }
+  // Remove a bank link. One never finished (pending, failed) is deleted; an
+  // authorized one is revoked: its accounts keep their rows and their history,
+  // syncing stops, and the bank's consent lapses on its own.
+  rpc DeleteConnection(DeleteConnectionRequest) returns (DeleteConnectionResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/connections/{id}/delete"
+      body: "*"
+    };
+  }
   // ---- invoicing ----------------------------------------------------------
 
   // The issuing profile of a party: what the footer of a Croatian invoice
@@ -166,8 +175,7 @@ service FinanceService {
   }
 
   // A new draft for a client, pre-filled from the last approved invoice to
-  // them; or, with from_invoice_id, a duplicate of that invoice's header and
-  // lines, dated today. No number is taken.
+  // them. No number is taken.
   rpc CreateInvoice(CreateInvoiceRequest) returns (CreateInvoiceResponse) {
     option (google.api.http) = {
       post: "/v1/finance/invoices"
@@ -175,8 +183,7 @@ service FinanceService {
     };
   }
 
-  // Replace a draft's dates, note, lines and header (client of the same
-  // party, currency, VAT treatment, series). Totals are recomputed here,
+  // Replace a draft's dates, note and lines. Totals are recomputed here,
   // never trusted from the client.
   rpc UpdateInvoice(UpdateInvoiceRequest) returns (UpdateInvoiceResponse) {
     option (google.api.http) = {
@@ -205,17 +212,10 @@ service FinanceService {
     };
   }
 
-  // Cancel an issued invoice. It keeps its number; a draft is deleted instead.
+  // Cancel a draft or an approved invoice. An approved one keeps its number.
   rpc CancelInvoice(CancelInvoiceRequest) returns (CancelInvoiceResponse) {
     option (google.api.http) = {
       post: "/v1/finance/invoices/{id}/cancel"
-      body: "*"
-    };
-  }
-  // Delete a draft. It took no number, so nothing remains.
-  rpc DeleteInvoice(DeleteInvoiceRequest) returns (DeleteInvoiceResponse) {
-    option (google.api.http) = {
-      post: "/v1/finance/invoices/{id}/delete"
       body: "*"
     };
   }
@@ -1021,9 +1021,6 @@ message Invoice {
   string created_at = 23;
   string updated_at = 24;
   repeated InvoiceLine lines = 25;
-  // The series the number is (or will be) in: the middle of the number.
-  string premises = 26;
-  string device = 27;
 }
 
 message ListInvoicesRequest {
@@ -1039,9 +1036,7 @@ message GetInvoiceResponse {
   Invoice invoice = 1;
 }
 message CreateInvoiceRequest {
-  // Either, or both: the client to bill, the invoice to duplicate.
   string client_id = 1;
-  string from_invoice_id = 2;
 }
 message CreateInvoiceResponse {
   Invoice invoice = 1;
@@ -1053,12 +1048,6 @@ message UpdateInvoiceRequest {
   string place_of_issue = 4;
   string note = 5;
   repeated InvoiceLine lines = 6;
-  // The header; empty keeps what the draft has.
-  string client_id = 7;
-  string currency = 8;
-  string vat_treatment = 9;
-  string premises = 10;
-  string device = 11;
 }
 message UpdateInvoiceResponse {
   Invoice invoice = 1;
@@ -1081,10 +1070,6 @@ message ApproveInvoiceRequest {
 message ApproveInvoiceResponse {
   Invoice invoice = 1;
 }
-message DeleteInvoiceRequest {
-  string id = 1;
-}
-message DeleteInvoiceResponse {}
 message CancelInvoiceRequest {
   string id = 1;
   string reason = 2;
@@ -1336,6 +1321,10 @@ message ListConnectionsRequest {
 message ListConnectionsResponse {
   repeated Connection connections = 1;
 }
+message DeleteConnectionRequest {
+  string id = 1;
+}
+message DeleteConnectionResponse {}
 
 message Connection {
   string id = 1;
@@ -1348,6 +1337,12 @@ message Connection {
   string valid_until = 7;
   string authorized_at = 8;
   uint32 accounts = 9;
+  // Why it is failed or revoked, when it is: "code exchange refused",
+  // "removed by you", "replaced by a newer consent".
+  string failure = 10;
+  string created_at = 11;
+  // The consent that took this one's accounts over, when one did.
+  string replaced_by = 12;
 }
 
 message PingRequest {

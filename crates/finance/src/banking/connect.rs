@@ -82,6 +82,7 @@ pub async fn start<P: Provider + ?Sized>(
     aspsp_country: &str,
     redirect_url: &str,
 ) -> Result<Started, ConnectError> {
+    sweep_abandoned(pool).await?;
     let connection_id = Uuid::new_v4();
     let state = fresh_state();
     let valid_until = Utc::now()
@@ -215,10 +216,96 @@ pub async fn complete<P: Provider + ?Sized>(
         .map_err(map_err)?;
         accounts.push(id);
     }
+    // A renewal: the accounts moved here from an earlier consent of the same
+    // login, which now holds none. It is revoked and points at this one, so
+    // the page says "replaced" instead of showing a live consent with no
+    // accounts under it.
+    sqlx::query(
+        "update finance.connections
+            set status = 'revoked', failure = 'replaced by a newer consent', replaced_by = $2,
+                updated_at = now()
+          where party_id = $1 and id <> $2 and status = 'authorized'
+            and provider = (select provider from finance.connections where id = $2)
+            and psu_type = (select psu_type from finance.connections where id = $2)
+            and not exists (select 1 from finance.accounts a where a.connection_id = finance.connections.id)",
+    )
+    .bind(party_id)
+    .bind(connection_id)
+    .execute(pool)
+    .await
+    .map_err(map_err)?;
     Ok(Completed {
         connection_id,
         accounts,
     })
+}
+
+/// Remove a consent. One never finished is deleted; an authorized one is
+/// revoked -- its accounts keep their rows and their history, syncing
+/// stops (the loop fetches only under an authorized consent), and the bank's
+/// consent lapses on its own. Already revoked or expired: nothing to do.
+///
+/// # Errors
+/// Not-found for an id outside the caller's view; the database.
+pub async fn remove(pool: &PgPool, party_id: Uuid, id: Uuid) -> Result<(), ConnectError> {
+    let row: Option<(String,)> =
+        sqlx::query_as("select status from finance.connections where id = $1 and party_id = $2")
+            .bind(id)
+            .bind(party_id)
+            .fetch_optional(pool)
+            .await
+            .map_err(map_err)?;
+    let Some((status,)) = row else {
+        return Err(ConnectError::NotFound);
+    };
+    match status.as_str() {
+        "pending" | "failed" => {
+            sqlx::query("delete from finance.connections where id = $1")
+                .bind(id)
+                .execute(pool)
+                .await
+                .map_err(map_err)?;
+        }
+        "authorized" => {
+            let mut tx = pool.begin().await.map_err(map_err)?;
+            sqlx::query(
+                "update finance.connections
+                    set status = 'revoked', failure = 'removed by you', session_id = null, updated_at = now()
+                  where id = $1",
+            )
+            .bind(id)
+            .execute(&mut *tx)
+            .await
+            .map_err(map_err)?;
+            sqlx::query(
+                "update finance.accounts set sync_enabled = false where connection_id = $1",
+            )
+            .bind(id)
+            .execute(&mut *tx)
+            .await
+            .map_err(map_err)?;
+            tx.commit().await.map_err(map_err)?;
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+/// Drop the pending rows of consents nobody finished: a browser closed on the
+/// bank's screen leaves one behind, and it would sit on the page forever. An
+/// hour is longer than any bank's login; the callback for an older one
+/// answers not-found, which the page already says.
+///
+/// # Errors
+/// The database.
+pub async fn sweep_abandoned(pool: &PgPool) -> Result<u64, ConnectError> {
+    let done = sqlx::query(
+        "delete from finance.connections where status = 'pending' and created_at < now() - interval '1 hour'",
+    )
+    .execute(pool)
+    .await
+    .map_err(map_err)?;
+    Ok(done.rows_affected())
 }
 
 async fn mark_failed(pool: &PgPool, id: Uuid, why: &str) -> Result<(), DbError> {

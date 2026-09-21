@@ -6,15 +6,14 @@
 use tbd_db::DbError;
 use tbd_proto::finance::v1::{
     ApproveInvoiceRequest, ApproveInvoiceResponse, CancelInvoiceRequest, CancelInvoiceResponse,
-    ClientProfile, CreateInvoiceRequest, CreateInvoiceResponse, DeleteInvoiceRequest,
-    DeleteInvoiceResponse, DeleteLineTemplateRequest, DeleteLineTemplateResponse,
-    GetInvoiceDocumentRequest, GetInvoiceDocumentResponse, GetInvoiceRequest, GetInvoiceResponse,
-    GetIssuerRequest, GetIssuerResponse, Invoice, InvoiceLine, IssuerProfile, LineTemplate,
-    ListClientsRequest, ListClientsResponse, ListInvoicesRequest, ListInvoicesResponse,
-    ListLineTemplatesRequest, ListLineTemplatesResponse, PreviewInvoiceRequest,
-    PreviewInvoiceResponse, UpdateInvoiceRequest, UpdateInvoiceResponse, UpsertClientRequest,
-    UpsertClientResponse, UpsertIssuerRequest, UpsertIssuerResponse, UpsertLineTemplateRequest,
-    UpsertLineTemplateResponse,
+    ClientProfile, CreateInvoiceRequest, CreateInvoiceResponse, DeleteLineTemplateRequest,
+    DeleteLineTemplateResponse, GetInvoiceDocumentRequest, GetInvoiceDocumentResponse,
+    GetInvoiceRequest, GetInvoiceResponse, GetIssuerRequest, GetIssuerResponse, Invoice,
+    InvoiceLine, IssuerProfile, LineTemplate, ListClientsRequest, ListClientsResponse,
+    ListInvoicesRequest, ListInvoicesResponse, ListLineTemplatesRequest, ListLineTemplatesResponse,
+    PreviewInvoiceRequest, PreviewInvoiceResponse, UpdateInvoiceRequest, UpdateInvoiceResponse,
+    UpsertClientRequest, UpsertClientResponse, UpsertIssuerRequest, UpsertIssuerResponse,
+    UpsertLineTemplateRequest, UpsertLineTemplateResponse,
 };
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
@@ -38,8 +37,6 @@ pub(crate) fn invoice_status(e: InvoiceError) -> Status {
         InvoiceError::StaleDraft => {
             Status::failed_precondition("the draft changed since it was previewed; preview again")
         }
-        InvoiceError::IsDraft => Status::failed_precondition("a draft is deleted, not cancelled"),
-        InvoiceError::Invalid(m) => Status::invalid_argument(m),
         InvoiceError::NoIssuer => Status::failed_precondition("no issuer profile; set one first"),
         InvoiceError::NoLines => Status::failed_precondition("an invoice needs at least one line"),
         InvoiceError::Render(r) => Status::internal(format!("render: {r}")),
@@ -122,8 +119,6 @@ fn invoice_proto(r: InvoiceRow, lines: Vec<LineRow>) -> Invoice {
         cancelled_at: t(r.cancelled_at),
         created_at: r.created_at.to_rfc3339(),
         updated_at: r.updated_at.to_rfc3339(),
-        premises: r.premises,
-        device: r.device,
         lines: lines
             .into_iter()
             .map(|l| InvoiceLine {
@@ -348,25 +343,12 @@ impl Finance {
         &self,
         request: Request<CreateInvoiceRequest>,
     ) -> Result<Response<CreateInvoiceResponse>, Status> {
-        let req = request.get_ref();
-        let client = if req.client_id.is_empty() {
-            None
-        } else {
-            Some(uuid(&req.client_id, "client_id")?)
-        };
-        let source = if req.from_invoice_id.is_empty() {
-            None
-        } else {
-            Some(uuid(&req.from_invoice_id, "from_invoice_id")?)
-        };
-        if client.is_none() && source.is_none() {
-            return Err(Status::invalid_argument("client_id or from_invoice_id"));
-        }
+        let client = uuid(&request.get_ref().client_id, "client_id")?;
         let (mut timer, pool, access, _) = self
             .invoice_context("FinanceService/CreateInvoice", &request, &[])
             .await?;
         let r = async {
-            let row = store::create_draft(pool, &access, client, source).await?;
+            let row = store::create_draft(pool, &access, client).await?;
             let (row, lines) = store::invoice(pool, &access, row.id).await?;
             Ok(CreateInvoiceResponse {
                 invoice: Some(invoice_proto(row, lines)),
@@ -397,25 +379,6 @@ impl Finance {
                     template_id: Uuid::parse_str(&l.template_id).ok(),
                 })
                 .collect(),
-            client_id: if req.client_id.is_empty() {
-                None
-            } else {
-                Some(uuid(&req.client_id, "client_id")?)
-            },
-            currency: Some(req.currency).filter(|c| !c.trim().is_empty()),
-            vat_treatment: if req.vat_treatment.trim().is_empty() {
-                None
-            } else {
-                Some(
-                    VatTreatment::parse(req.vat_treatment.trim()).ok_or_else(|| {
-                        Status::invalid_argument(
-                            "vat_treatment: want standard_hr, reverse_charge_eu, outside_scope_non_eu or exempt_issuer",
-                        )
-                    })?,
-                )
-            },
-            premises: Some(req.premises).filter(|p| !p.trim().is_empty()),
-            device: Some(req.device).filter(|d| !d.trim().is_empty()),
         };
         let (mut timer, pool, access, _) = self
             .invoice_context("FinanceService/UpdateInvoice", &request, &[])
@@ -474,19 +437,6 @@ impl Finance {
         self.done(&mut timer, r)
     }
 
-    pub(crate) async fn rpc_delete_invoice(
-        &self,
-        request: Request<DeleteInvoiceRequest>,
-    ) -> Result<Response<DeleteInvoiceResponse>, Status> {
-        let id = uuid(&request.get_ref().id, "id")?;
-        let (mut timer, pool, access, _) = self
-            .invoice_context("FinanceService/DeleteInvoice", &request, &[])
-            .await?;
-        let r = store::delete_draft(pool, &access, id)
-            .await
-            .map(|()| DeleteInvoiceResponse {});
-        self.done(&mut timer, r)
-    }
     pub(crate) async fn rpc_cancel_invoice(
         &self,
         request: Request<CancelInvoiceRequest>,
