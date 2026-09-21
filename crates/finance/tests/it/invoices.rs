@@ -19,7 +19,7 @@ use uuid::Uuid;
 
 use crate::support::{Server, start_with_store};
 
-const OWNER: &str = "inv-owner";
+pub(crate) const OWNER: &str = "inv-owner";
 const READER: &str = "inv-reader";
 
 fn as_caller<T>(subject: &str, message: T) -> Request<T> {
@@ -76,7 +76,7 @@ async fn seed(pool: &PgPool) -> World {
     }
 }
 
-fn issuer(party: Uuid) -> IssuerProfile {
+pub(crate) fn issuer(party: Uuid) -> IssuerProfile {
     IssuerProfile {
         party_id: party.to_string(),
         legal_name: "Inorbit d.o.o.".into(),
@@ -99,7 +99,7 @@ fn issuer(party: Uuid) -> IssuerProfile {
     }
 }
 
-fn client(party: Uuid) -> ClientProfile {
+pub(crate) fn client(party: Uuid) -> ClientProfile {
     ClientProfile {
         id: String::new(),
         party_id: party.to_string(),
@@ -115,7 +115,7 @@ fn client(party: Uuid) -> ClientProfile {
     }
 }
 
-fn lines() -> Vec<InvoiceLine> {
+pub(crate) fn lines() -> Vec<InvoiceLine> {
     vec![
         InvoiceLine {
             position: 0,

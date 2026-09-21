@@ -652,6 +652,10 @@ message SendMailRequest {
   string in_reply_to_mail_id = 10;
   // The accountant's bundle, built by the service into one zip attachment.
   MailBundle bundle = 11;
+  // The invoice this mail delivers: recorded as its delivery, the invoice
+  // marked sent. Refused if it went out before, unless `force`.
+  string invoice_id = 12;
+  bool force = 13;
 }
 // The bundle as the page prepared it: small text files with their bytes,
 // and the receipts by document with the name each takes inside the zip.
@@ -1180,6 +1184,16 @@ message Invoice {
   int64 paid_minor = 28;
   string paid_at = 29;
   repeated InvoicePayment payments = 30;
+  // The first time it went out, and every time.
+  string sent_at = 31;
+  repeated InvoiceDelivery deliveries = 32;
+}
+// One time an invoice went out: the mail that carried it, to whom, when.
+message InvoiceDelivery {
+  string id = 1;
+  string mail_id = 2;
+  repeated string to = 3;
+  string sent_at = 4;
 }
 // A payment against an invoice: a bank transaction the matcher or a person
 // tied to it, or one a person recorded that the bank has not shown.

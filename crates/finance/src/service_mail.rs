@@ -155,6 +155,8 @@ impl Finance {
             html: Some(req.html).filter(|h| !h.trim().is_empty()),
             attachment_document_ids,
             in_reply_to_mail_id: opt_uuid(&req.in_reply_to_mail_id, "in_reply_to_mail_id")?,
+            invoice_id: opt_uuid(&req.invoice_id, "invoice_id")?,
+            force: req.force,
             bundle: match req.bundle {
                 None => None,
                 Some(b) => {

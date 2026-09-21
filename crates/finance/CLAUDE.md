@@ -127,6 +127,11 @@ The finance service. gRPC only. Scaffolded by `tbd new service` (docs/tbd/README
   error), the list and thread reads, and `import_replies`, which `run_sync` calls at the
   end of every pull: each reply is an `in` row under its parent and its PDF a receipt of
   the party, never imported twice (`provider_id` unique per connector). A send may carry
+  an *invoice* (`SendMailRequest.invoice_id`): the invoice is checked before the
+  provider is asked (in the grant, issued, and not delivered before unless `force`),
+  and the send's transaction adds a `finance.invoice_deliveries` row, flips `approved`
+  to `sent` with `sent_at` from the first send, and writes the `sent` event
+  (`invoice_to_deliver` / `record_delivery`). A send may carry
   the accountant's *bundle*: the page sends the text files (README, summary, missing)
   with their bytes and the receipts as document ids with the name each takes, and the
   service fetches the receipts and writes one stored zip (`zip.rs`, the browser's

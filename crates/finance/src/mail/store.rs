@@ -261,6 +261,11 @@ pub struct SendInput {
     pub in_reply_to_mail_id: Option<Uuid>,
     /// The accountant's bundle to build and attach as one zip.
     pub bundle: Option<Bundle>,
+    /// The invoice this mail delivers, when it is one: recorded as its
+    /// delivery, the invoice marked sent.
+    pub invoice_id: Option<Uuid>,
+    /// Send an invoice that already went out once more.
+    pub force: bool,
 }
 
 /// The accountant's bundle as the page prepared it: the summary files with
@@ -398,6 +403,12 @@ pub async fn send(
         parent_id = Some(parent.id);
     }
 
+    // An invoice goes out once unless the person says again: the guard
+    // stands before the provider is asked.
+    let invoice = match input.invoice_id {
+        Some(id) => Some(invoice_to_deliver(pool, access, id, input.force).await?),
+        None => None,
+    };
     let creds = crate::connectors::store::open_credentials(pool, sealer, connector.id).await?;
     let outgoing = Outgoing {
         to: to.clone(),
@@ -460,11 +471,89 @@ pub async fn send(
             .await
             .map_err(map_err)?;
     }
+    if let (Some(inv), "sent") = (&invoice, status) {
+        record_delivery(&mut tx, inv, id, &to, access).await?;
+    }
     tx.commit().await.map_err(map_err)?;
     if let Err(e) = &sent {
         tracing::warn!(mail = %id, connector = %connector.id, error = %e, "mail: send failed");
     }
     get(pool, access, id).await
+}
+
+/// The invoice a mail delivers, checked: in the grant, issued, and not sent
+/// before unless `force`.
+async fn invoice_to_deliver(
+    pool: &PgPool,
+    access: &Access,
+    id: Uuid,
+    force: bool,
+) -> Result<crate::invoice::store::InvoiceRow, StoreError> {
+    let (row, _) = crate::invoice::store::invoice(pool, access, id)
+        .await
+        .map_err(|e| match e {
+            crate::invoice::store::InvoiceError::Db(d) => StoreError::Db(d),
+            other => StoreError::Refused(other.to_string()),
+        })?;
+    if !matches!(row.status.as_str(), "approved" | "sent" | "paid") {
+        return Err(StoreError::Refused(format!(
+            "invoice is {}; only an issued invoice is sent",
+            row.status
+        )));
+    }
+    if !force {
+        let earlier = crate::invoice::store::deliveries_of(pool, &[id]).await?;
+        if let Some(first) = earlier.first() {
+            return Err(StoreError::Refused(format!(
+                "invoice {} was already sent on {} to {}; send again to send it once more",
+                row.number.clone().unwrap_or_default(),
+                first.sent_at.format("%Y-%m-%d"),
+                first.to_addrs.join(", ")
+            )));
+        }
+    }
+    Ok(row)
+}
+
+/// The delivery row, the invoice's `sent` (paid stays paid), the event.
+async fn record_delivery(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    inv: &crate::invoice::store::InvoiceRow,
+    mail_id: Uuid,
+    to: &[String],
+    access: &Access,
+) -> Result<(), StoreError> {
+    sqlx::query(
+        "insert into finance.invoice_deliveries (id, invoice_id, party_id, mail_id, to_addrs)
+         values ($1, $2, $3, $4, $5)",
+    )
+    .bind(Uuid::new_v4())
+    .bind(inv.id)
+    .bind(inv.party_id)
+    .bind(mail_id)
+    .bind(to)
+    .execute(&mut **tx)
+    .await
+    .map_err(map_err)?;
+    sqlx::query(
+        "update finance.invoices
+            set status = case when status = 'approved' then 'sent' else status end,
+                sent_at = coalesce(sent_at, clock_timestamp()), updated_at = clock_timestamp()
+          where id = $1",
+    )
+    .bind(inv.id)
+    .execute(&mut **tx)
+    .await
+    .map_err(map_err)?;
+    crate::invoice::store::event(
+        tx,
+        inv.id,
+        access.user(),
+        "sent",
+        serde_json::json!({ "mail_id": mail_id, "to": to }),
+    )
+    .await?;
+    Ok(())
 }
 
 /// What a listing narrows to.

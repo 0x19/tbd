@@ -26,7 +26,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { api } from "@/lib/api/client";
+import { api, ApiError } from "@/lib/api/client";
 import { describe } from "@/lib/api/hooks";
 import type { Connector, MailTemplate } from "@/lib/api/schema";
 import { plan, summaryText } from "@/lib/bundle";
@@ -64,6 +64,9 @@ export function Composer({
   const { partyName } = useFinance();
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  // The service refused because the invoice went out before: its words, and
+  // the person's say-so to send once more.
+  const [resend, setResend] = useState<string | null>(null);
   const [attaching, setAttaching] = useState(false);
   const [pane, setPane] = useState<"write" | "preview">("write");
   const [showCc, setShowCc] = useState(false);
@@ -144,11 +147,13 @@ export function Composer({
     }
   };
 
-  const send = async () => {
+  const send = async (force = false) => {
     if (!sender) return;
     setBusy(true);
     try {
       const r = await api.sendMail({
+        invoice_id: draft.source?.kind === "invoice" ? draft.source.invoice.id : "",
+        force,
         connector_id: sender.id,
         template_id: draft.template_id,
         to,
@@ -174,7 +179,11 @@ export function Composer({
         toast.error(t("mail.failed", { error: r.mail?.error ?? "" }));
       }
     } catch (e) {
-      toast.error(describe(e));
+      if (e instanceof ApiError && e.code === "failed_precondition" && e.message.includes("already sent")) {
+        setResend(e.message);
+      } else {
+        toast.error(describe(e));
+      }
     } finally {
       setBusy(false);
       setConfirming(false);
@@ -468,6 +477,28 @@ export function Composer({
           })
         }
       />
+      <Dialog open={resend !== null} onOpenChange={(o) => !o && setResend(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("mail.resend.title")}</DialogTitle>
+            <DialogDescription>{resend}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setResend(null)}>
+              {t("common.cancel")}
+            </Button>
+            <Button
+              onClick={() => {
+                setResend(null);
+                void send(true);
+              }}
+              disabled={busy}
+            >
+              <Send /> {t("mail.resend.confirm")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <Dialog open={confirming} onOpenChange={(o) => !o && setConfirming(false)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>

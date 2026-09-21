@@ -426,7 +426,7 @@ function InvoiceView() {
               </a>
             </Button>
             <Button variant="outline" size="sm" onClick={sendByMail} disabled={!inv.document_id}>
-              <Send /> {t("invoices.send_mail")}
+              <Send /> {inv.sent_at ? t("invoices.send_again") : t("invoices.send_mail")}
             </Button>
           </>
         ) : null}
@@ -553,6 +553,32 @@ function InvoiceView() {
               </Field>
             </CardContent>
           </Card>
+
+          {inv.deliveries.length > 0 ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>{t("invoices.sent_section")}</CardTitle>
+                <CardDescription>{t("invoices.sent_hint")}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ul className="divide-y text-sm">
+                  {inv.deliveries.map((d) => (
+                    <li key={d.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                      <span>
+                        <span className="tabular-nums">{when(d.sent_at)}</span>
+                        <span className="text-muted-foreground"> · {d.to.join(", ")}</span>
+                      </span>
+                      {d.mail_id ? (
+                        <Button asChild variant="ghost" size="sm" className="h-7 text-xs">
+                          <Link href={`/mail/?mail=${d.mail_id}`}>{t("invoices.open_thread")}</Link>
+                        </Button>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
+          ) : null}
 
           <PaymentsCard
             invoice={inv}

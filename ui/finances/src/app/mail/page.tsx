@@ -34,7 +34,15 @@ export default function MailPage() {
     () => (connectors.data?.connectors ?? []).filter((c) => c.status === "linked" && c.can_send),
     [connectors.data],
   );
-  const [tab, setTab] = useState("compose");
+  // `?mail=<id>` opens that thread: the invoice page links its deliveries here.
+  const [openMail] = useState<string | null>(() => {
+    try {
+      return new URLSearchParams(window.location.search).get("mail");
+    } catch {
+      return null;
+    }
+  });
+  const [tab, setTab] = useState(openMail ? "sent" : "compose");
   const [draft, setDraft] = useState<Draft>(EMPTY);
   const [listVersion, setListVersion] = useState(0);
 
@@ -92,6 +100,7 @@ export default function MailPage() {
         <TabsContent value="sent" className="mt-4">
           <SentList
             version={listVersion}
+            initialOpen={openMail}
             connectors={connectors.data?.connectors ?? []}
             onReply={(m) => {
               setDraft(replyDraft(m));

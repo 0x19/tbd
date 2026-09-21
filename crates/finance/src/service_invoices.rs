@@ -10,7 +10,7 @@ use tbd_proto::finance::v1::{
     CreateIssuerResponse, DeleteInvoiceRequest, DeleteInvoiceResponse, DeleteLineTemplateRequest,
     DeleteLineTemplateResponse, GetInvoiceDocumentRequest, GetInvoiceDocumentResponse,
     GetInvoiceRequest, GetInvoiceResponse, GetIssuerRequest, GetIssuerResponse, Invoice,
-    InvoiceLine, InvoicePayment, IssuerProfile, LineTemplate, ListClientsRequest,
+    InvoiceDelivery, InvoiceLine, InvoicePayment, IssuerProfile, LineTemplate, ListClientsRequest,
     ListClientsResponse, ListInvoicesRequest, ListInvoicesResponse, ListIssuersRequest,
     ListIssuersResponse, ListLineTemplatesRequest, ListLineTemplatesResponse, Party,
     PreviewInvoiceRequest, PreviewInvoiceResponse, RecordPaymentRequest, RecordPaymentResponse,
@@ -27,8 +27,8 @@ use crate::{
         VatTreatment,
         payments::{self, PaymentRow},
         store::{
-            self, ClientInput, ClientRow, DraftInput, InvoiceError, InvoiceRow, IssuerInput,
-            IssuerRow, LineInput, LineRow, TemplateInput, TemplateRow,
+            self, ClientInput, ClientRow, DeliveryRow, DraftInput, InvoiceError, InvoiceRow,
+            IssuerInput, IssuerRow, LineInput, LineRow, TemplateInput, TemplateRow,
         },
     },
     service::{Finance, status_of},
@@ -114,7 +114,33 @@ fn payment_proto(p: PaymentRow) -> InvoicePayment {
     }
 }
 
-fn invoice_proto(r: InvoiceRow, lines: Vec<LineRow>, payments: Vec<PaymentRow>) -> Invoice {
+fn delivery_proto(d: DeliveryRow) -> InvoiceDelivery {
+    InvoiceDelivery {
+        id: d.id.to_string(),
+        mail_id: d.mail_id.map(|m| m.to_string()).unwrap_or_default(),
+        to: d.to_addrs,
+        sent_at: d.sent_at.to_rfc3339(),
+    }
+}
+
+/// One invoice with everything the page shows: lines, payments, deliveries.
+async fn full(
+    pool: &sqlx::PgPool,
+    access: &tbd_db::Access,
+    id: Uuid,
+) -> Result<Invoice, InvoiceError> {
+    let (row, lines) = store::invoice(pool, access, id).await?;
+    let ps = payments::payments_of(pool, &[row.id]).await?;
+    let ds = store::deliveries_of(pool, &[row.id]).await?;
+    Ok(invoice_proto(row, lines, ps, ds))
+}
+
+fn invoice_proto(
+    r: InvoiceRow,
+    lines: Vec<LineRow>,
+    payments: Vec<PaymentRow>,
+    deliveries: Vec<DeliveryRow>,
+) -> Invoice {
     let t =
         |v: Option<chrono::DateTime<chrono::Utc>>| v.map(|t| t.to_rfc3339()).unwrap_or_default();
     Invoice {
@@ -147,6 +173,8 @@ fn invoice_proto(r: InvoiceRow, lines: Vec<LineRow>, payments: Vec<PaymentRow>) 
         paid_minor: r.paid_minor,
         paid_at: t(r.paid_at),
         payments: payments.into_iter().map(payment_proto).collect(),
+        sent_at: t(r.sent_at),
+        deliveries: deliveries.into_iter().map(delivery_proto).collect(),
         lines: lines
             .into_iter()
             .map(|l| InvoiceLine {
@@ -469,12 +497,18 @@ impl Finance {
             for p in payments::payments_of(pool, &ids).await? {
                 by_invoice.entry(p.invoice_id).or_default().push(p);
             }
+            let mut sent: std::collections::HashMap<Uuid, Vec<DeliveryRow>> =
+                std::collections::HashMap::new();
+            for d in store::deliveries_of(pool, &ids).await? {
+                sent.entry(d.invoice_id).or_default().push(d);
+            }
             Ok(ListInvoicesResponse {
                 invoices: rows
                     .into_iter()
                     .map(|r| {
                         let ps = by_invoice.remove(&r.id).unwrap_or_default();
-                        invoice_proto(r, Vec::new(), ps)
+                        let ds = sent.remove(&r.id).unwrap_or_default();
+                        invoice_proto(r, Vec::new(), ps, ds)
                     })
                     .collect(),
             })
@@ -492,16 +526,12 @@ impl Finance {
             .invoice_context("FinanceService/GetInvoice", &request, &[])
             .await?;
         let r = async {
-            let (row, lines) = store::invoice(pool, &access, id).await?;
-            payments::settle(pool, row.party_id).await?;
-            let (row, lines) = if row.status == "draft" {
-                (row, lines)
-            } else {
-                store::invoice(pool, &access, id).await?
-            };
-            let ps = payments::payments_of(pool, &[row.id]).await?;
+            let (row, _) = store::invoice(pool, &access, id).await?;
+            if row.status != "draft" {
+                payments::settle(pool, row.party_id).await?;
+            }
             Ok(GetInvoiceResponse {
-                invoice: Some(invoice_proto(row, lines, ps)),
+                invoice: Some(full(pool, &access, id).await?),
             })
         }
         .await;
@@ -531,9 +561,8 @@ impl Finance {
             .await?;
         let r = async {
             let row = store::create_draft(pool, &access, client, source).await?;
-            let (row, lines) = store::invoice(pool, &access, row.id).await?;
             Ok(CreateInvoiceResponse {
-                invoice: Some(invoice_proto(row, lines, Vec::new())),
+                invoice: Some(full(pool, &access, row.id).await?),
             })
         }
         .await;
@@ -586,9 +615,8 @@ impl Finance {
             .await?;
         let r = async {
             let row = store::update_draft(pool, &access, id, input).await?;
-            let (row, lines) = store::invoice(pool, &access, row.id).await?;
             Ok(UpdateInvoiceResponse {
-                invoice: Some(invoice_proto(row, lines, Vec::new())),
+                invoice: Some(full(pool, &access, row.id).await?),
             })
         }
         .await;
@@ -629,10 +657,8 @@ impl Finance {
             .await?;
         let r = async {
             let done = store::approve(pool, &access, id, &req.content_hash).await?;
-            let (row, lines) = store::invoice(pool, &access, done.invoice.id).await?;
-            let ps = payments::payments_of(pool, &[row.id]).await?;
             Ok(ApproveInvoiceResponse {
-                invoice: Some(invoice_proto(row, lines, ps)),
+                invoice: Some(full(pool, &access, done.invoice.id).await?),
             })
         }
         .await;
@@ -677,10 +703,8 @@ impl Finance {
             .await?;
         let r = async {
             let row = payments::record(pool, &access, invoice_id, &input).await?;
-            let (row, lines) = store::invoice(pool, &access, row.id).await?;
-            let ps = payments::payments_of(pool, &[row.id]).await?;
             Ok(RecordPaymentResponse {
-                invoice: Some(invoice_proto(row, lines, ps)),
+                invoice: Some(full(pool, &access, row.id).await?),
             })
         }
         .await;
@@ -696,10 +720,8 @@ impl Finance {
             .await?;
         let r = async {
             let row = payments::unlink(pool, &access, id).await?;
-            let (row, lines) = store::invoice(pool, &access, row.id).await?;
-            let ps = payments::payments_of(pool, &[row.id]).await?;
             Ok(UnlinkPaymentResponse {
-                invoice: Some(invoice_proto(row, lines, ps)),
+                invoice: Some(full(pool, &access, row.id).await?),
             })
         }
         .await;
@@ -716,10 +738,8 @@ impl Finance {
             .await?;
         let r = async {
             let row = store::cancel(pool, &access, id, &req.reason).await?;
-            let (row, lines) = store::invoice(pool, &access, row.id).await?;
-            let ps = payments::payments_of(pool, &[row.id]).await?;
             Ok(CancelInvoiceResponse {
-                invoice: Some(invoice_proto(row, lines, ps)),
+                invoice: Some(full(pool, &access, row.id).await?),
             })
         }
         .await;

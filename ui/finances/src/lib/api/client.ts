@@ -349,6 +349,9 @@ export const api = {
     html: string;
     attachment_document_ids: string[];
     in_reply_to_mail_id: string;
+    // The invoice this mail delivers; refused if sent before unless force.
+    invoice_id?: string;
+    force?: boolean;
     // The accountant's bundle: the service builds the zip, so the receipts
     // travel as ids and only the text files as (base64) bytes.
     bundle?: {

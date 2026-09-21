@@ -5411,6 +5411,12 @@
           "currency": {
             "type": "string"
           },
+          "deliveries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/tbd.finance.v1.InvoiceDelivery"
+            }
+          },
           "delivery_date": {
             "type": "string"
           },
@@ -5466,6 +5472,9 @@
           "premises": {
             "type": "string"
           },
+          "sent_at": {
+            "type": "string"
+          },
           "status": {
             "type": "string"
           },
@@ -5493,6 +5502,27 @@
           "year": {
             "type": "integer",
             "format": "int32"
+          }
+        }
+      },
+      "tbd.finance.v1.InvoiceDelivery": {
+        "type": "object",
+        "description": "`tbd.finance.v1.InvoiceDelivery`",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "mail_id": {
+            "type": "string"
+          },
+          "sent_at": {
+            "type": "string"
+          },
+          "to": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         }
       },
@@ -6489,10 +6519,16 @@
           "connector_id": {
             "type": "string"
           },
+          "force": {
+            "type": "boolean"
+          },
           "html": {
             "type": "string"
           },
           "in_reply_to_mail_id": {
+            "type": "string"
+          },
+          "invoice_id": {
             "type": "string"
           },
           "subject": {

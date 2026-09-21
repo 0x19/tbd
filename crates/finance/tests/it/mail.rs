@@ -3,9 +3,10 @@
 //! and a reply that comes back with its attachment.
 
 use tbd_proto::finance::v1::{
-    DeleteMailTemplateRequest, GetMailRequest, ListMailRequest, ListMailTemplatesRequest,
-    MailBundle, MailBundleFile, MailBundleReceipt, SendMailRequest, UploadDocumentRequest,
-    UpsertMailTemplateRequest,
+    ApproveInvoiceRequest, CreateInvoiceRequest, DeleteMailTemplateRequest, GetInvoiceRequest,
+    GetMailRequest, ListMailRequest, ListMailTemplatesRequest, MailBundle, MailBundleFile,
+    MailBundleReceipt, PreviewInvoiceRequest, SendMailRequest, UpdateInvoiceRequest,
+    UploadDocumentRequest, UpsertClientRequest, UpsertIssuerRequest, UpsertMailTemplateRequest,
 };
 use tonic::Code;
 
@@ -338,4 +339,153 @@ async fn a_bundle_goes_out_as_one_zip_of_the_pages_files_and_the_receipts() {
         text.contains("%PDF-1.4 hetzner"),
         "with the document's bytes"
     );
+}
+
+/// A mail that carries an invoice records the delivery and marks the invoice
+/// sent; a second send is refused until forced; a paid invoice stays paid.
+#[tokio::test]
+#[allow(clippy::too_many_lines)]
+async fn an_invoice_sent_by_mail_is_recorded_and_not_sent_twice_by_accident() {
+    let (factory, _, sent) = kinds_mail(false, false);
+    let (server, pool) = start_with_kinds(factory).await;
+    let (_, company) = seed(&pool).await;
+    let mailbox = link_with(&server, company, "ok").await;
+    let mut c = server.client().await;
+    // An issued invoice: issuer, client, draft with lines, approve.
+    c.upsert_issuer(as_caller(
+        OWNER,
+        UpsertIssuerRequest {
+            issuer: Some(crate::invoices::issuer(company)),
+        },
+    ))
+    .await
+    .unwrap();
+    let client = c
+        .upsert_client(as_caller(
+            OWNER,
+            UpsertClientRequest {
+                client: Some(crate::invoices::client(company)),
+            },
+        ))
+        .await
+        .unwrap()
+        .into_inner()
+        .client
+        .unwrap();
+    let draft = c
+        .create_invoice(as_caller(
+            OWNER,
+            CreateInvoiceRequest {
+                client_id: client.id,
+                ..Default::default()
+            },
+        ))
+        .await
+        .unwrap()
+        .into_inner()
+        .invoice
+        .unwrap();
+    c.update_invoice(as_caller(
+        OWNER,
+        UpdateInvoiceRequest {
+            id: draft.id.clone(),
+            delivery_date: draft.delivery_date.clone(),
+            due_date: draft.due_date.clone(),
+            lines: crate::invoices::lines(),
+            ..Default::default()
+        },
+    ))
+    .await
+    .unwrap();
+    // A draft cannot be delivered.
+    let mail = |force: bool| SendMailRequest {
+        connector_id: mailbox.id.clone(),
+        to: vec!["nevio@inorbit.hr".into()],
+        subject: "Račun".into(),
+        body: "u privitku".into(),
+        invoice_id: draft.id.clone(),
+        force,
+        ..SendMailRequest::default()
+    };
+    let e = c
+        .send_mail(as_caller(OWNER, mail(false)))
+        .await
+        .unwrap_err();
+    assert_eq!(e.code(), Code::FailedPrecondition, "{e}");
+    let p = c
+        .preview_invoice(as_caller(
+            OWNER,
+            PreviewInvoiceRequest {
+                id: draft.id.clone(),
+            },
+        ))
+        .await
+        .unwrap()
+        .into_inner();
+    let approved = c
+        .approve_invoice(as_caller(
+            OWNER,
+            ApproveInvoiceRequest {
+                id: draft.id.clone(),
+                content_hash: p.content_hash,
+            },
+        ))
+        .await
+        .unwrap()
+        .into_inner()
+        .invoice
+        .unwrap();
+    assert_eq!(approved.status, "approved");
+    assert!(approved.sent_at.is_empty());
+
+    let out = c
+        .send_mail(as_caller(OWNER, mail(false)))
+        .await
+        .unwrap()
+        .into_inner()
+        .mail
+        .unwrap();
+    assert_eq!(out.status, "sent");
+    assert_eq!(sent.lock().unwrap().len(), 1);
+    let after = c
+        .get_invoice(as_caller(
+            OWNER,
+            GetInvoiceRequest {
+                id: draft.id.clone(),
+            },
+        ))
+        .await
+        .unwrap()
+        .into_inner()
+        .invoice
+        .unwrap();
+    assert_eq!(after.status, "sent");
+    assert!(!after.sent_at.is_empty());
+    assert_eq!(after.deliveries.len(), 1);
+    assert_eq!(after.deliveries[0].mail_id, out.id);
+    assert_eq!(after.deliveries[0].to, vec!["nevio@inorbit.hr"]);
+
+    // Again by accident: refused, nothing went out; forced: a second delivery.
+    let e = c
+        .send_mail(as_caller(OWNER, mail(false)))
+        .await
+        .unwrap_err();
+    assert_eq!(e.code(), Code::FailedPrecondition, "{e}");
+    assert!(e.message().contains("already sent"), "{}", e.message());
+    assert_eq!(sent.lock().unwrap().len(), 1);
+    c.send_mail(as_caller(OWNER, mail(true))).await.unwrap();
+    let again = c
+        .get_invoice(as_caller(
+            OWNER,
+            GetInvoiceRequest {
+                id: draft.id.clone(),
+            },
+        ))
+        .await
+        .unwrap()
+        .into_inner()
+        .invoice
+        .unwrap();
+    assert_eq!(again.deliveries.len(), 2);
+    assert_eq!(again.sent_at, after.sent_at, "the first send is the date");
 }

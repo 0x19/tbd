@@ -129,7 +129,11 @@ same conventions; read `ui/chaos/CLAUDE.md` for what is the kit's and what is ou
   (`/invoices/` row, `/invoices/view/`) hands over the invoice's number, dates, total,
   its stored PDF's `document_id` as the attachment and the client's `recipients` as the
   addresses (`kind: "invoice"`); the composer picks that party's sender and first
-  template either way. `src/lib/bundle.ts` holds the pure builders both pages share --
+  template either way, and sends the invoice's id along (`invoice_id`) so the service
+  records the delivery and marks the invoice sent; a `failed_precondition` saying
+  "already sent" opens a "Send again" dialog that resends with `force`. The invoice
+  page lists `deliveries` under "Sent", each linking to `/mail/?mail=<id>`, which the
+  mail page opens on the Sent tab with that thread (`SentList.initialOpen`). `src/lib/bundle.ts` holds the pure builders both pages share --
   `summaryText()` (the README and `{{Summary}}`) and `plan()` (the same files the
   download zips: README, summary.csv, missing.csv and each receipt's name inside the
   zip, without the receipts' bytes) -- and the composer runs them again on every

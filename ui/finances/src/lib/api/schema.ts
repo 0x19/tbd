@@ -269,6 +269,13 @@ export const InvoiceLine = z.object({
 });
 export type InvoiceLine = z.infer<typeof InvoiceLine>;
 
+export const InvoiceDelivery = z.object({
+  id: z.string(),
+  mail_id: z.string(),
+  to: z.array(z.string()),
+  sent_at: z.string(),
+});
+export type InvoiceDelivery = z.infer<typeof InvoiceDelivery>;
 export const InvoicePayment = z.object({
   id: z.string(),
   invoice_id: z.string(),
@@ -316,6 +323,9 @@ export const Invoice = z.object({
   paid_minor: Minor,
   paid_at: z.string(),
   payments: z.array(InvoicePayment),
+  // The first time it went out, and every time.
+  sent_at: z.string(),
+  deliveries: z.array(InvoiceDelivery),
 });
 export type Invoice = z.infer<typeof Invoice>;
 export const ListInvoicesResponse = z.object({ invoices: z.array(Invoice) });

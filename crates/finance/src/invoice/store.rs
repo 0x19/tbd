@@ -141,6 +141,19 @@ pub struct InvoiceRow {
     /// What the payments cover so far, and when they covered it all.
     pub paid_minor: i64,
     pub paid_at: Option<DateTime<Utc>>,
+    /// The first time it went out to the client.
+    pub sent_at: Option<DateTime<Utc>>,
+}
+
+/// One time an invoice went out: the mail that carried it, to whom, when.
+#[allow(missing_docs)]
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct DeliveryRow {
+    pub id: Uuid,
+    pub invoice_id: Uuid,
+    pub mail_id: Option<Uuid>,
+    pub to_addrs: Vec<String>,
+    pub sent_at: DateTime<Utc>,
 }
 
 #[allow(missing_docs)]
@@ -275,7 +288,7 @@ pub(crate) const INVOICE_COLUMNS: &str =
     "id, party_id, client_id, status, year, ordinal, premises, device, number, issued_at,
     delivery_date, due_date, place_of_issue, currency, subtotal_minor, vat_minor, total_minor,
     vat_treatment, vat_note, note, content_hash, approved_at, document_id, prefilled_from,
-    cancelled_at, created_at, updated_at, paid_minor, paid_at";
+    cancelled_at, created_at, updated_at, paid_minor, paid_at, sent_at";
 
 /// The issuer profile of a party the caller may read.
 ///
@@ -294,6 +307,27 @@ pub async fn issuer(
     .fetch_optional(pool)
     .await
     .map_err(map_err)?)
+}
+
+/// The deliveries of these invoices, oldest first.
+///
+/// # Errors
+/// The database.
+pub async fn deliveries_of(
+    pool: &PgPool,
+    invoice_ids: &[Uuid],
+) -> Result<Vec<DeliveryRow>, DbError> {
+    if invoice_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    sqlx::query_as::<_, DeliveryRow>(
+        "select id, invoice_id, mail_id, to_addrs, sent_at from finance.invoice_deliveries
+          where invoice_id = any($1) order by sent_at",
+    )
+    .bind(invoice_ids)
+    .fetch_all(pool)
+    .await
+    .map_err(map_err)
 }
 
 /// The issuer profiles of every party in the view.

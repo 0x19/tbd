@@ -54,16 +54,19 @@ export function SentList({
   version,
   connectors,
   onReply,
+  initialOpen = null,
 }: {
   version: number;
   connectors: Connector[];
   onReply: (m: Mail) => void;
+  /** A thread to open on arrival, from the URL. */
+  initialOpen?: string | null;
 }) {
   const t = useT();
   const { partyIds } = useFinance();
   const [q, setQ] = useState("");
   const [direction, setDirection] = useState("");
-  const [openId, setOpenId] = useState<string | null>(null);
+  const [openId, setOpenId] = useState<string | null>(initialOpen);
   const list = useFetch(() => api.mail({ party_ids: partyIds, q, direction, limit: 100 }), 0, [
     partyIds.join(","),
     q,

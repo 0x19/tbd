@@ -12,6 +12,7 @@ draft ──approve(hash)──▶ approved        number taken, PDF stored, has
 approved ──cancel──▶ cancelled           keeps its number
 draft ──delete──▶ (gone)                 never had one; nothing remains
 any ──duplicate──▶ draft                 the header and lines, dated today
+approved ──sent by mail──▶ sent          a delivery row: the mail, to whom, when
 approved ──payments cover it──▶ paid     matched from the bank, or recorded
 paid ──last payment undone──▶ approved   the one step back
 ```
@@ -27,6 +28,16 @@ paid ──last payment undone──▶ approved   the one step back
 - A **draft's header** may change until it is approved: the client (of the same
   party), the currency, the VAT treatment (its note follows) and the series. A
   draft that is not wanted is deleted; only an issued invoice is cancelled.
+- **Sent** is a fact, not a button: a mail sent through `SendMail` with
+  `invoice_id` set (the composer sets it when the page handed it an invoice)
+  records a row in `finance.invoice_deliveries` (the mail, the recipients, the
+  time), flips `approved` to `sent` and stamps `sent_at` with the first send
+  (`paid` stays `paid`), and writes a `sent` event. A draft or a cancelled
+  invoice is refused before the provider is asked. Sending the same invoice a
+  second time is refused with the date and recipients of the first send unless
+  `force`, which the page asks for as "Send again"; every send is one more row,
+  listed on the invoice page with a link to its thread. `Invoice.deliveries` and
+  `sent_at` carry them.
 - A **preview** renders the draft with the number it *would* take and the current
   minute, watermarked `PREVIEW`, and returns the SHA-256 of the canonical document.
   The minute is truncated so an approval that follows within it computes the same
