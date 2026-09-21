@@ -111,6 +111,8 @@ services:
       FINANCE_CONNECTOR_KEY: "{{ vault_finance_connector_key | default('') }}"
       FINANCE_GOOGLE_CLIENT_ID: "{{ vault_finance_google_client_id | default('') }}"
       FINANCE_GOOGLE_CLIENT_SECRET: "{{ vault_finance_google_client_secret | default('') }}"
+      FINANCE_GOOGLE_SEND_CLIENT_ID: "{{ vault_finance_google_send_client_id | default('') }}"
+      FINANCE_GOOGLE_SEND_CLIENT_SECRET: "{{ vault_finance_google_send_client_secret | default('') }}"
       OTEL_EXPORTER_OTLP_ENDPOINT: "{{ otlp_endpoint | default('') }}"
       PYROSCOPE_SERVER_ADDRESS: "{{ pyroscope_server | default('') }}"
     restart: unless-stopped

@@ -79,6 +79,16 @@ pub struct Connectors {
     /// Its secret. Environment only.
     #[serde(skip_serializing, default)]
     pub google_client_secret: String,
+    /// A second Google OAuth client, for links made for sending only: a
+    /// project of its own that asks for `gmail.send` alone and is published,
+    /// so its refresh tokens do not die after seven days the way a Testing
+    /// project's do (docs/finance/gmail.md). Optional; without it a send-only
+    /// link uses the client above. Environment only.
+    #[serde(skip_serializing, default)]
+    pub google_send_client_id: String,
+    /// Its secret. Environment only.
+    #[serde(skip_serializing, default)]
+    pub google_send_client_secret: String,
     /// Where a provider sends the browser back: the finance UI host's
     /// `/connectors/callback/`, registered with each provider.
     #[serde(default)]
@@ -351,6 +361,17 @@ pub struct Overrides {
     /// Google OAuth client secret. Never echoed.
     #[arg(long, env = "FINANCE_GOOGLE_CLIENT_SECRET", hide_env_values = true)]
     pub google_client_secret: Option<String>,
+    /// Google OAuth client id for send-only Gmail links (a published project
+    /// asking for `gmail.send` alone). Optional.
+    #[arg(long, env = "FINANCE_GOOGLE_SEND_CLIENT_ID")]
+    pub google_send_client_id: Option<String>,
+    /// Its secret. Never echoed.
+    #[arg(
+        long,
+        env = "FINANCE_GOOGLE_SEND_CLIENT_SECRET",
+        hide_env_values = true
+    )]
+    pub google_send_client_secret: Option<String>,
 }
 
 impl Overrides {
@@ -385,6 +406,12 @@ impl Overrides {
         }
         if let Some(v) = &self.google_client_secret {
             config.connectors.google_client_secret.clone_from(v);
+        }
+        if let Some(v) = &self.google_send_client_id {
+            config.connectors.google_send_client_id.clone_from(v);
+        }
+        if let Some(v) = &self.google_send_client_secret {
+            config.connectors.google_send_client_secret.clone_from(v);
         }
     }
 }

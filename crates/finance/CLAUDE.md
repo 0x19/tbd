@@ -88,7 +88,12 @@ The finance service. gRPC only. Scaffolded by `tbd new service` (docs/tbd/README
   scopes were kept counts as readable. A grant narrower than the purpose (a box unticked on
   Google's screen) links the row and puts a sentence naming the box in `failure`, so the
   page says why it cannot send. `test` on a send-only credential asks `userinfo`,
-  never the mailbox (`getProfile` wants a read scope). Pending rows nobody finished are
+  never the mailbox (`getProfile` wants a read scope). Two Google OAuth clients: a link
+  for sending only goes through `FINANCE_GOOGLE_SEND_CLIENT_*` when set (a published
+  project asking for `gmail.send` alone, whose refresh tokens do not die after seven days
+  the way a Testing project's do; `docs/finance/gmail.md`), anything else through the
+  read client; the credential records `client` and a refresh goes back to that one.
+  Pending rows nobody finished are
   dropped after an hour (`sweep_abandoned`, at start and before a new link). A kind may also *send*:
   `capabilities` says so from the consent it holds (a mailbox linked before sending was
   asked for is read-only until linked again), `send` builds the MIME itself (text,

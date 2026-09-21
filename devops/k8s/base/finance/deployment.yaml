@@ -83,6 +83,20 @@ spec:
                   name: finance-connectors
                   key: google-client-secret
                   optional: true
+            # The send-only client: a published Google project asking for
+            # gmail.send alone, whose refresh tokens do not expire weekly.
+            - name: FINANCE_GOOGLE_SEND_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: finance-connectors
+                  key: google-send-client-id
+                  optional: true
+            - name: FINANCE_GOOGLE_SEND_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: finance-connectors
+                  key: google-send-client-secret
+                  optional: true
           livenessProbe:
             grpc:
               port: 50054

@@ -53,11 +53,34 @@ fn scopes_for(purpose: Purpose) -> String {
 /// more says `complete = false` and the caller comes round again.
 const MAX_MESSAGES: usize = 500;
 
+/// One Google OAuth client: a project's consent screen and its status.
+#[derive(Debug, Clone)]
+struct OauthClient {
+    id: String,
+    secret: String,
+}
+
+impl OauthClient {
+    fn configured(&self) -> bool {
+        !self.id.is_empty() && !self.secret.is_empty()
+    }
+}
+
+/// The name a credential records for the client that minted it, so a
+/// refresh goes back to the same one: Google refuses a refresh token at any
+/// other client.
+const CLIENT_READ: &str = "read";
+const CLIENT_SEND: &str = "send";
+
 /// The kind.
 #[derive(Debug, Clone)]
 pub struct Gmail {
-    client_id: String,
-    client_secret: String,
+    /// The client links for reading (or both) go through: a Testing project
+    /// with the restricted read scope, or an Internal one.
+    read: OauthClient,
+    /// The client send-only links go through when configured: a published
+    /// project asking for `gmail.send` alone, whose refresh tokens last.
+    send: Option<OauthClient>,
     http: reqwest::Client,
     token_url: String,
     api: String,
@@ -106,9 +129,16 @@ impl Gmail {
     /// From configuration; unconfigured is allowed, and says so on link.
     #[must_use]
     pub fn new(config: &Config) -> Self {
+        let send = OauthClient {
+            id: config.google_send_client_id.clone(),
+            secret: config.google_send_client_secret.clone(),
+        };
         Self {
-            client_id: config.google_client_id.clone(),
-            client_secret: config.google_client_secret.clone(),
+            read: OauthClient {
+                id: config.google_client_id.clone(),
+                secret: config.google_client_secret.clone(),
+            },
+            send: send.configured().then_some(send),
             http: reqwest::Client::new(),
             token_url: TOKEN_URL.to_owned(),
             api: API.to_owned(),
@@ -116,17 +146,52 @@ impl Gmail {
         }
     }
 
+    /// The client a link of this purpose goes through, and its name for the
+    /// credential. Sending only prefers the send client; without one, the
+    /// read client serves, as it did before there were two.
+    fn client_for(&self, purpose: Purpose) -> (&OauthClient, &'static str) {
+        match (purpose, &self.send) {
+            (Purpose::Send, Some(send)) => (send, CLIENT_SEND),
+            _ => (&self.read, CLIENT_READ),
+        }
+    }
+
+    /// The client a credential was minted at. One from before there were two
+    /// names none and is the read client's.
+    fn client_of(&self, credentials: &Value) -> &OauthClient {
+        match (
+            credentials.get("client").and_then(Value::as_str),
+            &self.send,
+        ) {
+            (Some(CLIENT_SEND), Some(send)) => send,
+            _ => &self.read,
+        }
+    }
+
     /// Google's endpoints replaced by a test's server.
     #[cfg(test)]
     fn with_endpoints(token_url: &str, api: &str) -> Self {
         Self {
-            client_id: "client".into(),
-            client_secret: "secret".into(),
+            read: OauthClient {
+                id: "client".into(),
+                secret: "secret".into(),
+            },
+            send: None,
             http: reqwest::Client::new(),
             token_url: token_url.to_owned(),
             api: api.to_owned(),
             userinfo_url: format!("{api}/userinfo"),
         }
+    }
+
+    /// With a send client too.
+    #[cfg(test)]
+    fn with_send_client(mut self, id: &str, secret: &str) -> Self {
+        self.send = Some(OauthClient {
+            id: id.into(),
+            secret: secret.into(),
+        });
+        self
     }
 
     /// Start a session: mint the first token.
@@ -170,7 +235,7 @@ impl Gmail {
     }
 
     fn configured(&self) -> bool {
-        !self.client_id.is_empty() && !self.client_secret.is_empty()
+        self.read.configured()
     }
 
     async fn access_token(&self, credentials: &Value) -> Result<String, ConnectorError> {
@@ -178,12 +243,13 @@ impl Gmail {
             .get("refresh_token")
             .and_then(Value::as_str)
             .ok_or_else(|| ConnectorError::Unlinked("no refresh token".into()))?;
+        let client = self.client_of(credentials);
         let resp = self
             .http
             .post(&self.token_url)
             .form(&[
-                ("client_id", self.client_id.as_str()),
-                ("client_secret", self.client_secret.as_str()),
+                ("client_id", client.id.as_str()),
+                ("client_secret", client.secret.as_str()),
                 ("refresh_token", refresh),
                 ("grant_type", "refresh_token"),
             ])
@@ -612,10 +678,11 @@ impl Connector for Gmail {
                 "set FINANCE_GOOGLE_CLIENT_ID and FINANCE_GOOGLE_CLIENT_SECRET".into(),
             ));
         }
+        let (client, _) = self.client_for(ctx.purpose);
         let mut url =
             reqwest::Url::parse(AUTH_URL).map_err(|e| ConnectorError::Provider(e.to_string()))?;
         url.query_pairs_mut()
-            .append_pair("client_id", &self.client_id)
+            .append_pair("client_id", &client.id)
             .append_pair("redirect_uri", &ctx.redirect_url)
             .append_pair("response_type", "code")
             .append_pair("scope", &scopes_for(ctx.purpose))
@@ -632,12 +699,13 @@ impl Connector for Gmail {
         if !self.configured() {
             return Err(ConnectorError::Unconfigured("no OAuth client".into()));
         }
+        let (client, client_name) = self.client_for(ctx.purpose);
         let resp = self
             .http
             .post(&self.token_url)
             .form(&[
-                ("client_id", self.client_id.as_str()),
-                ("client_secret", self.client_secret.as_str()),
+                ("client_id", client.id.as_str()),
+                ("client_secret", client.secret.as_str()),
                 ("code", code),
                 ("grant_type", "authorization_code"),
                 ("redirect_uri", ctx.redirect_url.as_str()),
@@ -690,7 +758,7 @@ impl Connector for Gmail {
             .and_then(Value::as_str)
             .unwrap_or_default();
         Ok(Linked {
-            credentials: json!({ "refresh_token": refresh, "scope": scope }),
+            credentials: json!({ "refresh_token": refresh, "scope": scope, "client": client_name }),
             external_id: email.clone(),
             label: email,
         })
@@ -1413,6 +1481,94 @@ mod tests {
             .expect_err("refused twice is unlinked");
         assert!(matches!(err, ConnectorError::Unlinked(_)), "{err}");
         assert_eq!(mints(&server).await, 2, "exactly one re-mint, not a loop");
+    }
+
+    #[tokio::test]
+    async fn a_send_only_link_goes_through_the_send_client_and_refreshes_there() {
+        use wiremock::matchers::{body_string_contains, method, path};
+        let server = wiremock::MockServer::start().await;
+        // The token endpoint answers only the client whose secret it sees.
+        for (secret, token) in [("secret", "read-token"), ("send-secret", "send-token")] {
+            wiremock::Mock::given(method("POST"))
+                .and(path("/token"))
+                .and(body_string_contains(format!("client_secret={secret}")))
+                .respond_with(wiremock::ResponseTemplate::new(200).set_body_json(
+                    serde_json::json!({ "access_token": token, "refresh_token": "r", "scope": scopes_for(Purpose::Send) }),
+                ))
+                .mount(&server)
+                .await;
+        }
+        wiremock::Mock::given(method("GET"))
+            .and(path("/userinfo"))
+            .respond_with(
+                wiremock::ResponseTemplate::new(200)
+                    .set_body_json(serde_json::json!({ "email": "nevio@tenderly.co" })),
+            )
+            .mount(&server)
+            .await;
+        let gmail = Gmail::with_endpoints(&format!("{}/token", server.uri()), &server.uri())
+            .with_send_client("send-client", "send-secret");
+        let ctx = |purpose| AuthContext {
+            state: "s".into(),
+            redirect_url: "https://f/cb".into(),
+            purpose,
+        };
+
+        // The consent URL names the client the purpose chooses.
+        assert!(
+            gmail
+                .start(&ctx(Purpose::Send))
+                .await
+                .unwrap()
+                .contains("client_id=send-client")
+        );
+        assert!(
+            gmail
+                .start(&ctx(Purpose::Read))
+                .await
+                .unwrap()
+                .contains("client_id=client")
+        );
+        assert!(
+            gmail
+                .start(&ctx(Purpose::Both))
+                .await
+                .unwrap()
+                .contains("client_id=client")
+        );
+
+        // The exchange goes to the same client and the credential remembers it.
+        let linked = gmail.complete(&ctx(Purpose::Send), "code").await.unwrap();
+        assert_eq!(linked.credentials["client"], "send");
+        let read = gmail.complete(&ctx(Purpose::Both), "code").await.unwrap();
+        assert_eq!(read.credentials["client"], "read");
+
+        // A refresh goes back to the client that minted the credential; one
+        // from before there were two is the read client's.
+        assert_eq!(
+            gmail.access_token(&linked.credentials).await.unwrap(),
+            "send-token"
+        );
+        assert_eq!(
+            gmail.access_token(&read.credentials).await.unwrap(),
+            "read-token"
+        );
+        assert_eq!(
+            gmail
+                .access_token(&json!({ "refresh_token": "r" }))
+                .await
+                .unwrap(),
+            "read-token"
+        );
+
+        // Without a send client, sending only falls back to the read client.
+        let one = Gmail::with_endpoints(&format!("{}/token", server.uri()), &server.uri());
+        assert!(
+            one.start(&ctx(Purpose::Send))
+                .await
+                .unwrap()
+                .contains("client_id=client")
+        );
     }
 
     #[test]
