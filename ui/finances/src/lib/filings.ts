@@ -72,6 +72,13 @@ export function labelOf(t: (k: string) => string, form: string, key: string): st
   return s === k ? "" : s;
 }
 
+/** The label a row column has in the dictionary (`filings.<form>.row.<col>`), or nothing. */
+export function rowLabelOf(t: (k: string) => string, form: string, col: string): string {
+  const k = `filings.${form}.row.${col}`;
+  const s = t(k);
+  return s === k ? "" : s;
+}
+
 /** Keys in a stable, numeric-aware order: "1", "2", "10", "26", then names. */
 export function keyOrder(keys: string[]): string[] {
   const num = (k: string) => {

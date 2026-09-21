@@ -16,7 +16,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { api, blobUrl } from "@/lib/api/client";
 import { describe } from "@/lib/api/hooks";
 import type { Filing } from "@/lib/api/schema";
-import { figure, keyOrder, labelOf } from "@/lib/filings";
+import { figure, keyOrder, labelOf, rowLabelOf } from "@/lib/filings";
 import { dateOf, when } from "@/lib/format";
 import { useT } from "@/lib/i18n";
 
@@ -58,9 +58,13 @@ export function FilingSheet({
     };
   }, [id]);
 
+  // Empty markers (a section with no persons flattens to an empty string
+  // under the container's key) say nothing to a person and are left out.
   const values = useMemo(() => {
     if (!filing) return [];
-    return keyOrder(Object.keys(filing.values)).map((k) => ({ k, v: filing.values[k] ?? "" }));
+    return keyOrder(Object.keys(filing.values))
+      .map((k) => ({ k, v: filing.values[k] ?? "" }))
+      .filter(({ v }) => v !== "");
   }, [filing]);
 
   const rowGroups = useMemo(() => {
@@ -184,8 +188,8 @@ export function FilingSheet({
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-48">#</TableHead>
                     <TableHead></TableHead>
+                    <TableHead className="text-muted-foreground w-40 text-right text-xs">#</TableHead>
                     <TableHead className="text-right">EUR</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -194,8 +198,10 @@ export function FilingSheet({
                     const label = labelOf(t, filing.form, k);
                     return (
                       <TableRow key={k}>
-                        <TableCell className="font-mono text-xs">{k}</TableCell>
-                        <TableCell className="text-muted-foreground">{label}</TableCell>
+                        <TableCell className={label ? "" : "font-mono text-xs"}>{label || k}</TableCell>
+                        <TableCell className="text-muted-foreground text-right font-mono text-xs" title={k}>
+                          {label ? k.split(".").pop() : ""}
+                        </TableCell>
                         <TableCell className="text-right tabular-nums">{figure(filing.form, k, v)}</TableCell>
                       </TableRow>
                     );
@@ -213,11 +219,14 @@ export function FilingSheet({
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        {g.columns.map((c) => (
-                          <TableHead key={c} className="font-mono text-xs">
-                            {c}
-                          </TableHead>
-                        ))}
+                        {g.columns.map((c) => {
+                          const label = rowLabelOf(t, filing.form, c);
+                          return (
+                            <TableHead key={c} className={label ? "" : "font-mono text-xs"} title={c}>
+                              {label || c}
+                            </TableHead>
+                          );
+                        })}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
