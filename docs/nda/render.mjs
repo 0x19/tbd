@@ -1,17 +1,17 @@
-// Renders docs/nda/nda.{hr,en}.md to target/nda/nda.{hr,en}.pdf (A4, numbered pages);
-// NDA_OUT=<dir> writes elsewhere.
+// Renders docs/nda/nda.{hr,en}.md to docs/nda/nda.{hr,en}.pdf (A4, numbered pages), which
+// are committed next to their sources; NDA_OUT=<dir> writes elsewhere.
 // Run through `mise run nda:pdf`; it uses the Playwright Chromium already installed
 // for the finances UI's e2e tests (ui/finances).
 // Markdown becomes HTML through `npx marked` (fetched once, then cached by npm).
 import { execFileSync } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, "../..");
-const out = process.env.NDA_OUT ?? resolve(root, "target/nda");
+const out = process.env.NDA_OUT ?? here;
 // Playwright is a dependency of ui/finances, so resolve it from there, whatever the cwd.
 const { chromium } = createRequire(resolve(root, "ui/finances/package.json"))("playwright");
 mkdirSync(out, { recursive: true });
@@ -36,10 +36,8 @@ try {
     const text = readFileSync(md, "utf8").replace(/_{3,}/g, (m) => "\\_".repeat(m.length));
     const body = execFileSync("npx", ["-y", "marked@18"], { input: text, encoding: "utf8" });
     const html = `<!doctype html><html lang="${lang}"><head><meta charset="utf-8"><style>${css}</style></head><body>${body}</body></html>`;
-    const htmlPath = resolve(out, `nda.${lang}.html`);
-    writeFileSync(htmlPath, html);
     const page = await browser.newPage();
-    await page.goto(`file://${htmlPath}`, { waitUntil: "load" });
+    await page.setContent(html, { waitUntil: "load" });
     const pdf = resolve(out, `nda.${lang}.pdf`);
     await page.pdf({
       path: pdf,

@@ -493,7 +493,7 @@ pnpm typecheck
 """
 
 [tasks."nda:pdf"]
-description = "Render docs/nda/nda.{hr,en}.md to target/nda/*.pdf with the finances UI's Playwright Chromium (docs/nda/README.md)"
+description = "Render docs/nda/nda.{hr,en}.md to docs/nda/*.pdf with the finances UI's Playwright Chromium (docs/nda/README.md)"
 depends = ["ui:finances:install"]
 dir = "ui/finances"
 run = "node ../../docs/nda/render.mjs"
