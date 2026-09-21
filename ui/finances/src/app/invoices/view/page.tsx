@@ -3,12 +3,13 @@
 // One invoice: a draft is edited here, previewed as the PDF it would become,
 // and approved with the hash of exactly that preview. An approved invoice is
 // the immutable record: its PDF, its number, who approved it.
-import { Check, Download, ExternalLink, Eye, Maximize2, Plus, Trash2, X } from "lucide-react";
+import { Check, Download, ExternalLink, Eye, Maximize2, Plus, Send, Trash2, X } from "lucide-react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { useFinance } from "@/app/providers";
 import { PageTitle } from "@/components/kit";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
@@ -23,6 +24,7 @@ import { describe, useFetch } from "@/lib/api/hooks";
 import type { Invoice, InvoiceLine, LineTemplate } from "@/lib/api/schema";
 import { money, when } from "@/lib/format";
 import { useT } from "@/lib/i18n";
+import { stashPrefill } from "@/lib/mail-template";
 
 export default function InvoicePage() {
   return (
@@ -94,6 +96,32 @@ function InvoiceView() {
   const id = useSearchParams().get("id") ?? "";
   const loaded = useFetch(() => api.invoice(id), 0, [id]);
   const inv = loaded.data?.invoice ?? null;
+  const router = useRouter();
+  const { partyName } = useFinance();
+  // The client's addresses, for sending the approved PDF by mail.
+  const clients = useFetch(() => (inv?.party_id ? api.clients([inv.party_id]) : Promise.resolve(null)), 0, [
+    inv?.party_id,
+  ]);
+  const sendByMail = () => {
+    if (!inv) return;
+    const c = clients.data?.clients.find((x) => x.id === inv.client_id);
+    stashPrefill({
+      kind: "invoice",
+      party_id: inv.party_id,
+      company: partyName(inv.party_id),
+      invoice: {
+        id: inv.id,
+        number: inv.number,
+        issued_at: inv.issued_at,
+        due_date: inv.due_date,
+        total: money(inv.total_minor, inv.currency),
+        document_id: inv.document_id,
+        filename: `${inv.number}.pdf`,
+      },
+      client: { id: inv.client_id, name: c?.name ?? "", recipients: c?.recipients ?? [] },
+    });
+    router.push("/mail/");
+  };
   const templates = useFetch(
     () =>
       inv?.client_id
@@ -332,11 +360,16 @@ function InvoiceView() {
           </>
         ) : null}
         {docUrl ? (
-          <Button asChild variant="outline" size="sm">
-            <a href={docUrl} download={`inorbit-${inv.number}.pdf`}>
-              <Download /> {t("invoices.pdf")}
-            </a>
-          </Button>
+          <>
+            <Button asChild variant="outline" size="sm">
+              <a href={docUrl} download={`inorbit-${inv.number}.pdf`}>
+                <Download /> {t("invoices.pdf")}
+              </a>
+            </Button>
+            <Button variant="outline" size="sm" onClick={sendByMail} disabled={!inv.document_id}>
+              <Send /> {t("invoices.send_mail")}
+            </Button>
+          </>
         ) : null}
         {inv.status === "draft" || inv.status === "approved" ? (
           <Button variant="ghost" size="sm" onClick={() => void cancel()} disabled={busy !== ""}>

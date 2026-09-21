@@ -15,12 +15,25 @@ export type TemplateContext = {
   today?: Date;
   /** The reconciliation page's summary of the month, for `{{Summary}}`. */
   summary?: string;
+  /** The invoice being sent, for `{{InvoiceNumber}}` and friends. */
+  invoice?: InvoiceFacts;
+};
+
+/** What an invoice mail says about itself: rendered on the page, never
+ *  re-derived from the PDF. */
+export type InvoiceFacts = {
+  number: string;
+  /** Formatted with its currency, the way the page shows money. */
+  total: string;
+  issued_at: string;
+  due_date: string;
+  client: string;
 };
 
 /** What the reconciliation page hands the composer: the month, its summary
- *  and the receipts that cover it. Carried through `sessionStorage`, so a
- *  reload of the composer does not repeat it and nothing reaches the URL. */
-export type Prefill = {
+ *  and the receipts that cover it. */
+export type MonthPrefill = {
+  kind: "month";
   party_id: string;
   /** The company's display name. */
   company: string;
@@ -29,6 +42,29 @@ export type Prefill = {
    *  summary and the bundle from these in whatever language it is in. */
   rows: ReconciliationRow[];
 };
+
+/** What the invoices page hands the composer: the approved invoice, its
+ *  stored PDF as the attachment, and the client's addresses as recipients. */
+export type InvoicePrefill = {
+  kind: "invoice";
+  party_id: string;
+  company: string;
+  invoice: {
+    id: string;
+    number: string;
+    issued_at: string;
+    due_date: string;
+    /** Already formatted with the currency. */
+    total: string;
+    document_id: string;
+    filename: string;
+  };
+  client: { id: string; name: string; recipients: string[] };
+};
+
+/** A hand-off from another page, carried through `sessionStorage`, so a
+ *  reload of the composer does not repeat it and nothing reaches the URL. */
+export type Prefill = MonthPrefill | InvoicePrefill;
 
 /** The accountant's bundle before any bytes: the text files with their
  *  content and the receipts by document with the name each takes inside the
@@ -61,7 +97,9 @@ export function takePrefill(): Prefill | null {
     const raw = sessionStorage.getItem(PREFILL_KEY);
     if (!raw) return null;
     sessionStorage.removeItem(PREFILL_KEY);
-    return JSON.parse(raw) as Prefill;
+    const p = JSON.parse(raw) as Prefill | (Omit<MonthPrefill, "kind"> & { kind?: undefined });
+    // A stash from before invoices could be sent carries no kind.
+    return p.kind === undefined ? { ...p, kind: "month" } : p;
   } catch {
     return null;
   }
@@ -98,7 +136,23 @@ const MONTHS: Record<Lang, string[]> = {
   ],
 };
 
-/** Every helper and what it becomes, for the legend and for `render`. */
+/** The helpers grouped as the composer lists them: the month's, the
+ *  invoice's (present only when an invoice is being sent), and `Summary`. */
+export const HELPER_GROUPS: { id: "month" | "invoice" | "summary"; names: string[] }[] = [
+  { id: "month", names: ["Month", "MonthPadded", "MonthName", "Year", "MonthYear", "Company", "Today"] },
+  { id: "invoice", names: ["Client", "InvoiceNumber", "InvoiceTotal", "IssueDate", "DueDate"] },
+  { id: "summary", names: ["Summary"] },
+];
+
+function localDate(iso: string, lang: Lang): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  if (!m) return iso;
+  return lang === "hr" ? `${m[3]}.${m[2]}.${m[1]}.` : `${m[1]}-${m[2]}-${m[3]}`;
+}
+
+/** Every helper and what it becomes, for the legend and for `render`. The
+ *  invoice helpers are present only with an invoice, so a template that
+ *  names them shows them unfilled in any other mail. */
 export function helpers(ctx: TemplateContext): Record<string, string> {
   const [y, m] = ctx.month.split("-");
   const mi = Math.max(0, Math.min(11, Number(m) - 1));
@@ -114,6 +168,15 @@ export function helpers(ctx: TemplateContext): Record<string, string> {
     Company: ctx.company,
     Today: ctx.lang === "hr" ? `${dd}.${mm}.${today.getFullYear()}.` : `${today.getFullYear()}-${mm}-${dd}`,
     Summary: ctx.summary ?? "",
+    ...(ctx.invoice
+      ? {
+          Client: ctx.invoice.client,
+          InvoiceNumber: ctx.invoice.number,
+          InvoiceTotal: ctx.invoice.total,
+          IssueDate: localDate(ctx.invoice.issued_at, ctx.lang),
+          DueDate: localDate(ctx.invoice.due_date, ctx.lang),
+        }
+      : {}),
   };
 }
 
@@ -124,6 +187,12 @@ export function render(template: string, ctx: TemplateContext): string {
   return template.replace(/\{\{\s*([A-Za-z]+)\s*\}\}/g, (whole, name: string) =>
     name in h ? h[name]! : whole,
   );
+}
+
+/** Good enough to catch a missing @ or a stray word before the service
+ *  refuses it: the service has the last word. */
+export function looksLikeAddress(a: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a);
 }
 
 /** Comma- or newline-separated addresses, trimmed, empties dropped. */

@@ -118,7 +118,7 @@ export default function AccountantPage() {
 
   const router = useRouter();
   const sendByMail = () => {
-    stashPrefill({ party_id: chosen, company: chosenName, month, rows });
+    stashPrefill({ kind: "month", party_id: chosen, company: chosenName, month, rows });
     router.push("/mail/");
   };
 

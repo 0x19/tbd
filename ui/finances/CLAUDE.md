@@ -59,16 +59,30 @@ same conventions; read `ui/chaos/CLAUDE.md` for what is the kit's and what is ou
   (`force`); the toast says whether the amount was checked or nothing could be read; the
   bundle -- receipts, summary.csv, missing.csv, README -- is zipped in the browser by
   `src/lib/zip.ts`, since a month of PDFs would not fit one gRPC message), `/mail/`
-  (three tabs: compose -- the sender is a linked connector with `can_send`, a template
-  fills recipients, subject and body, and `src/lib/mail-template.ts` renders `{{Month}}`,
-  `{{MonthName}}`, `{{Year}}`, `{{MonthYear}}`, `{{Company}}`, `{{Today}}` from a chosen
-  month, live in a preview and a legend; receipts attach from `ListDocuments`; a confirm
-  dialog counts recipients, then `SendMail`; sent & replies -- `ListMail` with direction
-  and search, a row opens the thread from `GetMail` with Reply prefilling the composer
-  (`in_reply_to_mail_id`); templates -- `UpsertMailTemplate`/`DeleteMailTemplate`).
-  "Send to the accountant" on `/reconciliation/` hands the composer the month's _rows_
-  (`Prefill`, through `sessionStorage`: `stashPrefill` / `takePrefill`, read once), not
-  rendered text. `src/lib/bundle.ts` holds the pure builders both pages share --
+  (`src/components/mail/`, the page is the orchestration: three tabs and one draft.
+  Compose is `composer.tsx`: the form and `preview.tsx` -- the mail as the recipient
+  sees it, header, body, attachments, the bundle's contents -- side by side at equal
+  width from `xl`, two tabs below that. The sender is a linked connector with `can_send`;
+  a template of that party fills recipients, subject and body; `src/lib/mail-template.ts`
+  renders `{{Month}}`, `{{MonthName}}`, `{{Year}}`, `{{MonthYear}}`, `{{Company}}`,
+  `{{Today}}` from a chosen month, `{{Summary}}` from a reconciliation hand-off, and
+  `{{Client}}`, `{{InvoiceNumber}}`, `{{InvoiceTotal}}`, `{{IssueDate}}`, `{{DueDate}}`
+  from an invoice hand-off (`HELPER_GROUPS`; `helpers-menu.tsx` inserts one at the
+  caret). Recipients are checked with `looksLikeAddress` before the service does; the
+  send bar names the first thing missing; receipts attach from `ListDocuments`
+  (`attach-dialog.tsx`); a confirm dialog restates recipients, subject and attachments,
+  then `SendMail`. Sent & replies (`sent-list.tsx`): `ListMail` with direction and
+  search, a row opens `thread-sheet.tsx` from `GetMail`, Reply prefills the composer
+  (`in_reply_to_mail_id`). Templates (`templates.tsx`): cards, an editor with the same
+  preview filled with sample values, `UpsertMailTemplate`/`DeleteMailTemplate`.)
+  Two pages hand the composer content through `sessionStorage` (`Prefill` in
+  `mail-template.ts`: `stashPrefill` / `takePrefill`, read once; `draft.ts` turns it
+  into a draft): "Send to the accountant" on `/reconciliation/` hands over the month's
+  _rows_ (`kind: "month"`), not rendered text; "Send by mail" on an approved invoice
+  (`/invoices/` row, `/invoices/view/`) hands over the invoice's number, dates, total,
+  its stored PDF's `document_id` as the attachment and the client's `recipients` as the
+  addresses (`kind: "invoice"`); the composer picks that party's sender and first
+  template either way. `src/lib/bundle.ts` holds the pure builders both pages share --
   `summaryText()` (the README and `{{Summary}}`) and `plan()` (the same files the
   download zips: README, summary.csv, missing.csv and each receipt's name inside the
   zip, without the receipts' bytes) -- and the composer runs them again on every

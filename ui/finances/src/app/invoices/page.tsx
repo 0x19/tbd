@@ -5,7 +5,7 @@
 // amount, filters in the URL so a view can be shared, and the numbers that
 // matter at the top: what is outstanding, what is overdue, what this year
 // has billed.
-import { AlertTriangle, ArrowUpDown, Download, FileText, Plus, Search, Wallet, X } from "lucide-react";
+import { AlertTriangle, ArrowUpDown, Download, FileText, Plus, Search, Send, Wallet, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
@@ -27,6 +27,7 @@ import { describe, useFetch } from "@/lib/api/hooks";
 import type { Invoice } from "@/lib/api/schema";
 import { day, money, when } from "@/lib/format";
 import { useT } from "@/lib/i18n";
+import { stashPrefill } from "@/lib/mail-template";
 import { cn } from "@/lib/utils";
 
 type Tab = "all" | "draft" | "issued" | "paid" | "cancelled";
@@ -188,6 +189,29 @@ function Invoices() {
     } catch (e) {
       toast.error(describe(e));
     }
+  };
+
+  // An approved invoice goes to its client as a mail: the stored PDF as the
+  // attachment, the client's addresses as recipients, the composer does the
+  // rest (the same hand-off the reconciliation page makes).
+  const sendByMail = (i: Invoice) => {
+    const c = clients.data?.clients.find((x) => x.id === i.client_id);
+    stashPrefill({
+      kind: "invoice",
+      party_id: i.party_id,
+      company: partyName(i.party_id),
+      invoice: {
+        id: i.id,
+        number: i.number,
+        issued_at: i.issued_at,
+        due_date: i.due_date,
+        total: money(i.total_minor, i.currency),
+        document_id: i.document_id,
+        filename: `${i.number}.pdf`,
+      },
+      client: { id: i.client_id, name: c?.name ?? clientName(i.client_id), recipients: c?.recipients ?? [] },
+    });
+    router.push("/mail/");
   };
 
   const toggleSort = (k: SortKey) => set({ sort: k, dir: sort === k && dir === "desc" ? "asc" : "desc" });
@@ -425,15 +449,28 @@ function Invoices() {
                       </TableCell>
                       <TableCell onClick={(e) => e.stopPropagation()}>
                         {i.document_id ? (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="size-8"
-                            aria-label={t("invoices.download_pdf")}
-                            onClick={() => void download(i)}
-                          >
-                            <Download />
-                          </Button>
+                          <span className="flex justify-end gap-0.5">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-8"
+                              aria-label={t("invoices.download_pdf")}
+                              title={t("invoices.download_pdf")}
+                              onClick={() => void download(i)}
+                            >
+                              <Download />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-8"
+                              aria-label={t("invoices.send_mail")}
+                              title={t("invoices.send_mail")}
+                              onClick={() => sendByMail(i)}
+                            >
+                              <Send />
+                            </Button>
+                          </span>
                         ) : null}
                       </TableCell>
                     </TableRow>
