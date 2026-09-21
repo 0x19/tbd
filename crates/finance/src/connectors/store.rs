@@ -155,6 +155,7 @@ pub async fn start(
             purpose.as_str()
         )));
     }
+    sweep_abandoned(pool).await?;
     let id = Uuid::new_v4();
     let state = {
         use base64::Engine as _;
@@ -255,10 +256,25 @@ pub async fn complete(
     let (want_read, want_send) = purpose.wants();
     let can_read = granted.read && want_read;
     let can_send = granted.send && want_send;
+    // Linked, but with less than was asked for: a person unticked a box on
+    // the provider's screen. The row says so, in words that name the box,
+    // rather than showing "no sending" and leaving them to guess.
+    let short = match (want_read && !can_read, want_send && !can_send) {
+        (true, true) => {
+            Some("the consent granted neither reading nor sending; link again and allow both")
+        }
+        (true, false) => {
+            Some("the consent did not include reading; link again and allow reading the mailbox")
+        }
+        (false, true) => Some(
+            "the consent did not include sending; link again and tick \"Send email on your behalf\"",
+        ),
+        (false, false) => None,
+    };
     sqlx::query(
         "update finance.connectors
             set status = 'linked', credentials = $2, external_id = $3, label = $4, linked_at = now(),
-                state = case when id = $5 then state else null end, failure = null, updated_at = now(),
+                state = case when id = $5 then state else null end, failure = $9, updated_at = now(),
                 can_send = $6, can_read = $7, purpose = $8
           where id = $1",
     )
@@ -270,6 +286,7 @@ pub async fn complete(
     .bind(can_send)
     .bind(can_read)
     .bind(purpose.as_str())
+    .bind(short)
     .execute(pool)
     .await
     .map_err(map_err)?;
@@ -593,6 +610,24 @@ async fn progress(pool: &PgPool, run_id: Uuid, stored: bool) -> Result<(), Store
     .await
     .map_err(map_err)?;
     Ok(())
+}
+
+/// Drop the pending rows of links nobody finished: a browser closed on the
+/// provider's screen leaves one behind, and it would sit in the list as a
+/// nameless "gmail · pending" forever. An hour is longer than any consent
+/// screen; the callback for an older one answers not-found, which the page
+/// already says.
+///
+/// # Errors
+/// The database.
+pub async fn sweep_abandoned(pool: &PgPool) -> Result<u64, StoreError> {
+    let done = sqlx::query(
+        "delete from finance.connectors where status = 'pending' and created_at < now() - interval '1 hour'",
+    )
+    .execute(pool)
+    .await
+    .map_err(map_err)?;
+    Ok(done.rows_affected())
 }
 
 /// Close every run that never finished. For start-up: the process that was

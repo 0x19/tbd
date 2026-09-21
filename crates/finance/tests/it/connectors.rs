@@ -1005,6 +1005,89 @@ async fn a_mailbox_linked_for_sending_only_is_never_pulled_and_still_sends() {
     // A read-only link is the mirror image: it pulls and may not send.
     let read_only = link_for(&server, party, "read").await;
     assert!(read_only.can_read && !read_only.can_send);
+    assert!(read_only.failure.is_empty(), "{}", read_only.failure);
+}
+
+/// Start a mock link for a purpose and hand back the response.
+async fn start_for(
+    c: &mut FinanceClient,
+    party: Uuid,
+    purpose: &str,
+) -> tbd_proto::finance::v1::StartConnectorResponse {
+    c.start_connector(as_caller(
+        OWNER,
+        StartConnectorRequest {
+            party_id: party.to_string(),
+            kind: "mock".into(),
+            purpose: purpose.into(),
+        },
+    ))
+    .await
+    .unwrap()
+    .into_inner()
+}
+
+#[tokio::test]
+async fn a_narrower_grant_says_which_box_and_an_abandoned_link_is_swept() {
+    let (factory, _) = kinds(false);
+    let (server, pool) = start_with_kinds(factory).await;
+    let (_, party) = seed(&pool).await;
+    let mut c = server.client().await;
+
+    // Asked for sending, granted only reading (a box left unticked on the
+    // provider's screen): linked, cannot send, and the row says which box.
+    let started = start_for(&mut c, party, "send").await;
+    let short = c
+        .complete_connector(as_caller(
+            OWNER,
+            CompleteConnectorRequest {
+                state: state_of(&started.url),
+                code: "nosend".into(),
+            },
+        ))
+        .await
+        .unwrap()
+        .into_inner()
+        .connector
+        .unwrap();
+    assert_eq!(short.status, "linked");
+    assert!(!short.can_send && !short.can_read);
+    assert!(
+        short.failure.contains("Send email on your behalf"),
+        "{}",
+        short.failure
+    );
+
+    // A link nobody finished is dropped once it is stale; a fresh one stays.
+    let abandoned = start_for(&mut c, party, "both").await;
+    sqlx::query(
+        "update finance.connectors set created_at = now() - interval '2 hours' where id = $1::uuid",
+    )
+    .bind(&abandoned.connector_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let _fresh = start_for(&mut c, party, "both").await;
+    let listed = c
+        .list_connectors(as_caller(
+            OWNER,
+            ListConnectorsRequest {
+                party_ids: vec![party.to_string()],
+            },
+        ))
+        .await
+        .unwrap()
+        .into_inner()
+        .connectors;
+    assert!(
+        !listed.iter().any(|x| x.id == abandoned.connector_id),
+        "the stale pending row is gone"
+    );
+    assert_eq!(
+        listed.iter().filter(|x| x.status == "pending").count(),
+        1,
+        "the fresh one stays"
+    );
 
     // An unknown purpose is refused as an argument, and the kind lists what
     // it offers.

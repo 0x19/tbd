@@ -73,8 +73,11 @@ The finance service. gRPC only. Scaffolded by `tbd new service` (docs/tbd/README
   Google keeps an earlier, wider grant for the same account, so a send-only link of a
   mailbox once linked for reading still records `can_read = false`, and `begin_sync`
   refuses it (`State("send-only")`, FAILED_PRECONDITION). A credential recorded before
-  scopes were kept counts as readable. `test` on a send-only credential asks `userinfo`,
-  never the mailbox (`getProfile` wants a read scope). A kind may also *send*:
+  scopes were kept counts as readable. A grant narrower than the purpose (a box unticked on
+  Google's screen) links the row and puts a sentence naming the box in `failure`, so the
+  page says why it cannot send. `test` on a send-only credential asks `userinfo`,
+  never the mailbox (`getProfile` wants a read scope). Pending rows nobody finished are
+  dropped after an hour (`sweep_abandoned`, at start and before a new link). A kind may also *send*:
   `capabilities` says so from the consent it holds (a mailbox linked before sending was
   asked for is read-only until linked again), `send` builds the MIME itself (text,
   attachments, `In-Reply-To` and Gmail's `threadId` for a reply), and `replies` reads a

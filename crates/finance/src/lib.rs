@@ -211,6 +211,11 @@ pub async fn serve_with(
                 Ok(n) => tracing::info!(runs = n, "closed connector runs left open by a restart"),
                 Err(e) => tracing::warn!(error = %e, "could not close orphaned connector runs"),
             }
+            match connectors::store::sweep_abandoned(&sweep).await {
+                Ok(0) => {}
+                Ok(n) => tracing::info!(connectors = n, "dropped links nobody finished"),
+                Err(e) => tracing::warn!(error = %e, "could not drop abandoned links"),
+            }
             // Documents the reader has never seen: those stored before it
             // existed, or while it was down. After the sweep, so a pull
             // that restarts is not competing with the backlog for the pool.
