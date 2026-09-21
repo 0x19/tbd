@@ -12,6 +12,9 @@ extend-exclude = [
   "docs/nda/nda.hr.md",
   # Merchant names as printed on bank statements; a rule must match them as spelled.
   "crates/finance/seeds/rules.sql",
+  # The accountant's 2025 filings quoted verbatim: Croatian account and position names.
+  "docs/accountant/gfi-2025.md",
+  "docs/accountant/expected/",
   # mobile: buf-generated Dart (protobuf's own accessor names) and Xcode's storyboard ids.
   "mobile/packages/tbd_proto/lib/gen/",
   "mobile/apps/*/ios/",
