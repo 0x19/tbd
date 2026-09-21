@@ -76,3 +76,19 @@ Medium, SemiBold, Bold (OFL), under `crates/finance/assets/fonts/`.
 
 For eyes: `INVOICE_SAMPLE_OUT=/tmp/sample.pdf cargo nextest run -p tbd-finance -E 'test(invoice::render::)'`
 writes the August 2026 sample.
+
+## Invoices issued before this service
+
+`finance import-invoices --dir ~/finance-data --party <uuid>` reads every PDF under the
+directory and shows what it found: number, issue time, client, total, lines. Nothing is
+written without `--apply`; `--lines` prints each parsed line. It needs poppler's
+`pdftotext` (the positions are what tell a wrapped description which row it belongs to),
+so it runs on a laptop against the cluster's database, never in the service.
+
+What it writes: an approved invoice with the printed number, dates, lines and totals; the
+PDF as the invoice's document; the client found by name or made from the page; an
+`imported` event naming the file; and the counter raised past the number. A file that
+does not add up (lines, subtotal, VAT, total) is refused with the arithmetic; a copy of an
+invoice (the same content in a second file) is one invoice; two files claiming one number
+with different content are both refused and named, because only a person can say which
+was issued. A second run finds everything present and writes nothing.

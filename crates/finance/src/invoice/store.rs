@@ -256,7 +256,7 @@ pub struct Preview {
 }
 
 /// A statement assembled from constant column lists and nothing else.
-fn sql(s: &str) -> sqlx::AssertSqlSafe<String> {
+pub(crate) fn sql(s: &str) -> sqlx::AssertSqlSafe<String> {
     sqlx::AssertSqlSafe(s.to_owned())
 }
 
@@ -264,7 +264,7 @@ const ISSUER_COLUMNS: &str =
     "party_id, legal_name, address_lines, oib, vat_id, iban, swift, bank_name, court,
     registration_no, share_capital, board_member, issued_by, place_of_issue, operator_id, premises,
     device, due_days";
-const CLIENT_COLUMNS: &str = "id, party_id, name, address_lines, country_code, tax_id, vat_treatment, recipients, currency, archived_at";
+pub(crate) const CLIENT_COLUMNS: &str = "id, party_id, name, address_lines, country_code, tax_id, vat_treatment, recipients, currency, archived_at";
 const INVOICE_COLUMNS: &str =
     "id, party_id, client_id, status, year, ordinal, premises, device, number, issued_at,
     delivery_date, due_date, place_of_issue, currency, subtotal_minor, vat_minor, total_minor,

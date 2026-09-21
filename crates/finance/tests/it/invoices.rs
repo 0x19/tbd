@@ -783,3 +783,169 @@ async fn a_draft_is_deleted_its_header_edited_and_a_series_counts_alone() {
         .unwrap();
     assert_eq!(n, 4, "the deleted draft's lines went with it");
 }
+
+/// The importer writes what was issued before this service: approved rows
+/// with their printed numbers, the PDF as the document, the client made
+/// once, the counter raised past them; a copy of a file is one invoice, two
+/// different files claiming one number are both refused, a second run
+/// changes nothing.
+#[tokio::test]
+#[allow(clippy::too_many_lines)]
+async fn issued_invoices_are_imported_from_their_pdfs_once() {
+    use tbd_db::{Access, UserId};
+    use tbd_finance::invoice::{
+        VatTreatment,
+        import::{Parsed, PrintedLine, apply},
+    };
+    let (server, pool) = start_with_store().await;
+    let w = seed(&pool).await;
+    let mut c = server.client().await;
+    c.upsert_issuer(as_caller(
+        OWNER,
+        UpsertIssuerRequest {
+            issuer: Some(issuer(w.company)),
+        },
+    ))
+    .await
+    .unwrap();
+    let day = |y, m, d| chrono::NaiveDate::from_ymd_opt(y, m, d).unwrap();
+    let parsed = |ordinal: i32, year: i32, client: &str, bytes: &[u8], source: &str| Parsed {
+        source: source.into(),
+        sha256: format!("{:x}", <sha2::Sha256 as sha2::Digest>::digest(bytes)),
+        bytes: bytes.to_vec(),
+        ordinal,
+        premises: "1".into(),
+        device: "1".into(),
+        year,
+        kind: "invoice".into(),
+        issued_at: day(year, 3, 31).and_hms_opt(16, 2, 0).unwrap(),
+        due_date: day(year, 4, 15),
+        delivery_date: day(year, 3, 31),
+        place_of_issue: "Viškovo".into(),
+        client_name: client.into(),
+        client_address: vec!["Helsinki".into()],
+        client_country: "FI".into(),
+        client_tax_id: "FI32746464".into(),
+        currency: "EUR".into(),
+        vat_treatment: VatTreatment::ReverseChargeEu,
+        lines: vec![PrintedLine {
+            description: format!("Software development services for {year}"),
+            quantity_milli: 1000,
+            unit_price_minor: 916_700,
+            amount_minor: 916_700,
+        }],
+        subtotal_minor: 916_700,
+        vat_minor: 0,
+        total_minor: 916_700,
+        note: String::new(),
+    };
+    let three = parsed(3, 2025, "Eiger Oy", b"%PDF three", "3.pdf");
+    let mut three_copy = parsed(
+        3,
+        2025,
+        "Eiger Oy",
+        b"%PDF three with a receipt appended",
+        "3-copy.pdf",
+    );
+    three_copy.lines[0].description = "Software development services for 2025".into();
+    let four_a = parsed(4, 2025, "Eiger Oy", b"%PDF four a", "4a.pdf");
+    let mut four_b = parsed(4, 2025, "Tenderly", b"%PDF four b", "4b.pdf");
+    four_b.total_minor = 562_282;
+    four_b.subtotal_minor = 562_282;
+    four_b.lines[0].unit_price_minor = 562_282;
+    four_b.lines[0].amount_minor = 562_282;
+    let last_year = parsed(14, 2024, "Eiger Oy", b"%PDF fourteen", "14.pdf");
+    let access = Access::for_parties(UserId(Uuid::nil()), vec![w.company]);
+
+    let report = apply(
+        &pool,
+        &access,
+        w.company,
+        &[three, three_copy, four_a, four_b, last_year],
+    )
+    .await
+    .unwrap();
+    assert_eq!(report.imported, vec!["3-1-1-2025", "14-1-1-2024"]);
+    assert!(report.present.is_empty());
+    assert_eq!(report.refused.len(), 2, "{:?}", report.refused);
+    assert!(
+        report
+            .refused
+            .iter()
+            .all(|(n, why)| n == "4-1-1-2025" && why.contains("2 files"))
+    );
+
+    let list = c
+        .list_invoices(as_caller(OWNER, ListInvoicesRequest::default()))
+        .await
+        .unwrap()
+        .into_inner()
+        .invoices;
+    assert_eq!(list.len(), 2);
+    let three = list.iter().find(|i| i.number == "3-1-1-2025").unwrap();
+    assert_eq!(three.status, "approved");
+    assert_eq!(three.total_minor, 916_700);
+    assert_eq!(three.vat_treatment, "reverse_charge_eu");
+    assert!(!three.document_id.is_empty(), "the PDF is the document");
+    let doc = c
+        .get_invoice_document(as_caller(
+            OWNER,
+            GetInvoiceDocumentRequest {
+                id: three.id.clone(),
+            },
+        ))
+        .await
+        .unwrap()
+        .into_inner();
+    assert_eq!(doc.pdf, b"%PDF three", "the smaller of the two copies");
+    let full = c
+        .get_invoice(as_caller(
+            OWNER,
+            GetInvoiceRequest {
+                id: three.id.clone(),
+            },
+        ))
+        .await
+        .unwrap()
+        .into_inner()
+        .invoice
+        .unwrap();
+    assert_eq!(full.lines.len(), 1);
+    assert_eq!(
+        full.lines[0].description,
+        "Software development services for 2025"
+    );
+    let (clients,): (i64,) =
+        sqlx::query_as("select count(*) from finance.clients where party_id = $1")
+            .bind(w.company)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(clients, 1, "one client made, reused");
+    let (next,): (i32,) = sqlx::query_as(
+        "select next_ordinal from finance.invoice_numbers where party_id = $1 and year = 2025",
+    )
+    .bind(w.company)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(next, 4, "the counter continues after the imported number");
+
+    // A second run: everything already there, nothing written twice.
+    let again = apply(
+        &pool,
+        &access,
+        w.company,
+        &[parsed(3, 2025, "Eiger Oy", b"%PDF three", "3.pdf")],
+    )
+    .await
+    .unwrap();
+    assert_eq!(again.present, vec!["3-1-1-2025"]);
+    assert!(again.imported.is_empty());
+    let (docs,): (i64,) =
+        sqlx::query_as("select count(*) from finance.documents where kind = 'invoice'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(docs, 2);
+}

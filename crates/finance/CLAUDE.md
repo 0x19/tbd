@@ -17,7 +17,8 @@ The finance service. gRPC only. Scaffolded by `tbd new service` (docs/tbd/README
 - `main.rs`: the only file that prints. Subcommands are one-shots with no telemetry:
   `config`, `import` (prototype JSON), `adopt` (a prototype consent as a connection),
   `categorise`, `session` (one signed GET, spends no allowance), `sync` (one tick, or
-  `--account` a manual refresh).
+  `--account` a manual refresh), `import-invoices` (the PDFs issued before this service,
+  shown first, written with `--apply`; `invoice/import.rs`, poppler on the laptop).
 - `import.rs`: the **only** place provider JSON becomes rows (`ingest_pages`,
   `ingest_balances`), audited against 2,861 real Erste rows. The importer and the
   syncer both call it; a second parser would drift into wrong money without an error.

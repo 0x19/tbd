@@ -65,6 +65,23 @@ enum Command {
         #[arg(long)]
         account: Option<uuid::Uuid>,
     },
+    /// Read issued invoices (the PDFs of the years before this service) back
+    /// into the books. Every file is parsed and shown; nothing is written
+    /// without --apply. Needs poppler's pdftotext on this machine.
+    ImportInvoices {
+        /// A directory searched recursively for *.pdf.
+        #[arg(long)]
+        dir: std::path::PathBuf,
+        /// The issuing party.
+        #[arg(long)]
+        party: uuid::Uuid,
+        /// Write what parsed cleanly.
+        #[arg(long)]
+        apply: bool,
+        /// Show every parsed line under its invoice.
+        #[arg(long)]
+        lines: bool,
+    },
     /// Import transactions the prototype already pulled from the provider.
     ///
     /// Reads saved responses rather than calling the API: the ASPSP allows only
@@ -200,22 +217,136 @@ async fn one_shot(
                 }
             }
         }
+        Command::ImportInvoices {
+            dir,
+            party,
+            apply,
+            lines,
+        } => {
+            import_invoices(dir, *party, *apply, *lines, config).await?;
+        }
         Command::Import {
             dir,
             profile,
             party,
-        } => {
-            let pool = pool_for(config, "importing")?;
-            let report = tbd_finance::import::from_prototype(&pool, dir, profile, *party).await?;
-            println!(
-                "{profile}: {} accounts, {} balance snapshots, {} inserted, {} already present, {} skipped",
-                report.accounts,
-                report.balances,
-                report.inserted,
-                report.duplicates,
-                report.skipped
-            );
+        } => import_prototype(dir, profile, *party, config).await?,
+    }
+    Ok(())
+}
+
+/// Every `*.pdf` under a directory, recursively.
+fn pdfs_under(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) -> anyhow::Result<()> {
+    for entry in std::fs::read_dir(dir)? {
+        let path = entry?.path();
+        if path.is_dir() {
+            pdfs_under(&path, out)?;
+        } else if path
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("pdf"))
+        {
+            out.push(path);
         }
     }
+    Ok(())
+}
+
+/// `import-invoices`: parse every PDF under the directory, show the table,
+/// and with `--apply` write what parsed cleanly.
+async fn import_invoices(
+    dir: &std::path::Path,
+    party: uuid::Uuid,
+    apply: bool,
+    show_lines: bool,
+    config: &Config,
+) -> anyhow::Result<()> {
+    let mut files = Vec::new();
+    pdfs_under(dir, &mut files)?;
+    files.sort();
+    let mut good = Vec::new();
+    println!("number         issued            client                            total  file");
+    for f in &files {
+        match tbd_finance::invoice::import::read_file(f) {
+            Ok(p) => {
+                let total = format!("{} {}", minor(p.total_minor), p.currency);
+                println!(
+                    "{:<14} {:<17} {:<24} {:>14}  {}  ({} lines{})",
+                    p.number(),
+                    p.issued_at.format("%Y-%m-%d %H:%M"),
+                    p.client_name.chars().take(24).collect::<String>(),
+                    total,
+                    f.display(),
+                    p.lines.len(),
+                    if p.kind == "advance" { ", advance" } else { "" }
+                );
+                if show_lines {
+                    for l in &p.lines {
+                        println!(
+                            "      {:>6}.{:03} × {:>12} = {:>12}  {}",
+                            l.quantity_milli / 1000,
+                            l.quantity_milli.rem_euclid(1000),
+                            minor(l.unit_price_minor),
+                            minor(l.amount_minor),
+                            l.description
+                        );
+                    }
+                }
+                good.push(p);
+            }
+            Err(e) => println!(
+                "{:<14} {:<17} {:<24} {:>14}  {}  SKIPPED: {e}",
+                "-",
+                "",
+                "",
+                "",
+                f.display()
+            ),
+        }
+    }
+    if apply {
+        let pool = pool_for(config, "importing invoices")?;
+        let access = tbd_db::Access::for_parties(tbd_db::UserId(uuid::Uuid::nil()), vec![party]);
+        let report = tbd_finance::invoice::import::apply(&pool, &access, party, &good).await?;
+        println!(
+            "imported {}: {}",
+            report.imported.len(),
+            report.imported.join(", ")
+        );
+        println!(
+            "already present {}: {}",
+            report.present.len(),
+            report.present.join(", ")
+        );
+        for (n, why) in &report.refused {
+            println!("refused {n}: {why}");
+        }
+    } else {
+        println!(
+            "{} readable of {} files; add --apply to write them",
+            good.len(),
+            files.len()
+        );
+    }
+    Ok(())
+}
+
+/// Minor units as `-5622.82`.
+fn minor(v: i64) -> String {
+    let sign = if v < 0 { "-" } else { "" };
+    format!("{sign}{}.{:02}", v.abs() / 100, v.abs() % 100)
+}
+
+/// `import`: the prototype's saved provider responses as rows.
+async fn import_prototype(
+    dir: &std::path::Path,
+    profile: &str,
+    party: uuid::Uuid,
+    config: &Config,
+) -> anyhow::Result<()> {
+    let pool = pool_for(config, "importing")?;
+    let report = tbd_finance::import::from_prototype(&pool, dir, profile, party).await?;
+    println!(
+        "{profile}: {} accounts, {} balance snapshots, {} inserted, {} already present, {} skipped",
+        report.accounts, report.balances, report.inserted, report.duplicates, report.skipped
+    );
     Ok(())
 }
