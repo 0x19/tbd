@@ -1,49 +1,34 @@
 "use client";
 
-// The tuner. The microphone is opened when the visitor asks, read in a
-// loop, and never leaves the page: no recording, no upload, no worker
-// elsewhere. Everything below is Web Audio and the arithmetic in pitch.ts.
+// The tuner: the shared microphone, the pitch arithmetic, a needle. The
+// reference tones are synthesised strings played through the same context.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Eyebrow, Tag } from "@/components/kit";
+import { MicPanel, MicStatus } from "@/components/playgrounds/mic-panel";
+import { useMic } from "@/components/playgrounds/use-mic";
 import { Button } from "@/components/ui/button";
+import { centsOff, detectPitch, freqOfMidi, median, nearestString, noteOf, TUNINGS } from "@/lib/music/pitch";
+import { pluck } from "@/lib/music/pluck";
 import { cn } from "@/lib/utils";
-
-import { centsOff, detectPitch, freqOfMidi, median, nearestString, noteOf, rms, TUNINGS } from "./pitch";
-import { pluck } from "./pluck";
-
-type Status = "idle" | "starting" | "listening" | "blocked" | "unsupported";
 
 const A4_MIN = 432;
 const A4_MAX = 446;
-const WINDOW = 4096;
 const SMOOTH = 5;
 /** A note this periodic counts; below it is noise, a chord or the room. */
 const CLARITY = 0.72;
 
-type Input = { id: string; label: string };
-
 export function Tuner() {
-  const [status, setStatus] = useState<Status>("idle");
   const [tuningId, setTuningId] = useState(TUNINGS[0]!.id);
   const [a4, setA4] = useState(440);
   /** The string the meter aims at; null follows whatever is nearest. */
   const [locked, setLocked] = useState<number | null>(null);
   const [reading, setReading] = useState<{ freq: number; string: number; cents: number } | null>(null);
   const [quiet, setQuiet] = useState(true);
-  /** The input's level, so a silent page is visibly silent rather than broken. */
-  const [level, setLevel] = useState(0);
-  const [inputs, setInputs] = useState<Input[]>([]);
-  const [inputId, setInputId] = useState("");
-
-  const ctx = useRef<AudioContext | null>(null);
-  const stream = useRef<MediaStream | null>(null);
-  const analyser = useRef<AnalyserNode | null>(null);
-  const frame = useRef(0);
   const recent = useRef<number[]>([]);
   const lastHeard = useRef(0);
-  // The loop reads these without re-subscribing on every change.
+  // The frame callback reads these without re-subscribing on every change.
   const settings = useRef({ tuningId, a4, locked });
   useEffect(() => {
     settings.current = { tuningId, a4, locked };
@@ -51,30 +36,8 @@ export function Tuner() {
 
   const tuning = TUNINGS.find((t) => t.id === tuningId) ?? TUNINGS[0]!;
 
-  const stop = useCallback(() => {
-    cancelAnimationFrame(frame.current);
-    stream.current?.getTracks().forEach((t) => t.stop());
-    stream.current = null;
-    void ctx.current?.close();
-    ctx.current = null;
-    analyser.current = null;
-    recent.current = [];
-    setReading(null);
-    setQuiet(true);
-    setLevel(0);
-    setStatus("idle");
-  }, []);
-
-  useEffect(() => () => stop(), [stop]);
-
-  const tick = useCallback(() => {
-    const node = analyser.current;
-    const audio = ctx.current;
-    if (!node || !audio) return;
-    const buf = new Float32Array(node.fftSize);
-    node.getFloatTimeDomainData(buf);
-    setLevel(rms(buf));
-    const pitch = detectPitch(buf, audio.sampleRate);
+  const onFrame = useCallback((buf: Float32Array, sampleRate: number) => {
+    const pitch = detectPitch(buf, sampleRate);
     const now = performance.now();
     if (pitch && pitch.clarity > CLARITY) {
       lastHeard.current = now;
@@ -91,59 +54,13 @@ export function Tuner() {
       recent.current = [];
       setQuiet(true);
     }
-    frame.current = requestAnimationFrame(tick);
   }, []);
-
-  const start = async (deviceId = inputId) => {
-    if (
-      typeof navigator === "undefined" ||
-      !navigator.mediaDevices?.getUserMedia ||
-      !("AudioContext" in window)
-    ) {
-      setStatus("unsupported");
-      return;
-    }
-    stop();
-    setStatus("starting");
-    try {
-      const media = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: false,
-        },
-      });
-      // Which microphones there are, now that the browser will say, and
-      // which one it gave us, so the picker shows the truth.
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      setInputs(
-        devices
-          .filter((d) => d.kind === "audioinput")
-          .map((d, i) => ({ id: d.deviceId, label: d.label || `Microphone ${i + 1}` })),
-      );
-      setInputId(media.getAudioTracks()[0]?.getSettings().deviceId ?? deviceId);
-      const audio = new AudioContext();
-      await audio.resume();
-      const source = audio.createMediaStreamSource(media);
-      const node = audio.createAnalyser();
-      node.fftSize = WINDOW;
-      node.smoothingTimeConstant = 0;
-      source.connect(node);
-      stream.current = media;
-      ctx.current = audio;
-      analyser.current = node;
-      setStatus("listening");
-      frame.current = requestAnimationFrame(tick);
-    } catch {
-      setStatus("blocked");
-    }
-  };
+  const mic = useMic(onFrame);
 
   /** A reference tone for a string: a synthesised pluck, not a beep. */
   const play = (index: number) => {
-    const audio = ctx.current ?? new AudioContext();
-    if (!ctx.current) ctx.current = audio;
+    const audio = mic.context();
+    void audio.resume();
     const samples = pluck(audio.sampleRate, freqOfMidi(tuning.strings[index]!, a4));
     const buffer = audio.createBuffer(1, samples.length, audio.sampleRate);
     buffer.copyToChannel(samples, 0);
@@ -154,8 +71,9 @@ export function Tuner() {
     setLocked(index);
   };
 
+  const listening = mic.status === "listening";
   const cents = reading?.cents ?? 0;
-  const shown = reading && !quiet;
+  const shown = listening && reading !== null && !quiet;
   const aimed = shown ? reading.string : locked;
   const inTune = shown && Math.abs(cents) <= 5;
   const close = shown && Math.abs(cents) <= 15;
@@ -173,20 +91,7 @@ export function Tuner() {
       <div className="bg-background p-6 sm:p-8">
         <div className="flex items-baseline justify-between gap-4">
           <Eyebrow>Meter</Eyebrow>
-          <span className="text-muted-foreground flex items-center gap-2 font-mono text-[11px] uppercase">
-            <span
-              className={cn(
-                "size-2 rounded-full",
-                status === "listening" ? "bg-emerald-500" : "bg-muted-foreground/40",
-                status === "listening" && !shown && "animate-pulse",
-              )}
-            />
-            {status === "idle" && "not listening"}
-            {status === "starting" && "asking for the microphone"}
-            {status === "listening" && (shown ? "hearing a note" : "listening")}
-            {status === "blocked" && "microphone blocked"}
-            {status === "unsupported" && "no microphone here"}
-          </span>
+          <MicStatus mic={mic} hearing={shown ? "hearing a note" : null} />
         </div>
 
         <div className="mt-8 flex items-end justify-between gap-6">
@@ -236,76 +141,13 @@ export function Tuner() {
           />
         </div>
 
-        {status === "listening" ? (
-          <div className="mt-6">
-            <div className="text-muted-foreground flex items-center justify-between font-mono text-[11px] tracking-[0.18em] uppercase">
-              <span>Input level</span>
-              <span>
-                {level < 0.0005
-                  ? "nothing reaching the page"
-                  : level < 0.0015
-                    ? "very quiet"
-                    : "hearing sound"}
-              </span>
-            </div>
-            <div className="bg-muted mt-2 h-1.5 w-full overflow-hidden rounded-full">
-              <div
-                className={cn(
-                  "h-full rounded-full transition-[width] duration-75",
-                  level < 0.0015 ? "bg-muted-foreground/50" : "bg-emerald-500",
-                )}
-                style={{ width: `${Math.min(100, Math.sqrt(level) * 220)}%` }}
-              />
-            </div>
-            {inputs.length > 1 ? (
-              <label className="text-muted-foreground mt-3 flex items-center gap-2 text-sm">
-                <span className="shrink-0">Microphone</span>
-                <select
-                  className="bg-background min-w-0 flex-1 rounded-md border px-2 py-1 text-sm"
-                  value={inputId}
-                  onChange={(e) => void start(e.target.value)}
-                >
-                  {inputs.map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : null}
-            {level < 0.0005 ? (
-              <p className="text-muted-foreground mt-2 text-sm">
-                The browser is listening but no sound arrives. Try another microphone above, or check the
-                system input level and that nothing else holds the microphone.
-              </p>
-            ) : null}
-          </div>
-        ) : null}
-
-        <div className="mt-8 flex flex-wrap items-center gap-3">
-          {status === "listening" || status === "starting" ? (
-            <Button variant="outline" onClick={stop}>
-              Stop listening
-            </Button>
-          ) : (
-            <Button onClick={() => void start()}>Start listening</Button>
-          )}
+        <MicPanel mic={mic}>
           {locked !== null ? (
             <Button variant="ghost" onClick={() => setLocked(null)}>
               Follow the nearest string
             </Button>
           ) : null}
-          {status === "blocked" ? (
-            <p className="text-muted-foreground text-sm">
-              The browser refused the microphone. Allow it for this site and press start again.
-            </p>
-          ) : null}
-          {status === "unsupported" ? (
-            <p className="text-muted-foreground text-sm">
-              This browser has no microphone access, or the page is not on https.
-            </p>
-          ) : null}
-        </div>
+        </MicPanel>
       </div>
 
       {/* ---------------------------------------------------- the strings */}
