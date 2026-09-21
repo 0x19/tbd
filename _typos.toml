@@ -8,6 +8,8 @@ extend-exclude = [
   "docs/design/",
   # The finance UI's dictionaries are bilingual by design (en and hr side by side).
   "ui/finances/src/lib/i18n/messages/",
+  # The accountant's NDA: the Croatian version, which the checker reads as English.
+  "docs/nda/nda.hr.md",
   # Merchant names as printed on bank statements; a rule must match them as spelled.
   "crates/finance/seeds/rules.sql",
   # mobile: buf-generated Dart (protobuf's own accessor names) and Xcode's storyboard ids.
