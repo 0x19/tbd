@@ -42,12 +42,14 @@ use tbd_proto::finance::v1::{
     WatchConnectorsRequest, WatchConnectorsResponse, finance_service_server::FinanceService,
 };
 use tbd_proto::finance::v1::{
-    DeleteCounterpartyPolicyRequest, DeleteCounterpartyPolicyResponse, DeleteInvoiceRequest,
-    DeleteInvoiceResponse, LinkDocumentRequest, LinkDocumentResponse, MonthlyReconciliationRequest,
-    MonthlyReconciliationResponse, RecordPaymentRequest, RecordPaymentResponse,
-    SetCounterpartyPolicyRequest, SetCounterpartyPolicyResponse, SetDefaultClientRequest,
-    SetDefaultClientResponse, SetTransactionNoteRequest, SetTransactionNoteResponse,
-    UnlinkDocumentRequest, UnlinkDocumentResponse, UnlinkPaymentRequest, UnlinkPaymentResponse,
+    CreateIssuerRequest, CreateIssuerResponse, DeleteCounterpartyPolicyRequest,
+    DeleteCounterpartyPolicyResponse, DeleteInvoiceRequest, DeleteInvoiceResponse,
+    LinkDocumentRequest, LinkDocumentResponse, ListIssuersRequest, ListIssuersResponse,
+    MonthlyReconciliationRequest, MonthlyReconciliationResponse, RecordPaymentRequest,
+    RecordPaymentResponse, SetCounterpartyPolicyRequest, SetCounterpartyPolicyResponse,
+    SetDefaultClientRequest, SetDefaultClientResponse, SetTransactionNoteRequest,
+    SetTransactionNoteResponse, UnlinkDocumentRequest, UnlinkDocumentResponse,
+    UnlinkPaymentRequest, UnlinkPaymentResponse,
 };
 use tbd_proto::finance::v1::{
     DeleteMailTemplateRequest, DeleteMailTemplateResponse, ExtractDocumentRequest,
@@ -1069,6 +1071,18 @@ impl FinanceService for Finance {
         r: Request<CancelInvoiceRequest>,
     ) -> Result<Response<CancelInvoiceResponse>, Status> {
         self.rpc_cancel_invoice(r).await
+    }
+    async fn list_issuers(
+        &self,
+        r: Request<ListIssuersRequest>,
+    ) -> Result<Response<ListIssuersResponse>, Status> {
+        self.rpc_list_issuers(r).await
+    }
+    async fn create_issuer(
+        &self,
+        r: Request<CreateIssuerRequest>,
+    ) -> Result<Response<CreateIssuerResponse>, Status> {
+        self.rpc_create_issuer(r).await
     }
     async fn set_default_client(
         &self,

@@ -51,7 +51,11 @@ The finance service. gRPC only. Scaffolded by `tbd new service` (docs/tbd/README
   `UpdateInvoice` until approval; a draft is deleted (`DeleteInvoice`), never
   cancelled, and `CancelInvoice` refuses one; `CreateInvoice{from_invoice_id}`
   duplicates any invoice's header and lines into a draft dated today; `SetDefaultClient`
-  marks the one client per party the list opens on (`clients.is_default`). `payments.rs`
+  marks the one client per party the list opens on (`clients.is_default`);
+  `CreateIssuer` makes a company to invoice as -- an `internal` organisation party
+  through `tbd_db::create_org`, granted `own` to the caller, and its issuer profile
+  from the name, OIB, VAT id and country -- and `ListIssuers` lists the profiles in
+  the view. `payments.rs`
   is money in: `settle` runs before every read and ties a booked credit to the invoice
   whose number the payer wrote (remittance or structured reference, same currency),
   `record` is a person's word, `unlink` undoes one (a match stays `rejected`, never

@@ -252,6 +252,11 @@ export const ClientProfile = z.object({
 });
 export type ClientProfile = z.infer<typeof ClientProfile>;
 export const ListClientsResponse = z.object({ clients: z.array(ClientProfile) });
+export const ListIssuersResponse = z.object({ issuers: z.array(IssuerProfile) });
+export const CreateIssuerResponse = z.object({
+  party: Party.nullable().optional(),
+  issuer: IssuerProfile.nullable().optional(),
+});
 export const UpsertClientResponse = z.object({ client: ClientProfile.nullable().optional() });
 
 export const InvoiceLine = z.object({

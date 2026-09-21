@@ -61,7 +61,11 @@ same conventions; read `ui/chaos/CLAUDE.md` for what is the kit's and what is ou
   by the client's name or an amount and a day the bank has not shown; the list's
   Outstanding and Overdue tiles count what is still owed, `total - paid`), `/clients/` (a table with a "default" badge and a "Make default" action per row =
   `SetDefaultClient`, one per company; a sheet per client with its details and line
-  templates), `/issuer/` (one form in sections), `/connectors/`
+  templates), `/issuer/` ("Companies": every organisation in the grant with its issuer profile from
+  `ListIssuers`, a row selected opens the profile form in sections below; "Add company"
+  = `CreateIssuer`, which makes the organisation party owned by the caller and starts
+  its profile from name, OIB, VAT id and country, then `Providers.reload()` so the
+  scope toggle and every page see it), `/connectors/`
   (one flat list drawn from the `WatchConnectors` SSE feed via `useEvents`: a pull's
   progress and outcome, a relink, a removal arrive as events; `useFetch` polls only
   while the feed is down. Link a mailbox chooses the kind (a `token` kind such as

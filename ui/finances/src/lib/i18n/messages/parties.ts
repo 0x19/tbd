@@ -49,6 +49,23 @@ export const en: Dict = {
   "parties.unit_price.variable_hint": "Only used when there is no previous invoice",
   "parties.no_templates": "No templates: a draft starts from the last invoice to this client.",
   // Issuer
+  "parties.issuers.title": "Companies",
+  "parties.issuers.description":
+    "Who the invoices come from. Each company has its own profile, numbering and clients; add one and fill in what a Croatian invoice must carry.",
+  "parties.add_company": "Add company",
+  "parties.add_company_hint":
+    "The name, OIB and VAT id start the profile; the address, bank and legal lines come next.",
+  "parties.company.legal_name": "Legal name",
+  "parties.company.oib": "OIB",
+  "parties.company.vat_id": "VAT id",
+  "parties.company.country": "Country",
+  "parties.company_created": "{name} added. Fill in the rest of its profile below.",
+  "parties.col.company": "Company",
+  "parties.col.oib": "OIB",
+  "parties.col.iban": "IBAN",
+  "parties.col.place": "Place of issue",
+  "parties.no_profile": "profile not filled",
+  "parties.no_companies": "No companies yet.",
   "parties.issuer.title": "Issuer",
   "parties.issuer.description":
     "Who the invoices come from: the legal lines, the bank account, and the numbering. Printed on every invoice.",
@@ -135,6 +152,23 @@ export const hr: Dict = {
   "parties.unit_price.variable_hint": "Koristi se samo kad nema prethodnog računa",
   "parties.no_templates": "Nema predložaka: nacrt počinje od zadnjeg računa ovom klijentu.",
   // Izdavatelj
+  "parties.issuers.title": "Tvrtke",
+  "parties.issuers.description":
+    "Od koga računi dolaze. Svaka tvrtka ima svoj profil, numeraciju i klijente; dodaj je i upiši što hrvatski račun mora nositi.",
+  "parties.add_company": "Dodaj tvrtku",
+  "parties.add_company_hint":
+    "Naziv, OIB i PDV broj otvaraju profil; adresa, banka i pravne stavke dolaze potom.",
+  "parties.company.legal_name": "Naziv",
+  "parties.company.oib": "OIB",
+  "parties.company.vat_id": "PDV broj",
+  "parties.company.country": "Država",
+  "parties.company_created": "{name} dodana. Dopuni ostatak profila dolje.",
+  "parties.col.company": "Tvrtka",
+  "parties.col.oib": "OIB",
+  "parties.col.iban": "IBAN",
+  "parties.col.place": "Mjesto izdavanja",
+  "parties.no_profile": "profil nije popunjen",
+  "parties.no_companies": "Još nema tvrtki.",
   "parties.issuer.title": "Izdavatelj",
   "parties.issuer.description":
     "Od koga dolaze računi: zakonski podaci, bankovni račun i numeriranje. Ispisuje se na svakom računu.",

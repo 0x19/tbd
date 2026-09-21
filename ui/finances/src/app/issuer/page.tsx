@@ -4,22 +4,33 @@
 // invoice must carry, the bank it is paid into, and the numbering triple.
 // Data, not template text: change an address here and every later invoice
 // follows; issued ones keep what they were rendered with.
-import { useEffect, useState } from "react";
+import { Plus } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { useFinance } from "@/app/providers";
 import { PageTitle, SectionTitle } from "@/components/kit";
 import { TextField } from "@/components/text-field";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api/client";
 import { describe, useFetch } from "@/lib/api/hooks";
 import type { IssuerProfile } from "@/lib/api/schema";
 import { useT } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 
 const EMPTY_ISSUER = (party_id: string): IssuerProfile => ({
   party_id,
@@ -44,34 +55,162 @@ const EMPTY_ISSUER = (party_id: string): IssuerProfile => ({
 
 export default function IssuerPage() {
   const t = useT();
-  const { parties, partyIds } = useFinance();
-  const orgs = parties.filter((p) => p.kind === "org");
-  const [party, setParty] = useState("");
-  const chosen = party || orgs[0]?.id || partyIds[0] || "";
+  const { parties, partyName, reload } = useFinance();
+  const orgs = useMemo(() => parties.filter((p) => p.kind === "org"), [parties]);
+  const key = orgs.map((o) => o.id).join(",");
+  const issuers = useFetch(() => api.issuers(orgs.map((o) => o.id)), 0, [key]);
+  const [selected, setSelected] = useState("");
+  const chosen = selected || orgs[0]?.id || "";
+  const [adding, setAdding] = useState(false);
+  const profileOf = (party: string) => issuers.data?.issuers.find((i) => i.party_id === party);
   return (
     <>
-      <PageTitle title={t("parties.issuer.title")} description={t("parties.issuer.description")}>
-        {parties.length > 1 ? (
-          <Select value={chosen} onValueChange={setParty}>
-            <SelectTrigger className="w-48">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {parties.map((p) => (
-                <SelectItem key={p.id} value={p.id}>
-                  {p.display_name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        ) : null}
+      <PageTitle title={t("parties.issuers.title")} description={t("parties.issuers.description")}>
+        <Button size="sm" onClick={() => setAdding(true)}>
+          <Plus /> {t("parties.add_company")}
+        </Button>
       </PageTitle>
-      {chosen ? <IssuerForm party={chosen} /> : null}
+
+      <Card>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t("parties.col.company")}</TableHead>
+                <TableHead className="hidden sm:table-cell">{t("parties.col.oib")}</TableHead>
+                <TableHead className="hidden md:table-cell">{t("parties.col.iban")}</TableHead>
+                <TableHead className="hidden lg:table-cell">{t("parties.col.place")}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {orgs.map((o) => {
+                const p = profileOf(o.id);
+                return (
+                  <TableRow
+                    key={o.id}
+                    className={cn("cursor-pointer", chosen === o.id && "bg-muted/50")}
+                    onClick={() => setSelected(o.id)}
+                  >
+                    <TableCell className="font-medium">
+                      {p?.legal_name || partyName(o.id)}
+                      {issuers.data && !p?.legal_name ? (
+                        <Badge variant="outline" className="ml-2 text-[10px]">
+                          {t("parties.no_profile")}
+                        </Badge>
+                      ) : null}
+                    </TableCell>
+                    <TableCell className="hidden font-mono text-xs sm:table-cell">{p?.oib || "—"}</TableCell>
+                    <TableCell className="hidden font-mono text-xs md:table-cell">{p?.iban || "—"}</TableCell>
+                    <TableCell className="text-muted-foreground hidden text-xs lg:table-cell">
+                      {p?.place_of_issue || "—"}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+              {orgs.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={4} className="text-muted-foreground py-10 text-center text-sm">
+                    {t("parties.no_companies")}
+                  </TableCell>
+                </TableRow>
+              ) : null}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {chosen ? (
+        <>
+          <SectionTitle title={profileOf(chosen)?.legal_name || partyName(chosen)} />
+          <IssuerForm party={chosen} onSaved={issuers.reload} />
+        </>
+      ) : null}
+
+      <AddCompanyDialog
+        open={adding}
+        onClose={() => setAdding(false)}
+        onCreated={(partyId) => {
+          setAdding(false);
+          reload();
+          issuers.reload();
+          setSelected(partyId);
+        }}
+      />
     </>
   );
 }
 
-function IssuerForm({ party }: { party: string }) {
+function AddCompanyDialog({
+  open,
+  onClose,
+  onCreated,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onCreated: (partyId: string) => void;
+}) {
+  const t = useT();
+  const [form, setForm] = useState({ legal_name: "", oib: "", vat_id: "", country_code: "HR" });
+  const [busy, setBusy] = useState(false);
+  const oibOk = form.oib === "" || /^\d{11}$/.test(form.oib);
+  const create = async () => {
+    setBusy(true);
+    try {
+      const r = await api.createIssuer({ ...form, country_code: form.country_code.toUpperCase() });
+      toast.success(t("parties.company_created", { name: form.legal_name }));
+      setForm({ legal_name: "", oib: "", vat_id: "", country_code: "HR" });
+      if (r.party) onCreated(r.party.id);
+    } catch (e) {
+      toast.error(describe(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{t("parties.add_company")}</DialogTitle>
+          <DialogDescription>{t("parties.add_company_hint")}</DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-3">
+          <TextField
+            label={t("parties.company.legal_name")}
+            value={form.legal_name}
+            onChange={(v) => setForm({ ...form, legal_name: v })}
+          />
+          <div className="grid grid-cols-2 gap-3">
+            <TextField
+              label={t("parties.company.oib")}
+              value={form.oib}
+              onChange={(v) => setForm({ ...form, oib: v })}
+            />
+            <TextField
+              label={t("parties.company.vat_id")}
+              value={form.vat_id}
+              onChange={(v) => setForm({ ...form, vat_id: v })}
+            />
+          </div>
+          <TextField
+            label={t("parties.company.country")}
+            value={form.country_code}
+            onChange={(v) => setForm({ ...form, country_code: v })}
+          />
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            {t("common.cancel")}
+          </Button>
+          <Button onClick={() => void create()} disabled={busy || !form.legal_name.trim() || !oibOk}>
+            {busy ? t("common.saving") : t("parties.add_company")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function IssuerForm({ party, onSaved }: { party: string; onSaved: () => void }) {
   const t = useT();
   const loaded = useFetch(() => api.issuer(party), 0, [party]);
   const [form, setForm] = useState<IssuerProfile>(EMPTY_ISSUER(party));
@@ -86,6 +225,7 @@ function IssuerForm({ party }: { party: string }) {
       const r = await api.upsertIssuer({ ...form, due_days: Number(form.due_days) || 15 });
       if (r.issuer) setForm(r.issuer);
       toast.success(t("parties.issuer_saved"));
+      onSaved();
     } catch (e) {
       toast.error(describe(e));
     } finally {

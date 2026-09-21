@@ -296,6 +296,23 @@ pub async fn issuer(
     .map_err(map_err)?)
 }
 
+/// The issuer profiles of every party in the view.
+///
+/// # Errors
+/// The database.
+pub async fn issuers(pool: &PgPool, view: &Access) -> Result<Vec<IssuerRow>, InvoiceError> {
+    if view.is_empty() {
+        return Ok(Vec::new());
+    }
+    Ok(sqlx::query_as::<_, IssuerRow>(sql(&format!(
+        "select {ISSUER_COLUMNS} from finance.issuers where party_id = any($1) order by legal_name"
+    )))
+    .bind(view.party_ids())
+    .fetch_all(pool)
+    .await
+    .map_err(map_err)?)
+}
+
 /// Create or replace the issuer profile.
 ///
 /// # Errors

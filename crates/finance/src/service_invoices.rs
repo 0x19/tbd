@@ -6,12 +6,13 @@
 use tbd_db::DbError;
 use tbd_proto::finance::v1::{
     ApproveInvoiceRequest, ApproveInvoiceResponse, CancelInvoiceRequest, CancelInvoiceResponse,
-    ClientProfile, CreateInvoiceRequest, CreateInvoiceResponse, DeleteInvoiceRequest,
-    DeleteInvoiceResponse, DeleteLineTemplateRequest, DeleteLineTemplateResponse,
-    GetInvoiceDocumentRequest, GetInvoiceDocumentResponse, GetInvoiceRequest, GetInvoiceResponse,
-    GetIssuerRequest, GetIssuerResponse, Invoice, InvoiceLine, InvoicePayment, IssuerProfile,
-    LineTemplate, ListClientsRequest, ListClientsResponse, ListInvoicesRequest,
-    ListInvoicesResponse, ListLineTemplatesRequest, ListLineTemplatesResponse,
+    ClientProfile, CreateInvoiceRequest, CreateInvoiceResponse, CreateIssuerRequest,
+    CreateIssuerResponse, DeleteInvoiceRequest, DeleteInvoiceResponse, DeleteLineTemplateRequest,
+    DeleteLineTemplateResponse, GetInvoiceDocumentRequest, GetInvoiceDocumentResponse,
+    GetInvoiceRequest, GetInvoiceResponse, GetIssuerRequest, GetIssuerResponse, Invoice,
+    InvoiceLine, InvoicePayment, IssuerProfile, LineTemplate, ListClientsRequest,
+    ListClientsResponse, ListInvoicesRequest, ListInvoicesResponse, ListIssuersRequest,
+    ListIssuersResponse, ListLineTemplatesRequest, ListLineTemplatesResponse, Party,
     PreviewInvoiceRequest, PreviewInvoiceResponse, RecordPaymentRequest, RecordPaymentResponse,
     SetDefaultClientRequest, SetDefaultClientResponse, UnlinkPaymentRequest, UnlinkPaymentResponse,
     UpdateInvoiceRequest, UpdateInvoiceResponse, UpsertClientRequest, UpsertClientResponse,
@@ -223,6 +224,108 @@ impl Finance {
         self.done(&mut timer, r)
     }
 
+    pub(crate) async fn rpc_list_issuers(
+        &self,
+        request: Request<ListIssuersRequest>,
+    ) -> Result<Response<ListIssuersResponse>, Status> {
+        let party_ids = request.get_ref().party_ids.clone();
+        let (mut timer, pool, _, view) = self
+            .invoice_context("FinanceService/ListIssuers", &request, &party_ids)
+            .await?;
+        let r = store::issuers(pool, &view)
+            .await
+            .map(|rows| ListIssuersResponse {
+                issuers: rows.into_iter().map(issuer_proto).collect(),
+            });
+        self.done(&mut timer, r)
+    }
+    pub(crate) async fn rpc_create_issuer(
+        &self,
+        request: Request<CreateIssuerRequest>,
+    ) -> Result<Response<CreateIssuerResponse>, Status> {
+        let req = request.get_ref().clone();
+        let legal_name = req.legal_name.trim().to_owned();
+        if legal_name.is_empty() {
+            return Err(Status::invalid_argument("legal_name: empty"));
+        }
+        let oib = req.oib.trim().to_owned();
+        if !oib.is_empty() && (oib.len() != 11 || !oib.chars().all(|c| c.is_ascii_digit())) {
+            return Err(Status::invalid_argument("oib: want eleven digits"));
+        }
+        let country = if req.country_code.trim().is_empty() {
+            "HR".to_owned()
+        } else {
+            req.country_code.trim().to_ascii_uppercase()
+        };
+        if country.len() != 2 || !country.chars().all(|c| c.is_ascii_alphabetic()) {
+            return Err(Status::invalid_argument("country_code: want two letters"));
+        }
+        let (mut timer, pool, access, _) = self
+            .invoice_context("FinanceService/CreateIssuer", &request, &[])
+            .await?;
+        let r = async {
+            if access.user().0.is_nil() {
+                return Err(InvoiceError::Invalid(
+                    "a company needs an owner; sign in first".into(),
+                ));
+            }
+            // The party, owned by whoever made it; the profile from what was given.
+            let org = tbd_db::create_org(
+                pool,
+                &legal_name,
+                (!oib.is_empty()).then_some(oib.as_str()),
+                Some(&country),
+                true,
+            )
+            .await?;
+            tbd_db::grant(
+                pool,
+                access.user(),
+                tbd_db::PartyId(org.0),
+                tbd_db::Capability::Own,
+                Some(access.user()),
+                None,
+            )
+            .await?;
+            let owner = tbd_db::Access::for_parties(access.user(), vec![org.0]);
+            let issuer = store::upsert_issuer(
+                pool,
+                &owner,
+                IssuerInput {
+                    party_id: org.0,
+                    legal_name: legal_name.clone(),
+                    address_lines: Vec::new(),
+                    oib: oib.clone(),
+                    vat_id: req.vat_id.trim().to_owned(),
+                    iban: String::new(),
+                    swift: String::new(),
+                    bank_name: String::new(),
+                    court: String::new(),
+                    registration_no: String::new(),
+                    share_capital: String::new(),
+                    board_member: String::new(),
+                    issued_by: String::new(),
+                    place_of_issue: String::new(),
+                    operator_id: "1".into(),
+                    premises: "1".into(),
+                    device: "1".into(),
+                    due_days: 15,
+                },
+            )
+            .await?;
+            Ok(CreateIssuerResponse {
+                party: Some(Party {
+                    id: org.0.to_string(),
+                    kind: "org".into(),
+                    display_name: legal_name,
+                    capability: "own".into(),
+                }),
+                issuer: Some(issuer_proto(issuer)),
+            })
+        }
+        .await;
+        self.done(&mut timer, r)
+    }
     pub(crate) async fn rpc_upsert_issuer(
         &self,
         request: Request<UpsertIssuerRequest>,

@@ -219,6 +219,9 @@ export const api = {
   issuer: (party_id: string) => call(GetIssuerResponse, `/v1/finance/issuer${query({ party_id })}`),
   upsertIssuer: (issuer: IssuerProfile) =>
     call(UpsertIssuerResponse, "/v1/finance/issuer", { method: "POST", json: { issuer } }),
+  issuers: (party_ids: string[]) => call(ListIssuersResponse, `/v1/finance/issuers${query({ party_ids })}`),
+  createIssuer: (c: { legal_name: string; oib: string; vat_id: string; country_code: string }) =>
+    call(CreateIssuerResponse, "/v1/finance/issuers", { method: "POST", json: c }),
   clients: (party_ids: string[]) => call(ListClientsResponse, `/v1/finance/clients${query({ party_ids })}`),
   upsertClient: (client: Omit<ClientProfile, "archived" | "is_default">) =>
     call(UpsertClientResponse, "/v1/finance/clients", { method: "POST", json: { client } }),

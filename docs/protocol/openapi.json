@@ -2163,6 +2163,90 @@
         }
       }
     },
+    "/v1/finance/issuers": {
+      "get": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/ListIssuers",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/ListIssuers` on the `finance` backend.",
+        "operationId": "FinanceService.ListIssuers",
+        "parameters": [
+          {
+            "name": "party_ids",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "explode": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.ListIssuersResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.ListIssuersResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/CreateIssuer",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/CreateIssuer` on the `finance` backend.",
+        "operationId": "FinanceService.CreateIssuer",
+        "requestBody": {
+          "description": "`tbd.finance.v1.CreateIssuerRequest`; path variables override their fields",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/tbd.finance.v1.CreateIssuerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.CreateIssuerResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.CreateIssuerResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/finance/mail": {
       "get": {
         "tags": [
@@ -4804,6 +4888,36 @@
           }
         }
       },
+      "tbd.finance.v1.CreateIssuerRequest": {
+        "type": "object",
+        "description": "`tbd.finance.v1.CreateIssuerRequest`",
+        "properties": {
+          "country_code": {
+            "type": "string"
+          },
+          "legal_name": {
+            "type": "string"
+          },
+          "oib": {
+            "type": "string"
+          },
+          "vat_id": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.finance.v1.CreateIssuerResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.CreateIssuerResponse`",
+        "properties": {
+          "issuer": {
+            "$ref": "#/components/schemas/tbd.finance.v1.IssuerProfile"
+          },
+          "party": {
+            "$ref": "#/components/schemas/tbd.finance.v1.Party"
+          }
+        }
+      },
       "tbd.finance.v1.DeclareCategoryRequest": {
         "type": "object",
         "description": "`tbd.finance.v1.DeclareCategoryRequest`",
@@ -5530,6 +5644,18 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/tbd.finance.v1.Invoice"
+            }
+          }
+        }
+      },
+      "tbd.finance.v1.ListIssuersResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.ListIssuersResponse`",
+        "properties": {
+          "issuers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/tbd.finance.v1.IssuerProfile"
             }
           }
         }

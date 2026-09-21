@@ -9,10 +9,10 @@ use sqlx::PgPool;
 use tbd_db::{Capability, PartyId, UserId, create_org, ensure_user, grant};
 use tbd_proto::finance::v1::{
     ApproveInvoiceRequest, CancelInvoiceRequest, ClientProfile, CreateInvoiceRequest,
-    DeleteInvoiceRequest, GetInvoiceDocumentRequest, GetInvoiceRequest, InvoiceLine, IssuerProfile,
-    ListClientsRequest, ListInvoicesRequest, PreviewInvoiceRequest, RecordPaymentRequest,
-    SetDefaultClientRequest, UnlinkPaymentRequest, UpdateInvoiceRequest, UpsertClientRequest,
-    UpsertIssuerRequest,
+    CreateIssuerRequest, DeleteInvoiceRequest, GetInvoiceDocumentRequest, GetInvoiceRequest,
+    InvoiceLine, IssuerProfile, ListClientsRequest, ListInvoicesRequest, ListIssuersRequest,
+    ListPartiesRequest, PreviewInvoiceRequest, RecordPaymentRequest, SetDefaultClientRequest,
+    UnlinkPaymentRequest, UpdateInvoiceRequest, UpsertClientRequest, UpsertIssuerRequest,
 };
 use tonic::{Code, Request, metadata::MetadataValue};
 use uuid::Uuid;
@@ -1272,4 +1272,93 @@ async fn one_client_is_the_default_and_it_moves() {
         .await
         .unwrap_err();
     assert_eq!(e.code(), Code::NotFound, "{e}");
+}
+
+/// A second company: made by the owner, owned by the owner, listed with its
+/// profile, unseen by the reader who was granted only the first; a bad OIB is
+/// refused before anything is made.
+#[tokio::test]
+async fn a_company_is_made_owned_and_listed() {
+    let (server, pool) = start_with_store().await;
+    let world = seed(&pool).await;
+    let mut c = server.client().await;
+    let e = c
+        .create_issuer(as_caller(
+            OWNER,
+            CreateIssuerRequest {
+                legal_name: "Druga d.o.o.".into(),
+                oib: "12345".into(),
+                ..Default::default()
+            },
+        ))
+        .await
+        .unwrap_err();
+    assert_eq!(e.code(), Code::InvalidArgument, "{e}");
+    let made = c
+        .create_issuer(as_caller(
+            OWNER,
+            CreateIssuerRequest {
+                legal_name: "Druga d.o.o.".into(),
+                oib: "12345678903".into(),
+                vat_id: "HR12345678903".into(),
+                country_code: "hr".into(),
+            },
+        ))
+        .await
+        .unwrap()
+        .into_inner();
+    let party = made.party.unwrap();
+    assert_eq!(party.kind, "org");
+    assert_eq!(party.capability, "own");
+    let issuer = made.issuer.unwrap();
+    assert_eq!(issuer.party_id, party.id);
+    assert_eq!(issuer.legal_name, "Druga d.o.o.");
+    assert_eq!(issuer.oib, "12345678903");
+    assert_eq!(issuer.premises, "1");
+    // The owner's grant now holds it; the reader's does not.
+    let mine = c
+        .list_parties(as_caller(OWNER, ListPartiesRequest::default()))
+        .await
+        .unwrap()
+        .into_inner()
+        .parties;
+    assert!(
+        mine.iter()
+            .any(|p| p.id == party.id && p.capability == "own")
+    );
+    let theirs = c
+        .list_parties(as_caller(READER, ListPartiesRequest::default()))
+        .await
+        .unwrap()
+        .into_inner()
+        .parties;
+    assert!(theirs.iter().all(|p| p.id != party.id));
+    // Listed with the first company's profile once that one is set.
+    c.upsert_issuer(as_caller(
+        OWNER,
+        UpsertIssuerRequest {
+            issuer: Some(super::invoices::issuer(world.company)),
+        },
+    ))
+    .await
+    .unwrap();
+    let listed = c
+        .list_issuers(as_caller(OWNER, ListIssuersRequest::default()))
+        .await
+        .unwrap()
+        .into_inner()
+        .issuers;
+    let names: Vec<&str> = listed.iter().map(|i| i.legal_name.as_str()).collect();
+    assert_eq!(names, vec!["Druga d.o.o.", "Inorbit d.o.o."], "by name");
+    let seen = c
+        .list_issuers(as_caller(READER, ListIssuersRequest::default()))
+        .await
+        .unwrap()
+        .into_inner()
+        .issuers;
+    assert_eq!(
+        seen.len(),
+        1,
+        "the reader sees only the company it was granted"
+    );
 }
