@@ -179,7 +179,9 @@ function LinkDialog({
   const start = async () => {
     setBusy(true);
     try {
-      const r = await api.startConnector(party, kind, purposes.includes(purpose) ? purpose : "both");
+      // A kind that offers one purpose gets that one; the choice is hidden then.
+      const wanted: Purpose = purposes.includes(purpose) ? purpose : (purposes[0] ?? "both");
+      const r = await api.startConnector(party, kind, wanted);
       if (r.url) {
         window.location.href = r.url;
         return;
