@@ -380,11 +380,31 @@ function ClassCard({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-24">{t("books.account")}</TableHead>
-                  <TableHead></TableHead>
-                  {MONEY_COLUMNS.map((c) => (
-                    <TableHead key={c} className="text-right whitespace-nowrap">
-                      {t(COLUMN_LABEL[c])}
+                  <TableHead className="w-24" rowSpan={2}>
+                    {t("books.account")}
+                  </TableHead>
+                  <TableHead rowSpan={2}></TableHead>
+                  <TableHead className="text-muted-foreground border-l text-center" colSpan={2}>
+                    {t("books.opening")}
+                  </TableHead>
+                  <TableHead className="text-muted-foreground border-l text-center" colSpan={2}>
+                    {t("books.period")}
+                  </TableHead>
+                  <TableHead className="text-muted-foreground border-l text-center" colSpan={2}>
+                    {t("books.total")}
+                  </TableHead>
+                  <TableHead className="border-l text-right" rowSpan={2}>
+                    {t("books.balance")}
+                  </TableHead>
+                </TableRow>
+                <TableRow>
+                  {MONEY_COLUMNS.filter((c) => c !== "balance_minor").map((c) => (
+                    <TableHead
+                      key={c}
+                      className={cn("text-right whitespace-nowrap", c.endsWith("debit_minor") && "border-l")}
+                      title={t(COLUMN_LABEL[c])}
+                    >
+                      {t(c.endsWith("debit_minor") ? "books.debit" : "books.credit")}
                     </TableHead>
                   ))}
                 </TableRow>
