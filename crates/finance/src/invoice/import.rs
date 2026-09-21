@@ -886,6 +886,15 @@ async fn store_pdf(
             .await
             .map_err(map_err)?;
     if let Some((id,)) = existing {
+        // The same PDF may have arrived earlier as a receipt (a month folder
+        // holds our own invoices beside the suppliers'); it is an invoice.
+        sqlx::query(
+            "update finance.documents set kind = 'invoice' where id = $1 and kind <> 'invoice'",
+        )
+        .bind(id)
+        .execute(&mut **tx)
+        .await
+        .map_err(map_err)?;
         return Ok(id);
     }
     let id = Uuid::new_v4();
