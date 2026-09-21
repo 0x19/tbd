@@ -40,7 +40,8 @@ pub const fn headline_keys(form: Form) -> &'static [&'static str] {
             "300.Vrijednost",
             "300.Porez",
             "400",
-            "500",
+            "630",
+            "640",
         ],
         Form::PdvS => &["IsporukeUkupno.I1", "IsporukeUkupno.I2"],
         Form::Zp => &[

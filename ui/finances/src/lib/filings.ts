@@ -8,7 +8,18 @@ import { decimalToMinor } from "@/lib/receipts";
 /** The headline columns per form, in display order (mirrors form.rs). */
 export const HEADLINE: Record<string, string[]> = {
   pd: ["1", "2", "3", "26", "35", "38", "43", "44", "55", "56", "57", "59"],
-  pdv: ["000", "104", "105", "200.Vrijednost", "200.Porez", "300.Vrijednost", "300.Porez", "400", "500"],
+  pdv: [
+    "000",
+    "104",
+    "105",
+    "200.Vrijednost",
+    "200.Porez",
+    "300.Vrijednost",
+    "300.Porez",
+    "400",
+    "630",
+    "640",
+  ],
   pdv_s: ["IsporukeUkupno.I1", "IsporukeUkupno.I2"],
   zp: ["IsporukeUkupno.I1", "IsporukeUkupno.I2", "IsporukeUkupno.I3", "IsporukeUkupno.I4"],
   joppd: [
@@ -36,6 +47,7 @@ export const FORMS = ["pd", "pdv", "pdv_s", "zp", "joppd", "pd_ipo", "tz"];
 function plain(form: string, key: string): boolean {
   if (form === "pd") return key === "43" || key === "111" || key === "112" || /^Godina\d\d$/.test(key);
   if (form === "tz") return key === "02";
+  if (form === "pdv") return key === "500";
   if (form === "joppd")
     return /^A\.(BrojOsoba|BrojRedaka|DatumIzvjesca|OznakaIzvjesca|VrstaIzvjesca)$/.test(key);
   return false;

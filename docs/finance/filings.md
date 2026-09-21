@@ -16,7 +16,7 @@ Upload one or several `.xml` files on `/filings/` (or `UploadDocument` with
 | Form | Root element | Schema (2025 → 2026) | Read as |
 |---|---|---|---|
 | PD | `ObrazacPD` | v9-0 → v10-0 | `1`…`59`, the loss table (`Godina00`, `PG00`…), donations `110`…`150` and their recipients |
-| PDV | `ObrazacPDV` | v10-0 → v11-0 | `000`, `100`…`111`, pairs `200.Vrijednost`/`200.Porez` …, `400` to pay, `500` to refund |
+| PDV | `ObrazacPDV` | v10-0 → v11-0 | `000` all supplies, `100`…`111` the non-taxable section, pairs `200.Vrijednost`/`200.Porez` (taxable, II) and `300.…` (input VAT, III), `400` the signed result (II − III: positive to pay, negative a refund), `500` the deduction pro-rata in %, `610`…`660` the other data (`630` services received from abroad, `640` services provided abroad) |
 | PDV-S | `ObrazacPDVS` | v1-0 | one row per EU supplier, `IsporukeUkupno.I1`, `I2` |
 | ZP | `ObrazacZP` | v1-0 | one row per EU customer, `IsporukeUkupno.I1`…`I4` |
 | JOPPD | `ObrazacJOPPD` | v1-1 | page A as `A.…` (`A.PredujamPoreza.P1` gross, `.P2` tax, `A.Doprinosi.….P1`), page B one row per recipient (`P1`…`P17`) |

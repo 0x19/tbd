@@ -3,6 +3,8 @@
 
 use std::collections::BTreeMap;
 
+use chrono::SecondsFormat;
+
 use tbd_proto::finance::v1::{
     Filing, GetFilingRequest, GetFilingResponse, ListFilingsRequest, ListFilingsResponse,
 };
@@ -46,7 +48,10 @@ pub(crate) fn filing_proto(f: FilingRow, with_body: bool) -> Filing {
         period_to: f.period_to.map(|d| d.to_string()).unwrap_or_default(),
         oib: f.oib,
         obveznik: f.obveznik,
-        prepared_at: f.prepared_at.map(|t| t.to_rfc3339()).unwrap_or_default(),
+        prepared_at: f
+            .prepared_at
+            .map(|t| t.to_rfc3339_opts(SecondsFormat::Secs, true))
+            .unwrap_or_default(),
         author: f.author,
         filename: f.filename.unwrap_or_default(),
         report_mark: f.report_mark,
@@ -62,7 +67,7 @@ pub(crate) fn filing_proto(f: FilingRow, with_body: bool) -> Filing {
             String::new()
         },
         error: f.error.unwrap_or_default(),
-        parsed_at: f.parsed_at.to_rfc3339(),
+        parsed_at: f.parsed_at.to_rfc3339_opts(SecondsFormat::Secs, true),
         parser_version: f.parser_version,
     }
 }
