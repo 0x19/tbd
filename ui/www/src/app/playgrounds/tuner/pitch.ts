@@ -18,12 +18,17 @@ export type Pitch = {
  * holds the fundamental where plain autocorrelation jumps to an overtone,
  * which is what a low E does through a phone microphone.
  */
-export function detectPitch(buf: Float32Array, sampleRate: number, minHz = 60, maxHz = 1200): Pitch | null {
+export function detectPitch(
+  buf: Float32Array,
+  sampleRate: number,
+  floor = 0.0015,
+  minHz = 60,
+  maxHz = 1200,
+): Pitch | null {
   const n = buf.length;
-  let power = 0;
-  for (let i = 0; i < n; i += 1) power += buf[i]! * buf[i]!;
-  // Too quiet to mean anything: the room, not a string.
-  if (Math.sqrt(power / n) < 0.008) return null;
+  // Too quiet to mean anything: the room, not a string. A laptop microphone
+  // hears a guitar across a desk at a few thousandths of full scale.
+  if (rms(buf) < floor) return null;
 
   const maxTau = Math.min(n - 1, Math.floor(sampleRate / minHz));
   const minTau = Math.max(2, Math.floor(sampleRate / maxHz));
@@ -72,6 +77,13 @@ export function detectPitch(buf: Float32Array, sampleRate: number, minHz = 60, m
   const freq = sampleRate / period;
   if (!Number.isFinite(freq) || freq < minHz || freq > maxHz) return null;
   return { freq, clarity: Math.min(1, chosen.value) };
+}
+
+/** The window's level, 0..1 of full scale. */
+export function rms(buf: Float32Array): number {
+  let power = 0;
+  for (let i = 0; i < buf.length; i += 1) power += buf[i]! * buf[i]!;
+  return buf.length ? Math.sqrt(power / buf.length) : 0;
 }
 
 const NAMES = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"] as const;
