@@ -12,12 +12,18 @@ mise run local:build     # build the engine, protocol and chaos images and impor
 mise run local:deploy    # apply observability, host services and the app; waits for readiness
 mise run local:traffic   # 30 rounds of `chaos validate` through Envoy (TRAFFIC_ROUNDS=n)
 mise run local:load      # sustained load through Envoy, 8 workers (LOAD_SECONDS=n); fills dashboards and profiles
-mise run local:restart   # after a code change: rebuild, import, roll the app pods
+mise run local:restart   # after a code change: rebuild, import, migrate the database, roll the app pods
+mise run db:migrate      # only the migrations (`--status` to look); services never migrate on start
 mise run local:status    # every pod
 mise run local:urls      # the port map below
 mise run k9s             # TUI on the cluster
 mise run local:down      # delete the cluster; PVC data on the RAID is kept
 ```
+
+A migration under `/migrations` reaches the cluster's database only through `db:migrate`
+(the `tbd migrate` CLI, over a port-forward, with the URL from the `finance-db` secret):
+`local:restart` runs it before rolling the pods, and a build that adds a column rolled
+without it answers "internal error" until it is run.
 
 `mise run ansible:local` runs `devops/ansible/playbooks/local.yml`, which does the same
 steps idempotently and is the template for provisioning a real box the same way. Pass

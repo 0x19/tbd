@@ -931,9 +931,27 @@ run = """
 mise run local:build
 kubectl apply -k devops/k8s/overlays/local
 kubectl -n tbd rollout status statefulset/ledger-postgres statefulset/clickhouse --timeout=180s
+mise run db:migrate
 kubectl -n tbd rollout restart deployment/engine deployment/protocol deployment/chaos deployment/ledger deployment/humans deployment/finance deployment/www deployment/playground
 kubectl -n tbd rollout status deployment/engine deployment/protocol deployment/chaos deployment/playground deployment/finance deployment/humans deployment/ledger deployment/www --timeout=180s
 """
+
+[tasks."db:migrate"]
+description = "Apply the pending migrations under /migrations to the cluster's database (the tbd CLI through a port-forward, the URL from the finance-db secret); services do not migrate on start, so run this before rolling a build that adds a column"
+usage = 'flag "--status" help="report what is applied and what is pending, write nothing"'
+run = '''
+set -e
+url=$(kubectl -n tbd get secret finance-db -o jsonpath='{.data.database-url}' | base64 -d | sed 's#@ledger-postgres[.]tbd[.]svc:5432#@127.0.0.1:15432#')
+kubectl -n tbd port-forward svc/ledger-postgres 15432:5432 >/dev/null 2>&1 &
+pf=$!
+trap 'kill $pf 2>/dev/null' EXIT
+sleep 2
+if [ "${usage_status:-false}" = "true" ]; then
+  cargo run -q -p tbd-cli -- migrate --database-url "$url" --status
+else
+  cargo run -q -p tbd-cli -- migrate --database-url "$url"
+fi
+'''
 
 [tasks."local:urls"]
 run = """
