@@ -27,9 +27,16 @@ Consequences visible in the numbers:
   versus AOP 050 60.311,04; 94010 62.082,14 versus 21.012,23 + 65.047,18 = 86.059,41.
 - Only the "Ukupno" and "Saldo" columns are authoritative. The split is an artefact.
 
+The filings confirm the hand-over: every form up to June 2025 was prepared by the
+previous accountant (K.P.N. services, the `K.P.N.service_otvorene stavke` file in the
+monthly folders), every form from August 2025 by Trinajstić. The PDV returns for July,
+October, November and December 2025 carry a preparation date of 16 April 2026, the day
+the annual accounts were made: those months were re-filed as corrections at year end.
+
 What the service must support: importing an opening trial balance at an arbitrary date
-(including P&L year-to-date balances), negative postings on either side, and reporting
-year totals that do not depend on where the import date falls.
+(including P&L year-to-date balances), negative postings on either side, reporting year
+totals that do not depend on where the import date falls, and a corrected filing beside
+the original for the same period.
 
 ## 2. The owner's spending from the company account became a loan with interest
 
@@ -50,10 +57,21 @@ prescribes for 2025 applies to loans between related entities, not to this one. 
 company account paid for both business and private items through the year, which is
 also why the reconciliation policy in the finance service has a `personal` need.
 
+The filed PD-IPO (read on 2026-09-21 from the XML) settles the terms. Three tranches
+at 2 %: 81.370,92 from 1 January 2025, 10.119,65 from 2 August and 5.897,11 from
+2 December, principal 97.387,68 and interest 1.721,40 at year end, nothing repaid
+within the form. The interest reproduces to the cent as principal × 2 % × days / 365
+with the first day counted (365, 152 and 30 days: 1.627,42, 84,28 and 9,69, the last
+filed as 9,70). The opening principal of 81.370,92 is a third figure for the same
+receivable at 1.1.2025, beside the 60.311,04 in the filed 2024 balance sheet (AOP 050)
+and the 72.515,51 the migrated ledger carried on 1331; the three do not agree and go to
+the accountant.
+
 What the service must support: a member-loan sub-ledger (drawdowns from bank payments
-marked personal, repayments, prescribed-rate interest accrual with day count, year-end
-receivable for interest), the reclassification between AOP 050 and AOP 061, and the tax
-consequence if interest is not charged (hidden distribution, PD row 25).
+marked personal, repayments, interest at the rate with the day count above, year-end
+receivable for interest), the reclassification between AOP 050 and AOP 061, the PD-IPO
+rows the loan produces, and the tax consequence if interest is not charged (hidden
+distribution, PD row 25).
 
 ## 3. Equipment was depreciated to zero
 
@@ -84,9 +102,15 @@ remaining 86.059,41 − 62.082,14 = 23.977,27 does not appear in this trial bala
 all: it was distributed before the migration and is netted into the imported opening
 balances.
 
+The JOPPD filings show the instalments: beside the twelve salary reports (gross
+1.493,13, net 1.075,60 or 1.075,61), 2025 has a run of reports with no gross and only
+capital-income tax, one per payout (136,36 to 681,82 of tax, that is 12 % of 1.136 to
+5.682 paid), from August to December, and the run continues in 2026.
+
 What the service must support: a profit-distribution decision as a journal entry
-(gross, 12% tax, net), payment tracking against it, the JOPPD-side report of the tax,
-and the equity roll-forward check that catches distributions hidden in an import.
+(gross, 12% tax, net), payment tracking against it instalment by instalment, the JOPPD
+each instalment produces, and the equity roll-forward check that catches distributions
+hidden in an import.
 
 ## 5. The trial balance is pre-closing
 
