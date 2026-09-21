@@ -16,6 +16,7 @@
 //! since is refused. That is what makes "nothing goes out without my say-so"
 //! a test rather than a hope.
 
+pub mod aging;
 pub mod import;
 pub mod numbering;
 pub mod payments;

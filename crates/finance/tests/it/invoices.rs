@@ -8,11 +8,12 @@ use serde_json::json;
 use sqlx::PgPool;
 use tbd_db::{Capability, PartyId, UserId, create_org, ensure_user, grant};
 use tbd_proto::finance::v1::{
-    ApproveInvoiceRequest, CancelInvoiceRequest, ClientProfile, CreateInvoiceRequest,
-    CreateIssuerRequest, DeleteInvoiceRequest, GetInvoiceDocumentRequest, GetInvoiceRequest,
-    InvoiceLine, IssuerProfile, ListClientsRequest, ListInvoicesRequest, ListIssuersRequest,
-    ListPartiesRequest, PreviewInvoiceRequest, RecordPaymentRequest, SetDefaultClientRequest,
-    UnlinkPaymentRequest, UpdateInvoiceRequest, UpsertClientRequest, UpsertIssuerRequest,
+    AgingReportRequest, ApproveInvoiceRequest, CancelInvoiceRequest, ClientProfile,
+    CreateInvoiceRequest, CreateIssuerRequest, DeleteInvoiceRequest, GetInvoiceDocumentRequest,
+    GetInvoiceRequest, InvoiceLine, IssuerProfile, ListClientsRequest, ListInvoicesRequest,
+    ListIssuersRequest, ListPartiesRequest, PreviewInvoiceRequest, RecordPaymentRequest,
+    SetDefaultClientRequest, UnlinkPaymentRequest, UpdateInvoiceRequest, UpsertClientRequest,
+    UpsertIssuerRequest,
 };
 use tonic::{Code, Request, metadata::MetadataValue};
 use uuid::Uuid;
@@ -1361,4 +1362,61 @@ async fn a_company_is_made_owned_and_listed() {
         1,
         "the reader sees only the company it was granted"
     );
+}
+
+/// The aging report and the per-invoice ages come from the same rule: an
+/// approved invoice due last spring is over 90 days, a draft has no age, and
+/// a reader who was granted only the company sees the same numbers.
+#[tokio::test]
+async fn receivables_age_from_the_due_date_and_the_report_says_who_owes() {
+    let (server, pool) = start_with_store().await;
+    let world = seed(&pool).await;
+    let mut c = server.client().await;
+    let (id, _) = draft(&server, world.company).await;
+    let before = c
+        .get_invoice(as_caller(OWNER, GetInvoiceRequest { id: id.clone() }))
+        .await
+        .unwrap()
+        .into_inner()
+        .invoice
+        .unwrap();
+    // Due long ago, then approved: the age counts from the due date.
+    c.update_invoice(as_caller(
+        OWNER,
+        UpdateInvoiceRequest {
+            id: id.clone(),
+            delivery_date: before.delivery_date.clone(),
+            due_date: "2026-03-01".into(),
+            lines: lines(),
+            ..Default::default()
+        },
+    ))
+    .await
+    .unwrap();
+    assert_eq!(before.days_overdue, 0, "a draft has no age");
+    assert_eq!(before.outstanding_minor, 0);
+    approve(&server, id.clone()).await;
+    let inv = c
+        .get_invoice(as_caller(OWNER, GetInvoiceRequest { id: id.clone() }))
+        .await
+        .unwrap()
+        .into_inner()
+        .invoice
+        .unwrap();
+    assert!(inv.days_overdue > 90, "{}", inv.days_overdue);
+    assert_eq!(inv.outstanding_minor, inv.total_minor);
+    let rep = c
+        .aging_report(as_caller(OWNER, AgingReportRequest::default()))
+        .await
+        .unwrap()
+        .into_inner();
+    assert_eq!(rep.buckets.len(), 5);
+    let over = rep.buckets.iter().find(|b| b.bucket == "d90_plus").unwrap();
+    assert_eq!((over.count, over.amount_minor), (1, inv.total_minor));
+    assert_eq!(rep.clients.len(), 1);
+    assert_eq!(rep.clients[0].client_id, inv.client_id);
+    assert_eq!(rep.clients[0].overdue_minor, inv.total_minor);
+    assert_eq!(rep.clients[0].oldest_days, inv.days_overdue);
+    assert!(!rep.clients[0].client_name.is_empty());
+    assert_eq!(rep.as_of.len(), 10);
 }

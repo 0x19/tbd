@@ -91,6 +91,12 @@ export const en: Dict = {
   "mail.source.month": "Reconciliation of {month} · {company}",
   "mail.source.invoice": "Invoice {number} for {client}",
   "mail.default_subject_invoice": "Invoice {{InvoiceNumber}} – {{Company}}",
+  "mail.default_subject_reminder": "Payment reminder: invoice {{InvoiceNumber}} – {{Company}}",
+  "mail.default_body_reminder":
+    "Dear {{Client}},\n\nour invoice {{InvoiceNumber}} of {{IssueDate}}, due on {{DueDate}}, is still outstanding: {{Outstanding}} ({{DaysOverdue}} days past due).\n\nIf the payment is already on its way, please disregard this note. Otherwise we kindly ask you to settle it at your earliest convenience.\n\nKind regards,\n{{Company}}",
+  "mail.source.reminder": "Reminder for invoice {number} to {client}",
+  "mail.prefilled_reminder":
+    "Reminder for {number} to {client} is ready. The text is the default until you type your own or pick a template named “reminder”.",
   "mail.prefilled_invoice":
     "Prepared for invoice {number}: the PDF is attached and it goes to {client}'s addresses. Check and send.",
   "mail.prefilled_invoice_no_address":
@@ -200,6 +206,12 @@ export const hr: Dict = {
   "mail.source.month": "Usklađivanje za {month} · {company}",
   "mail.source.invoice": "Račun {number} za {client}",
   "mail.default_subject_invoice": "Račun {{InvoiceNumber}} – {{Company}}",
+  "mail.default_subject_reminder": "Opomena za plaćanje: račun {{InvoiceNumber}} – {{Company}}",
+  "mail.default_body_reminder":
+    "Poštovani,\n\nnaš račun {{InvoiceNumber}} od {{IssueDate}}, s dospijećem {{DueDate}}, još nije podmiren: {{Outstanding}} ({{DaysOverdue}} dana nakon dospijeća).\n\nAko je uplata već na putu, zanemarite ovu poruku. U suprotnom vas molimo da ga podmirite u najkraćem roku.\n\nS poštovanjem,\n{{Company}}",
+  "mail.source.reminder": "Opomena za račun {number} za {client}",
+  "mail.prefilled_reminder":
+    "Opomena za {number} za {client} je pripremljena. Tekst je zadani dok ne upišeš svoj ili odabereš predložak nazvan „opomena”.",
   "mail.prefilled_invoice":
     "Pripremljeno za račun {number}: PDF je priložen i ide na adrese klijenta {client}. Provjeri i pošalji.",
   "mail.prefilled_invoice_no_address":

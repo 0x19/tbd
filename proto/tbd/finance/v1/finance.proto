@@ -195,6 +195,11 @@ service FinanceService {
   rpc GetInvoice(GetInvoiceRequest) returns (GetInvoiceResponse) {
     option (google.api.http) = {get: "/v1/finance/invoices/{id}"};
   }
+  // What is still owed to the view's companies, by how long it has been owed
+  // (not yet due, 1-30, 31-60, 61-90, over 90 days) and by client.
+  rpc AgingReport(AgingReportRequest) returns (AgingReportResponse) {
+    option (google.api.http) = {get: "/v1/finance/invoices/aging"};
+  }
 
   // A new draft for a client, pre-filled from the last approved invoice to
   // them; or, with from_invoice_id, a duplicate of that invoice's header and
@@ -656,6 +661,9 @@ message SendMailRequest {
   // marked sent. Refused if it went out before, unless `force`.
   string invoice_id = 12;
   bool force = 13;
+  // The mail is a reminder that the invoice is still owed: recorded as such,
+  // never refused for an earlier send, refused for a paid invoice.
+  bool reminder = 14;
 }
 // The bundle as the page prepared it: small text files with their bytes,
 // and the receipts by document with the name each takes inside the zip.
@@ -1187,6 +1195,11 @@ message Invoice {
   // The first time it went out, and every time.
   string sent_at = 31;
   repeated InvoiceDelivery deliveries = 32;
+  // What is still owed (zero unless approved or sent), days past the due
+  // date (zero until then), and the last reminder sent.
+  int64 outstanding_minor = 33;
+  int32 days_overdue = 34;
+  string reminded_at = 35;
 }
 // One time an invoice went out: the mail that carried it, to whom, when.
 message InvoiceDelivery {
@@ -1194,6 +1207,36 @@ message InvoiceDelivery {
   string mail_id = 2;
   repeated string to = 3;
   string sent_at = 4;
+  // invoice (it went out) or reminder (it is still owed).
+  string kind = 5;
+}
+// Receivables aging: what is owed, for how long, by whom.
+message AgingReportRequest {
+  repeated string party_ids = 1;
+}
+message AgingBucket {
+  string currency = 1;
+  // current, d1_30, d31_60, d61_90, d90_plus.
+  string bucket = 2;
+  int32 count = 3;
+  int64 amount_minor = 4;
+}
+message ClientAging {
+  string client_id = 1;
+  string client_name = 2;
+  string currency = 3;
+  int32 count = 4;
+  int64 outstanding_minor = 5;
+  int64 overdue_minor = 6;
+  int32 oldest_days = 7;
+}
+message AgingReportResponse {
+  // YYYY-MM-DD in Zagreb, the day the ages are counted to.
+  string as_of = 1;
+  // Every bucket of every currency with something open, all five per currency.
+  repeated AgingBucket buckets = 2;
+  // Who owes, most overdue first.
+  repeated ClientAging clients = 3;
 }
 // A payment against an invoice: a bank transaction the matcher or a person
 // tied to it, or one a person recorded that the bank has not shown.

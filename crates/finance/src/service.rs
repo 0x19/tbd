@@ -15,22 +15,23 @@ use tbd_common::{
 };
 use tbd_db::{Access, DbError};
 use tbd_proto::finance::v1::{
-    Account, ApproveInvoiceRequest, ApproveInvoiceResponse, Balance, CancelInvoiceRequest,
-    CancelInvoiceResponse, Category, CompleteConnectionRequest, CompleteConnectionResponse,
-    CompleteConnectorRequest, CompleteConnectorResponse, ConfigureConnectorRequest,
-    ConfigureConnectorResponse, Connection, CreateInvoiceRequest, CreateInvoiceResponse,
-    DeclareCategoryRequest, DeclareCategoryResponse, DeleteConnectionRequest,
-    DeleteConnectionResponse, DeleteConnectorRequest, DeleteConnectorResponse,
-    DeleteLineTemplateRequest, DeleteLineTemplateResponse, GetDocumentRequest, GetDocumentResponse,
-    GetInvoiceDocumentRequest, GetInvoiceDocumentResponse, GetInvoiceRequest, GetInvoiceResponse,
-    GetIssuerRequest, GetIssuerResponse, GetTransactionRequest, GetTransactionResponse,
-    ListAccountsRequest, ListAccountsResponse, ListCategoriesRequest, ListCategoriesResponse,
-    ListClientsRequest, ListClientsResponse, ListConnectionsRequest, ListConnectionsResponse,
-    ListConnectorKindsRequest, ListConnectorKindsResponse, ListConnectorRunsRequest,
-    ListConnectorRunsResponse, ListConnectorsRequest, ListConnectorsResponse, ListDocumentsRequest,
-    ListDocumentsResponse, ListInvoicesRequest, ListInvoicesResponse, ListLineTemplatesRequest,
-    ListLineTemplatesResponse, ListPartiesRequest, ListPartiesResponse, ListRulesRequest,
-    ListRulesResponse, ListTransactionsRequest, ListTransactionsResponse, MonthlySummaryRequest,
+    Account, AgingReportRequest, AgingReportResponse, ApproveInvoiceRequest,
+    ApproveInvoiceResponse, Balance, CancelInvoiceRequest, CancelInvoiceResponse, Category,
+    CompleteConnectionRequest, CompleteConnectionResponse, CompleteConnectorRequest,
+    CompleteConnectorResponse, ConfigureConnectorRequest, ConfigureConnectorResponse, Connection,
+    CreateInvoiceRequest, CreateInvoiceResponse, DeclareCategoryRequest, DeclareCategoryResponse,
+    DeleteConnectionRequest, DeleteConnectionResponse, DeleteConnectorRequest,
+    DeleteConnectorResponse, DeleteLineTemplateRequest, DeleteLineTemplateResponse,
+    GetDocumentRequest, GetDocumentResponse, GetInvoiceDocumentRequest, GetInvoiceDocumentResponse,
+    GetInvoiceRequest, GetInvoiceResponse, GetIssuerRequest, GetIssuerResponse,
+    GetTransactionRequest, GetTransactionResponse, ListAccountsRequest, ListAccountsResponse,
+    ListCategoriesRequest, ListCategoriesResponse, ListClientsRequest, ListClientsResponse,
+    ListConnectionsRequest, ListConnectionsResponse, ListConnectorKindsRequest,
+    ListConnectorKindsResponse, ListConnectorRunsRequest, ListConnectorRunsResponse,
+    ListConnectorsRequest, ListConnectorsResponse, ListDocumentsRequest, ListDocumentsResponse,
+    ListInvoicesRequest, ListInvoicesResponse, ListLineTemplatesRequest, ListLineTemplatesResponse,
+    ListPartiesRequest, ListPartiesResponse, ListRulesRequest, ListRulesResponse,
+    ListTransactionsRequest, ListTransactionsResponse, MonthlySummaryRequest,
     MonthlySummaryResponse, Party, PingRequest, PingResponse, PreviewInvoiceRequest,
     PreviewInvoiceResponse, RefreshAccountRequest, RefreshAccountResponse, Rule,
     SetAccountSyncRequest, SetAccountSyncResponse, StartConnectionRequest, StartConnectionResponse,
@@ -1044,6 +1045,12 @@ impl FinanceService for Finance {
         r: Request<GetInvoiceRequest>,
     ) -> Result<Response<GetInvoiceResponse>, Status> {
         self.rpc_get_invoice(r).await
+    }
+    async fn aging_report(
+        &self,
+        r: Request<AgingReportRequest>,
+    ) -> Result<Response<AgingReportResponse>, Status> {
+        self.rpc_aging_report(r).await
     }
     async fn create_invoice(
         &self,

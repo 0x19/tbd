@@ -5,8 +5,9 @@
 use tbd_proto::finance::v1::{
     ApproveInvoiceRequest, CreateInvoiceRequest, DeleteMailTemplateRequest, GetInvoiceRequest,
     GetMailRequest, ListMailRequest, ListMailTemplatesRequest, MailBundle, MailBundleFile,
-    MailBundleReceipt, PreviewInvoiceRequest, SendMailRequest, UpdateInvoiceRequest,
-    UploadDocumentRequest, UpsertClientRequest, UpsertIssuerRequest, UpsertMailTemplateRequest,
+    MailBundleReceipt, PreviewInvoiceRequest, RecordPaymentRequest, SendMailRequest,
+    UpdateInvoiceRequest, UploadDocumentRequest, UpsertClientRequest, UpsertIssuerRequest,
+    UpsertMailTemplateRequest,
 };
 use tonic::Code;
 
@@ -488,4 +489,48 @@ async fn an_invoice_sent_by_mail_is_recorded_and_not_sent_twice_by_accident() {
         .unwrap();
     assert_eq!(again.deliveries.len(), 2);
     assert_eq!(again.sent_at, after.sent_at, "the first send is the date");
+    assert!(again.reminded_at.is_empty());
+
+    // A reminder is a mail by nature sent after the invoice: never refused
+    // for that, recorded as a reminder.
+    let remind = SendMailRequest {
+        reminder: true,
+        subject: "Opomena".into(),
+        ..mail(false)
+    };
+    c.send_mail(as_caller(OWNER, remind.clone())).await.unwrap();
+    let reminded = c
+        .get_invoice(as_caller(
+            OWNER,
+            GetInvoiceRequest {
+                id: draft.id.clone(),
+            },
+        ))
+        .await
+        .unwrap()
+        .into_inner()
+        .invoice
+        .unwrap();
+    assert_eq!(reminded.deliveries.len(), 3);
+    assert_eq!(reminded.deliveries[2].kind, "reminder");
+    assert_eq!(reminded.deliveries[0].kind, "invoice");
+    assert!(!reminded.reminded_at.is_empty());
+    assert_eq!(reminded.status, "sent");
+
+    // Paid: nothing to remind.
+    c.record_payment(as_caller(
+        OWNER,
+        RecordPaymentRequest {
+            invoice_id: draft.id.clone(),
+            amount_minor: reminded.total_minor,
+            paid_on: "2026-09-01".into(),
+            ..Default::default()
+        },
+    ))
+    .await
+    .unwrap();
+    let e = c.send_mail(as_caller(OWNER, remind)).await.unwrap_err();
+    assert_eq!(e.code(), Code::FailedPrecondition, "{e}");
+    assert!(e.message().contains("paid"), "{}", e.message());
+    assert_eq!(sent.lock().unwrap().len(), 3);
 }

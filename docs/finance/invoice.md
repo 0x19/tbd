@@ -38,6 +38,19 @@ paid ──last payment undone──▶ approved   the one step back
   `force`, which the page asks for as "Send again"; every send is one more row,
   listed on the invoice page with a link to its thread. `Invoice.deliveries` and
   `sent_at` carry them.
+- **Age** is the server's word (`invoice/aging.rs`): an invoice is open while
+  `approved` or `sent`, `outstanding_minor` is what the payments do not cover,
+  `days_overdue` counts from the due date in Zagreb and is zero until then.
+  `AgingReport` sums the open invoices into the five buckets (not yet due,
+  1–30, 31–60, 61–90, over 90 days) per currency and per client, most overdue
+  first; the invoices page draws it and a client row narrows the list.
+- A **reminder** is a mail with `reminder` set beside `invoice_id`: recorded as
+  a delivery of kind `reminder` (never refused for the invoice having gone out,
+  refused for a paid one), `reminded_at` on the invoice is the last one, and the
+  event is `reminded`. The page offers it on an overdue invoice; the composer
+  fills `{{Outstanding}}` and `{{DaysOverdue}}` beside the invoice helpers, takes
+  a template named "reminder" or "opomena" when the company has one, and has a
+  default text in the page's language otherwise.
 - A **preview** renders the draft with the number it *would* take and the current
   minute, watermarked `PREVIEW`, and returns the SHA-256 of the canonical document.
   The minute is truncated so an approval that follows within it computes the same

@@ -53,10 +53,20 @@ export default function MailPage() {
   useEffect(() => {
     if (!prefill || !connectors.data || !templates.data) return;
     const sender = senders.find((c) => c.party_id === prefill.party_id) ?? senders[0];
-    const tpl = templates.data.templates.find((x) => x.party_id === prefill.party_id);
+    // A reminder takes a template named for it, or none: the party's first
+    // template is about something else, and the composer has a default text.
+    const own = templates.data.templates.filter((x) => x.party_id === prefill.party_id);
+    const tpl =
+      prefill.kind === "invoice" && prefill.reminder
+        ? own.find((x) => /reminder|opomena|podsjet/i.test(x.name))
+        : own[0];
     setDraft(applyTemplate(fromPrefill(prefill, sender?.id ?? ""), tpl));
     setTab("compose");
-    if (prefill.kind === "invoice") {
+    if (prefill.kind === "invoice" && prefill.reminder) {
+      toast.info(
+        t("mail.prefilled_reminder", { number: prefill.invoice.number, client: prefill.client.name }),
+      );
+    } else if (prefill.kind === "invoice") {
       toast.info(
         prefill.client.recipients.length
           ? t("mail.prefilled_invoice", { number: prefill.invoice.number, client: prefill.client.name })

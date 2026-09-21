@@ -141,6 +141,8 @@ export function Templates({
       issued_at: `${thisMonth()}-01`,
       due_date: `${thisMonth()}-15`,
       client: t("mail.templates.sample_client"),
+      outstanding: "1.250,00 €",
+      days_overdue: 12,
     },
   };
   const [lastFocus, setLastFocus] = useState<"subject" | "body">("body");

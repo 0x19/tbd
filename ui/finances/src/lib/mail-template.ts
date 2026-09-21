@@ -28,6 +28,9 @@ export type InvoiceFacts = {
   issued_at: string;
   due_date: string;
   client: string;
+  /** Formatted with its currency; what a reminder asks for. */
+  outstanding: string;
+  days_overdue: number;
 };
 
 /** What the reconciliation page hands the composer: the month, its summary
@@ -56,10 +59,14 @@ export type InvoicePrefill = {
     due_date: string;
     /** Already formatted with the currency. */
     total: string;
+    outstanding: string;
+    days_overdue: number;
     document_id: string;
     filename: string;
   };
   client: { id: string; name: string; recipients: string[] };
+  /** The mail reminds the client the invoice is still owed. */
+  reminder?: boolean;
 };
 
 /** A hand-off from another page, carried through `sessionStorage`, so a
@@ -140,7 +147,10 @@ const MONTHS: Record<Lang, string[]> = {
  *  invoice's (present only when an invoice is being sent), and `Summary`. */
 export const HELPER_GROUPS: { id: "month" | "invoice" | "summary"; names: string[] }[] = [
   { id: "month", names: ["Month", "MonthPadded", "MonthName", "Year", "MonthYear", "Company", "Today"] },
-  { id: "invoice", names: ["Client", "InvoiceNumber", "InvoiceTotal", "IssueDate", "DueDate"] },
+  {
+    id: "invoice",
+    names: ["Client", "InvoiceNumber", "InvoiceTotal", "IssueDate", "DueDate", "Outstanding", "DaysOverdue"],
+  },
   { id: "summary", names: ["Summary"] },
 ];
 
@@ -171,10 +181,13 @@ export function helpers(ctx: TemplateContext): Record<string, string> {
     ...(ctx.invoice
       ? {
           Client: ctx.invoice.client,
+          Invoice: ctx.invoice.number,
           InvoiceNumber: ctx.invoice.number,
           InvoiceTotal: ctx.invoice.total,
           IssueDate: localDate(ctx.invoice.issued_at, ctx.lang),
           DueDate: localDate(ctx.invoice.due_date, ctx.lang),
+          Outstanding: ctx.invoice.outstanding,
+          DaysOverdue: String(ctx.invoice.days_overdue),
         }
       : {}),
   };

@@ -55,7 +55,10 @@ The finance service. gRPC only. Scaffolded by `tbd new service` (docs/tbd/README
   `CreateIssuer` makes a company to invoice as -- an `internal` organisation party
   through `tbd_db::create_org`, granted `own` to the caller, and its issuer profile
   from the name, OIB, VAT id and country -- and `ListIssuers` lists the profiles in
-  the view. `payments.rs`
+  the view. `aging.rs` is pure: what is open, outstanding and how many days
+  overdue (from the due date in Zagreb), and `report` sums it into five buckets
+  per currency and per client for `AgingReport`; `Invoice.outstanding_minor`,
+  `days_overdue` and `reminded_at` come from the same functions. `payments.rs`
   is money in: `settle` runs before every read and ties a booked credit to the invoice
   whose number the payer wrote (remittance or structured reference, same currency),
   `record` is a person's word, `unlink` undoes one (a match stays `rejected`, never
@@ -131,7 +134,9 @@ The finance service. gRPC only. Scaffolded by `tbd new service` (docs/tbd/README
   provider is asked (in the grant, issued, and not delivered before unless `force`),
   and the send's transaction adds a `finance.invoice_deliveries` row, flips `approved`
   to `sent` with `sent_at` from the first send, and writes the `sent` event
-  (`invoice_to_deliver` / `record_delivery`). A send may carry
+  (`invoice_to_deliver` / `record_delivery`); with `reminder` the row is of kind
+  `reminder`, the earlier-send guard does not apply, a paid invoice is refused, and
+  the event is `reminded`. A send may carry
   the accountant's *bundle*: the page sends the text files (README, summary, missing)
   with their bytes and the receipts as document ids with the name each takes, and the
   service fetches the receipts and writes one stored zip (`zip.rs`, the browser's

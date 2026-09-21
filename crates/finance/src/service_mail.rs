@@ -157,6 +157,7 @@ impl Finance {
             in_reply_to_mail_id: opt_uuid(&req.in_reply_to_mail_id, "in_reply_to_mail_id")?,
             invoice_id: opt_uuid(&req.invoice_id, "invoice_id")?,
             force: req.force,
+            reminder: req.reminder,
             bundle: match req.bundle {
                 None => None,
                 Some(b) => {

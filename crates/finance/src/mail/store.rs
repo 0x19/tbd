@@ -266,6 +266,9 @@ pub struct SendInput {
     pub invoice_id: Option<Uuid>,
     /// Send an invoice that already went out once more.
     pub force: bool,
+    /// The mail reminds the client the invoice is still owed: never refused
+    /// for having gone out before, refused for a paid one.
+    pub reminder: bool,
 }
 
 /// The accountant's bundle as the page prepared it: the summary files with
@@ -406,7 +409,7 @@ pub async fn send(
     // An invoice goes out once unless the person says again: the guard
     // stands before the provider is asked.
     let invoice = match input.invoice_id {
-        Some(id) => Some(invoice_to_deliver(pool, access, id, input.force).await?),
+        Some(id) => Some(invoice_to_deliver(pool, access, id, input.force, input.reminder).await?),
         None => None,
     };
     let creds = crate::connectors::store::open_credentials(pool, sealer, connector.id).await?;
@@ -472,7 +475,12 @@ pub async fn send(
             .map_err(map_err)?;
     }
     if let (Some(inv), "sent") = (&invoice, status) {
-        record_delivery(&mut tx, inv, id, &to, access).await?;
+        let kind = if input.reminder {
+            "reminder"
+        } else {
+            "invoice"
+        };
+        record_delivery(&mut tx, inv, id, &to, access, kind).await?;
     }
     tx.commit().await.map_err(map_err)?;
     if let Err(e) = &sent {
@@ -482,12 +490,14 @@ pub async fn send(
 }
 
 /// The invoice a mail delivers, checked: in the grant, issued, and not sent
-/// before unless `force`.
+/// before unless `force`. A reminder is a second mail by nature, so it is
+/// never refused for that; it is refused for an invoice nobody owes on.
 async fn invoice_to_deliver(
     pool: &PgPool,
     access: &Access,
     id: Uuid,
     force: bool,
+    reminder: bool,
 ) -> Result<crate::invoice::store::InvoiceRow, StoreError> {
     let (row, _) = crate::invoice::store::invoice(pool, access, id)
         .await
@@ -501,7 +511,13 @@ async fn invoice_to_deliver(
             row.status
         )));
     }
-    if !force {
+    if reminder && row.status == "paid" {
+        return Err(StoreError::Refused(format!(
+            "invoice {} is paid; there is nothing to remind",
+            row.number.clone().unwrap_or_default()
+        )));
+    }
+    if !force && !reminder {
         let earlier = crate::invoice::store::deliveries_of(pool, &[id]).await?;
         if let Some(first) = earlier.first() {
             return Err(StoreError::Refused(format!(
@@ -522,16 +538,18 @@ async fn record_delivery(
     mail_id: Uuid,
     to: &[String],
     access: &Access,
+    kind: &str,
 ) -> Result<(), StoreError> {
     sqlx::query(
-        "insert into finance.invoice_deliveries (id, invoice_id, party_id, mail_id, to_addrs)
-         values ($1, $2, $3, $4, $5)",
+        "insert into finance.invoice_deliveries (id, invoice_id, party_id, mail_id, to_addrs, kind)
+         values ($1, $2, $3, $4, $5, $6)",
     )
     .bind(Uuid::new_v4())
     .bind(inv.id)
     .bind(inv.party_id)
     .bind(mail_id)
     .bind(to)
+    .bind(kind)
     .execute(&mut **tx)
     .await
     .map_err(map_err)?;
@@ -549,7 +567,11 @@ async fn record_delivery(
         tx,
         inv.id,
         access.user(),
-        "sent",
+        if kind == "reminder" {
+            "reminded"
+        } else {
+            "sent"
+        },
         serde_json::json!({ "mail_id": mail_id, "to": to }),
     )
     .await?;

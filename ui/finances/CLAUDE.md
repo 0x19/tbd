@@ -133,7 +133,13 @@ same conventions; read `ui/chaos/CLAUDE.md` for what is the kit's and what is ou
   records the delivery and marks the invoice sent; a `failed_precondition` saying
   "already sent" opens a "Send again" dialog that resends with `force`. The invoice
   page lists `deliveries` under "Sent", each linking to `/mail/?mail=<id>`, which the
-  mail page opens on the Sent tab with that thread (`SentList.initialOpen`). `src/lib/bundle.ts` holds the pure builders both pages share --
+  mail page opens on the Sent tab with that thread (`SentList.initialOpen`). "Send
+  reminder" (an overdue invoice, on the list and the page) is the same hand-off with
+  `reminder: true`: the mail page takes only a template named reminder/opomena, the
+  composer's default subject and body are the reminder ones (rendered in the page's
+  language at send, like the subject), and the send carries `reminder`. Ages come from
+  the service (`days_overdue`, `outstanding_minor`), never from the browser's clock;
+  `aging-card.tsx` draws `AgingReport` above the list and a client row narrows it. `src/lib/bundle.ts` holds the pure builders both pages share --
   `summaryText()` (the README and `{{Summary}}`) and `plan()` (the same files the
   download zips: README, summary.csv, missing.csv and each receipt's name inside the
   zip, without the receipts' bytes) -- and the composer runs them again on every

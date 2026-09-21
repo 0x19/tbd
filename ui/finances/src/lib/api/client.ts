@@ -4,6 +4,7 @@
 import { z } from "zod";
 
 import {
+  AgingReportResponse,
   type ClientProfile,
   CompleteConnectionResponse,
   ConnectorResponse,
@@ -224,6 +225,8 @@ export const api = {
   upsertIssuer: (issuer: IssuerProfile) =>
     call(UpsertIssuerResponse, "/v1/finance/issuer", { method: "POST", json: { issuer } }),
   issuers: (party_ids: string[]) => call(ListIssuersResponse, `/v1/finance/issuers${query({ party_ids })}`),
+  agingReport: (party_ids: string[]) =>
+    call(AgingReportResponse, `/v1/finance/invoices/aging${query({ party_ids })}`),
   createIssuer: (c: { legal_name: string; oib: string; vat_id: string; country_code: string }) =>
     call(CreateIssuerResponse, "/v1/finance/issuers", { method: "POST", json: c }),
   clients: (party_ids: string[]) => call(ListClientsResponse, `/v1/finance/clients${query({ party_ids })}`),
@@ -352,6 +355,9 @@ export const api = {
     // The invoice this mail delivers; refused if sent before unless force.
     invoice_id?: string;
     force?: boolean;
+    // A reminder that the invoice is still owed: recorded as such, never
+    // refused for an earlier send.
+    reminder?: boolean;
     // The accountant's bundle: the service builds the zip, so the receipts
     // travel as ids and only the text files as (base64) bytes.
     bundle?: {

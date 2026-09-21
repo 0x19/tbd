@@ -3,7 +3,19 @@
 // One invoice: a draft is edited here, previewed as the PDF it would become,
 // and approved with the hash of exactly that preview. An approved invoice is
 // the immutable record: its PDF, its number, who approved it.
-import { Check, Copy, Download, ExternalLink, Eye, Maximize2, Plus, Send, Trash2, X } from "lucide-react";
+import {
+  BellRing,
+  Check,
+  Copy,
+  Download,
+  ExternalLink,
+  Eye,
+  Maximize2,
+  Plus,
+  Send,
+  Trash2,
+  X,
+} from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
@@ -23,6 +35,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -117,7 +130,7 @@ function InvoiceView() {
   const clients = useFetch(() => (inv?.party_id ? api.clients([inv.party_id]) : Promise.resolve(null)), 0, [
     inv?.party_id,
   ]);
-  const sendByMail = () => {
+  const sendByMail = (reminder = false) => {
     if (!inv) return;
     const c = clients.data?.clients.find((x) => x.id === inv.client_id);
     stashPrefill({
@@ -130,10 +143,13 @@ function InvoiceView() {
         issued_at: inv.issued_at,
         due_date: inv.due_date,
         total: money(inv.total_minor, inv.currency),
+        outstanding: money(inv.outstanding_minor, inv.currency),
+        days_overdue: inv.days_overdue,
         document_id: inv.document_id,
         filename: `${inv.number}.pdf`,
       },
       client: { id: inv.client_id, name: c?.name ?? "", recipients: c?.recipients ?? [] },
+      reminder,
     });
     router.push("/mail/");
   };
@@ -425,9 +441,21 @@ function InvoiceView() {
                 <Download /> {t("invoices.pdf")}
               </a>
             </Button>
-            <Button variant="outline" size="sm" onClick={sendByMail} disabled={!inv.document_id}>
+            <Button variant="outline" size="sm" onClick={() => sendByMail()} disabled={!inv.document_id}>
               <Send /> {inv.sent_at ? t("invoices.send_again") : t("invoices.send_mail")}
             </Button>
+            {inv.days_overdue > 0 ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-destructive"
+                onClick={() => sendByMail(true)}
+                disabled={!inv.document_id}
+                title={t("invoices.days_overdue", { n: inv.days_overdue })}
+              >
+                <BellRing /> {t("invoices.remind")}
+              </Button>
+            ) : null}
           </>
         ) : null}
         <Button variant="outline" size="sm" onClick={() => void duplicate()} disabled={busy !== ""}>
@@ -564,9 +592,14 @@ function InvoiceView() {
                 <ul className="divide-y text-sm">
                   {inv.deliveries.map((d) => (
                     <li key={d.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
-                      <span>
+                      <span className="flex flex-wrap items-center gap-2">
                         <span className="tabular-nums">{when(d.sent_at)}</span>
-                        <span className="text-muted-foreground"> · {d.to.join(", ")}</span>
+                        <span className="text-muted-foreground">{d.to.join(", ")}</span>
+                        {d.kind === "reminder" ? (
+                          <Badge variant="outline" className="text-[10px]">
+                            {t("invoices.delivery.reminder")}
+                          </Badge>
+                        ) : null}
                       </span>
                       {d.mail_id ? (
                         <Button asChild variant="ghost" size="sm" className="h-7 text-xs">

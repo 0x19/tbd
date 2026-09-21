@@ -105,18 +105,26 @@ export function Composer({
             issued_at: source.invoice.issued_at,
             due_date: source.invoice.due_date,
             client: source.client.name,
+            outstanding: source.invoice.outstanding,
+            days_overdue: source.invoice.days_overdue,
           }
         : undefined,
   };
+  const reminder = source?.kind === "invoice" && source.reminder === true;
   const subjectRaw =
     draft.subject ||
     (source?.kind === "month"
       ? t("mail.default_subject")
-      : source?.kind === "invoice"
-        ? t("mail.default_subject_invoice")
-        : "");
+      : reminder
+        ? t("mail.default_subject_reminder")
+        : source?.kind === "invoice"
+          ? t("mail.default_subject_invoice")
+          : "");
   const subject = render(subjectRaw, ctx);
-  const body = render(draft.body, ctx);
+  // A reminder has a default text, like the subject, until something is
+  // typed or a template chosen: rendered in the page's language at send.
+  const bodyRaw = draft.body || (reminder ? t("mail.default_body_reminder") : "");
+  const body = render(bodyRaw, ctx);
   const to = splitAddresses(draft.to);
   const cc = splitAddresses(draft.cc);
   const bcc = splitAddresses(draft.bcc);
@@ -154,6 +162,7 @@ export function Composer({
       const r = await api.sendMail({
         invoice_id: draft.source?.kind === "invoice" ? draft.source.invoice.id : "",
         force,
+        reminder,
         connector_id: sender.id,
         template_id: draft.template_id,
         to,
@@ -223,7 +232,10 @@ export function Composer({
           <span className="flex items-center gap-2">
             {source.kind === "invoice" ? <FileText className="size-4" /> : <Archive className="size-4" />}
             {source.kind === "invoice"
-              ? t("mail.source.invoice", { number: source.invoice.number, client: source.client.name })
+              ? t(source.reminder ? "mail.source.reminder" : "mail.source.invoice", {
+                  number: source.invoice.number,
+                  client: source.client.name,
+                })
               : t("mail.source.month", { month: monthLabel(source.month), company: source.company })}
           </span>
           <Button
@@ -391,7 +403,7 @@ export function Composer({
               onChange={(e) => setDraft({ ...draft, body: e.target.value })}
               rows={14}
               className="min-h-[18rem] font-mono text-sm leading-relaxed"
-              placeholder={t("mail.body_placeholder")}
+              placeholder={reminder ? body : t("mail.body_placeholder")}
             />
           </div>
 

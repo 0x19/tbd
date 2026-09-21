@@ -154,6 +154,8 @@ pub struct DeliveryRow {
     pub mail_id: Option<Uuid>,
     pub to_addrs: Vec<String>,
     pub sent_at: DateTime<Utc>,
+    /// `invoice` (it went out) or `reminder` (it is still owed).
+    pub kind: String,
 }
 
 #[allow(missing_docs)]
@@ -321,7 +323,7 @@ pub async fn deliveries_of(
         return Ok(Vec::new());
     }
     sqlx::query_as::<_, DeliveryRow>(
-        "select id, invoice_id, mail_id, to_addrs, sent_at from finance.invoice_deliveries
+        "select id, invoice_id, mail_id, to_addrs, sent_at, kind from finance.invoice_deliveries
           where invoice_id = any($1) order by sent_at",
     )
     .bind(invoice_ids)
@@ -665,8 +667,9 @@ async fn lines_of(pool: &PgPool, id: Uuid) -> Result<Vec<LineRow>, DbError> {
     .map_err(map_err)
 }
 
-/// Today in Zagreb: the day an invoice is dated by.
-fn today() -> NaiveDate {
+/// Today in Zagreb: the day an invoice is dated by, and aged from.
+#[must_use]
+pub fn today() -> NaiveDate {
     Utc::now().with_timezone(&Zagreb).date_naive()
 }
 

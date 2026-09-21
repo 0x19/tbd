@@ -8,6 +8,7 @@
 import {
   AlertTriangle,
   ArrowUpDown,
+  BellRing,
   ChevronDown,
   Copy,
   Download,
@@ -26,6 +27,7 @@ import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { useFinance } from "@/app/providers";
+import { AgingCard } from "@/components/invoices/aging-card";
 import { KpiStrip, PageTitle } from "@/components/kit";
 import { ScopeToggle } from "@/components/scope-toggle";
 import { StatusBadge } from "@/components/status-badge";
@@ -84,10 +86,6 @@ export default function InvoicesPage() {
       <Invoices />
     </Suspense>
   );
-}
-
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
 }
 
 function Invoices() {
@@ -183,7 +181,6 @@ function Invoices() {
   const clientName = (id: string) => clients.data?.clients.find((c) => c.id === id)?.name ?? "—";
   const all = useMemo(() => invoices.data?.invoices ?? [], [invoices.data]);
   const years = useMemo(() => [...new Set(all.map((i) => String(i.year)))].sort().reverse(), [all]);
-  const today = todayIso();
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -228,7 +225,7 @@ function Invoices() {
     const add = (rows: Invoice[]) =>
       rows.reduce((s, i) => s + BigInt(i.total_minor) - BigInt(i.paid_minor), 0n);
     const open = all.filter((i) => i.status === "approved" || i.status === "sent");
-    const overdue = open.filter((i) => i.due_date < today);
+    const overdue = open.filter((i) => i.days_overdue > 0);
     const thisYear = all.filter(
       (i) =>
         (i.status === "approved" || i.status === "sent" || i.status === "paid") &&
@@ -244,7 +241,7 @@ function Invoices() {
       yearN: thisYear.length,
       ccy,
     };
-  }, [all, today]);
+  }, [all]);
 
   const create = async (clientId: string = draftClient) => {
     const chosen = clientId;
@@ -312,7 +309,7 @@ function Invoices() {
   // An approved invoice goes to its client as a mail: the stored PDF as the
   // attachment, the client's addresses as recipients, the composer does the
   // rest (the same hand-off the reconciliation page makes).
-  const sendByMail = (i: Invoice) => {
+  const sendByMail = (i: Invoice, reminder = false) => {
     const c = clients.data?.clients.find((x) => x.id === i.client_id);
     stashPrefill({
       kind: "invoice",
@@ -324,10 +321,13 @@ function Invoices() {
         issued_at: i.issued_at,
         due_date: i.due_date,
         total: money(i.total_minor, i.currency),
+        outstanding: money(i.outstanding_minor, i.currency),
+        days_overdue: i.days_overdue,
         document_id: i.document_id,
         filename: `${i.number}.pdf`,
       },
       client: { id: i.client_id, name: c?.name ?? clientName(i.client_id), recipients: c?.recipients ?? [] },
+      reminder,
     });
     router.push("/mail/");
   };
@@ -459,6 +459,12 @@ function Invoices() {
         />
       )}
 
+      <AgingCard
+        partyIds={issuerIds}
+        version={invoices.data ? all.length : 0}
+        onClient={(id) => set({ client: id, tab: "issued" })}
+      />
+
       <Card>
         <CardHeader className="gap-3">
           <div className="flex flex-wrap items-center gap-2">
@@ -559,7 +565,7 @@ function Invoices() {
               </TableHeader>
               <TableBody>
                 {filtered.map((i) => {
-                  const overdue = (i.status === "approved" || i.status === "sent") && i.due_date < today;
+                  const overdue = i.days_overdue > 0;
                   return (
                     <TableRow
                       key={i.id}
@@ -592,7 +598,7 @@ function Invoices() {
                         )}
                       >
                         {day(i.due_date)}
-                        {overdue ? ` · ${t("invoices.overdue")}` : ""}
+                        {overdue ? ` · ${t("invoices.days_overdue", { n: i.days_overdue })}` : ""}
                       </TableCell>
                       <TableCell className="text-right font-mono tabular-nums">
                         {money(i.total_minor, i.currency)}
@@ -621,6 +627,22 @@ function Invoices() {
                               >
                                 <Send />
                               </Button>
+                              {overdue ? (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="text-destructive size-8"
+                                  aria-label={t("invoices.remind")}
+                                  title={
+                                    i.reminded_at
+                                      ? `${t("invoices.remind")} · ${t("invoices.reminded_at", { when: when(i.reminded_at) })}`
+                                      : t("invoices.remind")
+                                  }
+                                  onClick={() => sendByMail(i, true)}
+                                >
+                                  <BellRing />
+                                </Button>
+                              ) : null}
                             </>
                           ) : null}
                           <Button

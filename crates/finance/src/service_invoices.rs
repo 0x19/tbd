@@ -5,7 +5,8 @@
 
 use tbd_db::DbError;
 use tbd_proto::finance::v1::{
-    ApproveInvoiceRequest, ApproveInvoiceResponse, CancelInvoiceRequest, CancelInvoiceResponse,
+    AgingBucket, AgingReportRequest, AgingReportResponse, ApproveInvoiceRequest,
+    ApproveInvoiceResponse, CancelInvoiceRequest, CancelInvoiceResponse, ClientAging,
     ClientProfile, CreateInvoiceRequest, CreateInvoiceResponse, CreateIssuerRequest,
     CreateIssuerResponse, DeleteInvoiceRequest, DeleteInvoiceResponse, DeleteLineTemplateRequest,
     DeleteLineTemplateResponse, GetInvoiceDocumentRequest, GetInvoiceDocumentResponse,
@@ -24,7 +25,7 @@ use uuid::Uuid;
 
 use crate::{
     invoice::{
-        VatTreatment,
+        VatTreatment, aging,
         payments::{self, PaymentRow},
         store::{
             self, ClientInput, ClientRow, DeliveryRow, DraftInput, InvoiceError, InvoiceRow,
@@ -120,6 +121,7 @@ fn delivery_proto(d: DeliveryRow) -> InvoiceDelivery {
         mail_id: d.mail_id.map(|m| m.to_string()).unwrap_or_default(),
         to: d.to_addrs,
         sent_at: d.sent_at.to_rfc3339(),
+        kind: d.kind,
     }
 }
 
@@ -143,6 +145,13 @@ fn invoice_proto(
 ) -> Invoice {
     let t =
         |v: Option<chrono::DateTime<chrono::Utc>>| v.map(|t| t.to_rfc3339()).unwrap_or_default();
+    let outstanding_minor = aging::outstanding(&r);
+    let days_overdue = aging::days_overdue(&r, store::today());
+    let reminded_at = t(deliveries
+        .iter()
+        .filter(|d| d.kind == "reminder")
+        .map(|d| d.sent_at)
+        .max());
     Invoice {
         id: r.id.to_string(),
         party_id: r.party_id.to_string(),
@@ -174,6 +183,9 @@ fn invoice_proto(
         paid_at: t(r.paid_at),
         payments: payments.into_iter().map(payment_proto).collect(),
         sent_at: t(r.sent_at),
+        outstanding_minor,
+        days_overdue,
+        reminded_at,
         deliveries: deliveries.into_iter().map(delivery_proto).collect(),
         lines: lines
             .into_iter()
@@ -509,6 +521,53 @@ impl Finance {
                         let ps = by_invoice.remove(&r.id).unwrap_or_default();
                         let ds = sent.remove(&r.id).unwrap_or_default();
                         invoice_proto(r, Vec::new(), ps, ds)
+                    })
+                    .collect(),
+            })
+        }
+        .await;
+        self.done(&mut timer, r)
+    }
+
+    pub(crate) async fn rpc_aging_report(
+        &self,
+        request: Request<AgingReportRequest>,
+    ) -> Result<Response<AgingReportResponse>, Status> {
+        let party_ids = request.get_ref().party_ids.clone();
+        let (mut timer, pool, _, view) = self
+            .invoice_context("FinanceService/AgingReport", &request, &party_ids)
+            .await?;
+        let r = async {
+            for party in view.party_ids() {
+                payments::settle(pool, *party).await?;
+            }
+            let rows = store::invoices(pool, &view).await?;
+            let clients = store::clients(pool, &view).await?;
+            let today = store::today();
+            let rep = aging::report(&rows, &clients, today);
+            Ok(AgingReportResponse {
+                as_of: today.to_string(),
+                buckets: rep
+                    .buckets
+                    .into_iter()
+                    .map(|b| AgingBucket {
+                        currency: b.currency,
+                        bucket: b.bucket.to_string(),
+                        count: b.count,
+                        amount_minor: b.amount_minor,
+                    })
+                    .collect(),
+                clients: rep
+                    .clients
+                    .into_iter()
+                    .map(|c| ClientAging {
+                        client_id: c.client_id.to_string(),
+                        client_name: c.client_name,
+                        currency: c.currency,
+                        count: c.count,
+                        outstanding_minor: c.outstanding_minor,
+                        overdue_minor: c.overdue_minor,
+                        oldest_days: c.oldest_days,
                     })
                     .collect(),
             })

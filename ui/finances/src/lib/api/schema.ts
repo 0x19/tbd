@@ -274,8 +274,34 @@ export const InvoiceDelivery = z.object({
   mail_id: z.string(),
   to: z.array(z.string()),
   sent_at: z.string(),
+  // invoice (it went out) or reminder (it is still owed).
+  kind: z.string(),
 });
 export type InvoiceDelivery = z.infer<typeof InvoiceDelivery>;
+export const AgingBucket = z.object({
+  currency: z.string(),
+  // current, d1_30, d31_60, d61_90, d90_plus.
+  bucket: z.string(),
+  count: z.number(),
+  amount_minor: Minor,
+});
+export type AgingBucket = z.infer<typeof AgingBucket>;
+export const ClientAging = z.object({
+  client_id: z.string(),
+  client_name: z.string(),
+  currency: z.string(),
+  count: z.number(),
+  outstanding_minor: Minor,
+  overdue_minor: Minor,
+  oldest_days: z.number(),
+});
+export type ClientAging = z.infer<typeof ClientAging>;
+export const AgingReportResponse = z.object({
+  as_of: z.string(),
+  buckets: z.array(AgingBucket),
+  clients: z.array(ClientAging),
+});
+export type AgingReportResponse = z.infer<typeof AgingReportResponse>;
 export const InvoicePayment = z.object({
   id: z.string(),
   invoice_id: z.string(),
@@ -326,6 +352,10 @@ export const Invoice = z.object({
   // The first time it went out, and every time.
   sent_at: z.string(),
   deliveries: z.array(InvoiceDelivery),
+  // What is still owed, days past due (zero until then), the last reminder.
+  outstanding_minor: Minor,
+  days_overdue: z.number(),
+  reminded_at: z.string(),
 });
 export type Invoice = z.infer<typeof Invoice>;
 export const ListInvoicesResponse = z.object({ invoices: z.array(Invoice) });
