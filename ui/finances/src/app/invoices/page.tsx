@@ -99,12 +99,18 @@ function Invoices() {
   const invoices = useFetch(() => api.invoices(issuerIds), 30_000, [key]);
   const clients = useFetch(() => api.clients(issuerIds), 0, [key]);
 
-  const tab = (params.get("tab") as Tab) || "all";
-  const q = params.get("q") ?? "";
-  const clientFilter = params.get("client") ?? "";
-  const yearFilter = params.get("year") ?? "";
-  const sort = (params.get("sort") as SortKey) || "issued";
-  const dir = params.get("dir") === "asc" ? "asc" : "desc";
+  // The filters are state, seeded from the URL once and mirrored back into
+  // it without a navigation, so they stay shareable and never depend on the
+  // router re-rendering the page for a query-only change.
+  const [filters, setFilters] = useState<Record<string, string>>(() =>
+    Object.fromEntries(["tab", "q", "client", "year", "sort", "dir"].map((k) => [k, params.get(k) ?? ""])),
+  );
+  const tab = (filters.tab as Tab) || "all";
+  const q = filters.q ?? "";
+  const clientFilter = filters.client ?? "";
+  const yearFilter = filters.year ?? "";
+  const sort = (filters.sort as SortKey) || "issued";
+  const dir = filters.dir === "asc" ? "asc" : "desc";
   const [search, setSearch] = useState(q);
   const searchRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -129,13 +135,18 @@ function Invoices() {
   const appliedDefault = useRef(false);
 
   const set = (patch: Record<string, string>) => {
-    const next = new URLSearchParams(params.toString());
-    for (const [k, v] of Object.entries(patch)) {
-      if (v) next.set(k, v);
-      else next.delete(k);
-    }
-    const s = next.toString();
-    router.replace(s ? `/invoices/?${s}` : "/invoices/");
+    setFilters((prev) => {
+      const next = { ...prev, ...patch };
+      const url = new URLSearchParams();
+      for (const [k, v] of Object.entries(next)) if (v) url.set(k, v);
+      const s = url.toString();
+      window.history.replaceState(window.history.state, "", s ? `/invoices/?${s}` : "/invoices/");
+      return next;
+    });
+  };
+  const clear = () => {
+    setSearch("");
+    set({ tab: "", q: "", client: "", year: "", sort: "", dir: "" });
   };
 
   // `/` focuses search, `n` starts a draft, like the kit's lists.
@@ -160,14 +171,24 @@ function Invoices() {
   useEffect(() => {
     if (appliedDefault.current || !clients.data) return;
     appliedDefault.current = true;
-    if (!params.get("client") && defaultClient && clientList.some((c) => c.id === defaultClient)) {
+    if (!filters.client && defaultClient && clientList.some((c) => c.id === defaultClient)) {
       set({ client: defaultClient });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clients.data]);
   // The client a new draft is for: the one the list is on, else the default,
   // else the first.
-  const draftClient = clientFilter || defaultClient || clientList[0]?.id || "";
+  const latestClient = useMemo(() => {
+    const issued = (invoices.data?.invoices ?? []).filter((i) => i.issued_at);
+    issued.sort((a, b) => b.issued_at.localeCompare(a.issued_at));
+    return issued[0]?.client_id ?? "";
+  }, [invoices.data]);
+  const draftClient =
+    clientFilter ||
+    defaultClient ||
+    (clientList.some((c) => c.id === latestClient) ? latestClient : "") ||
+    clientList[0]?.id ||
+    "";
   const clientName = (id: string) => clients.data?.clients.find((c) => c.id === id)?.name ?? "—";
   const all = useMemo(() => invoices.data?.invoices ?? [], [invoices.data]);
   const years = useMemo(() => [...new Set(all.map((i) => String(i.year)))].sort().reverse(), [all]);
@@ -486,14 +507,7 @@ function Invoices() {
               </Select>
             ) : null}
             {q || clientFilter || yearFilter || tab !== "all" ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setSearch("");
-                  router.replace("/invoices/");
-                }}
-              >
+              <Button variant="ghost" size="sm" onClick={clear}>
                 <X /> {t("invoices.clear")}
               </Button>
             ) : null}
