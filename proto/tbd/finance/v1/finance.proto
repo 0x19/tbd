@@ -165,6 +165,14 @@ service FinanceService {
       body: "*"
     };
   }
+  // Make a client the company's default: the invoices list opens on it and
+  // a new draft is for it. The one before it no longer is.
+  rpc SetDefaultClient(SetDefaultClientRequest) returns (SetDefaultClientResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/clients/{id}/default"
+      body: "*"
+    };
+  }
 
   // Every invoice the caller may see, newest first.
   rpc ListInvoices(ListInvoicesRequest) returns (ListInvoicesResponse) {
@@ -995,6 +1003,8 @@ message ClientProfile {
   repeated string recipients = 8;
   string currency = 9;
   bool archived = 10;
+  // The company's default client; set through SetDefaultClient, read-only here.
+  bool is_default = 11;
 }
 
 message ListClientsRequest {
@@ -1008,6 +1018,12 @@ message UpsertClientRequest {
   ClientProfile client = 1;
 }
 message UpsertClientResponse {
+  ClientProfile client = 1;
+}
+message SetDefaultClientRequest {
+  string id = 1;
+}
+message SetDefaultClientResponse {
   ClientProfile client = 1;
 }
 

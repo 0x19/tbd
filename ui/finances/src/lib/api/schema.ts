@@ -247,6 +247,8 @@ export const ClientProfile = z.object({
   recipients: z.array(z.string()),
   currency: z.string(),
   archived: z.boolean(),
+  // The company's default client, one per company; set through SetDefaultClient.
+  is_default: z.boolean(),
 });
 export type ClientProfile = z.infer<typeof ClientProfile>;
 export const ListClientsResponse = z.object({ clients: z.array(ClientProfile) });

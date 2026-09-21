@@ -103,6 +103,9 @@ pub struct ClientRow {
     pub recipients: Vec<String>,
     pub currency: String,
     pub archived_at: Option<DateTime<Utc>>,
+    /// The company's default client: the invoices list opens on it and a
+    /// new draft is for it. One per party.
+    pub is_default: bool,
 }
 
 #[allow(missing_docs)]
@@ -267,7 +270,7 @@ const ISSUER_COLUMNS: &str =
     "party_id, legal_name, address_lines, oib, vat_id, iban, swift, bank_name, court,
     registration_no, share_capital, board_member, issued_by, place_of_issue, operator_id, premises,
     device, due_days";
-pub(crate) const CLIENT_COLUMNS: &str = "id, party_id, name, address_lines, country_code, tax_id, vat_treatment, recipients, currency, archived_at";
+pub(crate) const CLIENT_COLUMNS: &str = "id, party_id, name, address_lines, country_code, tax_id, vat_treatment, recipients, currency, archived_at, is_default";
 pub(crate) const INVOICE_COLUMNS: &str =
     "id, party_id, client_id, status, year, ordinal, premises, device, number, issued_at,
     delivery_date, due_date, place_of_issue, currency, subtotal_minor, vat_minor, total_minor,
@@ -845,6 +848,43 @@ async fn starting_lines(
             }
         })
         .collect())
+}
+
+/// Make a client the party's default, the one before it no longer.
+///
+/// # Errors
+/// Not in the grant (not found); the database.
+pub async fn set_default_client(
+    pool: &PgPool,
+    access: &Access,
+    client_id: Uuid,
+) -> Result<ClientRow, InvoiceError> {
+    let (party,): (Uuid,) = sqlx::query_as("select party_id from finance.clients where id = $1")
+        .bind(client_id)
+        .fetch_optional(pool)
+        .await
+        .map_err(map_err)?
+        .ok_or(DbError::NotFound { what: "client" })?;
+    access.require(PartyId(party), "client")?;
+    let mut tx = pool.begin().await.map_err(map_err)?;
+    sqlx::query("update finance.clients set is_default = false where party_id = $1 and is_default")
+        .bind(party)
+        .execute(&mut *tx)
+        .await
+        .map_err(map_err)?;
+    sqlx::query("update finance.clients set is_default = true where id = $1")
+        .bind(client_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(map_err)?;
+    tx.commit().await.map_err(map_err)?;
+    sqlx::query_as::<_, ClientRow>(sql(&format!(
+        "select {CLIENT_COLUMNS} from finance.clients where id = $1"
+    )))
+    .bind(client_id)
+    .fetch_one(pool)
+    .await
+    .map_err(|e| map_err(e).into())
 }
 
 /// Replace a draft's editable fields and lines, and recompute its totals.

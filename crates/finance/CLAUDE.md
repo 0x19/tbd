@@ -50,7 +50,8 @@ The finance service. gRPC only. Scaffolded by `tbd new service` (docs/tbd/README
   header (client of the same party, currency, VAT treatment, series) changes through
   `UpdateInvoice` until approval; a draft is deleted (`DeleteInvoice`), never
   cancelled, and `CancelInvoice` refuses one; `CreateInvoice{from_invoice_id}`
-  duplicates any invoice's header and lines into a draft dated today. `payments.rs`
+  duplicates any invoice's header and lines into a draft dated today; `SetDefaultClient`
+  marks the one client per party the list opens on (`clients.is_default`). `payments.rs`
   is money in: `settle` runs before every read and ties a booked credit to the invoice
   whose number the payer wrote (remittance or structured reference, same currency),
   `record` is a person's word, `unlink` undoes one (a match stays `rejected`, never

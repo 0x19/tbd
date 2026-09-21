@@ -220,8 +220,10 @@ export const api = {
   upsertIssuer: (issuer: IssuerProfile) =>
     call(UpsertIssuerResponse, "/v1/finance/issuer", { method: "POST", json: { issuer } }),
   clients: (party_ids: string[]) => call(ListClientsResponse, `/v1/finance/clients${query({ party_ids })}`),
-  upsertClient: (client: Omit<ClientProfile, "archived">) =>
+  upsertClient: (client: Omit<ClientProfile, "archived" | "is_default">) =>
     call(UpsertClientResponse, "/v1/finance/clients", { method: "POST", json: { client } }),
+  setDefaultClient: (id: string) =>
+    call(UpsertClientResponse, `/v1/finance/clients/${id}/default`, { method: "POST", json: {} }),
   invoices: (party_ids: string[]) =>
     call(ListInvoicesResponse, `/v1/finance/invoices${query({ party_ids })}`),
   invoice: (id: string) => call(InvoiceResponse, `/v1/finance/invoices/${id}`),
@@ -400,6 +402,11 @@ export const api = {
 export type Purpose = "read" | "send" | "both";
 
 export function pdfUrl(base64: string): string {
+  return blobUrl(base64, "application/pdf");
+}
+
+/** Base64 bytes from the API as an object URL of the given type, for a download. */
+export function blobUrl(base64: string, type: string): string {
   const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
-  return URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+  return URL.createObjectURL(new Blob([bytes], { type }));
 }

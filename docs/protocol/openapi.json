@@ -613,6 +613,59 @@
         }
       }
     },
+    "/v1/finance/clients/{id}/default": {
+      "post": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/SetDefaultClient",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/SetDefaultClient` on the `finance` backend.",
+        "operationId": "FinanceService.SetDefaultClient",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "`tbd.finance.v1.SetDefaultClientRequest`; path variables override their fields",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/tbd.finance.v1.SetDefaultClientRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.SetDefaultClientResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.SetDefaultClientResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/finance/connections": {
       "get": {
         "tags": [
@@ -4448,6 +4501,9 @@
           "id": {
             "type": "string"
           },
+          "is_default": {
+            "type": "boolean"
+          },
           "name": {
             "type": "string"
           },
@@ -6166,6 +6222,24 @@
         "properties": {
           "policy": {
             "$ref": "#/components/schemas/tbd.finance.v1.CounterpartyPolicy"
+          }
+        }
+      },
+      "tbd.finance.v1.SetDefaultClientRequest": {
+        "type": "object",
+        "description": "`tbd.finance.v1.SetDefaultClientRequest`",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.finance.v1.SetDefaultClientResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.SetDefaultClientResponse`",
+        "properties": {
+          "client": {
+            "$ref": "#/components/schemas/tbd.finance.v1.ClientProfile"
           }
         }
       },

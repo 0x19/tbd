@@ -22,6 +22,8 @@ paid ──last payment undone──▶ approved   the one step back
   per `(party, year, premises, device)`, so a second premises numbers from 1 on
   its own. The year is the year of approval, whatever year the draft was written
   in. Never a sequence.
+- A company has one **default client** (`clients.is_default`, `SetDefaultClient`, chosen on
+  the Clients page): the invoices list opens on it and a new draft is for it.
 - A **draft's header** may change until it is approved: the client (of the same
   party), the currency, the VAT treatment (its note follows) and the series. A
   draft that is not wanted is deleted; only an issued invoice is cancelled.

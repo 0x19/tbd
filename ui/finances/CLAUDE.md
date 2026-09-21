@@ -45,9 +45,11 @@ same conventions; read `ui/chaos/CLAUDE.md` for what is the kit's and what is ou
   holds fetch and switch with every outcome's toast, shared with `/accounts/`),
   `/connect/callback/` (the
   registered redirect: reads `state`+`code` from its URL, POSTs `CompleteConnection`,
-  then scrubs the URL), `/invoices/` (drafts, preview, approve, PDF; one client select filters the list and
-  is the client "New draft" is for; a pin beside it makes that client the default the
-  list opens on, kept in `localStorage` and applied to the URL on the first load only;
+  then scrubs the URL), `/invoices/` (drafts, preview, approve, PDF; the filters are page state mirrored into the
+  URL with `history.replaceState`, never a router navigation, since a query-only
+  `router.replace` did not re-render; one client select filters the list and is the
+  client "New draft" is for, opening on the company's default client (`is_default`,
+  set on `/clients/`) when the URL names none, else the client invoiced last;
   a row duplicates into a new draft, a draft row deletes after a confirm dialog, `n`
   starts a draft; the view edits a
   draft's client, VAT treatment, currency and series beside its dates and lines; on an
@@ -55,8 +57,9 @@ same conventions; read `ui/chaos/CLAUDE.md` for what is the kit's and what is ou
   matcher's bank matches and hand records -- with Undo = `UnlinkPayment` and "Record
   payment" = `RecordPayment`, either a credit picked from `ListTransactions` searched
   by the client's name or an amount and a day the bank has not shown; the list's
-  Outstanding and Overdue tiles count what is still owed, `total - paid`), `/clients/` (a table; a sheet per
-  client with its details and line templates), `/issuer/` (one form in sections), `/connectors/`
+  Outstanding and Overdue tiles count what is still owed, `total - paid`), `/clients/` (a table with a "default" badge and a "Make default" action per row =
+  `SetDefaultClient`, one per company; a sheet per client with its details and line
+  templates), `/issuer/` (one form in sections), `/connectors/`
   (one flat list drawn from the `WatchConnectors` SSE feed via `useEvents`: a pull's
   progress and outcome, a relink, a removal arrive as events; `useFetch` polls only
   while the feed is down. Link a mailbox chooses the kind (a `token` kind such as

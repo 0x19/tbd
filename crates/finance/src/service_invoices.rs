@@ -13,9 +13,10 @@ use tbd_proto::finance::v1::{
     LineTemplate, ListClientsRequest, ListClientsResponse, ListInvoicesRequest,
     ListInvoicesResponse, ListLineTemplatesRequest, ListLineTemplatesResponse,
     PreviewInvoiceRequest, PreviewInvoiceResponse, RecordPaymentRequest, RecordPaymentResponse,
-    UnlinkPaymentRequest, UnlinkPaymentResponse, UpdateInvoiceRequest, UpdateInvoiceResponse,
-    UpsertClientRequest, UpsertClientResponse, UpsertIssuerRequest, UpsertIssuerResponse,
-    UpsertLineTemplateRequest, UpsertLineTemplateResponse,
+    SetDefaultClientRequest, SetDefaultClientResponse, UnlinkPaymentRequest, UnlinkPaymentResponse,
+    UpdateInvoiceRequest, UpdateInvoiceResponse, UpsertClientRequest, UpsertClientResponse,
+    UpsertIssuerRequest, UpsertIssuerResponse, UpsertLineTemplateRequest,
+    UpsertLineTemplateResponse,
 };
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
@@ -93,6 +94,7 @@ fn client_proto(c: ClientRow) -> ClientProfile {
         recipients: c.recipients,
         currency: c.currency,
         archived: c.archived_at.is_some(),
+        is_default: c.is_default,
     }
 }
 
@@ -329,6 +331,22 @@ impl Finance {
         self.done(&mut timer, r)
     }
 
+    pub(crate) async fn rpc_set_default_client(
+        &self,
+        request: Request<SetDefaultClientRequest>,
+    ) -> Result<Response<SetDefaultClientResponse>, Status> {
+        let id = uuid(&request.get_ref().id, "id")?;
+        let (mut timer, pool, access, _) = self
+            .invoice_context("FinanceService/SetDefaultClient", &request, &[])
+            .await?;
+        let r =
+            store::set_default_client(pool, &access, id)
+                .await
+                .map(|c| SetDefaultClientResponse {
+                    client: Some(client_proto(c)),
+                });
+        self.done(&mut timer, r)
+    }
     pub(crate) async fn rpc_list_invoices(
         &self,
         request: Request<ListInvoicesRequest>,

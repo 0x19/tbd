@@ -10,8 +10,9 @@ use tbd_db::{Capability, PartyId, UserId, create_org, ensure_user, grant};
 use tbd_proto::finance::v1::{
     ApproveInvoiceRequest, CancelInvoiceRequest, ClientProfile, CreateInvoiceRequest,
     DeleteInvoiceRequest, GetInvoiceDocumentRequest, GetInvoiceRequest, InvoiceLine, IssuerProfile,
-    ListInvoicesRequest, PreviewInvoiceRequest, RecordPaymentRequest, UnlinkPaymentRequest,
-    UpdateInvoiceRequest, UpsertClientRequest, UpsertIssuerRequest,
+    ListClientsRequest, ListInvoicesRequest, PreviewInvoiceRequest, RecordPaymentRequest,
+    SetDefaultClientRequest, UnlinkPaymentRequest, UpdateInvoiceRequest, UpsertClientRequest,
+    UpsertIssuerRequest,
 };
 use tonic::{Code, Request, metadata::MetadataValue};
 use uuid::Uuid;
@@ -110,6 +111,7 @@ fn client(party: Uuid) -> ClientProfile {
         recipients: vec![],
         currency: "EUR".into(),
         archived: false,
+        is_default: false,
     }
 }
 
@@ -1188,6 +1190,82 @@ async fn payments_settle_invoices_by_the_number_the_payer_wrote() {
         .unlink_payment(as_caller(
             OWNER,
             UnlinkPaymentRequest {
+                id: Uuid::new_v4().to_string(),
+            },
+        ))
+        .await
+        .unwrap_err();
+    assert_eq!(e.code(), Code::NotFound, "{e}");
+}
+
+/// One client per company is the default; making another one moves it; a
+/// client outside the grant is not found.
+#[tokio::test]
+async fn one_client_is_the_default_and_it_moves() {
+    let (server, pool) = start_with_store().await;
+    let world = seed(&pool).await;
+    let mut c = server.client().await;
+    let make = |name: &str| UpsertClientRequest {
+        client: Some(ClientProfile {
+            name: name.into(),
+            ..client(world.company)
+        }),
+    };
+    let eiger = c
+        .upsert_client(as_caller(OWNER, make("Eiger Oy")))
+        .await
+        .unwrap()
+        .into_inner()
+        .client
+        .unwrap();
+    let tenderly = c
+        .upsert_client(as_caller(OWNER, make("Tenderly")))
+        .await
+        .unwrap()
+        .into_inner()
+        .client
+        .unwrap();
+    assert!(
+        !eiger.is_default && !tenderly.is_default,
+        "nobody until chosen"
+    );
+    let chosen = c
+        .set_default_client(as_caller(
+            OWNER,
+            SetDefaultClientRequest {
+                id: tenderly.id.clone(),
+            },
+        ))
+        .await
+        .unwrap()
+        .into_inner()
+        .client
+        .unwrap();
+    assert!(chosen.is_default);
+    c.set_default_client(as_caller(
+        OWNER,
+        SetDefaultClientRequest {
+            id: eiger.id.clone(),
+        },
+    ))
+    .await
+    .unwrap();
+    let listed = c
+        .list_clients(as_caller(OWNER, ListClientsRequest::default()))
+        .await
+        .unwrap()
+        .into_inner()
+        .clients;
+    let defaults: Vec<&str> = listed
+        .iter()
+        .filter(|x| x.is_default)
+        .map(|x| x.name.as_str())
+        .collect();
+    assert_eq!(defaults, vec!["Eiger Oy"], "moved, one at a time");
+    let e = c
+        .set_default_client(as_caller(
+            READER,
+            SetDefaultClientRequest {
                 id: Uuid::new_v4().to_string(),
             },
         ))

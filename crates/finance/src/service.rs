@@ -45,9 +45,9 @@ use tbd_proto::finance::v1::{
     DeleteCounterpartyPolicyRequest, DeleteCounterpartyPolicyResponse, DeleteInvoiceRequest,
     DeleteInvoiceResponse, LinkDocumentRequest, LinkDocumentResponse, MonthlyReconciliationRequest,
     MonthlyReconciliationResponse, RecordPaymentRequest, RecordPaymentResponse,
-    SetCounterpartyPolicyRequest, SetCounterpartyPolicyResponse, SetTransactionNoteRequest,
-    SetTransactionNoteResponse, UnlinkDocumentRequest, UnlinkDocumentResponse,
-    UnlinkPaymentRequest, UnlinkPaymentResponse,
+    SetCounterpartyPolicyRequest, SetCounterpartyPolicyResponse, SetDefaultClientRequest,
+    SetDefaultClientResponse, SetTransactionNoteRequest, SetTransactionNoteResponse,
+    UnlinkDocumentRequest, UnlinkDocumentResponse, UnlinkPaymentRequest, UnlinkPaymentResponse,
 };
 use tbd_proto::finance::v1::{
     DeleteMailTemplateRequest, DeleteMailTemplateResponse, ExtractDocumentRequest,
@@ -1069,6 +1069,12 @@ impl FinanceService for Finance {
         r: Request<CancelInvoiceRequest>,
     ) -> Result<Response<CancelInvoiceResponse>, Status> {
         self.rpc_cancel_invoice(r).await
+    }
+    async fn set_default_client(
+        &self,
+        r: Request<SetDefaultClientRequest>,
+    ) -> Result<Response<SetDefaultClientResponse>, Status> {
+        self.rpc_set_default_client(r).await
     }
     async fn delete_invoice(
         &self,

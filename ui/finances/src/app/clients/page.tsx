@@ -3,7 +3,7 @@
 // Clients: who is billed. A table of them, and a panel per client with its
 // details, the VAT treatment that decides the invoice's note, and the line
 // templates a new draft for it starts from.
-import { Plus } from "lucide-react";
+import { Plus, Star } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
@@ -36,6 +36,7 @@ const EMPTY_CLIENT = (party_id: string): ClientProfile => ({
   recipients: [],
   currency: "EUR",
   archived: false,
+  is_default: false,
 });
 
 // Wire value → message key; the label is looked up at render time.
@@ -55,6 +56,15 @@ export default function ClientsPage() {
   const loaded = useFetch(() => api.clients(chosen ? [chosen] : []), 0, [chosen]);
   const [editing, setEditing] = useState<ClientProfile | null>(null);
   const list = loaded.data?.clients ?? [];
+  const makeDefault = async (c: ClientProfile) => {
+    try {
+      await api.setDefaultClient(c.id);
+      toast.success(t("parties.default_set", { name: c.name }));
+      loaded.reload();
+    } catch (e) {
+      toast.error(describe(e));
+    }
+  };
   return (
     <>
       <PageTitle title={t("parties.clients.title")} description={t("parties.clients.description")}>
@@ -98,12 +108,21 @@ export default function ClientsPage() {
                   {multi ? (
                     <TableHead className="hidden xl:table-cell">{t("parties.col.billed_by")}</TableHead>
                   ) : null}
+                  <TableHead className="w-36" />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {list.map((c) => (
                   <TableRow key={c.id} className="cursor-pointer" onClick={() => setEditing(c)}>
-                    <TableCell className="font-medium">{c.name}</TableCell>
+                    <TableCell className="font-medium">
+                      {c.name}
+                      {c.is_default ? (
+                        <Badge variant="secondary" className="ml-2 text-[10px]">
+                          <Star className="mr-1 size-3 fill-current" />
+                          {t("parties.default")}
+                        </Badge>
+                      ) : null}
+                    </TableCell>
                     <TableCell className="text-muted-foreground hidden max-w-80 truncate text-xs md:table-cell">
                       {c.address_lines.join(", ")}
                     </TableCell>
@@ -122,11 +141,23 @@ export default function ClientsPage() {
                         {partyName(c.party_id)}
                       </TableCell>
                     ) : null}
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      {c.is_default ? null : (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={() => void makeDefault(c)}
+                        >
+                          <Star /> {t("parties.set_default")}
+                        </Button>
+                      )}
+                    </TableCell>
                   </TableRow>
                 ))}
                 {loaded.data && list.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-muted-foreground py-10 text-center text-sm">
+                    <TableCell colSpan={8} className="text-muted-foreground py-10 text-center text-sm">
                       {t("parties.no_clients")}
                     </TableCell>
                   </TableRow>
@@ -160,7 +191,7 @@ function ClientSheet({
     if (!form) return;
     setBusy(true);
     try {
-      const { archived: _archived, ...input } = form;
+      const { archived: _archived, is_default: _default, ...input } = form;
       const r = await api.upsertClient(input);
       toast.success(t("parties.client_saved"));
       if (r.client) setForm(r.client);

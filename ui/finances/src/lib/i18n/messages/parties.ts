@@ -5,6 +5,10 @@ import type { Dict } from "./index";
 export const en: Dict = {
   // Clients
   "parties.clients.title": "Clients",
+  "parties.default": "default",
+  "parties.set_default": "Make default",
+  "parties.default_set":
+    "{name} is now the default client: the invoices list opens on it and a new draft is for it.",
   "parties.clients.description": "Who is billed. The VAT treatment decides the note each invoice carries.",
   "parties.new_client": "New client",
   "parties.client": "Client",
@@ -87,6 +91,10 @@ export const en: Dict = {
 export const hr: Dict = {
   // Klijenti
   "parties.clients.title": "Klijenti",
+  "parties.default": "zadani",
+  "parties.set_default": "Postavi kao zadanog",
+  "parties.default_set":
+    "{name} je sada zadani klijent: popis računa otvara se na njemu i novi nacrt je za njega.",
   "parties.clients.description": "Tko se naplaćuje. PDV tretman određuje napomenu koju nosi svaki račun.",
   "parties.new_client": "Novi klijent",
   "parties.client": "Klijent",

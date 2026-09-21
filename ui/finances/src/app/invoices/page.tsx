@@ -11,7 +11,6 @@ import {
   Copy,
   Download,
   FileText,
-  Pin,
   Plus,
   Search,
   Send,
@@ -68,7 +67,6 @@ const TABS: { id: Tab; label: string; match: (i: Invoice) => boolean }[] = [
   { id: "cancelled", label: "invoices.tab.cancelled", match: (i) => i.status === "cancelled" },
 ];
 type SortKey = "issued" | "due" | "total" | "number";
-const DEFAULT_CLIENT_KEY = "finance.invoices.client";
 
 export default function InvoicesPage() {
   return (
@@ -114,24 +112,6 @@ function Invoices() {
   const [search, setSearch] = useState(q);
   const searchRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
-  // The client the list opens on: pinned once, kept in the browser. Applied
-  // to the URL on the first load only, so "All" chosen by hand stays.
-  const [defaultClient, setDefaultClient] = useState<string>(() => {
-    try {
-      return window.localStorage.getItem(DEFAULT_CLIENT_KEY) ?? "";
-    } catch {
-      return "";
-    }
-  });
-  const pin = (id: string) => {
-    setDefaultClient(id);
-    try {
-      if (id) window.localStorage.setItem(DEFAULT_CLIENT_KEY, id);
-      else window.localStorage.removeItem(DEFAULT_CLIENT_KEY);
-    } catch {
-      // No storage: the pin lasts this visit.
-    }
-  };
   const appliedDefault = useRef(false);
 
   const set = (patch: Record<string, string>) => {
@@ -168,12 +148,13 @@ function Invoices() {
   }, []);
 
   const clientList = useMemo(() => clients.data?.clients.filter((c) => !c.archived) ?? [], [clients.data]);
+  // The company's default client (Clients page): the list opens on it when
+  // the URL names none, and a new draft is for it.
+  const defaultClient = clientList.find((c) => c.is_default)?.id ?? "";
   useEffect(() => {
     if (appliedDefault.current || !clients.data) return;
     appliedDefault.current = true;
-    if (!filters.client && defaultClient && clientList.some((c) => c.id === defaultClient)) {
-      set({ client: defaultClient });
-    }
+    if (!filters.client && defaultClient) set({ client: defaultClient });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clients.data]);
   // The client a new draft is for: the one the list is on, else the default,
@@ -465,30 +446,6 @@ function Invoices() {
                     ))}
                   </SelectContent>
                 </Select>
-                {clientFilter ? (
-                  <Button
-                    variant={defaultClient === clientFilter ? "secondary" : "ghost"}
-                    size="icon"
-                    className="size-8"
-                    aria-label={t("invoices.default_client")}
-                    title={
-                      defaultClient === clientFilter
-                        ? t("invoices.default_client_is", { client: clientName(clientFilter) })
-                        : t("invoices.default_client")
-                    }
-                    onClick={() => {
-                      if (defaultClient === clientFilter) {
-                        pin("");
-                        toast.success(t("invoices.default_client_cleared"));
-                      } else {
-                        pin(clientFilter);
-                        toast.success(t("invoices.default_client_set", { client: clientName(clientFilter) }));
-                      }
-                    }}
-                  >
-                    {defaultClient === clientFilter ? <Pin className="fill-current" /> : <Pin />}
-                  </Button>
-                ) : null}
               </span>
             ) : null}
             {years.length > 1 ? (
