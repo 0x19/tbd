@@ -46,8 +46,10 @@ Before sending:
 2. Have a Croatian lawyer read it once. It was drafted with care from the Croatian
    Obligations Act, the GDPR and the trade-secrets act in mind, but it is not legal
    advice, and the accountant may have their own engagement terms to reconcile.
-3. Render to PDF if the accountant wants one. There is no converter in this tree;
-   `pandoc nda.hr.md -o nda.hr.pdf` works where pandoc and a PDF engine are installed,
-   and any Markdown editor prints it.
+3. Render to PDF: `mise run nda:pdf` writes `target/nda/nda.hr.pdf` and
+   `target/nda/nda.en.pdf` (A4, numbered pages) through `docs/nda/render.mjs`, which
+   uses the Playwright Chromium the finances UI's e2e tests already install and
+   fetches `marked` once through npx. `NDA_OUT=<dir>` writes somewhere else. The
+   PDFs are build output and are not committed.
 
 Both versions are signed; the Croatian one prevails in a dispute (8.2).

@@ -492,6 +492,12 @@ pnpm lint
 pnpm typecheck
 """
 
+[tasks."nda:pdf"]
+description = "Render docs/nda/nda.{hr,en}.md to target/nda/*.pdf with the finances UI's Playwright Chromium (docs/nda/README.md)"
+depends = ["ui:finances:install"]
+dir = "ui/finances"
+run = "node ../../docs/nda/render.mjs"
+
 [tasks."ui:auth:build"]
 description = "Build the sign-in UI image (ghcr.io/0x19/tbd-auth-ui:dev)"
 run = "docker build -f devops/docker/Dockerfile.auth-ui $(mise run -q auth:ui-build-args) -t $IMAGE_REGISTRY/tbd-auth-ui:dev ."
