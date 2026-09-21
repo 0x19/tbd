@@ -261,6 +261,7 @@ export function Composer({
                   {senders.map((c) => (
                     <SelectItem key={c.id} value={c.id}>
                       {c.external_id || c.label} · {partyName(c.party_id)}
+                      {c.can_read ? "" : ` · ${t("mail.send_only")}`}
                     </SelectItem>
                   ))}
                 </SelectContent>

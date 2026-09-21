@@ -15,7 +15,7 @@ use serde_json::{Value, json};
 
 use super::{
     Attachment, Auth, AuthContext, Capabilities, Connector, ConnectorError, Found, Inbound, Kind,
-    Linked, Outgoing, Reach, SentMail,
+    Linked, Outgoing, Purpose, Reach, SentMail,
 };
 use crate::{config::Connectors as Config, documents::mail};
 
@@ -23,11 +23,29 @@ const AUTH_URL: &str = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
 const USERINFO_URL: &str = "https://www.googleapis.com/oauth2/v3/userinfo";
 const API: &str = "https://gmail.googleapis.com/gmail/v1/users/me";
-/// Read to pull receipts, send to write to the accountant, `email` to name
-/// the mailbox. A link made before `send` was asked for lacks it; the
-/// credential records the scopes granted, and `capabilities` reads them.
-const SCOPES: &str = "https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send email";
+/// Read to pull receipts, send to write mail, `email` to name the mailbox.
+/// The purpose of the link decides which of the two are asked for
+/// (`scopes_for`), so a mailbox linked for sending only never holds a
+/// credential that could read it. The credential records the scopes
+/// granted -- a person may untick one on Google's screen -- and
+/// `capabilities` reads them.
+const READ_SCOPE: &str = "https://www.googleapis.com/auth/gmail.readonly";
 const SEND_SCOPE: &str = "https://www.googleapis.com/auth/gmail.send";
+const EMAIL_SCOPE: &str = "email";
+
+/// The scopes a purpose asks of Google, space-separated as the URL wants.
+fn scopes_for(purpose: Purpose) -> String {
+    let (read, send) = purpose.wants();
+    let mut scopes = Vec::with_capacity(3);
+    if read {
+        scopes.push(READ_SCOPE);
+    }
+    if send {
+        scopes.push(SEND_SCOPE);
+    }
+    scopes.push(EMAIL_SCOPE);
+    scopes.join(" ")
+}
 /// Never more than this per pull; a first pull of a busy mailbox is paged
 /// over several runs rather than held open for minutes.
 /// Messages fetched per round. A round runs detached from the RPC, so the
@@ -43,6 +61,9 @@ pub struct Gmail {
     http: reqwest::Client,
     token_url: String,
     api: String,
+    /// Google's userinfo endpoint (the `email` scope): names the account on
+    /// link, and is the whole test of a send-only credential.
+    userinfo_url: String,
 }
 
 /// Google mints an access token for an hour. A throttled pull of a busy
@@ -91,6 +112,7 @@ impl Gmail {
             http: reqwest::Client::new(),
             token_url: TOKEN_URL.to_owned(),
             api: API.to_owned(),
+            userinfo_url: USERINFO_URL.to_owned(),
         }
     }
 
@@ -103,6 +125,7 @@ impl Gmail {
             http: reqwest::Client::new(),
             token_url: token_url.to_owned(),
             api: api.to_owned(),
+            userinfo_url: format!("{api}/userinfo"),
         }
     }
 
@@ -432,10 +455,13 @@ impl Connector for Gmail {
             label: "Gmail / Google Workspace",
             description: "Receipts and invoices: PDF attachments, Stripe-hosted invoices, and receipt mails printed to PDF.",
             auth: Auth::Oauth,
-            consent_note: "Read-only access to the mailbox. Nothing is sent, moved or deleted; only \
-                           messages matching the queries are read: PDF attachments are kept, and a \
-                           receipt mail without one is printed to a page.",
+            consent_note: "The consent follows the purpose. Reading is read-only: nothing is moved \
+                           or deleted, and only messages matching the queries are read (PDF \
+                           attachments are kept, a receipt mail without one is printed to a page). \
+                           Sending is the send permission alone: a mailbox linked for sending only \
+                           is never read, listed or pulled.",
             configured: self.configured(),
+            purposes: &Purpose::ALL,
         }
     }
 
@@ -445,6 +471,9 @@ impl Connector for Gmail {
             .and_then(Value::as_str)
             .unwrap_or("");
         Capabilities {
+            // A credential from before scopes were recorded was linked with
+            // the read scope, the only one there was.
+            read: scope.is_empty() || scope.split_whitespace().any(|s| s == READ_SCOPE),
             send: scope.split_whitespace().any(|s| s == SEND_SCOPE),
         }
     }
@@ -589,7 +618,7 @@ impl Connector for Gmail {
             .append_pair("client_id", &self.client_id)
             .append_pair("redirect_uri", &ctx.redirect_url)
             .append_pair("response_type", "code")
-            .append_pair("scope", SCOPES)
+            .append_pair("scope", &scopes_for(ctx.purpose))
             // `offline` + `consent` is what yields a refresh token every time,
             // not only on the first consent.
             .append_pair("access_type", "offline")
@@ -642,7 +671,7 @@ impl Connector for Gmail {
         let who = self
             .get(
                 &Session::with_token(access.to_owned()),
-                USERINFO_URL,
+                &self.userinfo_url,
                 &Pace::default(),
             )
             .await?;
@@ -669,6 +698,18 @@ impl Connector for Gmail {
 
     async fn test(&self, credentials: &Value) -> Result<String, ConnectorError> {
         let session = self.open(credentials).await?;
+        if !self.capabilities(credentials).read {
+            // The send scope alone may not read the profile (Google's
+            // `getProfile` wants a read scope); `email` names the account,
+            // and that is all a send-only link is for.
+            let who = self
+                .get(&session, &self.userinfo_url, &Pace::default())
+                .await?;
+            return Ok(format!(
+                "{} · send only",
+                who.get("email").and_then(Value::as_str).unwrap_or("?")
+            ));
+        }
         let profile = self
             .get(&session, &format!("{}/profile", self.api), &Pace::default())
             .await?;
@@ -1375,6 +1416,55 @@ mod tests {
     }
 
     #[test]
+    fn the_purpose_decides_the_scopes_asked_and_the_grant_decides_the_capabilities() {
+        assert_eq!(scopes_for(Purpose::Read), format!("{READ_SCOPE} email"));
+        assert_eq!(scopes_for(Purpose::Send), format!("{SEND_SCOPE} email"));
+        assert_eq!(
+            scopes_for(Purpose::Both),
+            format!("{READ_SCOPE} {SEND_SCOPE} email")
+        );
+        let g = Gmail::new(&Config::default());
+        let send_only = g.capabilities(&json!({ "scope": scopes_for(Purpose::Send) }));
+        assert!(!send_only.read && send_only.send);
+        let read_only = g.capabilities(&json!({ "scope": scopes_for(Purpose::Read) }));
+        assert!(read_only.read && !read_only.send);
+        let both = g.capabilities(&json!({ "scope": scopes_for(Purpose::Both) }));
+        assert!(both.read && both.send);
+    }
+
+    #[tokio::test]
+    async fn a_send_only_credential_is_tested_through_userinfo_never_the_mailbox() {
+        use wiremock::matchers::{method, path};
+        let server = google("t1", "t2", "t1").await;
+        wiremock::Mock::given(method("GET"))
+            .and(path("/userinfo"))
+            .respond_with(
+                wiremock::ResponseTemplate::new(200)
+                    .set_body_json(serde_json::json!({ "email": "nevio@tenderly.co" })),
+            )
+            .mount(&server)
+            .await;
+        let gmail = Gmail::with_endpoints(&format!("{}/token", server.uri()), &server.uri());
+        let status = gmail
+            .test(&json!({ "refresh_token": "r", "scope": scopes_for(Purpose::Send) }))
+            .await
+            .expect("userinfo answers");
+        assert_eq!(status, "nevio@tenderly.co · send only");
+        let paths: Vec<String> = server
+            .received_requests()
+            .await
+            .unwrap_or_default()
+            .iter()
+            .map(|r| r.url.path().to_owned())
+            .collect();
+        assert!(paths.contains(&"/userinfo".to_owned()), "{paths:?}");
+        assert!(
+            !paths.contains(&"/profile".to_owned()),
+            "the mailbox is never touched: {paths:?}"
+        );
+    }
+
+    #[test]
     fn the_send_scope_decides_the_capability_and_a_mail_is_a_proper_mime() {
         let g = Gmail::new(&Config::default());
         assert!(!g.capabilities(&json!({ "refresh_token": "r" })).send);
@@ -1384,7 +1474,10 @@ mod tests {
             )
             .send
         );
-        assert!(g.capabilities(&json!({ "scope": SCOPES })).send);
+        assert!(
+            g.capabilities(&json!({ "scope": scopes_for(Purpose::Both) }))
+                .send
+        );
         let mail = Outgoing {
             to: vec!["a@b.hr".into()],
             cc: vec!["c@b.hr".into()],

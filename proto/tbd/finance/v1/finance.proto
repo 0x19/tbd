@@ -407,6 +407,8 @@ message ConnectorKind {
   string auth = 4;
   string consent_note = 5;
   bool configured = 6;
+  // The purposes this kind can be linked for: read, send, both.
+  repeated string purposes = 7;
 }
 message ListConnectorKindsRequest {}
 message ListConnectorKindsResponse {
@@ -431,6 +433,9 @@ message Connector {
   string created_at = 13;
   // The consent included sending: the mail page may use it.
   bool can_send = 14;
+  // The consent included reading: a pull is refused otherwise. A mailbox
+  // linked for sending only is never read, listed or pulled.
+  bool can_read = 15;
 }
 message ListConnectorsRequest {
   repeated string party_ids = 1;
@@ -441,6 +446,10 @@ message ListConnectorsResponse {
 message StartConnectorRequest {
   string party_id = 1;
   string kind = 2;
+  // What the link is for, which decides the consent asked of the provider:
+  // read (pull receipts), send (send mail as the account, read nothing), or
+  // both. Empty means both.
+  string purpose = 3;
 }
 message StartConnectorResponse {
   string connector_id = 1;

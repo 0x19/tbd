@@ -4369,6 +4369,9 @@
         "type": "object",
         "description": "`tbd.finance.v1.Connector`",
         "properties": {
+          "can_read": {
+            "type": "boolean"
+          },
           "can_send": {
             "type": "boolean"
           },
@@ -4434,6 +4437,12 @@
           },
           "name": {
             "type": "string"
+          },
+          "purposes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         }
       },
@@ -5882,6 +5891,9 @@
             "type": "string"
           },
           "party_id": {
+            "type": "string"
+          },
+          "purpose": {
             "type": "string"
           }
         }

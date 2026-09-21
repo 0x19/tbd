@@ -6,7 +6,7 @@
 // nothing polls while the stream is up. The kinds come from the server's
 // registry; a kind the server is not configured for is shown, greyed, with
 // what is missing -- not hidden.
-import { History, KeyRound, Loader2, Plus, RefreshCw, Trash2, Wrench } from "lucide-react";
+import { History, Inbox, KeyRound, Loader2, Plus, RefreshCw, Send, Trash2, Wrench } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -28,7 +28,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { api } from "@/lib/api/client";
+import { api, type Purpose } from "@/lib/api/client";
 import { describe, useEvents, useFetch } from "@/lib/api/hooks";
 import {
   type Connector,
@@ -155,18 +155,21 @@ function LinkDialog({
   const t = useT();
   const [kind, setKind] = useState("");
   const [party, setParty] = useState(defaultParty);
+  const [purpose, setPurpose] = useState<Purpose>("both");
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     if (open) {
       setParty(defaultParty);
       setKind(kinds.find((k) => k.configured)?.name ?? "");
+      setPurpose("both");
     }
   }, [open, defaultParty, kinds]);
   const chosen = kinds.find((k) => k.name === kind);
+  const purposes = (chosen?.purposes.length ? chosen.purposes : ["both"]) as Purpose[];
   const start = async () => {
     setBusy(true);
     try {
-      const r = await api.startConnector(party, kind);
+      const r = await api.startConnector(party, kind, purposes.includes(purpose) ? purpose : "both");
       window.location.href = r.url;
     } catch (e) {
       toast.error(describe(e));
@@ -175,7 +178,7 @@ function LinkDialog({
   };
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{t("connectors.link_mailbox")}</DialogTitle>
           <DialogDescription>{t("connectors.link_dialog_desc")}</DialogDescription>
@@ -204,6 +207,40 @@ function LinkDialog({
               ))}
             </div>
           </div>
+          {purposes.length > 1 ? (
+            <div className="space-y-2">
+              <Label>{t("connectors.purpose")}</Label>
+              <div className="grid gap-2">
+                {purposes.map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setPurpose(p)}
+                    className={
+                      "flex items-start gap-3 rounded-md border p-3 text-left text-sm " +
+                      (purpose === p ? "border-foreground" : "hover:bg-muted/50")
+                    }
+                  >
+                    <span className="text-muted-foreground mt-0.5">
+                      {p === "read" ? (
+                        <Inbox className="size-4" />
+                      ) : p === "send" ? (
+                        <Send className="size-4" />
+                      ) : (
+                        <KeyRound className="size-4" />
+                      )}
+                    </span>
+                    <span>
+                      <span className="block font-medium">{t(`connectors.purpose_${p}`)}</span>
+                      <span className="text-muted-foreground block text-xs">
+                        {t(`connectors.purpose_${p}_hint`)}
+                      </span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
           <div className="space-y-2">
             <Label>{t("connectors.belongs_to")}</Label>
             <Select value={party} onValueChange={setParty}>
@@ -220,7 +257,9 @@ function LinkDialog({
             </Select>
           </div>
           {chosen ? (
-            <p className="text-muted-foreground text-xs">{kindText(t, chosen, "consent_note")}</p>
+            <p className="text-muted-foreground text-xs">
+              {t(`connectors.consent_${purpose}`)} {kindText(t, chosen, "consent_note")}
+            </p>
           ) : null}
         </div>
         <DialogFooter>
@@ -288,17 +327,32 @@ function ConnectorRow({
                 {c.kind}
               </Badge>
               {c.status === "linked" ? (
-                <Badge
-                  variant="outline"
-                  className={
-                    c.can_send
-                      ? "border-transparent bg-emerald-600/12 text-[10px] text-emerald-700 dark:text-emerald-300"
-                      : "text-muted-foreground border-dashed text-[10px]"
-                  }
-                  title={c.can_send ? t("connectors.can_send_hint") : t("connectors.cannot_send_hint")}
-                >
-                  {c.can_send ? t("connectors.can_send") : t("connectors.cannot_send")}
-                </Badge>
+                <>
+                  <Badge
+                    variant="outline"
+                    className={
+                      c.can_read
+                        ? "gap-1 border-transparent bg-emerald-600/12 text-[10px] text-emerald-700 dark:text-emerald-300"
+                        : "text-muted-foreground gap-1 border-dashed text-[10px]"
+                    }
+                    title={c.can_read ? t("connectors.reads_hint") : t("connectors.reads_no_hint")}
+                  >
+                    <Inbox className="size-3" />{" "}
+                    {c.can_read ? t("connectors.reads") : t("connectors.reads_no")}
+                  </Badge>
+                  <Badge
+                    variant="outline"
+                    className={
+                      c.can_send
+                        ? "gap-1 border-transparent bg-emerald-600/12 text-[10px] text-emerald-700 dark:text-emerald-300"
+                        : "text-muted-foreground gap-1 border-dashed text-[10px]"
+                    }
+                    title={c.can_send ? t("connectors.can_send_hint") : t("connectors.cannot_send_hint")}
+                  >
+                    <Send className="size-3" />{" "}
+                    {c.can_send ? t("connectors.sends") : t("connectors.sends_no")}
+                  </Badge>
+                </>
               ) : null}
               {pulling ? (
                 <Badge
@@ -351,7 +405,11 @@ function ConnectorRow({
               disabled={busy !== "" || c.status === "pending"}
               onClick={() =>
                 void act("relink", async () => {
-                  const r = await api.startConnector(c.party_id, c.kind);
+                  // The row's own purpose again; "Allow sending" on a
+                  // read-only row widens it to both. A send-only row stays
+                  // send-only: widening it is a new, deliberate link.
+                  const purpose: Purpose = !c.can_read ? "send" : c.can_send ? "both" : "both";
+                  const r = await api.startConnector(c.party_id, c.kind, purpose);
                   window.location.href = r.url;
                   return "";
                 })
@@ -365,21 +423,23 @@ function ConnectorRow({
                   ? t("connectors.relink")
                   : t("connectors.allow_sending")}
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={busy !== "" || pulling || c.status !== "linked"}
-              onClick={() =>
-                void act("sync", async () => {
-                  // Opens the run; what it does arrives on the feed.
-                  await api.syncConnector(c.id);
-                  return "";
-                })
-              }
-            >
-              <RefreshCw className={pulling ? "animate-spin" : undefined} />{" "}
-              {pulling ? t("connectors.pulling") : t("connectors.pull_now")}
-            </Button>
+            {c.can_read ? (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={busy !== "" || pulling || c.status !== "linked"}
+                onClick={() =>
+                  void act("sync", async () => {
+                    // Opens the run; what it does arrives on the feed.
+                    await api.syncConnector(c.id);
+                    return "";
+                  })
+                }
+              >
+                <RefreshCw className={pulling ? "animate-spin" : undefined} />{" "}
+                {pulling ? t("connectors.pulling") : t("connectors.pull_now")}
+              </Button>
+            ) : null}
             <Button
               variant="ghost"
               size="sm"
@@ -396,10 +456,12 @@ function ConnectorRow({
             >
               <Wrench /> {busy === "test" ? t("connectors.testing") : t("connectors.test")}
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => setOpen(open === "history" ? "" : "history")}>
-              <History /> {t("connectors.history")}
-            </Button>
-            {c.kind === "gmail" ? (
+            {c.can_read ? (
+              <Button variant="ghost" size="sm" onClick={() => setOpen(open === "history" ? "" : "history")}>
+                <History /> {t("connectors.history")}
+              </Button>
+            ) : null}
+            {c.kind === "gmail" && c.can_read ? (
               <Button
                 variant="ghost"
                 size="sm"
@@ -514,7 +576,7 @@ function RunLine({ run, c }: { run: ConnectorRun | null; c: Connector }) {
   return (
     <p className="text-muted-foreground text-xs">
       {c.linked_at ? t("connectors.linked_at", { when: when(c.linked_at) }) : t("connectors.not_linked")} ·{" "}
-      {t("connectors.never_pulled")}
+      {c.can_read ? t("connectors.never_pulled") : t("connectors.send_only_line")}
     </p>
   );
 }

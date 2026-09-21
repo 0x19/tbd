@@ -29,6 +29,59 @@ pub enum Auth {
     Token,
 }
 
+/// What a link is for. Decides the consent asked of the provider, so a
+/// mailbox linked for sending only never holds a credential that could read
+/// it: the guarantee is in the consent, not only in our code.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Purpose {
+    /// Pull receipts; send nothing.
+    Read,
+    /// Send mail as the account; read, list and pull nothing.
+    Send,
+    /// Both.
+    Both,
+}
+
+impl Purpose {
+    /// Every purpose, in the order a page offers them.
+    pub const ALL: [Self; 3] = [Self::Read, Self::Send, Self::Both];
+
+    /// The word on the wire.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Read => "read",
+            Self::Send => "send",
+            Self::Both => "both",
+        }
+    }
+
+    /// Whether the purpose wants the read consent, and the send consent.
+    #[must_use]
+    pub const fn wants(self) -> (bool, bool) {
+        match self {
+            Self::Read => (true, false),
+            Self::Send => (false, true),
+            Self::Both => (true, true),
+        }
+    }
+}
+
+impl std::str::FromStr for Purpose {
+    type Err = String;
+
+    /// Empty means both, so a caller from before purposes existed is unchanged.
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "read" => Ok(Self::Read),
+            "send" => Ok(Self::Send),
+            "both" | "" => Ok(Self::Both),
+            other => Err(format!("unknown purpose {other}; read, send or both")),
+        }
+    }
+}
+
 /// A registry entry: what the UI shows when offering a kind to add.
 #[derive(Debug, Clone, Serialize)]
 pub struct Kind {
@@ -45,6 +98,8 @@ pub struct Kind {
     /// Whether the service has what it needs to link this kind (an OAuth
     /// client, say). False means "configure the server first", not "hidden".
     pub configured: bool,
+    /// What this kind can be linked for.
+    pub purposes: &'static [Purpose],
 }
 
 /// What a link attempt needs from the environment.
@@ -54,6 +109,8 @@ pub struct AuthContext {
     pub state: String,
     /// Where the provider sends the browser back.
     pub redirect_url: String,
+    /// What the link is for; the kind asks for the matching consent.
+    pub purpose: Purpose,
 }
 
 /// What a completed link yields: the credential to seal and the identity.
@@ -86,11 +143,23 @@ pub struct Found {
     pub received_at: Option<DateTime<Utc>>,
 }
 
-/// What a linked credential may do beyond pulling.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+/// What a linked credential may do, decided from the consent granted.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Capabilities {
+    /// The account may be read and pulled.
+    pub read: bool,
     /// Mail may be sent as this account.
     pub send: bool,
+}
+
+impl Default for Capabilities {
+    /// A kind that says nothing pulls and does not send.
+    fn default() -> Self {
+        Self {
+            read: true,
+            send: false,
+        }
+    }
 }
 
 /// A file that goes with a mail, or came with one.

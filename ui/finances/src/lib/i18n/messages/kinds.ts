@@ -8,5 +8,5 @@ export const hr: Dict = {
   "kinds.gmail.label": "Gmail / Google Workspace",
   "kinds.gmail.description": "Računi i potvrde koje stižu kao PDF privici.",
   "kinds.gmail.consent_note":
-    "Pristup sandučiću samo za čitanje. Ništa se ne šalje, premješta ni briše; čitaju se samo poruke koje odgovaraju upitu, a čuvaju se samo njihovi PDF privici.",
+    "Privola prati svrhu. Čitanje je samo za čitanje: ništa se ne premješta ni briše, a čitaju se samo poruke koje odgovaraju upitu (PDF privici se čuvaju, račun bez privitka ispisuje se na stranicu). Slanje je samo dopuštenje za slanje: sandučić povezan samo za slanje nikad se ne čita, ne popisuje i ne povlači.",
 };

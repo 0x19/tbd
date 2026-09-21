@@ -13,7 +13,7 @@ use sqlx::PgPool;
 use tbd_db::{Capability, PartyId, UserId, create_org, ensure_user, grant};
 use tbd_finance::connectors::{
     Attachment, Auth, AuthContext, Capabilities, Connector, ConnectorError, Found, Inbound, Kind,
-    Linked, Outgoing, Reach, SentMail,
+    Linked, Outgoing, Purpose, Reach, SentMail,
 };
 use tbd_proto::finance::v1::{
     CompleteConnectorRequest, ConfigureConnectorRequest, DeleteConnectorRequest,
@@ -62,6 +62,7 @@ impl Connector for MockKind {
             auth: Auth::Oauth,
             consent_note: "nothing",
             configured: true,
+            purposes: &Purpose::ALL,
         }
     }
     async fn start(&self, ctx: &AuthContext) -> Result<String, ConnectorError> {
@@ -87,10 +88,14 @@ impl Connector for MockKind {
         })
     }
     fn capabilities(&self, credentials: &Value) -> Capabilities {
-        Capabilities {
-            send: credentials["scope"]
+        let has = |w: &str| {
+            credentials["scope"]
                 .as_str()
-                .is_some_and(|s| s.split(' ').any(|w| w == "send")),
+                .is_some_and(|s| s.split(' ').any(|x| x == w))
+        };
+        Capabilities {
+            read: has("read"),
+            send: has("send"),
         }
     }
     async fn send(&self, credentials: &Value, mail: &Outgoing) -> Result<SentMail, ConnectorError> {
@@ -312,6 +317,41 @@ async fn link(server: &crate::support::Server, party: Uuid) -> tbd_proto::financ
     link_with(server, party, "ok").await
 }
 
+/// Link for a purpose. The mock grants `read send` whatever is asked, the
+/// way Google keeps an earlier grant; what the row records is the purpose's
+/// share of it.
+pub(crate) async fn link_for(
+    server: &crate::support::Server,
+    party: Uuid,
+    purpose: &str,
+) -> tbd_proto::finance::v1::Connector {
+    let mut c = server.client().await;
+    let started = c
+        .start_connector(as_caller(
+            OWNER,
+            StartConnectorRequest {
+                party_id: party.to_string(),
+                kind: "mock".into(),
+                purpose: purpose.into(),
+            },
+        ))
+        .await
+        .unwrap()
+        .into_inner();
+    c.complete_connector(as_caller(
+        OWNER,
+        CompleteConnectorRequest {
+            state: state_of(&started.url),
+            code: "ok".into(),
+        },
+    ))
+    .await
+    .unwrap()
+    .into_inner()
+    .connector
+    .unwrap()
+}
+
 /// Link with a given code: `nosend` yields a mailbox without send consent.
 pub(crate) async fn link_with(
     server: &crate::support::Server,
@@ -325,6 +365,7 @@ pub(crate) async fn link_with(
             StartConnectorRequest {
                 party_id: party.to_string(),
                 kind: "mock".into(),
+                purpose: String::new(),
             },
         ))
         .await
@@ -369,6 +410,7 @@ async fn a_link_seals_its_credential_and_a_foreign_state_is_not_found() {
             StartConnectorRequest {
                 party_id: personal.to_string(),
                 kind: "mock".into(),
+                purpose: String::new(),
             },
         ))
         .await
@@ -392,6 +434,7 @@ async fn a_link_seals_its_credential_and_a_foreign_state_is_not_found() {
             StartConnectorRequest {
                 party_id: personal.to_string(),
                 kind: "mock".into(),
+                purpose: String::new(),
             },
         ))
         .await
@@ -517,6 +560,7 @@ async fn a_revoked_link_is_marked_expired_by_test() {
             StartConnectorRequest {
                 party_id: company.to_string(),
                 kind: "mock".into(),
+                purpose: String::new(),
             },
         ))
         .await
@@ -921,4 +965,73 @@ async fn a_correction_is_declared_and_survives_a_re_read() {
         .await
         .unwrap_err();
     assert_eq!(missing.code(), Code::NotFound);
+}
+
+#[tokio::test]
+async fn a_mailbox_linked_for_sending_only_is_never_pulled_and_still_sends() {
+    let (factory, pulls) = kinds(false);
+    let (server, pool) = start_with_kinds(factory).await;
+    let (_, party) = seed(&pool).await;
+    let mut c = server.client().await;
+
+    // Asked for sending only; the mock (like Google with an earlier grant)
+    // hands back a credential that could read as well.
+    let sent_only = link_for(&server, party, "send").await;
+    assert!(sent_only.can_send, "linked for sending");
+    assert!(
+        !sent_only.can_read,
+        "the read consent was not asked for, so it is not recorded"
+    );
+
+    // A pull is refused before the kind is even asked.
+    let pulls_before = *pulls.lock().unwrap();
+    let err = c
+        .sync_connector(as_caller(
+            OWNER,
+            SyncConnectorRequest {
+                id: sent_only.id.clone(),
+            },
+        ))
+        .await
+        .expect_err("send-only is not pulled");
+    assert_eq!(err.code(), Code::FailedPrecondition, "{err}");
+    assert!(err.message().contains("send-only"), "{err}");
+    assert_eq!(
+        *pulls.lock().unwrap(),
+        pulls_before,
+        "the kind was never asked to pull"
+    );
+
+    // A read-only link is the mirror image: it pulls and may not send.
+    let read_only = link_for(&server, party, "read").await;
+    assert!(read_only.can_read && !read_only.can_send);
+
+    // An unknown purpose is refused as an argument, and the kind lists what
+    // it offers.
+    let err = c
+        .start_connector(as_caller(
+            OWNER,
+            StartConnectorRequest {
+                party_id: party.to_string(),
+                kind: "mock".into(),
+                purpose: "listen".into(),
+            },
+        ))
+        .await
+        .expect_err("no such purpose");
+    assert_eq!(err.code(), Code::InvalidArgument);
+    let kinds = c
+        .list_connector_kinds(as_caller(OWNER, ListConnectorKindsRequest {}))
+        .await
+        .unwrap()
+        .into_inner();
+    assert_eq!(
+        kinds
+            .kinds
+            .iter()
+            .find(|k| k.name == "mock")
+            .unwrap()
+            .purposes,
+        vec!["read", "send", "both"]
+    );
 }

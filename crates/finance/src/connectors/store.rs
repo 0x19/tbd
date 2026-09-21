@@ -7,7 +7,9 @@ use sqlx::PgPool;
 use tbd_db::{Access, DbError, PartyId, map_err};
 use uuid::Uuid;
 
-use super::{AuthContext, Connector, ConnectorError, Found, Pulled, Reach, crypto::Sealer};
+use super::{
+    AuthContext, Connector, ConnectorError, Found, Pulled, Purpose, Reach, crypto::Sealer,
+};
 
 /// Why a store call failed.
 #[derive(Debug, thiserror::Error)]
@@ -50,6 +52,8 @@ pub struct ConnectorRow {
     pub created_at: DateTime<Utc>,
     /// The kind said the credential may send, at link time.
     pub can_send: bool,
+    /// The consent included reading; a pull is refused otherwise.
+    pub can_read: bool,
 }
 
 #[allow(missing_docs)]
@@ -69,7 +73,7 @@ pub struct RunRow {
 
 const COLUMNS: &str =
     "id, party_id, kind, label, status, config, external_id, linked_at, last_sync_at,
-    last_sync_status, last_sync_error, failure, created_at, can_send";
+    last_sync_status, last_sync_error, failure, created_at, can_send, can_read";
 
 fn sql(s: &str) -> sqlx::AssertSqlSafe<String> {
     sqlx::AssertSqlSafe(s.to_owned())
@@ -140,9 +144,17 @@ pub async fn start(
     access: &Access,
     kind: &dyn Connector,
     party: Uuid,
+    purpose: Purpose,
     redirect_url: &str,
 ) -> Result<(Uuid, String), StoreError> {
     access.require(PartyId(party), "party")?;
+    if !kind.kind().purposes.contains(&purpose) {
+        return Err(StoreError::Refused(format!(
+            "{} cannot be linked for {}",
+            kind.kind().name,
+            purpose.as_str()
+        )));
+    }
     let id = Uuid::new_v4();
     let state = {
         use base64::Engine as _;
@@ -152,16 +164,18 @@ pub async fn start(
     let ctx = AuthContext {
         state: state.clone(),
         redirect_url: redirect_url.to_owned(),
+        purpose,
     };
     let url = kind.start(&ctx).await?;
     sqlx::query(
-        "insert into finance.connectors (id, party_id, kind, status, state)
-         values ($1, $2, $3, 'pending', $4)",
+        "insert into finance.connectors (id, party_id, kind, status, state, purpose)
+         values ($1, $2, $3, 'pending', $4, $5)",
     )
     .bind(id)
     .bind(party)
     .bind(kind.kind().name)
     .bind(&state)
+    .bind(purpose.as_str())
     .execute(pool)
     .await
     .map_err(map_err)?;
@@ -182,14 +196,18 @@ pub async fn complete(
     state: &str,
     code: &str,
 ) -> Result<ConnectorRow, StoreError> {
-    let pending: Option<(Uuid, Uuid, String, String)> = sqlx::query_as(
-        "select id, party_id, kind, status from finance.connectors where state = $1",
+    let pending: Option<(Uuid, Uuid, String, String, String)> = sqlx::query_as(
+        "select id, party_id, kind, status, purpose from finance.connectors where state = $1",
     )
     .bind(state)
     .fetch_optional(pool)
     .await
     .map_err(map_err)?;
-    let (id, party, kind_name, status) = pending.ok_or(DbError::NotFound { what: "connector" })?;
+    let (id, party, kind_name, status, purpose) =
+        pending.ok_or(DbError::NotFound { what: "connector" })?;
+    let purpose: Purpose = purpose
+        .parse()
+        .map_err(|e: String| StoreError::State(format!("purpose: {e}")))?;
     access.require(PartyId(party), "connector")?;
     if status != "pending" {
         return Err(StoreError::State(status));
@@ -201,6 +219,7 @@ pub async fn complete(
     let ctx = AuthContext {
         state: state.to_owned(),
         redirect_url: redirect_url.to_owned(),
+        purpose,
     };
     let linked = match kind.complete(&ctx, code).await {
         Ok(l) => l,
@@ -229,12 +248,18 @@ pub async fn complete(
     .map_err(map_err)?;
     let target = existing.map_or(id, |(e,)| e);
     let blob = sealer.seal(linked.credentials.to_string().as_bytes(), target.as_bytes())?;
-    let can_send = kind.capabilities(&linked.credentials).send;
+    // What was granted, within what was asked: a provider may keep an
+    // earlier, wider grant for the same account, and a link made for
+    // sending only must never read whatever the token could.
+    let granted = kind.capabilities(&linked.credentials);
+    let (want_read, want_send) = purpose.wants();
+    let can_read = granted.read && want_read;
+    let can_send = granted.send && want_send;
     sqlx::query(
         "update finance.connectors
             set status = 'linked', credentials = $2, external_id = $3, label = $4, linked_at = now(),
                 state = case when id = $5 then state else null end, failure = null, updated_at = now(),
-                can_send = $6
+                can_send = $6, can_read = $7, purpose = $8
           where id = $1",
     )
     .bind(target)
@@ -243,6 +268,8 @@ pub async fn complete(
     .bind(&linked.label)
     .bind(target)
     .bind(can_send)
+    .bind(can_read)
+    .bind(purpose.as_str())
     .execute(pool)
     .await
     .map_err(map_err)?;
@@ -353,6 +380,10 @@ pub async fn begin_sync(
     let connector = get(pool, access, id).await?;
     if connector.status != "linked" {
         return Err(StoreError::State(connector.status));
+    }
+    // Linked for sending only: nothing in it is read, listed or pulled.
+    if !connector.can_read {
+        return Err(StoreError::State("send-only".into()));
     }
     if !kinds.iter().any(|k| k.kind().name == connector.kind) {
         return Err(StoreError::UnknownKind(connector.kind.clone()));

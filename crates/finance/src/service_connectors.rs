@@ -65,6 +65,7 @@ fn connector_proto(c: ConnectorRow) -> Connector {
         failure: c.failure.unwrap_or_default(),
         created_at: c.created_at.to_rfc3339(),
         can_send: c.can_send,
+        can_read: c.can_read,
     }
 }
 
@@ -133,6 +134,7 @@ impl Finance {
                         },
                         consent_note: k.consent_note.into(),
                         configured: k.configured && configured,
+                        purposes: k.purposes.iter().map(|p| p.as_str().to_owned()).collect(),
                     }
                 })
                 .collect(),
@@ -174,11 +176,16 @@ impl Finance {
                 Status::invalid_argument(format!("unknown kind {}", req.kind)),
             ));
         };
+        let purpose: connectors::Purpose = match req.purpose.parse() {
+            Ok(p) => p,
+            Err(e) => return Err(self.reject(&mut timer, Status::invalid_argument(e))),
+        };
         let r = store::start(
             pool,
             &access,
             kind.as_ref(),
             party,
+            purpose,
             &self.connectors.redirect_url,
         )
         .await

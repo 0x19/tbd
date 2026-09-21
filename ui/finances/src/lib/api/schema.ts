@@ -323,6 +323,8 @@ export const ConnectorKind = z.object({
   auth: z.string(),
   consent_note: z.string(),
   configured: z.boolean(),
+  // read, send, both: what the kind can be linked for.
+  purposes: z.array(z.string()),
 });
 export type ConnectorKind = z.infer<typeof ConnectorKind>;
 export const ListConnectorKindsResponse = z.object({ kinds: z.array(ConnectorKind) });
@@ -342,6 +344,8 @@ export const Connector = z.object({
   failure: z.string(),
   created_at: z.string(),
   can_send: z.boolean(),
+  // The consent included reading; a mailbox linked for sending only is never pulled.
+  can_read: z.boolean(),
 });
 export type Connector = z.infer<typeof Connector>;
 export const ListConnectorsResponse = z.object({ connectors: z.array(Connector) });

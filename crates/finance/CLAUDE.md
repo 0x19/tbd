@@ -64,11 +64,21 @@ The finance service. gRPC only. Scaffolded by `tbd new service` (docs/tbd/README
   the store per watcher) -- the page draws from it and never polls while it is up.
   `ConfigureConnector` may move a connector to another party in the grant, taking
   the documents only it pulled. `service_connectors.rs` holds the RPCs. Tests inject
-  a mock kind through `serve_with_kinds`. A kind may also *send*: `capabilities` says
-  so from the consent it holds (Gmail asks for `gmail.send` too; a mailbox linked before
-  that is read-only until linked again, `connectors.can_send` records it), `send` builds
-  the MIME itself (text, attachments, `In-Reply-To` and Gmail's `threadId` for a reply),
-  and `replies` reads a thread it sent for what others answered.
+  a mock kind through `serve_with_kinds`. A link has a **purpose** (`Purpose`: read,
+  send, both; `StartConnector.purpose`, empty means both): the kind asks the provider
+  for the matching consent only (Gmail: `gmail.readonly`, `gmail.send`, always `email`;
+  `scopes_for`), so a mailbox linked for sending only never holds a credential that
+  could read it. The pending row keeps the purpose; on completion `capabilities` reads
+  what was granted and the row records it *within* the purpose (`can_read`, `can_send`):
+  Google keeps an earlier, wider grant for the same account, so a send-only link of a
+  mailbox once linked for reading still records `can_read = false`, and `begin_sync`
+  refuses it (`State("send-only")`, FAILED_PRECONDITION). A credential recorded before
+  scopes were kept counts as readable. `test` on a send-only credential asks `userinfo`,
+  never the mailbox (`getProfile` wants a read scope). A kind may also *send*:
+  `capabilities` says so from the consent it holds (a mailbox linked before sending was
+  asked for is read-only until linked again), `send` builds the MIME itself (text,
+  attachments, `In-Reply-To` and Gmail's `threadId` for a reply), and `replies` reads a
+  thread it sent for what others answered.
 - `mail/`: mail sent as a linked mailbox and kept. `store.rs` holds templates (a name per
   party; `{{Month}}`-style helpers are filled on the page, the service stores what was
   sent), `send` (refuses a mailbox that cannot send, an implausible address, no subject,

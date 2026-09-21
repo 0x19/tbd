@@ -4,14 +4,32 @@ import type { Dict } from "./index";
 export const en: Dict = {
   "connectors.title": "Connectors",
   "connectors.description":
-    "Mailboxes and portals the system pulls receipts from. Read-only, and only what you link.",
+    "Mailboxes the system pulls receipts from, sends mail as, or both: each is linked for a purpose, and the consent asked of the provider follows it.",
   "connectors.live": "Live",
   "connectors.polling": "Polling",
   "connectors.link_mailbox": "Link a mailbox",
-  "connectors.can_send": "can send",
-  "connectors.can_send_hint": "The consent included sending mail as this account",
-  "connectors.cannot_send": "read only",
+  "connectors.reads": "reads mail",
+  "connectors.reads_hint": "The consent included reading: receipts are pulled from this mailbox.",
+  "connectors.reads_no": "never read",
+  "connectors.reads_no_hint": "Linked for sending only. Nothing in this mailbox is read, listed or pulled.",
+  "connectors.sends": "sends mail",
+  "connectors.can_send_hint": "The consent included sending mail as this account.",
+  "connectors.sends_no": "no sending",
   "connectors.cannot_send_hint": "Linked before sending was asked for. Link it again to send mail from it.",
+  "connectors.purpose": "What for",
+  "connectors.purpose_read": "Read receipts",
+  "connectors.purpose_read_hint": "Pulls receipts and invoices from the mailbox. Sends nothing.",
+  "connectors.purpose_send": "Send mail only",
+  "connectors.purpose_send_hint":
+    "Sends mail as this address: invoices to clients, the month to the accountant. Nothing in the mailbox is read, listed or pulled, and the provider is not even asked for that permission.",
+  "connectors.purpose_both": "Read and send",
+  "connectors.purpose_both_hint": "Both of the above, from one mailbox.",
+  "connectors.consent_read": "Google will ask for read-only access to the mailbox and your address.",
+  "connectors.consent_send":
+    "Google will ask only to send mail on your behalf and for your address; not to read anything.",
+  "connectors.consent_both":
+    "Google will ask for read-only access, to send mail on your behalf, and for your address.",
+  "connectors.send_only_line": "send only, never pulled",
   "connectors.feed_error": "Feed: {error}",
   "connectors.nothing_linked": "Nothing linked yet. Link a mailbox to start collecting receipts.",
   "connectors.link_dialog_desc":
@@ -61,14 +79,32 @@ export const en: Dict = {
 export const hr: Dict = {
   "connectors.title": "Poveznice",
   "connectors.description":
-    "Sandučići i portali iz kojih sustav povlači račune. Samo za čitanje, i samo ono što povežete.",
+    "Sandučići iz kojih sustav povlači račune, iz kojih šalje poštu, ili oboje: svaki je povezan s nekom svrhom, a privola koja se traži od pružatelja prati je.",
   "connectors.live": "Uživo",
   "connectors.polling": "Osvježava",
   "connectors.link_mailbox": "Poveži sandučić",
-  "connectors.can_send": "može slati",
-  "connectors.can_send_hint": "Privola je uključila slanje pošte s ovog računa",
-  "connectors.cannot_send": "samo čitanje",
+  "connectors.reads": "čita poštu",
+  "connectors.reads_hint": "Privola je uključila čitanje: računi se povlače iz ovog sandučića.",
+  "connectors.reads_no": "ne čita se",
+  "connectors.reads_no_hint":
+    "Povezano samo za slanje. Ništa se u ovom sandučiću ne čita, ne popisuje ni ne povlači.",
+  "connectors.sends": "šalje poštu",
+  "connectors.can_send_hint": "Privola je uključila slanje pošte s ovog računa.",
+  "connectors.sends_no": "bez slanja",
   "connectors.cannot_send_hint": "Povezano prije nego što se tražilo slanje. Poveži ponovno za slanje pošte.",
+  "connectors.purpose": "Za što",
+  "connectors.purpose_read": "Čitanje računa",
+  "connectors.purpose_read_hint": "Povlači račune i potvrde iz sandučića. Ništa ne šalje.",
+  "connectors.purpose_send": "Samo slanje pošte",
+  "connectors.purpose_send_hint":
+    "Šalje poštu s ove adrese: račune klijentima, mjesec knjigovođi. Ništa se u sandučiću ne čita, ne popisuje ni ne povlači, a to se dopuštenje od pružatelja niti ne traži.",
+  "connectors.purpose_both": "Čitanje i slanje",
+  "connectors.purpose_both_hint": "Oboje, iz jednog sandučića.",
+  "connectors.consent_read": "Google će tražiti pristup sandučiću samo za čitanje i vašu adresu.",
+  "connectors.consent_send": "Google će tražiti samo slanje pošte u vaše ime i vašu adresu; ne i čitanje.",
+  "connectors.consent_both":
+    "Google će tražiti pristup samo za čitanje, slanje pošte u vaše ime i vašu adresu.",
+  "connectors.send_only_line": "samo slanje, nikad se ne povlači",
   "connectors.feed_error": "Tok: {error}",
   "connectors.nothing_linked": "Još ništa nije povezano. Povežite sandučić da počnete prikupljati račune.",
   "connectors.link_dialog_desc":

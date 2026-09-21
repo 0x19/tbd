@@ -40,8 +40,13 @@ same conventions; read `ui/chaos/CLAUDE.md` for what is the kit's and what is ou
   client with its details and line templates), `/issuer/` (one form in sections), `/connectors/`
   (one flat list drawn from the `WatchConnectors` SSE feed via `useEvents`: a pull's
   progress and outcome, a relink, a removal arrive as events; `useFetch` polls only
-  while the feed is down. Link a mailbox chooses the party; the row's party select
-  moves it through `ConfigureConnector`), `/connectors/callback/`, `/documents/`
+  while the feed is down. Link a mailbox chooses the kind, the **purpose** -- read
+  receipts, send mail only, or both; `StartConnector.purpose` decides the consent Google
+  is asked for, and the dialog says which -- and the party. A row shows two chips from
+  `can_read` / `can_send`; a row that cannot read has no Pull, Filter or History, its
+  line says "send only", and Link again keeps its purpose (a send-only mailbox is never
+  widened from the row: that is a new link, on purpose); the row's party select moves it
+  through `ConfigureConnector`), `/connectors/callback/`, `/documents/`
   (receipts as a ledger for daily use. Filters in the URL: search, vendor, month, and a
   view -- all, need a look, corrected, no amount -- over the first 200 the server
   returns for the filters (`ListDocuments`), paged by 25 on the page. `src/lib/receipts.ts`

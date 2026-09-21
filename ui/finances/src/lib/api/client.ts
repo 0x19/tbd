@@ -258,8 +258,11 @@ export const api = {
   connectorKinds: () => call(ListConnectorKindsResponse, "/v1/finance/connectors/kinds"),
   connectors: (party_ids: string[]) =>
     call(ListConnectorsResponse, `/v1/finance/connectors${query({ party_ids })}`),
-  startConnector: (party_id: string, kind: string) =>
-    call(StartConnectorResponse, "/v1/finance/connectors", { method: "POST", json: { party_id, kind } }),
+  startConnector: (party_id: string, kind: string, purpose: Purpose) =>
+    call(StartConnectorResponse, "/v1/finance/connectors", {
+      method: "POST",
+      json: { party_id, kind, purpose },
+    }),
   completeConnector: (state: string, code: string) =>
     call(ConnectorResponse, "/v1/finance/connectors/complete", { method: "POST", json: { state, code } }),
   testConnector: (id: string) =>
@@ -371,6 +374,9 @@ export const api = {
 };
 
 /** A base64 PDF from the API as an object URL for an <iframe> or a download. */
+/** What a mailbox is linked for; decides the consent asked of the provider. */
+export type Purpose = "read" | "send" | "both";
+
 export function pdfUrl(base64: string): string {
   const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
   return URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
