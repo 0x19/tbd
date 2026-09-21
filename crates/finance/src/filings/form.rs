@@ -59,10 +59,12 @@ pub const fn headline_keys(form: Form) -> &'static [&'static str] {
             "A.Doprinosi.ZdravstvenoOsiguranje.P1",
         ],
         Form::PdIpo => &[
-            "Podaci.Podaci1.Sveukupno.S1",
-            "Podaci.Podaci2.Sveukupno.S1",
-            "Podaci.Podaci3.Sveukupno.S1",
-            "Podaci.Podaci4.Sveukupno.S1",
+            "Podaci.Podaci1.Osobe.Sveukupno.S1",
+            "Podaci.Podaci2.Osobe.Sveukupno.S1",
+            "Podaci.Podaci2.Osobe.Sveukupno.S3",
+            "Podaci.Podaci2.Osobe.Sveukupno.S4",
+            "Podaci.Podaci3.Osobe.Sveukupno.S1",
+            "Podaci.Podaci4.Osobe.Sveukupno.S1",
         ],
         Form::Tz => &["01", "02", "03", "04", "05", "06", "07"],
     }

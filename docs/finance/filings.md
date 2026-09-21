@@ -20,7 +20,7 @@ Upload one or several `.xml` files on `/filings/` (or `UploadDocument` with
 | PDV-S | `ObrazacPDVS` | v1-0 | one row per EU supplier, `IsporukeUkupno.I1` goods acquired, `I2` services received |
 | ZP | `ObrazacZP` | v1-0 | one row per EU customer, `IsporukeUkupno.I1` goods, `I2` goods under procedures 42 and 63, `I3` triangular trade, `I4` services |
 | JOPPD | `ObrazacJOPPD` | v1-1 | page A as `A.…` (`A.PredujamPoreza.P1` income tax and surtax, `A.Doprinosi.….P1` the contribution totals), page B one row per recipient (`P1`…`P17`: `P11` gross, `P141` tax, `P162` net paid); the headline adds page B up as `B.P11`, `B.P162`, `B.P141`, since page A has no gross |
-| PD-IPO | `ObrazacPDIPO` | v1-0 | one row per related person and section, `Podaci.Podaci2.Sveukupno.S1` … |
+| PD-IPO | `ObrazacPDIPO` | v1-0 | one row per related person and section (loans received, loans given, goods and services), each with its `Obveze`/`Potrazivanja` tranches; the section totals sit beside the persons and flatten to `Podaci.Podaci2.Osobe.Sveukupno.S1` (principal), `S3` (balance), `S4` (interest) |
 | TZ | `ObrazacTZ` | v1-1 | `01`…`07` (`02` is a rate with four decimals) |
 
 Keys are the element names with the `Podatak` prefix dropped, joined with a dot below a
@@ -44,7 +44,7 @@ warning.
 Kept with `error` set: a recognised form whose body the reader could not finish (a
 newer schema, a missing block). The row shows the error and whatever was read;
 **Read again** after a parser upgrade clears it. The parser stamps `parser_version`
-(`filings/1`) on every row, so a later reader can tell what it wrote.
+(`filings/2` since the PD-IPO totals moved out of the rows) on every row, so a later reader can tell what it wrote.
 
 A filing never moves to another party (`UpdateDocument` refuses), and the same bytes
 uploaded twice are one document. Several JOPPDs in a month, or a corrected PDV beside

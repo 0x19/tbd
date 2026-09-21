@@ -75,6 +75,11 @@ fn joined_path(rel: &str, local: &str) -> String {
     }
 }
 
+/// An element with no element children.
+fn xml_leaf(n: Node<'_, '_>) -> bool {
+    elements(n).next().is_none()
+}
+
 /// Whether two element children share a local name: the shape of a row
 /// container.
 fn repeated(kids: &[Node<'_, '_>]) -> bool {
@@ -106,7 +111,21 @@ pub fn flatten(
         if kids.is_empty() {
             values.insert(key, content(c).unwrap_or_default());
         } else if row_paths.contains(&path.as_str()) || repeated(&kids) {
+            // The rows are the children named like the first one; a block
+            // with another name beside them (PD-IPO's `Sveukupno` inside
+            // `Osobe`) is a total and flattens to values under the container.
+            let row_name = kids[0].tag_name().name();
             for k in kids {
+                if k.tag_name().name() != row_name {
+                    let sub_key = join(&key, key_name(k.tag_name().name()));
+                    let sub_path = joined_path(&path, k.tag_name().name());
+                    if xml_leaf(k) {
+                        values.insert(sub_key, content(k).unwrap_or_default());
+                    } else {
+                        flatten(k, &sub_key, &sub_path, row_paths, values, rows);
+                    }
+                    continue;
+                }
                 let mut row = match object(k) {
                     Value::Object(m) => m,
                     other => {
@@ -199,6 +218,29 @@ mod tests {
         assert!(rows.is_empty());
         assert_eq!(text(d.root_element(), "Podatak6").as_deref(), Some("7.00"));
         assert!(find(d.root_element(), &["Podatak6"]).is_some());
+    }
+
+    #[test]
+    fn a_total_beside_the_rows_is_a_value_not_a_row() {
+        let d = doc(
+            "<T><Podaci2><Osobe><Osoba><O1>1</O1><Potrazivanja><Potrazivanje><P2>10.00</P2></Potrazivanje></Potrazivanja></Osoba>\
+             <Sveukupno><S1>10.00</S1><S4>0.20</S4></Sveukupno></Osobe></Podaci2></T>",
+        );
+        let mut values = BTreeMap::new();
+        let mut rows = Vec::new();
+        flatten(
+            d.root_element(),
+            "",
+            "",
+            &["Podaci2/Osobe"],
+            &mut values,
+            &mut rows,
+        );
+        assert_eq!(rows.len(), 1, "one person, one row");
+        assert_eq!(rows[0]["_kind"], "Podaci2.Osobe");
+        assert_eq!(rows[0]["Potrazivanja"]["Potrazivanje"]["P2"], "10.00");
+        assert_eq!(values["Podaci2.Osobe.Sveukupno.S1"], "10.00");
+        assert_eq!(values["Podaci2.Osobe.Sveukupno.S4"], "0.20");
     }
 
     #[test]

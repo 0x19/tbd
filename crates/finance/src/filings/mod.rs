@@ -29,7 +29,7 @@ use crate::connectors::store::StoreError;
 
 /// Stamped on every row this reader writes; a change to what it reads is a
 /// new version, and a re-read refreshes the row.
-pub const PARSER_VERSION: &str = "filings/1";
+pub const PARSER_VERSION: &str = "filings/2";
 
 /// Every ePorezna form namespace starts with this; what follows is
 /// `Obrazac<FORM>/v<major>-<minor>`.
@@ -509,8 +509,8 @@ mod tests {
 <Zaglavlje><Razdoblje><DatumOd>2025-01-01</DatumOd><DatumDo>2025-12-31</DatumDo></Razdoblje>
 <Obveznik><Naziv>T</Naziv><OIB>00000000001</OIB></Obveznik></Zaglavlje>
 <Tijelo><Podaci><Podaci2><Osobe><Osoba><O1>1</O1><O2>Member</O2><O4>00000000002</O4>
-<Potrazivanja><Potrazivanje><Z1>72515.51</Z1><Z2>97387.68</Z2></Potrazivanje></Potrazivanja></Osoba></Osobe>
-<Sveukupno><S1>97387.68</S1></Sveukupno></Podaci2></Podaci></Tijelo></ObrazacPDIPO>"#;
+<Potrazivanja><Potrazivanje><P1>2025-01-01</P1><P2>81370.92</P2><P5>2</P5><P6>1627.42</P6></Potrazivanje></Potrazivanja></Osoba>
+<Sveukupno><S1>97387.68</S1><S4>1721.4</S4></Sveukupno></Osobe></Podaci2></Podaci></Tijelo></ObrazacPDIPO>"#;
         let p = parse(xml.as_bytes()).expect("a PD-IPO");
         assert_eq!(p.form, Form::PdIpo);
         assert_eq!(
@@ -519,9 +519,10 @@ mod tests {
         );
         assert_eq!(p.rows.len(), 1);
         assert_eq!(p.rows[0]["_kind"], "Podaci.Podaci2.Osobe");
-        assert_eq!(p.rows[0]["Potrazivanja"]["Potrazivanje"]["Z2"], "97387.68");
-        assert_eq!(p.values["Podaci.Podaci2.Sveukupno.S1"], "97387.68");
-        assert_eq!(headline(Form::PdIpo, &p.values, &p.rows).len(), 1);
+        assert_eq!(p.rows[0]["Potrazivanja"]["Potrazivanje"]["P2"], "81370.92");
+        assert_eq!(p.values["Podaci.Podaci2.Osobe.Sveukupno.S1"], "97387.68");
+        assert_eq!(p.values["Podaci.Podaci2.Osobe.Sveukupno.S4"], "1721.4");
+        assert_eq!(headline(Form::PdIpo, &p.values, &p.rows).len(), 2);
     }
 
     #[test]
