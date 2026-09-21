@@ -440,6 +440,29 @@ pub async fn begin_sync(
     Ok(Started { run, connector })
 }
 
+/// Where a pull starts: a week before the last successful sync for late
+/// arrivals, a year back for a first pull, and never later than a `since`
+/// (YYYY-MM-DD) in the connector's config -- the bank's notices for old
+/// invoices live in old mail, and a person asks for them by setting it.
+fn since_of(row: &ConnectorRow) -> DateTime<Utc> {
+    let usual = row
+        .last_sync_at
+        .and_then(|t| t.checked_sub_days(Days::new(7)))
+        .unwrap_or_else(|| {
+            Utc::now()
+                .checked_sub_days(Days::new(365))
+                .unwrap_or_else(Utc::now)
+        });
+    let configured = row
+        .config
+        .get("since")
+        .and_then(Value::as_str)
+        .and_then(|d| chrono::NaiveDate::parse_from_str(d.trim(), "%Y-%m-%d").ok())
+        .and_then(|d| d.and_hms_opt(0, 0, 0))
+        .map(|t| t.and_utc());
+    configured.map_or(usual, |c| c.min(usual))
+}
+
 /// Pull new documents and store them, finishing the run either way.
 /// Idempotent: a provider id seen before is skipped, and identical bytes are
 /// one document. Runs until the kind says it has everything new, or
@@ -463,16 +486,7 @@ pub async fn run_sync(
         .find(|k| k.kind().name == row.kind)
         .ok_or_else(|| StoreError::UnknownKind(row.kind.clone()))?;
 
-    // Since the last successful sync, a week back for late arrivals; a first
-    // pull reaches back a year.
-    let since = row
-        .last_sync_at
-        .and_then(|t| t.checked_sub_days(Days::new(7)))
-        .unwrap_or_else(|| {
-            Utc::now()
-                .checked_sub_days(Days::new(365))
-                .unwrap_or_else(Utc::now)
-        });
+    let since = since_of(row);
     let creds = match credentials(pool, sealer, id).await {
         Ok(c) => c,
         Err(e) => {
@@ -931,4 +945,67 @@ pub async fn snapshot(
             (c, run)
         })
         .collect())
+}
+
+#[cfg(test)]
+mod since_tests {
+    use super::*;
+
+    fn row(last: Option<&str>, config: Value) -> ConnectorRow {
+        ConnectorRow {
+            id: Uuid::nil(),
+            party_id: Uuid::nil(),
+            kind: "gmail".into(),
+            label: String::new(),
+            status: "linked".into(),
+            config,
+            external_id: None,
+            linked_at: None,
+            last_sync_at: last.map(|t| t.parse().unwrap()),
+            last_sync_status: None,
+            last_sync_error: None,
+            failure: None,
+            created_at: Utc::now(),
+            can_send: false,
+            can_read: true,
+        }
+    }
+
+    #[test]
+    fn since_of_takes_the_earlier_of_the_usual_and_the_configured() {
+        let usual = since_of(&row(Some("2026-09-01T00:00:00Z"), serde_json::json!({})));
+        assert_eq!(
+            usual.to_rfc3339(),
+            "2026-08-25T00:00:00+00:00",
+            "a week back"
+        );
+        let first = since_of(&row(None, serde_json::json!({})));
+        assert!(
+            Utc::now() - first > chrono::Duration::days(364),
+            "a year the first time"
+        );
+        let old = since_of(&row(
+            Some("2026-09-01T00:00:00Z"),
+            serde_json::json!({"since": "2024-01-01"}),
+        ));
+        assert_eq!(old.to_rfc3339(), "2024-01-01T00:00:00+00:00");
+        let later = since_of(&row(
+            Some("2026-09-01T00:00:00Z"),
+            serde_json::json!({"since": "2026-09-10"}),
+        ));
+        assert_eq!(
+            later.to_rfc3339(),
+            "2026-08-25T00:00:00+00:00",
+            "never later than usual"
+        );
+        let junk = since_of(&row(
+            Some("2026-09-01T00:00:00Z"),
+            serde_json::json!({"since": "yesterday"}),
+        ));
+        assert_eq!(
+            junk.to_rfc3339(),
+            "2026-08-25T00:00:00+00:00",
+            "unreadable is ignored"
+        );
+    }
 }

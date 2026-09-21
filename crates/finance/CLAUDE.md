@@ -81,7 +81,7 @@ The finance service. gRPC only. Scaffolded by `tbd new service` (docs/tbd/README
   scope) and keeps PDF attachments; a pull holds a session whose access token is re-minted
   before Google's hour is up and once more if refused mid-pull (a throttled pull outlives
   the token; one died at 3,611 s and read as a broken link), so only a refused *refresh*
-  marks the row expired, and a later good pull or test clears that mark; a second query (`body_query`, Gmail's own syntax)
+  marks the row expired, and a later good pull or test clears that mark; a pull starts a week before the last good sync, a year back the first time, or at the connector's `since` (`YYYY-MM-DD` in its config) when that is earlier -- how the bank's old notices are fetched for old invoices; a second query (`body_query`, Gmail's own syntax)
   finds receipt mails with nothing attached, fetches the Stripe-hosted invoice a mail names
   (`/pdf` under the link) or prints the mail (`documents::mail`); a pulled message is never
   pulled twice, identical bytes are one document with several sources. `SyncConnector` opens a run row and
