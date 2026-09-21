@@ -92,15 +92,10 @@ auth.{$BASE_DOMAIN} {
 	import gated
 }
 
-# One canonical name for the site: www redirects to the apex.
-www.{$BASE_DOMAIN} {
-	redir https://{$BASE_DOMAIN}{uri} permanent
-}
-
-# The company site at the root of the base domain. Public, no sign-in. The Host
-# is rewritten to the www name because that is what Envoy's public `www.*`
-# virtual host matches, which keeps the domain itself out of envoy.yaml.
-{$BASE_DOMAIN} {
+# The company site. Public, no sign-in. The Host is rewritten to the www name
+# because that is what Envoy's public `www.*` virtual host matches, which keeps
+# the domain itself out of envoy.yaml.
+(site) {
 	encode zstd gzip
 	reverse_proxy cluster:18080 {
 		header_up Host www.{$BASE_DOMAIN}
@@ -111,3 +106,19 @@ www.{$BASE_DOMAIN} {
 		format json
 	}
 }
+
+# One canonical name for the site: www redirects to the apex.
+www.{$BASE_DOMAIN} {
+	redir https://{$BASE_DOMAIN}{uri} permanent
+}
+
+# The company site at the root of the base domain.
+{$BASE_DOMAIN} {
+	import site
+}
+
+# The site under further domains of its own (a company domain while the platform
+# stays on the base): one file per domain in sites.d/, git-ignored like .env, each
+# an apex importing `site` and a www redirecting to it. See sites.d/README.md.
+# A glob that matches nothing imports nothing.
+import sites.d/*.caddy

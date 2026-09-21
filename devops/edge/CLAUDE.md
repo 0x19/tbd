@@ -26,6 +26,12 @@ Public TLS edge for a cluster behind a home or office router. Read `README.md` f
   `Host` header the edge rewrites: to `www.{$BASE_DOMAIN}`, because Envoy matches the site
   on `www.*` and `envoy.yaml` must not learn the domain. `www.` redirects to the apex, so
   there is a single canonical URL and no duplicate content.
+- `sites.d/*.caddy` (git-ignored, one file per domain) serves the company site under
+  further domains: each file is `www.<domain>` redirecting to `<domain>`, which
+  `import site`s. A glob that matches nothing is not an error, so the file is simply
+  absent where the site has one domain. Behind Cloudflare's proxy the zone must be in
+  *Full (strict)* SSL mode: in *Flexible* mode Cloudflare fetches the origin over
+  plain HTTP, Caddy answers with its redirect to HTTPS, and the browser sees a loop.
 - The `(gated)` snippet is every non-API host: one `reverse_proxy` to Envoy. There is no
   auth in Caddy at all; Envoy's OAuth2 + JWT filters do it (docs/auth/README.md). Do not
   add basic auth back "as a second layer": it breaks the OAuth2 callback and hides the

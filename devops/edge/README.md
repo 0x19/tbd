@@ -28,6 +28,7 @@ internet ──443──▶ router (port forward) ──▶ this host: caddy (TL
 | `auth.<base>` | Envoy 18080 | none (it is the sign-in) | Ory Hydra, Ory Kratos and the login/registration/consent pages |
 | `<base>` (the apex) | Envoy 18080 | none (it is a public site) | the company site (`ui/www`); the Host is rewritten to `www.<base>` so Envoy's one public rule matches |
 | `www.<base>` | — | none | a permanent redirect to the apex, so the site has one canonical URL |
+| `<other>`, `www.<other>` | Envoy 18080 | none | the same site under a domain of its own, one file per domain in `sites.d/` (git-ignored; `sites.d/README.md`); Caddy gets its certificate the same way |
 
 Caddy adds TLS and nothing else: every host is one `reverse_proxy` to Envoy, and Envoy
 decides who gets in ([docs/auth/README.md](../../docs/auth/README.md)).
