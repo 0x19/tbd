@@ -262,6 +262,20 @@ export const InvoiceLine = z.object({
 });
 export type InvoiceLine = z.infer<typeof InvoiceLine>;
 
+export const InvoicePayment = z.object({
+  id: z.string(),
+  invoice_id: z.string(),
+  transaction_id: z.string(),
+  amount_minor: Minor,
+  currency: z.string(),
+  paid_on: z.string(),
+  // inferred (the matcher) or declared (a person).
+  source: z.string(),
+  reason: z.string(),
+  note: z.string(),
+  counterparty: z.string(),
+});
+export type InvoicePayment = z.infer<typeof InvoicePayment>;
 export const Invoice = z.object({
   id: z.string(),
   party_id: z.string(),
@@ -291,6 +305,10 @@ export const Invoice = z.object({
   // The series the number is (or will be) in.
   premises: z.string(),
   device: z.string(),
+  // What the payments cover so far; "paid" once they cover the total.
+  paid_minor: Minor,
+  paid_at: z.string(),
+  payments: z.array(InvoicePayment),
 });
 export type Invoice = z.infer<typeof Invoice>;
 export const ListInvoicesResponse = z.object({ invoices: z.array(Invoice) });

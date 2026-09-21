@@ -181,7 +181,9 @@ function Invoices() {
     [all],
   );
   const sums = useMemo(() => {
-    const add = (rows: Invoice[]) => rows.reduce((s, i) => s + BigInt(i.total_minor), 0n);
+    // What is still owed, not what was billed: a part paid counts.
+    const add = (rows: Invoice[]) =>
+      rows.reduce((s, i) => s + BigInt(i.total_minor) - BigInt(i.paid_minor), 0n);
     const open = all.filter((i) => i.status === "approved" || i.status === "sent");
     const overdue = open.filter((i) => i.due_date < today);
     const thisYear = all.filter(
@@ -195,7 +197,7 @@ function Invoices() {
       openN: open.length,
       overdue: add(overdue),
       overdueN: overdue.length,
-      year: add(thisYear),
+      year: thisYear.reduce((s, i) => s + BigInt(i.total_minor), 0n),
       yearN: thisYear.length,
       ccy,
     };

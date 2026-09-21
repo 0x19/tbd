@@ -135,6 +135,9 @@ pub struct InvoiceRow {
     pub cancelled_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    /// What the payments cover so far, and when they covered it all.
+    pub paid_minor: i64,
+    pub paid_at: Option<DateTime<Utc>>,
 }
 
 #[allow(missing_docs)]
@@ -265,11 +268,11 @@ const ISSUER_COLUMNS: &str =
     registration_no, share_capital, board_member, issued_by, place_of_issue, operator_id, premises,
     device, due_days";
 pub(crate) const CLIENT_COLUMNS: &str = "id, party_id, name, address_lines, country_code, tax_id, vat_treatment, recipients, currency, archived_at";
-const INVOICE_COLUMNS: &str =
+pub(crate) const INVOICE_COLUMNS: &str =
     "id, party_id, client_id, status, year, ordinal, premises, device, number, issued_at,
     delivery_date, due_date, place_of_issue, currency, subtotal_minor, vat_minor, total_minor,
     vat_treatment, vat_note, note, content_hash, approved_at, document_id, prefilled_from,
-    cancelled_at, created_at, updated_at";
+    cancelled_at, created_at, updated_at, paid_minor, paid_at";
 
 /// The issuer profile of a party the caller may read.
 ///
@@ -1000,7 +1003,7 @@ async fn write_lines(
     Ok(())
 }
 
-async fn event(
+pub(crate) async fn event(
     tx: &mut Transaction<'_, Postgres>,
     invoice: Uuid,
     user: UserId,

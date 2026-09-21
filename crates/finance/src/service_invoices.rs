@@ -9,12 +9,13 @@ use tbd_proto::finance::v1::{
     ClientProfile, CreateInvoiceRequest, CreateInvoiceResponse, DeleteInvoiceRequest,
     DeleteInvoiceResponse, DeleteLineTemplateRequest, DeleteLineTemplateResponse,
     GetInvoiceDocumentRequest, GetInvoiceDocumentResponse, GetInvoiceRequest, GetInvoiceResponse,
-    GetIssuerRequest, GetIssuerResponse, Invoice, InvoiceLine, IssuerProfile, LineTemplate,
-    ListClientsRequest, ListClientsResponse, ListInvoicesRequest, ListInvoicesResponse,
-    ListLineTemplatesRequest, ListLineTemplatesResponse, PreviewInvoiceRequest,
-    PreviewInvoiceResponse, UpdateInvoiceRequest, UpdateInvoiceResponse, UpsertClientRequest,
-    UpsertClientResponse, UpsertIssuerRequest, UpsertIssuerResponse, UpsertLineTemplateRequest,
-    UpsertLineTemplateResponse,
+    GetIssuerRequest, GetIssuerResponse, Invoice, InvoiceLine, InvoicePayment, IssuerProfile,
+    LineTemplate, ListClientsRequest, ListClientsResponse, ListInvoicesRequest,
+    ListInvoicesResponse, ListLineTemplatesRequest, ListLineTemplatesResponse,
+    PreviewInvoiceRequest, PreviewInvoiceResponse, RecordPaymentRequest, RecordPaymentResponse,
+    UnlinkPaymentRequest, UnlinkPaymentResponse, UpdateInvoiceRequest, UpdateInvoiceResponse,
+    UpsertClientRequest, UpsertClientResponse, UpsertIssuerRequest, UpsertIssuerResponse,
+    UpsertLineTemplateRequest, UpsertLineTemplateResponse,
 };
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
@@ -22,6 +23,7 @@ use uuid::Uuid;
 use crate::{
     invoice::{
         VatTreatment,
+        payments::{self, PaymentRow},
         store::{
             self, ClientInput, ClientRow, DraftInput, InvoiceError, InvoiceRow, IssuerInput,
             IssuerRow, LineInput, LineRow, TemplateInput, TemplateRow,
@@ -94,7 +96,22 @@ fn client_proto(c: ClientRow) -> ClientProfile {
     }
 }
 
-fn invoice_proto(r: InvoiceRow, lines: Vec<LineRow>) -> Invoice {
+fn payment_proto(p: PaymentRow) -> InvoicePayment {
+    InvoicePayment {
+        id: p.id.to_string(),
+        invoice_id: p.invoice_id.to_string(),
+        transaction_id: p.transaction_id.map(|t| t.to_string()).unwrap_or_default(),
+        amount_minor: p.amount_minor,
+        currency: p.currency,
+        paid_on: p.paid_on.to_string(),
+        source: p.source,
+        reason: p.reason,
+        note: p.note,
+        counterparty: p.counterparty.unwrap_or_default(),
+    }
+}
+
+fn invoice_proto(r: InvoiceRow, lines: Vec<LineRow>, payments: Vec<PaymentRow>) -> Invoice {
     let t =
         |v: Option<chrono::DateTime<chrono::Utc>>| v.map(|t| t.to_rfc3339()).unwrap_or_default();
     Invoice {
@@ -124,6 +141,9 @@ fn invoice_proto(r: InvoiceRow, lines: Vec<LineRow>) -> Invoice {
         updated_at: r.updated_at.to_rfc3339(),
         premises: r.premises,
         device: r.device,
+        paid_minor: r.paid_minor,
+        paid_at: t(r.paid_at),
+        payments: payments.into_iter().map(payment_proto).collect(),
         lines: lines
             .into_iter()
             .map(|l| InvoiceLine {
@@ -317,14 +337,28 @@ impl Finance {
         let (mut timer, pool, _, view) = self
             .invoice_context("FinanceService/ListInvoices", &request, &party_ids)
             .await?;
-        let r = store::invoices(pool, &view)
-            .await
-            .map(|rows| ListInvoicesResponse {
+        let r = async {
+            for party in view.party_ids() {
+                payments::settle(pool, *party).await?;
+            }
+            let rows = store::invoices(pool, &view).await?;
+            let ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
+            let mut by_invoice: std::collections::HashMap<Uuid, Vec<PaymentRow>> =
+                std::collections::HashMap::new();
+            for p in payments::payments_of(pool, &ids).await? {
+                by_invoice.entry(p.invoice_id).or_default().push(p);
+            }
+            Ok(ListInvoicesResponse {
                 invoices: rows
                     .into_iter()
-                    .map(|r| invoice_proto(r, Vec::new()))
+                    .map(|r| {
+                        let ps = by_invoice.remove(&r.id).unwrap_or_default();
+                        invoice_proto(r, Vec::new(), ps)
+                    })
                     .collect(),
-            });
+            })
+        }
+        .await;
         self.done(&mut timer, r)
     }
 
@@ -336,11 +370,20 @@ impl Finance {
         let (mut timer, pool, access, _) = self
             .invoice_context("FinanceService/GetInvoice", &request, &[])
             .await?;
-        let r = store::invoice(pool, &access, id)
-            .await
-            .map(|(row, lines)| GetInvoiceResponse {
-                invoice: Some(invoice_proto(row, lines)),
-            });
+        let r = async {
+            let (row, lines) = store::invoice(pool, &access, id).await?;
+            payments::settle(pool, row.party_id).await?;
+            let (row, lines) = if row.status == "draft" {
+                (row, lines)
+            } else {
+                store::invoice(pool, &access, id).await?
+            };
+            let ps = payments::payments_of(pool, &[row.id]).await?;
+            Ok(GetInvoiceResponse {
+                invoice: Some(invoice_proto(row, lines, ps)),
+            })
+        }
+        .await;
         self.done(&mut timer, r)
     }
 
@@ -369,7 +412,7 @@ impl Finance {
             let row = store::create_draft(pool, &access, client, source).await?;
             let (row, lines) = store::invoice(pool, &access, row.id).await?;
             Ok(CreateInvoiceResponse {
-                invoice: Some(invoice_proto(row, lines)),
+                invoice: Some(invoice_proto(row, lines, Vec::new())),
             })
         }
         .await;
@@ -424,7 +467,7 @@ impl Finance {
             let row = store::update_draft(pool, &access, id, input).await?;
             let (row, lines) = store::invoice(pool, &access, row.id).await?;
             Ok(UpdateInvoiceResponse {
-                invoice: Some(invoice_proto(row, lines)),
+                invoice: Some(invoice_proto(row, lines, Vec::new())),
             })
         }
         .await;
@@ -466,8 +509,9 @@ impl Finance {
         let r = async {
             let done = store::approve(pool, &access, id, &req.content_hash).await?;
             let (row, lines) = store::invoice(pool, &access, done.invoice.id).await?;
+            let ps = payments::payments_of(pool, &[row.id]).await?;
             Ok(ApproveInvoiceResponse {
-                invoice: Some(invoice_proto(row, lines)),
+                invoice: Some(invoice_proto(row, lines, ps)),
             })
         }
         .await;
@@ -487,6 +531,59 @@ impl Finance {
             .map(|()| DeleteInvoiceResponse {});
         self.done(&mut timer, r)
     }
+    pub(crate) async fn rpc_record_payment(
+        &self,
+        request: Request<RecordPaymentRequest>,
+    ) -> Result<Response<RecordPaymentResponse>, Status> {
+        let req = request.get_ref().clone();
+        let invoice_id = uuid(&req.invoice_id, "invoice_id")?;
+        let input = payments::RecordInput {
+            transaction_id: if req.transaction_id.is_empty() {
+                None
+            } else {
+                Some(uuid(&req.transaction_id, "transaction_id")?)
+            },
+            amount_minor: req.amount_minor,
+            paid_on: if req.paid_on.trim().is_empty() {
+                None
+            } else {
+                Some(date(&req.paid_on, "paid_on")?)
+            },
+            note: req.note,
+        };
+        let (mut timer, pool, access, _) = self
+            .invoice_context("FinanceService/RecordPayment", &request, &[])
+            .await?;
+        let r = async {
+            let row = payments::record(pool, &access, invoice_id, &input).await?;
+            let (row, lines) = store::invoice(pool, &access, row.id).await?;
+            let ps = payments::payments_of(pool, &[row.id]).await?;
+            Ok(RecordPaymentResponse {
+                invoice: Some(invoice_proto(row, lines, ps)),
+            })
+        }
+        .await;
+        self.done(&mut timer, r)
+    }
+    pub(crate) async fn rpc_unlink_payment(
+        &self,
+        request: Request<UnlinkPaymentRequest>,
+    ) -> Result<Response<UnlinkPaymentResponse>, Status> {
+        let id = uuid(&request.get_ref().id, "id")?;
+        let (mut timer, pool, access, _) = self
+            .invoice_context("FinanceService/UnlinkPayment", &request, &[])
+            .await?;
+        let r = async {
+            let row = payments::unlink(pool, &access, id).await?;
+            let (row, lines) = store::invoice(pool, &access, row.id).await?;
+            let ps = payments::payments_of(pool, &[row.id]).await?;
+            Ok(UnlinkPaymentResponse {
+                invoice: Some(invoice_proto(row, lines, ps)),
+            })
+        }
+        .await;
+        self.done(&mut timer, r)
+    }
     pub(crate) async fn rpc_cancel_invoice(
         &self,
         request: Request<CancelInvoiceRequest>,
@@ -499,8 +596,9 @@ impl Finance {
         let r = async {
             let row = store::cancel(pool, &access, id, &req.reason).await?;
             let (row, lines) = store::invoice(pool, &access, row.id).await?;
+            let ps = payments::payments_of(pool, &[row.id]).await?;
             Ok(CancelInvoiceResponse {
-                invoice: Some(invoice_proto(row, lines)),
+                invoice: Some(invoice_proto(row, lines, ps)),
             })
         }
         .await;

@@ -10,8 +10,8 @@ use tbd_db::{Capability, PartyId, UserId, create_org, ensure_user, grant};
 use tbd_proto::finance::v1::{
     ApproveInvoiceRequest, CancelInvoiceRequest, ClientProfile, CreateInvoiceRequest,
     DeleteInvoiceRequest, GetInvoiceDocumentRequest, GetInvoiceRequest, InvoiceLine, IssuerProfile,
-    ListInvoicesRequest, PreviewInvoiceRequest, UpdateInvoiceRequest, UpsertClientRequest,
-    UpsertIssuerRequest,
+    ListInvoicesRequest, PreviewInvoiceRequest, RecordPaymentRequest, UnlinkPaymentRequest,
+    UpdateInvoiceRequest, UpsertClientRequest, UpsertIssuerRequest,
 };
 use tonic::{Code, Request, metadata::MetadataValue};
 use uuid::Uuid;
@@ -948,4 +948,250 @@ async fn issued_invoices_are_imported_from_their_pdfs_once() {
             .await
             .unwrap();
     assert_eq!(docs, 2);
+}
+
+/// Money in: an account of the company and a booked credit on it.
+async fn credit(
+    pool: &PgPool,
+    party: Uuid,
+    account: Uuid,
+    date: &str,
+    minor: i64,
+    remittance: &str,
+) -> Uuid {
+    let id = Uuid::new_v4();
+    sqlx::query(
+        "insert into finance.bank_transactions
+            (id, party_id, account_id, status, dedup_key, amount_minor, currency, credit_debit,
+             booking_date, counterparty_name, remittance, reference_number)
+         values ($1,$2,$3,'booked',$4,$5,'EUR','CRDT',$6::date,'TENDERLY D.O.O.',$7,'HR99')",
+    )
+    .bind(id)
+    .bind(party)
+    .bind(account)
+    .bind(Uuid::new_v4().as_bytes().to_vec())
+    .bind(minor)
+    .bind(date)
+    .bind(remittance)
+    .execute(pool)
+    .await
+    .unwrap();
+    id
+}
+
+/// A payment that names the invoice in the remittance settles it on the next
+/// read; a part pays a part; undoing a match is remembered; a person's own
+/// record stands; nothing but an issued invoice takes a payment.
+#[tokio::test]
+#[allow(clippy::too_many_lines)]
+async fn payments_settle_invoices_by_the_number_the_payer_wrote() {
+    let (server, pool) = start_with_store().await;
+    let world = seed(&pool).await;
+    let account = Uuid::new_v4();
+    sqlx::query(
+        "insert into finance.accounts (id, party_id, iban, currency, name) values ($1,$2,'HR9224020061100925189','EUR','biz')",
+    )
+    .bind(account)
+    .bind(world.company)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let (first, client_id) = draft(&server, world.company).await;
+    let mut c = server.client().await;
+    let year = chrono::Utc::now().format("%Y").to_string();
+
+    // A draft takes no payment.
+    let e = c
+        .record_payment(as_caller(
+            OWNER,
+            RecordPaymentRequest {
+                invoice_id: first.clone(),
+                amount_minor: 100,
+                ..Default::default()
+            },
+        ))
+        .await
+        .unwrap_err();
+    assert_eq!(e.code(), Code::FailedPrecondition, "{e}");
+
+    let first_invoice = approve(&server, first.clone()).await;
+    assert_eq!(first_invoice.total_minor, 1_450_082);
+    // The bank shows the settlement, the way Erste writes Tenderly's.
+    let paid_tx = credit(
+        &pool,
+        world.company,
+        account,
+        "2026-09-04",
+        1_450_082,
+        &format!("HR99 | BROJ RACUNA 1-1-1-{year}"),
+    )
+    .await;
+    // Noise: a credit naming no invoice, and one naming a number we never issued.
+    credit(
+        &pool,
+        world.company,
+        account,
+        "2026-09-05",
+        5_000,
+        "HR99 | Povrat",
+    )
+    .await;
+    credit(
+        &pool,
+        world.company,
+        account,
+        "2026-09-05",
+        5_000,
+        &format!("HR99 | BROJ RACUNA 77-1-1-{year}"),
+    )
+    .await;
+
+    let listed = c
+        .list_invoices(as_caller(OWNER, ListInvoicesRequest::default()))
+        .await
+        .unwrap()
+        .into_inner()
+        .invoices;
+    let got = listed.iter().find(|i| i.id == first_invoice.id).unwrap();
+    assert_eq!(got.status, "paid", "settled on the next read");
+    assert_eq!(got.paid_minor, 1_450_082);
+    assert_eq!(got.paid_at, "2026-09-04T00:00:00+00:00");
+    assert_eq!(got.payments.len(), 1);
+    let payment = &got.payments[0];
+    assert_eq!(payment.source, "inferred");
+    assert_eq!(payment.transaction_id, paid_tx.to_string());
+    assert_eq!(payment.reason, format!("reference 1-1-1-{year}"));
+    assert_eq!(payment.counterparty, "TENDERLY D.O.O.");
+    let (rows,): (i64,) = sqlx::query_as("select count(*) from finance.invoice_payments")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(rows, 1, "the noise made no payment");
+
+    // Undone: the invoice is open again, and the match is not remade.
+    let undone = c
+        .unlink_payment(as_caller(
+            OWNER,
+            UnlinkPaymentRequest {
+                id: payment.id.clone(),
+            },
+        ))
+        .await
+        .unwrap()
+        .into_inner()
+        .invoice
+        .unwrap();
+    assert_eq!(undone.status, "approved");
+    assert_eq!(undone.paid_minor, 0);
+    assert!(undone.payments.is_empty());
+    let again = c
+        .get_invoice(as_caller(
+            OWNER,
+            GetInvoiceRequest {
+                id: first_invoice.id.clone(),
+            },
+        ))
+        .await
+        .unwrap()
+        .into_inner()
+        .invoice
+        .unwrap();
+    assert_eq!(again.status, "approved", "a rejected match stays rejected");
+
+    // A person records the same transaction by hand: their word, kept.
+    let recorded = c
+        .record_payment(as_caller(
+            OWNER,
+            RecordPaymentRequest {
+                invoice_id: first_invoice.id.clone(),
+                transaction_id: paid_tx.to_string(),
+                note: "checked with the bank".into(),
+                ..Default::default()
+            },
+        ))
+        .await
+        .unwrap()
+        .into_inner()
+        .invoice
+        .unwrap();
+    assert_eq!(recorded.status, "paid");
+    assert_eq!(recorded.payments[0].source, "declared");
+    assert_eq!(
+        recorded.payments[0].amount_minor, 1_450_082,
+        "the transaction's amount"
+    );
+    assert_eq!(
+        recorded.payments[0].paid_on, "2026-09-04",
+        "the transaction's day"
+    );
+    // The same transaction cannot settle a second invoice.
+    let b_draft = c
+        .create_invoice(as_caller(
+            OWNER,
+            CreateInvoiceRequest {
+                client_id,
+                ..Default::default()
+            },
+        ))
+        .await
+        .unwrap()
+        .into_inner()
+        .invoice
+        .unwrap();
+    let second = approve(&server, b_draft.id).await;
+    let e = c
+        .record_payment(as_caller(
+            OWNER,
+            RecordPaymentRequest {
+                invoice_id: second.id.clone(),
+                transaction_id: paid_tx.to_string(),
+                ..Default::default()
+            },
+        ))
+        .await
+        .unwrap_err();
+    assert_eq!(e.code(), Code::InvalidArgument, "{e}");
+    // A part by hand: still open, with the part on it.
+    let part = c
+        .record_payment(as_caller(
+            OWNER,
+            RecordPaymentRequest {
+                invoice_id: second.id.clone(),
+                amount_minor: 1_000_000,
+                paid_on: "2026-09-10".into(),
+                ..Default::default()
+            },
+        ))
+        .await
+        .unwrap()
+        .into_inner()
+        .invoice
+        .unwrap();
+    assert_eq!(part.status, "approved");
+    assert_eq!(part.paid_minor, 1_000_000);
+    assert_eq!(part.paid_at, "");
+    // The reader sees the payments; a stranger's payment id is not found.
+    let seen = c
+        .get_invoice(as_caller(
+            READER,
+            GetInvoiceRequest {
+                id: second.id.clone(),
+            },
+        ))
+        .await
+        .unwrap()
+        .into_inner()
+        .invoice
+        .unwrap();
+    assert_eq!(seen.payments.len(), 1);
+    let e = c
+        .unlink_payment(as_caller(
+            OWNER,
+            UnlinkPaymentRequest {
+                id: Uuid::new_v4().to_string(),
+            },
+        ))
+        .await
+        .unwrap_err();
+    assert_eq!(e.code(), Code::NotFound, "{e}");
 }

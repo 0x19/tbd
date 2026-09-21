@@ -12,6 +12,8 @@ draft ──approve(hash)──▶ approved        number taken, PDF stored, has
 approved ──cancel──▶ cancelled           keeps its number
 draft ──delete──▶ (gone)                 never had one; nothing remains
 any ──duplicate──▶ draft                 the header and lines, dated today
+approved ──payments cover it──▶ paid     matched from the bank, or recorded
+paid ──last payment undone──▶ approved   the one step back
 ```
 
 - A **number** is `ordinal-premises-device-year`, e.g. `10-1-1-2026`, allocated
@@ -92,3 +94,20 @@ does not add up (lines, subtotal, VAT, total) is refused with the arithmetic; a 
 invoice (the same content in a second file) is one invoice; two files claiming one number
 with different content are both refused and named, because only a person can say which
 was issued. A second run finds everything present and writes nothing.
+
+## Money in
+
+`finance.invoice_payments` holds what settled an invoice. The matcher
+(`invoice/payments.rs`, `settle`) runs before every read of the invoices and looks
+only at booked credits no payment row names yet: the payer writes the invoice
+number in the remittance (`HR99 | BROJ RACUNA 9-1-1-2026`, no structured reference,
+measured on every Tenderly settlement) or in the structured *poziv na broj*; the
+invoice with that number, in the same currency, gets the transaction as an
+`inferred` payment for the amount that arrived. A part pays a part. The invoice's
+`paid_minor` is the sum; it is `paid` once that covers the total, with `paid_at`
+the day of the last payment. `RecordPayment` is a person's word (`declared`): a
+transaction of the party, or an amount and a day the bank has not shown.
+`UnlinkPayment` undoes one; a match the matcher made is kept as `rejected` so it is
+not remade, and a paid invoice with nothing left covering it goes back to
+`approved`, the one step back the machine has. Amount alone never matches: two
+months can bill the same figure.

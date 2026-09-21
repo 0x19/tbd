@@ -228,6 +228,24 @@ service FinanceService {
       body: "*"
     };
   }
+  // Record a payment against an issued invoice: a bank transaction of the
+  // party (its amount and day unless given), or one the bank has not shown.
+  // The invoice is paid once its payments cover the total.
+  rpc RecordPayment(RecordPaymentRequest) returns (RecordPaymentResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/invoices/{invoice_id}/payments"
+      body: "*"
+    };
+  }
+  // Undo a payment. A match the matcher made is remembered as undone, so it
+  // is not made again; a paid invoice with nothing left covering it goes
+  // back to approved, the one step back the machine has.
+  rpc UnlinkPayment(UnlinkPaymentRequest) returns (UnlinkPaymentResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/payments/{id}/unlink"
+      body: "*"
+    };
+  }
 
   // The stored PDF of an approved invoice, base64.
   rpc GetInvoiceDocument(GetInvoiceDocumentRequest) returns (GetInvoiceDocumentResponse) {
@@ -1036,6 +1054,26 @@ message Invoice {
   // The series the number is (or will be) in: the middle of the number.
   string premises = 26;
   string device = 27;
+  // What the payments cover so far; `paid` once they cover the total.
+  int64 paid_minor = 28;
+  string paid_at = 29;
+  repeated InvoicePayment payments = 30;
+}
+// A payment against an invoice: a bank transaction the matcher or a person
+// tied to it, or one a person recorded that the bank has not shown.
+message InvoicePayment {
+  string id = 1;
+  string invoice_id = 2;
+  string transaction_id = 3;
+  int64 amount_minor = 4;
+  string currency = 5;
+  string paid_on = 6;
+  // inferred (the matcher, by the reference the payer wrote) or declared.
+  string source = 7;
+  string reason = 8;
+  string note = 9;
+  // The bank's counterparty on the transaction.
+  string counterparty = 10;
 }
 
 message ListInvoicesRequest {
@@ -1097,6 +1135,25 @@ message DeleteInvoiceRequest {
   string id = 1;
 }
 message DeleteInvoiceResponse {}
+message RecordPaymentRequest {
+  string invoice_id = 1;
+  // A bank transaction of the party, or empty for a payment the bank has not shown.
+  string transaction_id = 2;
+  // Minor units; zero means the transaction's amount.
+  int64 amount_minor = 3;
+  // YYYY-MM-DD; empty means the transaction's day, else today.
+  string paid_on = 4;
+  string note = 5;
+}
+message RecordPaymentResponse {
+  Invoice invoice = 1;
+}
+message UnlinkPaymentRequest {
+  string id = 1;
+}
+message UnlinkPaymentResponse {
+  Invoice invoice = 1;
+}
 message CancelInvoiceRequest {
   string id = 1;
   string reason = 2;

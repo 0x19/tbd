@@ -50,8 +50,12 @@ The finance service. gRPC only. Scaffolded by `tbd new service` (docs/tbd/README
   header (client of the same party, currency, VAT treatment, series) changes through
   `UpdateInvoice` until approval; a draft is deleted (`DeleteInvoice`), never
   cancelled, and `CancelInvoice` refuses one; `CreateInvoice{from_invoice_id}`
-  duplicates any invoice's header and lines into a draft dated today. See
-  `docs/finance/invoice.md`. `service_invoices.rs` holds the RPCs.
+  duplicates any invoice's header and lines into a draft dated today. `payments.rs`
+  is money in: `settle` runs before every read and ties a booked credit to the invoice
+  whose number the payer wrote (remittance or structured reference, same currency),
+  `record` is a person's word, `unlink` undoes one (a match stays `rejected`, never
+  remade); `paid` when the payments cover the total, back to `approved` when they no
+  longer do. See `docs/finance/invoice.md`. `service_invoices.rs` holds the RPCs.
 - `connectors/`: linked external accounts documents are pulled from (mailboxes today,
   portals later). `mod.rs` is the registry and the `Connector` trait -- adding a kind is
   one file and one line; the UI reads the registry (two kinds today: `gmail.rs`, and

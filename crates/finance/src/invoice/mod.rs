@@ -18,6 +18,7 @@
 
 pub mod import;
 pub mod numbering;
+pub mod payments;
 pub mod render;
 pub mod store;
 pub mod totals;

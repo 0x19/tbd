@@ -244,6 +244,16 @@ export const api = {
       device?: string;
     },
   ) => call(InvoiceResponse, `/v1/finance/invoices/${id}/update`, { method: "POST", json: draft }),
+  recordPayment: (
+    invoice_id: string,
+    p: { transaction_id?: string; amount_minor?: string; paid_on?: string; note?: string },
+  ) =>
+    call(InvoiceResponse, `/v1/finance/invoices/${invoice_id}/payments`, {
+      method: "POST",
+      json: { transaction_id: "", amount_minor: "0", paid_on: "", note: "", ...p },
+    }),
+  unlinkPayment: (id: string) =>
+    call(InvoiceResponse, `/v1/finance/payments/${id}/unlink`, { method: "POST", json: {} }),
   deleteInvoice: (id: string) =>
     call(z.object({}), `/v1/finance/invoices/${id}/delete`, { method: "POST", json: {} }),
   previewInvoice: (id: string) =>

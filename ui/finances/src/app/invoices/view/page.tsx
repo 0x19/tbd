@@ -10,6 +10,7 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { useFinance } from "@/app/providers";
+import { PaymentsCard } from "@/components/invoices/payments-card";
 import { PageTitle } from "@/components/kit";
 import { StatusBadge } from "@/components/status-badge";
 import {
@@ -552,6 +553,12 @@ function InvoiceView() {
               </Field>
             </CardContent>
           </Card>
+
+          <PaymentsCard
+            invoice={inv}
+            clientName={clients.data?.clients.find((x) => x.id === inv.client_id)?.name ?? ""}
+            onChanged={(next) => loaded.setData({ invoice: next })}
+          />
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">

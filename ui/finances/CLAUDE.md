@@ -47,7 +47,12 @@ same conventions; read `ui/chaos/CLAUDE.md` for what is the kit's and what is ou
   registered redirect: reads `state`+`code` from its URL, POSTs `CompleteConnection`,
   then scrubs the URL), `/invoices/` (drafts, preview, approve, PDF; a row duplicates into a new draft,
   a draft row deletes after a confirm dialog, `n` starts a draft; the view edits a
-  draft's client, VAT treatment, currency and series beside its dates and lines), `/clients/` (a table; a sheet per
+  draft's client, VAT treatment, currency and series beside its dates and lines; on an
+  issued invoice `components/invoices/payments-card.tsx` lists what settled it -- the
+  matcher's bank matches and hand records -- with Undo = `UnlinkPayment` and "Record
+  payment" = `RecordPayment`, either a credit picked from `ListTransactions` searched
+  by the client's name or an amount and a day the bank has not shown; the list's
+  Outstanding and Overdue tiles count what is still owed, `total - paid`), `/clients/` (a table; a sheet per
   client with its details and line templates), `/issuer/` (one form in sections), `/connectors/`
   (one flat list drawn from the `WatchConnectors` SSE feed via `useEvents`: a pull's
   progress and outcome, a relink, a removal arrive as events; `useFetch` polls only
