@@ -7,6 +7,11 @@ export const en: Dict = {};
 export const hr: Dict = {
   "kinds.gmail.label": "Gmail / Google Workspace",
   "kinds.gmail.description": "Računi i potvrde koje stižu kao PDF privici.",
+  "kinds.mojeracun.label": "Moj-eRačun",
+  "kinds.mojeracun.description":
+    "Ulazni e-računi tvrtke u Moj-eRačunu: UBL kakav je dostavljen, njegov ugrađeni PDF te dobavljač, broj, datum i iznos pročitani iz njega.",
+  "kinds.mojeracun.consent_note":
+    "API korisnik i lozinka tvrtke u Moj-eRačunu, njezin OIB, poslovna jedinica ako je registrirana i SoftwareId koji je Moj-eRačun izdao integratoru (integracije@moj-eracun.hr). Samo čitanje: dokumenti se preuzimaju, ništa se ne potvrđuje, ne šalje ni ne mijenja u Moj-eRačunu.",
   "kinds.eracuni.label": "e-računi",
   "kinds.eracuni.description":
     "Primljeni računi i sandučić e-računa tvrtke kod posrednika e-računi, s dobavljačem, brojem, datumom i iznosom kako ih e-računi zna.",

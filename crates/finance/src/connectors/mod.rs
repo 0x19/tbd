@@ -14,6 +14,7 @@
 pub mod crypto;
 pub mod eracuni;
 pub mod gmail;
+pub mod mojeracun;
 pub mod store;
 
 use async_trait::async_trait;
@@ -358,6 +359,7 @@ pub type KindsFactory = std::sync::Arc<dyn Fn() -> Vec<Box<dyn Connector>> + Sen
 pub fn registry(config: &crate::config::Connectors) -> Vec<Box<dyn Connector>> {
     vec![
         Box::new(gmail::Gmail::new(config)),
+        Box::new(mojeracun::MojEracun::new()),
         Box::new(eracuni::Eracuni::new()),
     ]
 }

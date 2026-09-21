@@ -200,9 +200,10 @@ register and the arithmetic to check against.
 
 ### F7. eRačun inbox
 
-*2026-09-21: the cheap form landed -- the `eracuni` connector pulls received invoices
-and the inbox as documents with e-računi's facts (`docs/finance/eracuni.md`); parsing
-UBL structurally, below, remains.*
+*2026-09-21: the cheap form landed -- the `mojeracun` connector pulls the inbox as
+documents with the facts read from each UBL and its embedded PDF
+(`docs/finance/mojeracun.md`; `eracuni` likewise for e-računi); the VAT lines, below,
+remain.*
 
 Since 1 January 2026 every VAT-registered company must receive domestic e-invoices and
 fiscalise their receipt. Croatian suppliers now arrive as UBL 2.1 or CII XML through an

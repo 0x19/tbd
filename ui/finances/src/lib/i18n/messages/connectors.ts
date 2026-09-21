@@ -33,11 +33,19 @@ export const en: Dict = {
   "connectors.token.title": "Paste the credentials for {kind}",
   "connectors.token.desc":
     "Nothing leaves this page except to the provider; the values are sealed at rest and never shown again.",
-  "connectors.token.username": "API user",
-  "connectors.token.secret": "API secret key",
-  "connectors.token.token": "Web-services token",
-  "connectors.token.where":
+  "connectors.token.optional": "optional",
+  "connectors.token.eracuni.username": "API user",
+  "connectors.token.eracuni.secretKey": "API secret key",
+  "connectors.token.eracuni.token": "Web-services token",
+  "connectors.token.eracuni.where":
     "In e-računi: Postavke → Web servisi. Web services must be enabled for the company first.",
+  "connectors.token.mojeracun.username": "API user (the Moj-eRačun login)",
+  "connectors.token.mojeracun.password": "Password",
+  "connectors.token.mojeracun.companyId": "Company OIB",
+  "connectors.token.mojeracun.companyBu": "Business unit",
+  "connectors.token.mojeracun.softwareId": "SoftwareId",
+  "connectors.token.mojeracun.where":
+    "The SoftwareId is issued by Moj-eRačun's integration department (integracije@moj-eracun.hr) to the integrator; the login is the company's Moj-eRačun user. The business unit only if one is registered there.",
   "connectors.token.link": "Link",
   "connectors.token.linking": "Checking with the provider…",
   "connectors.token.linked": "Linked. The first pull runs now.",
@@ -124,11 +132,19 @@ export const hr: Dict = {
   "connectors.token.title": "Zalijepite pristupne podatke za {kind}",
   "connectors.token.desc":
     "Ništa ne odlazi s ove stranice osim pružatelju; vrijednosti se čuvaju zapečaćene i više se ne prikazuju.",
-  "connectors.token.username": "API korisnik",
-  "connectors.token.secret": "API tajni ključ",
-  "connectors.token.token": "Token web servisa",
-  "connectors.token.where":
+  "connectors.token.optional": "neobvezno",
+  "connectors.token.eracuni.username": "API korisnik",
+  "connectors.token.eracuni.secretKey": "API tajni ključ",
+  "connectors.token.eracuni.token": "Token web servisa",
+  "connectors.token.eracuni.where":
     "U e-računima: Postavke → Web servisi. Web servisi moraju prvo biti uključeni za tvrtku.",
+  "connectors.token.mojeracun.username": "API korisnik (prijava u Moj-eRačun)",
+  "connectors.token.mojeracun.password": "Lozinka",
+  "connectors.token.mojeracun.companyId": "OIB tvrtke",
+  "connectors.token.mojeracun.companyBu": "Poslovna jedinica",
+  "connectors.token.mojeracun.softwareId": "SoftwareId",
+  "connectors.token.mojeracun.where":
+    "SoftwareId izdaje odjel integracija Moj-eRačuna (integracije@moj-eracun.hr) integratoru; prijava je korisnik tvrtke u Moj-eRačunu. Poslovna jedinica samo ako je tamo registrirana.",
   "connectors.token.link": "Poveži",
   "connectors.token.linking": "Provjeravam kod pružatelja…",
   "connectors.token.linked": "Povezano. Prvi dohvat kreće sada.",

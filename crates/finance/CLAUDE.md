@@ -58,12 +58,16 @@ The finance service. gRPC only. Scaffolded by `tbd new service` (docs/tbd/README
   longer do. See `docs/finance/invoice.md`. `service_invoices.rs` holds the RPCs.
 - `connectors/`: linked external accounts documents are pulled from (mailboxes today,
   portals later). `mod.rs` is the registry and the `Connector` trait -- adding a kind is
-  one file and one line; the UI reads the registry (two kinds today: `gmail.rs`, and
-  `eracuni.rs`, the company's received invoices and e-invoice inbox at its intermediary,
-  `Auth::Token`: `start` has no URL and the page completes with the pasted credentials,
-  proven by one call first; its documents carry `Found.facts`, which `store_one` writes
-  as the document's fields marked `provider`, and `write_read` never overrules such a
-  field -- `docs/finance/eracuni.md`). Credentials are sealed at rest
+  one file and one line; the UI reads the registry (three kinds today: `gmail.rs`;
+  `mojeracun.rs`, the company's incoming e-invoices at Moj-eRačun, `queryInbox` then
+  `receive` per new `ElectronicId`, the UBL read with `roxmltree` for the facts and its
+  embedded PDF, the XML itself the document when there is none, nothing confirmed back
+  -- `docs/finance/mojeracun.md`; and `eracuni.rs`, the same for e-računi with an API
+  whose answers are not documented -- `docs/finance/eracuni.md`). A token kind
+  (`Auth::Token`) has no URL: `start` answers with the state, the page completes with the
+  pasted credentials as `code`, and the kind proves them with one call first. Its
+  documents carry `Found.facts`, which `store_one` writes as the document's fields marked
+  `provider`, and `write_read` never overrules such a field. Credentials are sealed at rest
   (`crypto.rs`, ChaCha20-Poly1305 under `FINANCE_CONNECTOR_KEY`, bound to the row id) and
   only `store.rs` opens them, per call. `gmail.rs` links through Google OAuth (read-only
   scope) and keeps PDF attachments; a pull holds a session whose access token is re-minted

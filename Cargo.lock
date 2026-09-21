@@ -6193,6 +6193,7 @@ dependencies = [
  "regex",
  "reqwest 0.12.28",
  "ring",
+ "roxmltree 0.20.0",
  "serde",
  "serde_json",
  "sha2 0.10.9",

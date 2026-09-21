@@ -140,6 +140,18 @@ export default function ConnectorsPage() {
   );
 }
 
+/** What a kind linked by pasting asks for; the labels are `connectors.token.<kind>.<name>`. */
+const TOKEN_FIELDS: Record<string, { name: string; secret?: boolean; optional?: boolean }[]> = {
+  eracuni: [{ name: "username" }, { name: "secretKey", secret: true }, { name: "token", secret: true }],
+  mojeracun: [
+    { name: "username" },
+    { name: "password", secret: true },
+    { name: "companyId" },
+    { name: "companyBu", optional: true },
+    { name: "softwareId" },
+  ],
+};
+
 function LinkDialog({
   open,
   onOpenChange,
@@ -163,14 +175,14 @@ function LinkDialog({
   const [busy, setBusy] = useState(false);
   // A kind linked by pasting credentials: the second step of the dialog.
   const [pending, setPending] = useState<{ state: string } | null>(null);
-  const [creds, setCreds] = useState({ username: "", secretKey: "", token: "" });
+  const [creds, setCreds] = useState<Record<string, string>>({});
   useEffect(() => {
     if (open) {
       setParty(defaultParty);
       setKind(kinds.find((k) => k.configured)?.name ?? "");
       setPurpose("both");
       setPending(null);
-      setCreds({ username: "", secretKey: "", token: "" });
+      setCreds({});
     }
   }, [open, defaultParty, kinds]);
   const chosen = kinds.find((k) => k.name === kind);
@@ -198,7 +210,8 @@ function LinkDialog({
     if (!pending) return;
     setBusy(true);
     try {
-      await api.completeConnector(pending.state, JSON.stringify(creds));
+      const filled = Object.fromEntries(Object.entries(creds).filter(([, v]) => v.trim() !== ""));
+      await api.completeConnector(pending.state, JSON.stringify(filled));
       toast.success(t("connectors.token.linked"));
       onOpenChange(false);
       onLinked?.();
@@ -208,7 +221,8 @@ function LinkDialog({
       setBusy(false);
     }
   };
-  const credsReady = Object.values(creds).every((v) => v.trim().length > 0);
+  const fields = TOKEN_FIELDS[kind] ?? [];
+  const credsReady = fields.every((f) => f.optional || (creds[f.name] ?? "").trim().length > 0);
 
   if (pending) {
     return (
@@ -227,36 +241,25 @@ function LinkDialog({
               if (credsReady && !busy) void link();
             }}
           >
-            <div className="space-y-1">
-              <Label className="text-xs">{t("connectors.token.username")}</Label>
-              <Input
-                value={creds.username}
-                onChange={(e) => setCreds({ ...creds, username: e.target.value })}
-                autoComplete="off"
-                autoFocus
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">{t("connectors.token.secret")}</Label>
-              <Input
-                type="password"
-                value={creds.secretKey}
-                onChange={(e) => setCreds({ ...creds, secretKey: e.target.value })}
-                autoComplete="off"
-                className="font-mono"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">{t("connectors.token.token")}</Label>
-              <Input
-                type="password"
-                value={creds.token}
-                onChange={(e) => setCreds({ ...creds, token: e.target.value })}
-                autoComplete="off"
-                className="font-mono"
-              />
-            </div>
-            <p className="text-muted-foreground text-xs">{t("connectors.token.where")}</p>
+            {fields.map((f, i) => (
+              <div key={f.name} className="space-y-1">
+                <Label className="text-xs">
+                  {t(`connectors.token.${kind}.${f.name}`)}
+                  {f.optional ? (
+                    <span className="text-muted-foreground ml-1">({t("connectors.token.optional")})</span>
+                  ) : null}
+                </Label>
+                <Input
+                  type={f.secret ? "password" : "text"}
+                  value={creds[f.name] ?? ""}
+                  onChange={(e) => setCreds({ ...creds, [f.name]: e.target.value })}
+                  autoComplete="off"
+                  autoFocus={i === 0}
+                  className={f.secret ? "font-mono" : undefined}
+                />
+              </div>
+            ))}
+            <p className="text-muted-foreground text-xs">{t(`connectors.token.${kind}.where`)}</p>
           </form>
           <DialogFooter>
             <Button variant="outline" onClick={() => setPending(null)} disabled={busy}>

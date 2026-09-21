@@ -77,6 +77,10 @@ ring              = "0.17"
 # no network, fonts embedded from the crate. MIT.
 typst-as-lib      = { version = "0.16", default-features = false }
 typst             = "0.15"
+# UBL e-invoices (finance connectors) and tax filings are XML; roxmltree is a
+# pure-Rust, read-only DOM with no advisories. MIT/Apache-2.0.
+roxmltree         = "0.20"
+
 # The invoicing period and the time printed on an invoice are Europe/Zagreb.
 chrono-tz         = "0.10"
 typst-pdf         = "0.15"

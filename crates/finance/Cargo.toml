@@ -49,6 +49,7 @@ tonic.workspace = true
 tonic-health.workspace = true
 tonic-reflection.workspace = true
 tracing.workspace = true
+roxmltree.workspace = true
 
 [dev-dependencies]
 base64.workspace = true
