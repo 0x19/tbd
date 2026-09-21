@@ -50,6 +50,10 @@ COPY .cargo ./.cargo
 COPY crates ./crates
 COPY proto ./proto
 COPY migrations ./migrations
+# Data a crate compiles in with include_str! (the finance chart of accounts
+# under configs/finance/hr/); the runtime stage copies configs again for the
+# files read at start.
+COPY configs ./configs
 RUN cargo build --locked --release -p tbd-${BIN} \
  && cp target/release/${BIN} /usr/local/bin/app
 
