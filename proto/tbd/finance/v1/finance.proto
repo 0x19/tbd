@@ -820,7 +820,8 @@ message Filing {
   // A few figures per form, keyed as in `values`: PD "1", "2", "3", "38",
   // "44", "55", "56", "57", "59"; PDV "000", "104", "105", "200.Vrijednost",
   // "200.Porez", "300.Vrijednost", "300.Porez", "400", "630", "640"; JOPPD
-  // "A.PredujamPoreza.P1" and so on. Only keys the form carries.
+  // page A totals plus "B.P11", "B.P162", "B.P141" summed over page B. Only
+  // keys the form carries.
   map<string, string> headline = 13;
   // Every body value by path, Podatak prefix dropped ("1", "200.Porez",
   // "GP00", "A.Doprinosi.ZdravstvenoOsiguranje.P1"). Only from GetFiling.

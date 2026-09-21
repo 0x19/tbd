@@ -54,7 +54,6 @@ pub const fn headline_keys(form: Form) -> &'static [&'static str] {
             "A.BrojOsoba",
             "A.BrojRedaka",
             "A.PredujamPoreza.P1",
-            "A.PredujamPoreza.P2",
             "A.Doprinosi.GeneracijskaSolidarnost.P1",
             "A.Doprinosi.KapitaliziranaStednja.P1",
             "A.Doprinosi.ZdravstvenoOsiguranje.P1",

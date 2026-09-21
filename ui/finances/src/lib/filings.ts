@@ -25,11 +25,12 @@ export const HEADLINE: Record<string, string[]> = {
   joppd: [
     "A.BrojOsoba",
     "A.BrojRedaka",
+    "B.P11",
     "A.PredujamPoreza.P1",
-    "A.PredujamPoreza.P2",
     "A.Doprinosi.GeneracijskaSolidarnost.P1",
     "A.Doprinosi.KapitaliziranaStednja.P1",
     "A.Doprinosi.ZdravstvenoOsiguranje.P1",
+    "B.P162",
   ],
   pd_ipo: [
     "Podaci.Podaci1.Sveukupno.S1",

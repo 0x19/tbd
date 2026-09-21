@@ -19,7 +19,7 @@ Upload one or several `.xml` files on `/filings/` (or `UploadDocument` with
 | PDV | `ObrazacPDV` | v10-0 → v11-0 | `000` all supplies, `100`…`111` the non-taxable section, pairs `200.Vrijednost`/`200.Porez` (taxable, II) and `300.…` (input VAT, III), `400` the signed result (II − III: positive to pay, negative a refund), `500` the deduction pro-rata in %, `610`…`660` the other data (`630` services received from abroad, `640` services provided abroad) |
 | PDV-S | `ObrazacPDVS` | v1-0 | one row per EU supplier, `IsporukeUkupno.I1`, `I2` |
 | ZP | `ObrazacZP` | v1-0 | one row per EU customer, `IsporukeUkupno.I1`…`I4` |
-| JOPPD | `ObrazacJOPPD` | v1-1 | page A as `A.…` (`A.PredujamPoreza.P1` gross, `.P2` tax, `A.Doprinosi.….P1`), page B one row per recipient (`P1`…`P17`) |
+| JOPPD | `ObrazacJOPPD` | v1-1 | page A as `A.…` (`A.PredujamPoreza.P1` income tax and surtax, `A.Doprinosi.….P1` the contribution totals), page B one row per recipient (`P1`…`P17`: `P11` gross, `P141` tax, `P162` net paid); the headline adds page B up as `B.P11`, `B.P162`, `B.P141`, since page A has no gross |
 | PD-IPO | `ObrazacPDIPO` | v1-0 | one row per related person and section, `Podaci.Podaci2.Sveukupno.S1` … |
 | TZ | `ObrazacTZ` | v1-1 | `01`…`07` (`02` is a rate with four decimals) |
 

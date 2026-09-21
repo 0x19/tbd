@@ -36,8 +36,9 @@ fn strings(v: &serde_json::Value) -> BTreeMap<String, String> {
 /// A row on the wire; `with_body` adds every value and the rows.
 pub(crate) fn filing_proto(f: FilingRow, with_body: bool) -> Filing {
     let values = strings(&f.values);
+    let rows: Vec<serde_json::Value> = f.rows.as_array().cloned().unwrap_or_default();
     let headline = Form::parse(&f.form)
-        .map(|form| filings::headline(form, &values))
+        .map(|form| filings::headline(form, &values, &rows))
         .unwrap_or_default();
     Filing {
         id: f.document_id.to_string(),

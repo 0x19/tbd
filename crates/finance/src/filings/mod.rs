@@ -228,11 +228,48 @@ pub fn parse(bytes: &[u8]) -> Result<Parsed, ParseError> {
 /// The few figures a listing shows for a form, in display order, only those
 /// the form carries.
 #[must_use]
-pub fn headline(form: Form, values: &BTreeMap<String, String>) -> BTreeMap<String, String> {
-    form::headline_keys(form)
+pub fn headline(
+    form: Form,
+    values: &BTreeMap<String, String>,
+    rows: &[Value],
+) -> BTreeMap<String, String> {
+    let mut out: BTreeMap<String, String> = form::headline_keys(form)
         .iter()
         .filter_map(|k| values.get(*k).map(|v| ((*k).to_owned(), v.clone())))
-        .collect()
+        .collect();
+    // A JOPPD's page A carries the tax and contribution totals but no gross
+    // or net: those are on page B, one row per recipient, so the headline
+    // adds them up (`B.P11` gross, `B.P162` net paid, `B.P141` income tax).
+    if form == Form::Joppd {
+        for field in ["P11", "P162", "P141"] {
+            if let Some(sum) = sum_rows(rows, field) {
+                out.insert(format!("B.{field}"), decimal(sum));
+            }
+        }
+    }
+    out
+}
+
+/// The sum of one field over the rows, in minor units; `None` when no row
+/// carries it, so a missing figure never reads as zero.
+fn sum_rows(rows: &[Value], field: &str) -> Option<i64> {
+    let mut total = None;
+    for row in rows {
+        if let Some(v) = row.get(field).and_then(Value::as_str)
+            && let Ok(m) = minor(v)
+        {
+            total = Some(total.unwrap_or(0) + m);
+        }
+    }
+    total
+}
+
+/// Minor units back to the two-decimal string the forms use.
+#[must_use]
+pub fn decimal(minor: i64) -> String {
+    let sign = if minor < 0 { "-" } else { "" };
+    let abs = minor.unsigned_abs();
+    format!("{sign}{}.{:02}", abs / 100, abs % 100)
 }
 
 /// A decimal string that is not an amount.
@@ -412,7 +449,7 @@ mod tests {
         assert_eq!(p.rows[0]["_kind"], "Primatelji");
         assert_eq!(p.rows[0]["IznosDarovanja"], "500.00");
         assert!(p.error.is_none());
-        let h = headline(Form::Pd, &p.values);
+        let h = headline(Form::Pd, &p.values, &p.rows);
         assert_eq!(h["1"], "177733.47");
         assert!(!h.contains_key("44"), "a key the form lacks is not shown");
     }
@@ -438,7 +475,7 @@ mod tests {
         assert_eq!(p.values["500"], "0.00");
         assert_eq!(p.rows[0]["_kind"], "Preknjizenja.Stavke");
         assert_eq!(p.rows[0]["Iznos"], "5.00");
-        let h = headline(Form::Pdv, &p.values);
+        let h = headline(Form::Pdv, &p.values, &p.rows);
         assert_eq!(h["104"], "1000.00");
     }
 
@@ -460,7 +497,7 @@ mod tests {
         let p = parse(xml.as_bytes()).expect("a PDV-S");
         assert_eq!(p.form, Form::PdvS);
         assert_eq!(
-            headline(Form::PdvS, &p.values)["IsporukeUkupno.I2"],
+            headline(Form::PdvS, &p.values, &p.rows)["IsporukeUkupno.I2"],
             "9167.00"
         );
     }
@@ -484,7 +521,7 @@ mod tests {
         assert_eq!(p.rows[0]["_kind"], "Podaci.Podaci2.Osobe");
         assert_eq!(p.rows[0]["Potrazivanja"]["Potrazivanje"]["Z2"], "97387.68");
         assert_eq!(p.values["Podaci.Podaci2.Sveukupno.S1"], "97387.68");
-        assert_eq!(headline(Form::PdIpo, &p.values).len(), 1);
+        assert_eq!(headline(Form::PdIpo, &p.values, &p.rows).len(), 1);
     }
 
     #[test]
@@ -496,7 +533,7 @@ mod tests {
 <Podatak05>0.00</Podatak05><Podatak06>0.00</Podatak06><Podatak07>0.00</Podatak07></Tijelo></ObrazacTZ>"#;
         let p = parse(xml.as_bytes()).expect("a TZ");
         assert_eq!(p.form, Form::Tz);
-        assert_eq!(headline(Form::Tz, &p.values).len(), 7);
+        assert_eq!(headline(Form::Tz, &p.values, &p.rows).len(), 7);
         assert_eq!(scaled(&p.values["02"], 4), Ok(2000));
     }
 
@@ -528,8 +565,16 @@ mod tests {
         assert_eq!(p.rows[0]["_kind"], "B.Primatelji");
         assert_eq!(p.rows[0]["P4"], "00000000002");
         assert_eq!(p.rows[0]["P162"], "1075.61");
-        let h = headline(Form::Joppd, &p.values);
+        let h = headline(Form::Joppd, &p.values, &p.rows);
         assert_eq!(h["A.BrojOsoba"], "1");
+        assert_eq!(h["B.P11"], "1493.13", "gross is summed from page B");
+        assert_eq!(h["B.P162"], "1075.61");
+        assert!(
+            !h.contains_key("B.P141"),
+            "a field no row carries is not shown"
+        );
+        assert_eq!(decimal(-5), "-0.05");
+        assert_eq!(decimal(1_214_065), "12140.65");
     }
 
     #[test]

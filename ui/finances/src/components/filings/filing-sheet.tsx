@@ -17,7 +17,7 @@ import { api, blobUrl } from "@/lib/api/client";
 import { describe } from "@/lib/api/hooks";
 import type { Filing } from "@/lib/api/schema";
 import { figure, keyOrder, labelOf } from "@/lib/filings";
-import { day, when } from "@/lib/format";
+import { dateOf, when } from "@/lib/format";
 import { useT } from "@/lib/i18n";
 
 type Row = Record<string, unknown>;
@@ -166,7 +166,7 @@ export function FilingSheet({
                 { k: t("filings.author"), v: filing.author || "—" },
                 ...(filing.report_mark ? [{ k: t("filings.report_mark"), v: filing.report_mark }] : []),
                 { k: t("filings.file"), v: filing.filename },
-                { k: t("documents.reader"), v: `${filing.parser_version} · ${day(filing.parsed_at)}` },
+                { k: t("documents.reader"), v: `${filing.parser_version} · ${dateOf(filing.parsed_at)}` },
               ]}
             />
 

@@ -23,7 +23,7 @@ import { api } from "@/lib/api/client";
 import { useFetch } from "@/lib/api/hooks";
 import type { Filing } from "@/lib/api/schema";
 import { figure, FORMS, HEADLINE, labelOf, sumOf } from "@/lib/filings";
-import { day, money } from "@/lib/format";
+import { dateOf, money } from "@/lib/format";
 import { useT } from "@/lib/i18n";
 
 export default function FilingsPage() {
@@ -66,7 +66,7 @@ function Filings() {
 
   const pdTax = sumOf(filings, "44");
   const pdvDue = sumOf(filings, "400");
-  const gross = sumOf(filings, "A.PredujamPoreza.P1");
+  const gross = sumOf(filings, "B.P11");
   const hint = year ? t("filings.kpi.hint_year", { year: String(year) }) : t("filings.kpi.hint_all");
   const errors = filings.filter((f) => f.error).length;
 
@@ -219,7 +219,7 @@ function Filings() {
                         </TableCell>
                       ))}
                       <TableCell className="text-muted-foreground whitespace-nowrap">
-                        {r.prepared_at ? day(r.prepared_at) : "—"}
+                        {dateOf(r.prepared_at)}
                       </TableCell>
                     </TableRow>
                   ))}
