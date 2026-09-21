@@ -5,12 +5,14 @@
 //! amount, number. It runs on every document as it is stored, on every
 //! document it has never seen at start-up, and again on request. A person's
 //! corrections are declared and outlive any re-read. A document of kind
-//! `filing` (an ePorezna form) is handed to [`crate::filings`] instead.
+//! `filing` (an ePorezna form) is handed to [`crate::filings`] instead. A
+//! bank statement ([`statement`]) is, besides, read into bank transactions.
 
 pub mod fields;
 pub mod mail;
 pub mod party;
 pub mod pdf;
+pub mod statement;
 pub mod store;
 
 use sqlx::PgPool;
@@ -67,6 +69,22 @@ pub async fn read(pool: &PgPool, id: Uuid) -> Result<(), StoreError> {
         error.as_deref(),
     )
     .await?;
+    // A bank statement is also the bank's record: its entries become bank
+    // transactions of the account it names, through the one ingest path.
+    if let Some(t) = text.as_deref().filter(|t| statement::is_statement(t)) {
+        if let Some(done) = statement::ingest(pool, t, &to_read.filename).await? {
+            tracing::info!(
+                document = %id,
+                inserted = done.imported.inserted,
+                duplicates = done.imported.duplicates,
+                already_in_feed = done.already_in_feed,
+                unresolved_days = done.unresolved_days,
+                "statement read into bank transactions"
+            );
+        } else {
+            tracing::debug!(document = %id, "statement of an account not kept here");
+        }
+    }
     // Whose it is, from the amount, the date and the text just written.
     if let Some(moved) = party::assign(pool, id).await? {
         tracing::debug!(document = %id, party = %moved.party_id, by = moved.by.as_str(), "document party");

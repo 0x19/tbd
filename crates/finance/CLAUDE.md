@@ -143,7 +143,14 @@ The finance service. gRPC only. Scaffolded by `tbd new service` (docs/tbd/README
   `zip.ts` in Rust: no dependency, PDFs do not compress), so a month of PDFs never has
   to fit the gateway's 2 MiB body; the zip's name is on the row (`mails.bundle`) and its
   receipts are linked like any attachment. `service_mail.rs` holds the RPCs.
-- `documents/`: what a pulled receipt says. `pdf.rs` turns the bytes into text in-process
+- `documents/`: what a pulled receipt says. `statement.rs` reads a mailed Erste
+  statement ("IZVOD PROMETA PO RAČUNU") into bank transactions of the account it
+  names, through `import::ingest_pages` as provider-shaped rows keyed
+  `izvod:<payment reference>`, direction from the day's totals (a mixed day is the
+  subset summing to the credits), entries the feed already holds skipped by day and
+  signed amount; the reader runs it after the fields, so a statement that arrives by
+  mail settles invoices without anyone's hand (`docs/finance/invoice.md`, Money in).
+  `pdf.rs` turns the bytes into text in-process
   (`pdf-extract`, fenced against its panics, off the runtime; no OCR, a scan reads as
   empty and says so). `fields.rs` reads vendor, date, amount and number out of the text
   with labelled rules, each field carrying *how* it was found (`By`: label, sender,

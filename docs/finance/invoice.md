@@ -137,3 +137,17 @@ transaction of the party, or an amount and a day the bank has not shown.
 not remade, and a paid invoice with nothing left covering it goes back to
 `approved`, the one step back the machine has. Amount alone never matches: two
 months can bill the same figure.
+
+The matcher sees only bank transactions, and the bank feed reaches 90 days
+back from the day the account was linked (March 2026). What the feed never
+saw comes from the **statements**: a mailed Erste statement ("IZVOD PROMETA PO
+RAČUNU", PDF) that lands in the documents store is read entry by entry
+(`documents/statement.rs`: counterparty, IBAN, what the payer wrote, the
+recipient's reference, the bank's payment reference, the amount; a credit or a
+debit from the day's two totals) and its entries go through the one ingest
+path as provider-shaped rows, keyed `izvod:<payment reference>`. An entry the
+feed already holds (same day, same signed amount on that account) is skipped,
+so a month covered by both is counted once. From there the matcher settles the
+invoice the payer named, the same as for a feed row. A statement of an account
+not kept here is left alone. Statements exported by hand (George's HTML) are
+not read; a PDF export is.
