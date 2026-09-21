@@ -40,7 +40,7 @@ depreciation rates, interest) are basis points; each computation names its round
 (half up to the cent, at which step) in one place, `books::money`, with tests taken from
 the 2025 figures (12.140,65; 1.011,72; 7.449,87; 150,00).
 
-**Chart of accounts is data.** `configs/finance/hr/chart.toml` seeds the RRiF-style
+**Chart of accounts is data.** `configs/finance/hr/chart-rrif-2025.toml` seeds the RRiF-style
 chart the accountant uses (the 77 accounts in `gfi-2025.md` plus the groups the AOP map
 needs); a party may add analytic accounts under a synthetic one. The AOP map
 (`configs/finance/hr/gfi-2025.toml`) and the PD rules (`configs/finance/hr/pd-2025.toml`)
@@ -109,7 +109,7 @@ the dataviz skill; numbers are BigInt minor units as today.
 | # | Delivers | Proof |
 |---|---|---|
 | 0 | This documentation | reviewed by you |
-| 1 | `books` core: chart seed, periods, journal with the balance invariant, opening balance import, `TrialBalance` RPC and page | chaos: `grpc_finance_books_balanced`, `finance_trial_balance` operation; trial balance from the imported 2025 opening equals the migration column |
+| 1 | `books` core: chart seed, periods, journal with the balance invariant, opening balance import, `TrialBalance` RPC and page (`docs/finance/books.md`) | chaos: `grpc_finance_books_balanced`, `finance_trial_balance` and `finance_import_opening` operations; trial balance from the imported 2025 opening equals the migration column (`expected/opening-2025.csv`, held by `crates/finance/tests/it/books.rs`) |
 | 2 | Posting rules for existing sources: categorised bank transactions, invoices (receivable, revenue by residence, FX), documents (expense, payable, input VAT, reverse charge), payroll months, member loan, small inventory | chaos replay of 2025 H2 sources reaches the "period" column of the trial balance account by account |
 | 3 | Year-end: fixed assets and depreciation, distribution, interest accrual, PD computation, tax accrual and netting, BIL/RDG/DOP mapping, consistency checks from FINA's Kont sheet | chaos replay of 2025 equals every filed AOP and PD row; stress invariants |
 | 4 | Exports (xlsx, FINA xls fill, PD PDF, notes, decisions) and the three dashboard pages | export bytes hashed in chaos; FINA workbook re-read shows zero errors |

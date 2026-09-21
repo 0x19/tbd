@@ -19,6 +19,8 @@ extend-exclude = [
   # An ePorezna form as filed: Croatian element names and the company's own data.
   "crates/finance/tests/fixtures/filings/",
   "docs/accountant/expected/",
+  # The chart of accounts: the accountant's Croatian account names, verbatim.
+  "configs/finance/hr/",
   # mobile: buf-generated Dart (protobuf's own accessor names) and Xcode's storyboard ids.
   "mobile/packages/tbd_proto/lib/gen/",
   "mobile/apps/*/ios/",

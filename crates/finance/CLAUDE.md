@@ -186,6 +186,23 @@ The finance service. gRPC only. Scaffolded by `tbd new service` (docs/tbd/README
   `text` so search reaches it, and skips `party::assign`; a filing never moves party
   (`documents::store::update` refuses). Amounts stay strings; `minor()` converts
   exactly. `service_filings.rs` holds `ListFilings`/`GetFiling`. `docs/finance/filings.md`.
+- `books/`: the general ledger of a company party (`docs/finance/books.md`; phase 1 of
+  `docs/accountant/plan.md`). `chart.rs` is the RRiF chart compiled in from
+  `configs/finance/hr/chart-rrif-2025.toml` (the 77 accounts of the 2025 books and their
+  groups; class and kind from the first digit) and seeded per company on its first books
+  call; a unit test holds that every account of `docs/accountant/expected/trial-balance.csv`
+  is in it. `store.rs` is the one writer: `import_opening` keeps a year's opening trial
+  balance *as handed over*, both sides and signed, at its `as_of` date, replacing an earlier
+  import, balanced to the cent, every code an analytic account, every month open;
+  `post` writes an entry (two or more lines, one positive side each, balanced, month open,
+  source key unique so a rule re-run is a conflict, not a second entry) and the deferred
+  constraint trigger `finance.assert_entry_balanced` holds the same at commit for
+  anything that bypasses the code; `set_period` moves a month between open and closed,
+  locked is final; `trial_balance` is opening plus movement through a month, every
+  account with either, code order. Books belong to companies (a person's party is
+  refused); reads need the grant, writes need `own` (`owns`). No RPC posts an entry:
+  postings come from rules in phase 2. `service_books.rs` holds the RPCs and computes the
+  totals, class sums and `balanced` in integers once.
 - `reconcile/`: the accountant's month. `mod.rs` is two pure rule sets with their tests
   on the real August statement: *need* (what the accountant needs from us: `eracun` for an
   HR IBAN, since domestic B2B is e-invoiced; `none` for state-budget references (HR68),

@@ -299,6 +299,329 @@
         }
       }
     },
+    "/v1/finance/books/accounts": {
+      "get": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/ListLedgerAccounts",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/ListLedgerAccounts` on the `finance` backend.",
+        "operationId": "FinanceService.ListLedgerAccounts",
+        "parameters": [
+          {
+            "name": "party_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.ListLedgerAccountsResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.ListLedgerAccountsResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/UpsertLedgerAccount",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/UpsertLedgerAccount` on the `finance` backend.",
+        "operationId": "FinanceService.UpsertLedgerAccount",
+        "requestBody": {
+          "description": "`tbd.finance.v1.UpsertLedgerAccountRequest`; path variables override their fields",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/tbd.finance.v1.UpsertLedgerAccountRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.UpsertLedgerAccountResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.UpsertLedgerAccountResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/finance/books/opening": {
+      "post": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/ImportOpeningBalances",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/ImportOpeningBalances` on the `finance` backend.",
+        "operationId": "FinanceService.ImportOpeningBalances",
+        "requestBody": {
+          "description": "`tbd.finance.v1.ImportOpeningBalancesRequest`; path variables override their fields",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/tbd.finance.v1.ImportOpeningBalancesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.ImportOpeningBalancesResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.ImportOpeningBalancesResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/finance/books/periods": {
+      "get": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/ListPeriods",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/ListPeriods` on the `finance` backend.",
+        "operationId": "FinanceService.ListPeriods",
+        "parameters": [
+          {
+            "name": "party_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fiscal_year",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.ListPeriodsResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.ListPeriodsResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/finance/books/periods/close": {
+      "post": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/ClosePeriod",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/ClosePeriod` on the `finance` backend.",
+        "operationId": "FinanceService.ClosePeriod",
+        "requestBody": {
+          "description": "`tbd.finance.v1.ClosePeriodRequest`; path variables override their fields",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/tbd.finance.v1.ClosePeriodRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.ClosePeriodResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.ClosePeriodResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/finance/books/periods/lock": {
+      "post": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/LockPeriod",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/LockPeriod` on the `finance` backend.",
+        "operationId": "FinanceService.LockPeriod",
+        "requestBody": {
+          "description": "`tbd.finance.v1.LockPeriodRequest`; path variables override their fields",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/tbd.finance.v1.LockPeriodRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.LockPeriodResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.LockPeriodResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/finance/books/trial-balance": {
+      "get": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/TrialBalance",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/TrialBalance` on the `finance` backend.",
+        "operationId": "FinanceService.TrialBalance",
+        "parameters": [
+          {
+            "name": "party_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fiscal_year",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "through_month",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.TrialBalanceResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.TrialBalanceResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/finance/categories": {
       "get": {
         "tags": [
@@ -4843,6 +5166,35 @@
           }
         }
       },
+      "tbd.finance.v1.ClosePeriodRequest": {
+        "type": "object",
+        "description": "`tbd.finance.v1.ClosePeriodRequest`",
+        "properties": {
+          "fiscal_year": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "month": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "party_id": {
+            "type": "string"
+          },
+          "reopen": {
+            "type": "boolean"
+          }
+        }
+      },
+      "tbd.finance.v1.ClosePeriodResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.ClosePeriodResponse`",
+        "properties": {
+          "period": {
+            "$ref": "#/components/schemas/tbd.finance.v1.Period"
+          }
+        }
+      },
       "tbd.finance.v1.CompleteConnectionRequest": {
         "type": "object",
         "description": "`tbd.finance.v1.CompleteConnectionRequest`",
@@ -5504,6 +5856,49 @@
           }
         }
       },
+      "tbd.finance.v1.ImportOpeningBalancesRequest": {
+        "type": "object",
+        "description": "`tbd.finance.v1.ImportOpeningBalancesRequest`",
+        "properties": {
+          "as_of": {
+            "type": "string"
+          },
+          "fiscal_year": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "party_id": {
+            "type": "string"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/tbd.finance.v1.OpeningBalance"
+            }
+          },
+          "source": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.finance.v1.ImportOpeningBalancesResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.ImportOpeningBalancesResponse`",
+        "properties": {
+          "accounts": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "total_credit_minor": {
+            "type": "string",
+            "format": "int64"
+          },
+          "total_debit_minor": {
+            "type": "string",
+            "format": "int64"
+          }
+        }
+      },
       "tbd.finance.v1.Invoice": {
         "type": "object",
         "description": "`tbd.finance.v1.Invoice`",
@@ -5784,6 +6179,34 @@
           }
         }
       },
+      "tbd.finance.v1.LedgerAccount": {
+        "type": "object",
+        "description": "`tbd.finance.v1.LedgerAccount`",
+        "properties": {
+          "archived": {
+            "type": "boolean"
+          },
+          "class": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "code": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "parent_code": {
+            "type": "string"
+          },
+          "synthetic": {
+            "type": "boolean"
+          }
+        }
+      },
       "tbd.finance.v1.LineTemplate": {
         "type": "object",
         "description": "`tbd.finance.v1.LineTemplate`",
@@ -6037,6 +6460,18 @@
           }
         }
       },
+      "tbd.finance.v1.ListLedgerAccountsResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.ListLedgerAccountsResponse`",
+        "properties": {
+          "accounts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/tbd.finance.v1.LedgerAccount"
+            }
+          }
+        }
+      },
       "tbd.finance.v1.ListLineTemplatesResponse": {
         "type": "object",
         "description": "`tbd.finance.v1.ListLineTemplatesResponse`",
@@ -6089,6 +6524,22 @@
           }
         }
       },
+      "tbd.finance.v1.ListPeriodsResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.ListPeriodsResponse`",
+        "properties": {
+          "fiscal_year": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "periods": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/tbd.finance.v1.Period"
+            }
+          }
+        }
+      },
       "tbd.finance.v1.ListRulesResponse": {
         "type": "object",
         "description": "`tbd.finance.v1.ListRulesResponse`",
@@ -6116,6 +6567,32 @@
             "items": {
               "$ref": "#/components/schemas/tbd.finance.v1.Transaction"
             }
+          }
+        }
+      },
+      "tbd.finance.v1.LockPeriodRequest": {
+        "type": "object",
+        "description": "`tbd.finance.v1.LockPeriodRequest`",
+        "properties": {
+          "fiscal_year": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "month": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "party_id": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.finance.v1.LockPeriodResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.LockPeriodResponse`",
+        "properties": {
+          "period": {
+            "$ref": "#/components/schemas/tbd.finance.v1.Period"
           }
         }
       },
@@ -6344,6 +6821,23 @@
           }
         }
       },
+      "tbd.finance.v1.OpeningBalance": {
+        "type": "object",
+        "description": "`tbd.finance.v1.OpeningBalance`",
+        "properties": {
+          "account_code": {
+            "type": "string"
+          },
+          "credit_minor": {
+            "type": "string",
+            "format": "int64"
+          },
+          "debit_minor": {
+            "type": "string",
+            "format": "int64"
+          }
+        }
+      },
       "tbd.finance.v1.Party": {
         "type": "object",
         "description": "`tbd.finance.v1.Party`",
@@ -6358,6 +6852,26 @@
             "type": "string"
           },
           "kind": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.finance.v1.Period": {
+        "type": "object",
+        "description": "`tbd.finance.v1.Period`",
+        "properties": {
+          "changed_at": {
+            "type": "string"
+          },
+          "fiscal_year": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "month": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "status": {
             "type": "string"
           }
         }
@@ -6981,6 +7495,150 @@
           }
         }
       },
+      "tbd.finance.v1.TrialBalanceClass": {
+        "type": "object",
+        "description": "`tbd.finance.v1.TrialBalanceClass`",
+        "properties": {
+          "balance_minor": {
+            "type": "string",
+            "format": "int64"
+          },
+          "class": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "opening_credit_minor": {
+            "type": "string",
+            "format": "int64"
+          },
+          "opening_debit_minor": {
+            "type": "string",
+            "format": "int64"
+          },
+          "period_credit_minor": {
+            "type": "string",
+            "format": "int64"
+          },
+          "period_debit_minor": {
+            "type": "string",
+            "format": "int64"
+          },
+          "total_credit_minor": {
+            "type": "string",
+            "format": "int64"
+          },
+          "total_debit_minor": {
+            "type": "string",
+            "format": "int64"
+          }
+        }
+      },
+      "tbd.finance.v1.TrialBalanceResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.TrialBalanceResponse`",
+        "properties": {
+          "balanced": {
+            "type": "boolean"
+          },
+          "classes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/tbd.finance.v1.TrialBalanceClass"
+            }
+          },
+          "currency": {
+            "type": "string"
+          },
+          "fiscal_year": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "opening_as_of": {
+            "type": "string"
+          },
+          "party_id": {
+            "type": "string"
+          },
+          "periods": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/tbd.finance.v1.Period"
+            }
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/tbd.finance.v1.TrialBalanceRow"
+            }
+          },
+          "through_month": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "total_credit_minor": {
+            "type": "string",
+            "format": "int64"
+          },
+          "total_debit_minor": {
+            "type": "string",
+            "format": "int64"
+          },
+          "years": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        }
+      },
+      "tbd.finance.v1.TrialBalanceRow": {
+        "type": "object",
+        "description": "`tbd.finance.v1.TrialBalanceRow`",
+        "properties": {
+          "account_code": {
+            "type": "string"
+          },
+          "balance_minor": {
+            "type": "string",
+            "format": "int64"
+          },
+          "class": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "opening_credit_minor": {
+            "type": "string",
+            "format": "int64"
+          },
+          "opening_debit_minor": {
+            "type": "string",
+            "format": "int64"
+          },
+          "period_credit_minor": {
+            "type": "string",
+            "format": "int64"
+          },
+          "period_debit_minor": {
+            "type": "string",
+            "format": "int64"
+          },
+          "total_credit_minor": {
+            "type": "string",
+            "format": "int64"
+          },
+          "total_debit_minor": {
+            "type": "string",
+            "format": "int64"
+          }
+        }
+      },
       "tbd.finance.v1.UnlinkDocumentRequest": {
         "type": "object",
         "description": "`tbd.finance.v1.UnlinkDocumentRequest`",
@@ -7209,6 +7867,30 @@
         "properties": {
           "issuer": {
             "$ref": "#/components/schemas/tbd.finance.v1.IssuerProfile"
+          }
+        }
+      },
+      "tbd.finance.v1.UpsertLedgerAccountRequest": {
+        "type": "object",
+        "description": "`tbd.finance.v1.UpsertLedgerAccountRequest`",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "party_id": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.finance.v1.UpsertLedgerAccountResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.UpsertLedgerAccountResponse`",
+        "properties": {
+          "account": {
+            "$ref": "#/components/schemas/tbd.finance.v1.LedgerAccount"
           }
         }
       },

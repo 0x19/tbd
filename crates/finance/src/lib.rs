@@ -5,6 +5,7 @@
 //! and from the chaos tool with fault injection and counters attached.
 
 pub mod banking;
+pub mod books;
 pub mod categorise;
 pub mod config;
 pub mod connectors;
@@ -16,6 +17,7 @@ pub mod mail;
 pub mod money;
 pub mod reconcile;
 mod service;
+mod service_books;
 mod service_connectors;
 mod service_documents;
 mod service_filings;

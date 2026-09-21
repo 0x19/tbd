@@ -80,6 +80,10 @@ gives the migration-date balances per account. The account-level opening at 1.1.
 must be derived from both (findings.md §1), or obtained as the previous accountant's
 closing trial balance.
 
+The migration-date column itself is in hand: `expected/opening-2025.csv` (account, debit,
+credit, signed, at 2025-07-01) is what `ImportOpeningBalances` takes on `/books/`, and the
+finance crate's tests import it and check the trial balance against `gfi-2025.md` §1.
+
 ## What the golden dataset therefore consists of
 
 1. Opening trial balance at 1.1.2025 per account (derived or obtained).

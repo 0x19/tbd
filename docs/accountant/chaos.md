@@ -87,6 +87,17 @@ Stale pages found by the survey (`architecture.md` module tree, `README.md` coun
 
 ## Order of work
 
-Family 1 and the validate checks land with plan phase 1; family 2 with the opening
-import; families 3, 4, 7 with phase 3; 5 and 6 with phase 4. The expected files for 2025
-are the first thing written, in phase 0, from `gfi-2025.md`.
+Phase 1 lands the validate check `grpc_finance_books_balanced`, the operations
+`finance_trial_balance` and `finance_import_opening`, and the opening slice of family 2
+(`scenarios/finance_books.toml`: import, then the trial balance equals it). The posting
+operations of family 1 (`finance_post_entry`, `finance_repost_period`,
+`finance_lock_period`) need `PostPeriod` and land with phase 2; families 3, 4, 7 with
+phase 3; 5 and 6 with phase 4. The expected files for 2025 are the first thing written,
+in phase 0, from `gfi-2025.md`; `expected/opening-2025.csv` (the hand-over column,
+signed) joined them in phase 1.
+
+A scenario that needs Postgres runs against the compose database with `skip = true`, as
+the one stress campaign that needs one already does: the CI scenarios job has no
+database. Giving it one (`services: postgres` in `ci.yml`, a `database_url` the kind reads
+from an environment variable) is a separate decision; until then the DB-backed proof of
+each phase is the finance crate's integration tests.

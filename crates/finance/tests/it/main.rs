@@ -5,6 +5,7 @@
 
 mod access;
 mod banking;
+mod books;
 mod categorise;
 mod connect;
 mod connectors;

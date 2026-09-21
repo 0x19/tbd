@@ -23,6 +23,7 @@
 | A linked Gmail mailbox keeps expiring, or you are setting the Google clients up | [finance/gmail.md](finance/gmail.md) |
 | You want the company's incoming e-invoices in the receipts, or are linking the intermediary | [finance/mojeracun.md](finance/mojeracun.md) (Moj-eRačun), [finance/eracuni.md](finance/eracuni.md) (e-računi) |
 | You want the company's ePorezna filings (PD, PDV, JOPPD, …) in the service, or are uploading one | [finance/filings.md](finance/filings.md) |
+| You want the books: the chart of accounts, periods, the opening balances and the trial balance | [finance/books.md](finance/books.md) |
 | You are working on the `playground` service | [../crates/playground/CLAUDE.md](../crates/playground/CLAUDE.md) |
 | You are changing the public playground or its rules | [playground/README.md](playground/README.md) |
 | You want the mobile architecture: a bearer client, PKCE, the theme from the web kit | [mobile/README.md](mobile/README.md) |

@@ -43,6 +43,13 @@ use tbd_proto::finance::v1::{
     WatchConnectorsRequest, WatchConnectorsResponse, finance_service_server::FinanceService,
 };
 use tbd_proto::finance::v1::{
+    ClosePeriodRequest, ClosePeriodResponse, ImportOpeningBalancesRequest,
+    ImportOpeningBalancesResponse, ListLedgerAccountsRequest, ListLedgerAccountsResponse,
+    ListPeriodsRequest, ListPeriodsResponse, LockPeriodRequest, LockPeriodResponse,
+    TrialBalanceRequest, TrialBalanceResponse, UpsertLedgerAccountRequest,
+    UpsertLedgerAccountResponse,
+};
+use tbd_proto::finance::v1::{
     CreateIssuerRequest, CreateIssuerResponse, DeleteCounterpartyPolicyRequest,
     DeleteCounterpartyPolicyResponse, DeleteInvoiceRequest, DeleteInvoiceResponse,
     LinkDocumentRequest, LinkDocumentResponse, ListIssuersRequest, ListIssuersResponse,
@@ -1221,6 +1228,48 @@ impl FinanceService for Finance {
         r: Request<GetFilingRequest>,
     ) -> Result<Response<GetFilingResponse>, Status> {
         self.rpc_get_filing(r).await
+    }
+    async fn list_ledger_accounts(
+        &self,
+        r: Request<ListLedgerAccountsRequest>,
+    ) -> Result<Response<ListLedgerAccountsResponse>, Status> {
+        self.rpc_list_ledger_accounts(r).await
+    }
+    async fn upsert_ledger_account(
+        &self,
+        r: Request<UpsertLedgerAccountRequest>,
+    ) -> Result<Response<UpsertLedgerAccountResponse>, Status> {
+        self.rpc_upsert_ledger_account(r).await
+    }
+    async fn list_periods(
+        &self,
+        r: Request<ListPeriodsRequest>,
+    ) -> Result<Response<ListPeriodsResponse>, Status> {
+        self.rpc_list_periods(r).await
+    }
+    async fn close_period(
+        &self,
+        r: Request<ClosePeriodRequest>,
+    ) -> Result<Response<ClosePeriodResponse>, Status> {
+        self.rpc_close_period(r).await
+    }
+    async fn lock_period(
+        &self,
+        r: Request<LockPeriodRequest>,
+    ) -> Result<Response<LockPeriodResponse>, Status> {
+        self.rpc_lock_period(r).await
+    }
+    async fn import_opening_balances(
+        &self,
+        r: Request<ImportOpeningBalancesRequest>,
+    ) -> Result<Response<ImportOpeningBalancesResponse>, Status> {
+        self.rpc_import_opening_balances(r).await
+    }
+    async fn trial_balance(
+        &self,
+        r: Request<TrialBalanceRequest>,
+    ) -> Result<Response<TrialBalanceResponse>, Status> {
+        self.rpc_trial_balance(r).await
     }
     async fn list_mail_templates(
         &self,

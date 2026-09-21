@@ -472,6 +472,59 @@ service FinanceService {
   rpc GetFiling(GetFilingRequest) returns (GetFilingResponse) {
     option (google.api.http) = {get: "/v1/finance/filings/{id}"};
   }
+
+  // ---- books: the general ledger of a company party ----
+
+  // The party's chart of accounts, code order. A company's chart is seeded
+  // from the shipped RRiF chart on its first books call.
+  rpc ListLedgerAccounts(ListLedgerAccountsRequest) returns (ListLedgerAccountsResponse) {
+    option (google.api.http) = {get: "/v1/finance/books/accounts"};
+  }
+  // Add an analytic account to the chart, or rename one. Its parent is the
+  // longest existing code that is a prefix; a code with nothing above it is
+  // refused. Owners only.
+  rpc UpsertLedgerAccount(UpsertLedgerAccountRequest) returns (UpsertLedgerAccountResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/books/accounts"
+      body: "*"
+    };
+  }
+  // The twelve months of a fiscal year with their status.
+  rpc ListPeriods(ListPeriodsRequest) returns (ListPeriodsResponse) {
+    option (google.api.http) = {get: "/v1/finance/books/periods"};
+  }
+  // Close a month (no posting lands until it is reopened with `reopen`).
+  // Owners only; a locked month refuses.
+  rpc ClosePeriod(ClosePeriodRequest) returns (ClosePeriodResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/books/periods/close"
+      body: "*"
+    };
+  }
+  // Lock a month: filed, final. Owners only.
+  rpc LockPeriod(LockPeriodRequest) returns (LockPeriodResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/books/periods/lock"
+      body: "*"
+    };
+  }
+  // Import the opening trial balance of a fiscal year as handed over, both
+  // sides per account and signed, replacing an earlier import of the year.
+  // The set must balance to the cent, every code must be an analytic
+  // account of the chart, and every month of the year must be open. Owners
+  // only.
+  rpc ImportOpeningBalances(ImportOpeningBalancesRequest) returns (ImportOpeningBalancesResponse) {
+    option (google.api.http) = {
+      post: "/v1/finance/books/opening"
+      body: "*"
+    };
+  }
+  // The trial balance of a fiscal year through a month: every account with
+  // an opening or a posting, opening and movement side by side, class
+  // totals, and whether the whole balances.
+  rpc TrialBalance(TrialBalanceRequest) returns (TrialBalanceResponse) {
+    option (google.api.http) = {get: "/v1/finance/books/trial-balance"};
+  }
 }
 
 message ConnectorKind {
@@ -855,6 +908,150 @@ message GetFilingRequest {
 }
 message GetFilingResponse {
   Filing filing = 1;
+}
+
+// ---- books ----
+
+message LedgerAccount {
+  // 3 to 6 digits, RRiF numbering.
+  string code = 1;
+  string name = 2;
+  // The account above it; empty for a group.
+  string parent_code = 3;
+  // The first digit.
+  uint32 class = 4;
+  // asset, liability, equity, revenue, expense, result or other, from the class.
+  string kind = 5;
+  // A group or synthetic account postings never land on.
+  bool synthetic = 6;
+  bool archived = 7;
+}
+message ListLedgerAccountsRequest {
+  string party_id = 1;
+}
+message ListLedgerAccountsResponse {
+  repeated LedgerAccount accounts = 1;
+}
+message UpsertLedgerAccountRequest {
+  string party_id = 1;
+  // 4 to 6 digits; its parent is the longest existing prefix.
+  string code = 2;
+  string name = 3;
+}
+message UpsertLedgerAccountResponse {
+  LedgerAccount account = 1;
+}
+
+message Period {
+  uint32 fiscal_year = 1;
+  // 1 to 12.
+  uint32 month = 2;
+  // open, closed or locked.
+  string status = 3;
+  // RFC 3339; empty for a month never touched (open by default).
+  string changed_at = 4;
+}
+message ListPeriodsRequest {
+  string party_id = 1;
+  // 0 for the current year.
+  uint32 fiscal_year = 2;
+}
+message ListPeriodsResponse {
+  uint32 fiscal_year = 1;
+  repeated Period periods = 2;
+}
+message ClosePeriodRequest {
+  string party_id = 1;
+  uint32 fiscal_year = 2;
+  uint32 month = 3;
+  // Reopen a closed month instead.
+  bool reopen = 4;
+}
+message ClosePeriodResponse {
+  Period period = 1;
+}
+message LockPeriodRequest {
+  string party_id = 1;
+  uint32 fiscal_year = 2;
+  uint32 month = 3;
+}
+message LockPeriodResponse {
+  Period period = 1;
+}
+
+message OpeningBalance {
+  string account_code = 1;
+  // Minor units, signed, as the column was handed over. Rendered as JSON
+  // strings by the transcoder.
+  int64 debit_minor = 2;
+  int64 credit_minor = 3;
+}
+message ImportOpeningBalancesRequest {
+  string party_id = 1;
+  uint32 fiscal_year = 2;
+  // The date the balances stand at, YYYY-MM-DD, inside the fiscal year:
+  // 1 January, or the hand-over date when the books changed hands mid-year.
+  string as_of = 3;
+  // filed (the accountant's column), imported (another system) or derived;
+  // empty means filed.
+  string source = 4;
+  repeated OpeningBalance rows = 5;
+}
+message ImportOpeningBalancesResponse {
+  uint32 accounts = 1;
+  int64 total_debit_minor = 2;
+  int64 total_credit_minor = 3;
+}
+
+message TrialBalanceRequest {
+  string party_id = 1;
+  // 0 for the current year.
+  uint32 fiscal_year = 2;
+  // 1 to 12; 0 for the whole year.
+  uint32 through_month = 3;
+}
+message TrialBalanceRow {
+  string account_code = 1;
+  string name = 2;
+  uint32 class = 3;
+  string kind = 4;
+  // The opening as imported (signed), the year's postings through the month,
+  // their sums, and balance = total debit - total credit. Minor units.
+  int64 opening_debit_minor = 5;
+  int64 opening_credit_minor = 6;
+  int64 period_debit_minor = 7;
+  int64 period_credit_minor = 8;
+  int64 total_debit_minor = 9;
+  int64 total_credit_minor = 10;
+  int64 balance_minor = 11;
+}
+message TrialBalanceClass {
+  uint32 class = 1;
+  int64 opening_debit_minor = 2;
+  int64 opening_credit_minor = 3;
+  int64 period_debit_minor = 4;
+  int64 period_credit_minor = 5;
+  int64 total_debit_minor = 6;
+  int64 total_credit_minor = 7;
+  int64 balance_minor = 8;
+}
+message TrialBalanceResponse {
+  string party_id = 1;
+  uint32 fiscal_year = 2;
+  uint32 through_month = 3;
+  // The books' currency.
+  string currency = 4;
+  // The date the opening stands at, YYYY-MM-DD; empty when nothing was imported.
+  string opening_as_of = 5;
+  repeated TrialBalanceRow rows = 6;
+  repeated TrialBalanceClass classes = 7;
+  int64 total_debit_minor = 8;
+  int64 total_credit_minor = 9;
+  // total_debit_minor == total_credit_minor.
+  bool balanced = 10;
+  repeated Period periods = 11;
+  // Every fiscal year with an opening or a posting, newest first.
+  repeated uint32 years = 12;
 }
 message MonthlyReconciliationRequest {
   string party_id = 1;
