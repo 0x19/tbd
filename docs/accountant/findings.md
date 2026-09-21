@@ -43,11 +43,12 @@ unpaid at year end. The balance sheet shows the loan as short-term financial ass
 members".
 
 Interpretation: 97.493,01 − 72.515,51 = 24.977,50 of further private spending in 2025
-went into the loan; 1.721,40 on an average balance of that size implies a rate around
-the 2% the Tax Administration prescribes for loans to related natural persons (rules.md
-confirms the 2025 rate). The company account paid for both business and private items
-through the year, which is also why the reconciliation policy in the finance service has
-a `personal` need.
+went into the loan; 1.721,40 on an average balance of that size is a rate of about 2%,
+which is the floor in the income-tax act for loans to an employee (below it the
+difference is salary in kind; rules.md §4). The 4,38% rate the corporate-tax act
+prescribes for 2025 applies to loans between related entities, not to this one. The
+company account paid for both business and private items through the year, which is
+also why the reconciliation policy in the finance service has a `personal` need.
 
 What the service must support: a member-loan sub-ledger (drawdowns from bank payments
 marked personal, repayments, prescribed-rate interest accrual with day count, year-end
@@ -141,7 +142,15 @@ receivable.
   and card settlements; the mapping to AOP 165 confirms they are FX gains.
 - Cash: 1.950,00 was withdrawn through the transit account (1009) into the cash box
   (1020) and spent the same year; the cash box is empty at year end.
-- Tourist board membership fee prepaid (1450, 257,62) is carried as a receivable.
+- Tourist board membership fee: 192,31 was paid in 2025 and 257,62 sits on 1450 as a
+  receivable. NKD 62 has not been liable for this fee since 2020 (rules.md §8), so the
+  balance is an overpayment to reclaim, and the 2025 payment should not have been made.
+- Additional data AOP 278 "compensation to management" reports 2.878,75, which is
+  account 4686. In the accountant's ledger 4686 is named "software licences", but in
+  the RRiF chart 4686 is "compensation to external board members" and the AOP map
+  follows the number, not the name (rules.md §1). The same collision puts the HRT fee
+  (4684) under "other rights of use". The filed figure is wrong by naming, not by
+  amount; the service maps by account meaning and reports 4686 under AOP 145 only.
 - Deposits 79,63 and a loan to a natural person 80,00 carried from earlier years.
 
 ## Questions for the accountant
@@ -156,7 +165,9 @@ receivable.
 3. Depreciation: the rate and start date per asset for the 2025 charge of 12.821,80,
    and the list of assets behind 0371 (1.407,28 not yet in use).
 4. 14032 vs 24032: which EU service had a restricted input-VAT deduction.
-5. AOP 279: 2.597,45 filed vs 2.597,48 on 4199.
+5. AOP 279: 2.597,45 filed vs 2.597,48 on 4199; AOP 278: why 4686 (software) was
+   reported as management compensation; and the tourist-board fee paid for an
+   activity that is exempt since 2020.
 6. The 2024 comparatives (AOP 133 other operating income 4.095,52, AOP 156 3.932,29,
    AOP 279 4.140,00): which accounts, so the 2024 opening for a full replay can be
    rebuilt.
