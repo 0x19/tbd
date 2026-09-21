@@ -3,6 +3,7 @@
 // Every file exports `en` and `hr` maps keyed `<namespace>.<slug>`.
 import * as accountant from "./accountant";
 import * as banking from "./banking";
+import * as books from "./books";
 import * as categories from "./categories";
 import * as common from "./common";
 import * as connectors from "./connectors";
@@ -38,6 +39,7 @@ const all = [
   connectors,
   accountant,
   filings,
+  books,
   mail,
 ];
 

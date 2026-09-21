@@ -1,4 +1,5 @@
 import {
+  IconBook2,
   IconBuildingBank,
   IconCategory,
   IconChecklist,
@@ -45,6 +46,7 @@ export const navGroups: NavGroup[] = [
     items: [
       { title: "nav.reconciliation", url: "/reconciliation/", icon: IconChecklist },
       { title: "nav.filings", url: "/filings/", icon: IconFileCertificate },
+      { title: "nav.books", url: "/books/", icon: IconBook2 },
     ],
   },
   {

@@ -159,6 +159,17 @@ same conventions; read `ui/chaos/CLAUDE.md` for what is the kit's and what is ou
   label, one table per kind of row, Read again = `ExtractDocument`, Download XML =
   `GetDocument`). Sums on the strip are `BigInt` over `decimalToMinor` of the headline
   strings; nothing is rounded.
+- `/books/`: the general ledger of a company (`docs/finance/books.md`). `TrialBalance` for the
+  company, fiscal year and month in the URL (`party`, `year`, `through`; companies only, the
+  first in scope by default); a strip with both totals, balanced or the difference, and the
+  opening's date; twelve month chips whose status an owner changes from a menu (close, reopen,
+  lock behind `ConfirmDialog`, since a lock is final); one collapsible card per class with the
+  class sums in its header and the seven money columns per account, every figure the
+  service's integer through `money()`. `components/books/import-opening.tsx` (owners only)
+  takes the accountant's CSV (`account,[name,]debit,credit`, either separator and decimal
+  mark; `lib/books.ts` parses it with `decimalToMinor`), shows both sums and the difference
+  before sending, and posts `ImportOpeningBalances`; the server's sentence is the toast when
+  it refuses. Nav: Accountant.
 - Streams: `useEvents(url, schema, onEvent)` in `hooks.ts` wraps `EventSource` with
   credentials; every `data:` frame is one JSON message. Envoy keeps `/v1/**/events`
   open on the finance host. EventSource cannot send the dev bearer token, so in

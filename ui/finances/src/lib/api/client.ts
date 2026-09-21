@@ -20,6 +20,7 @@ import {
   GetIssuerResponse,
   GetMailResponse,
   GetTransactionResponse,
+  ImportOpeningBalancesResponse,
   InvoiceDocumentResponse,
   type InvoiceLine,
   InvoiceResponse,
@@ -36,15 +37,18 @@ import {
   ListFilingsResponse,
   ListInvoicesResponse,
   ListIssuersResponse,
+  ListLedgerAccountsResponse,
   ListLineTemplatesResponse,
   ListMailResponse,
   ListMailTemplatesResponse,
   ListPartiesResponse,
+  ListPeriodsResponse,
   ListRulesResponse,
   ListTransactionsResponse,
   Me,
   MonthlyReconciliationResponse,
   MonthlySummaryResponse,
+  PeriodResponse,
   PreviewInvoiceResponse,
   ReconciliationRowResponse,
   RefreshAccountResponse,
@@ -54,10 +58,12 @@ import {
   StartConnectorResponse,
   SyncConnectorResponse,
   TestConnectorResponse,
+  TrialBalanceResponse,
   type UpsertCategory,
   UpsertCategoryResponse,
   UpsertClientResponse,
   UpsertIssuerResponse,
+  UpsertLedgerAccountResponse,
   UpsertLineTemplateResponse,
   UpsertMailTemplateResponse,
   type UpsertRule,
@@ -326,6 +332,36 @@ export const api = {
   filings: (p: { party_ids: string[]; form?: string; year?: number; limit?: number; offset?: number }) =>
     call(ListFilingsResponse, `/v1/finance/filings${query({ limit: 200, ...p })}`),
   filing: (id: string) => call(GetFilingResponse, `/v1/finance/filings/${id}`),
+
+  // ---- books ----
+  trialBalance: (p: { party_id: string; fiscal_year?: number; through_month?: number }) =>
+    call(TrialBalanceResponse, `/v1/finance/books/trial-balance${query(p)}`),
+  ledgerAccounts: (party_id: string) =>
+    call(ListLedgerAccountsResponse, `/v1/finance/books/accounts${query({ party_id })}`),
+  upsertLedgerAccount: (party_id: string, code: string, name: string) =>
+    call(UpsertLedgerAccountResponse, "/v1/finance/books/accounts", {
+      method: "POST",
+      json: { party_id, code, name },
+    }),
+  periods: (party_id: string, fiscal_year: number) =>
+    call(ListPeriodsResponse, `/v1/finance/books/periods${query({ party_id, fiscal_year })}`),
+  closePeriod: (party_id: string, fiscal_year: number, month: number, reopen = false) =>
+    call(PeriodResponse, "/v1/finance/books/periods/close", {
+      method: "POST",
+      json: { party_id, fiscal_year, month, reopen },
+    }),
+  lockPeriod: (party_id: string, fiscal_year: number, month: number) =>
+    call(PeriodResponse, "/v1/finance/books/periods/lock", {
+      method: "POST",
+      json: { party_id, fiscal_year, month },
+    }),
+  importOpeningBalances: (p: {
+    party_id: string;
+    fiscal_year: number;
+    as_of: string;
+    source: string;
+    rows: { account_code: string; debit_minor: string; credit_minor: string }[];
+  }) => call(ImportOpeningBalancesResponse, "/v1/finance/books/opening", { method: "POST", json: p }),
   // ---- mail ----
   mailTemplates: (party_ids: string[]) =>
     call(ListMailTemplatesResponse, `/v1/finance/mail/templates${query({ party_ids })}`),

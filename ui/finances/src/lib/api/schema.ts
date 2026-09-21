@@ -575,6 +575,76 @@ export const ListFilingsResponse = z.object({
 });
 export const GetFilingResponse = z.object({ filing: Filing.nullable().optional() });
 
+// ---- books (the general ledger; docs/finance/books.md) ----
+export const LedgerAccount = z.object({
+  code: z.string(),
+  name: z.string(),
+  parent_code: z.string(),
+  class: z.number(),
+  kind: z.string(),
+  synthetic: z.boolean(),
+  archived: z.boolean(),
+});
+export type LedgerAccount = z.infer<typeof LedgerAccount>;
+export const ListLedgerAccountsResponse = z.object({ accounts: z.array(LedgerAccount) });
+export const UpsertLedgerAccountResponse = z.object({ account: LedgerAccount.nullable().optional() });
+export const Period = z.object({
+  fiscal_year: z.number(),
+  month: z.number(),
+  // open, closed or locked.
+  status: z.string(),
+  changed_at: z.string(),
+});
+export type Period = z.infer<typeof Period>;
+export const ListPeriodsResponse = z.object({ fiscal_year: z.number(), periods: z.array(Period) });
+export const PeriodResponse = z.object({ period: Period.nullable().optional() });
+export const ImportOpeningBalancesResponse = z.object({
+  accounts: z.number(),
+  total_debit_minor: Minor,
+  total_credit_minor: Minor,
+});
+// Every figure is minor units as a string; the opening is signed as filed.
+export const TrialBalanceRow = z.object({
+  account_code: z.string(),
+  name: z.string(),
+  class: z.number(),
+  kind: z.string(),
+  opening_debit_minor: Minor,
+  opening_credit_minor: Minor,
+  period_debit_minor: Minor,
+  period_credit_minor: Minor,
+  total_debit_minor: Minor,
+  total_credit_minor: Minor,
+  balance_minor: Minor,
+});
+export type TrialBalanceRow = z.infer<typeof TrialBalanceRow>;
+export const TrialBalanceClass = z.object({
+  class: z.number(),
+  opening_debit_minor: Minor,
+  opening_credit_minor: Minor,
+  period_debit_minor: Minor,
+  period_credit_minor: Minor,
+  total_debit_minor: Minor,
+  total_credit_minor: Minor,
+  balance_minor: Minor,
+});
+export type TrialBalanceClass = z.infer<typeof TrialBalanceClass>;
+export const TrialBalanceResponse = z.object({
+  party_id: z.string(),
+  fiscal_year: z.number(),
+  through_month: z.number(),
+  currency: z.string(),
+  opening_as_of: z.string(),
+  rows: z.array(TrialBalanceRow),
+  classes: z.array(TrialBalanceClass),
+  total_debit_minor: Minor,
+  total_credit_minor: Minor,
+  balanced: z.boolean(),
+  periods: z.array(Period),
+  years: z.array(z.number()),
+});
+export type TrialBalanceResponse = z.infer<typeof TrialBalanceResponse>;
+
 // ---- reconciliation (the accountant's month) ----
 export const Reason = z.object({ code: z.string(), args: z.record(z.string(), z.string()) });
 export type Reason = z.infer<typeof Reason>;
