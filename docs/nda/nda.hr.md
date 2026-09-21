@@ -4,7 +4,7 @@ sklopljen u Viškovu dana ____. ____. 20____. između:
 
 **1. INORBIT d.o.o.** (puni naziv: INORBIT društvo s ograničenom odgovornošću za usluge), sa sjedištem u Saršonima, Benčani 15A, 51216 Viškovo, upisano u sudski registar Trgovačkog suda u Rijeci pod MBS 081116183, OIB 38846238650, koje zastupa direktor Nevio Vesić (dalje: **Društvo**),
 
-**2. Nevio Vesić**, ______________________________________________ (adresa), OIB ______________________, u vlastito ime (dalje: **Direktor**; Društvo i Direktor zajedno: **Strane koje otkrivaju**),
+**2. Nevio Vesić**, Saršoni, Benčani 15A, 51216 Viškovo, OIB 21048306137, u vlastito ime (dalje: **Direktor**; Društvo i Direktor zajedno: **Strane koje otkrivaju**),
 
 i
 

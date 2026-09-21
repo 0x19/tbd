@@ -34,15 +34,14 @@ What it covers, and why it is not a generic NDA:
   the large-loss case anyway. Sources: zakon.hr (ZOO art. 350-356),
   existenzgruendungsportal.de (BMWK), katastor.hr, ipdraughts.wordpress.com.
 
-The company data (full name, seat, MBS, court) is filled from the court register as
-mirrored by companywall.hr and fininfo.hr on 2026-09-21; check the MBS against the
-company's own registration decision before signing.
+The company data (full name, seat, MBS, court) and the director's OIB and residence
+are taken from the company's record in the court register (sudreg.pravosudje.hr,
+MBS 081116183) on 2026-09-21.
 
 Before sending:
 
-1. Fill the remaining blanks: the director's private address and OIB, the
-   accountant's details, and the date; change the place of signing if it is not
-   Viškovo.
+1. Fill the remaining blanks: the accountant's details and the date; change the
+   place of signing if it is not Viškovo.
 2. Have a Croatian lawyer read it once. It was drafted with care from the Croatian
    Obligations Act, the GDPR and the trade-secrets act in mind, but it is not legal
    advice, and the accountant may have their own engagement terms to reconcile.

@@ -4,7 +4,7 @@ made in Viškovo on ____ ____________ 20____ between:
 
 **1. INORBIT d.o.o.** (full name: INORBIT društvo s ograničenom odgovornošću za usluge), with its registered seat at Benčani 15A, Saršoni, 51216 Viškovo, Croatia, entered in the court register of the Commercial Court in Rijeka under registration number (MBS) 081116183, personal identification number (OIB) 38846238650, represented by its director Nevio Vesić (the **Company**),
 
-**2. Nevio Vesić**, ______________________________________________ (address), OIB ______________________, in his own name (the **Director**; the Company and the Director together the **Disclosing Parties**),
+**2. Nevio Vesić**, Benčani 15A, Saršoni, 51216 Viškovo, Croatia, OIB 21048306137, in his own name (the **Director**; the Company and the Director together the **Disclosing Parties**),
 
 and
 
