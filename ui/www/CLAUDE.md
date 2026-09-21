@@ -14,6 +14,10 @@ routed on the public `www` virtual host rather than the API host: same origin,
 no CORS, still no cookies. `/legal/` promises that a playground which processes
 what a visitor types says so on its own page — so it does, in a "what this page
 sends" section. A new playground owes the reader the same paragraph.
+`/playgrounds/tuner/` is the other kind: it opens the microphone on request and does all
+of its listening in the page (`pitch.ts` is the arithmetic, `tuner.tsx` the Web Audio),
+so its paragraph says that nothing leaves the browser -- keep it true; a tuner that
+uploads audio would break the `/legal/` promise.
 
 - **Content lives in `src/data/site.ts`.** A copy change edits that file. Do not
   inline facts into a page.

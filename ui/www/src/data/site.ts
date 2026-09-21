@@ -363,6 +363,12 @@ export const playgrounds: {
     href: "/playgrounds/break-it/",
     tag: "Chaos",
   },
+  {
+    name: "Guitar tuner",
+    what: "Pluck a string and the meter names it and shows how far off you are, to the cent. Five tunings, a reference tone per string, an adjustable A4. It listens through the microphone and nothing leaves the page.",
+    href: "/playgrounds/tuner/",
+    tag: "Audio",
+  },
 ];
 
 export const nav = [
