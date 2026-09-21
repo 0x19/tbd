@@ -27,6 +27,7 @@ import { useFinance } from "@/app/providers";
 import { KpiStrip, PageTitle } from "@/components/kit";
 import { ScopeToggle } from "@/components/scope-toggle";
 import { StatusBadge } from "@/components/status-badge";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -38,7 +39,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -83,10 +84,18 @@ function Invoices() {
   const t = useT();
   const router = useRouter();
   const params = useSearchParams();
-  const { partyIds, partyName, multi } = useFinance();
-  const key = partyIds.join(",");
-  const invoices = useFetch(() => api.invoices(partyIds), 30_000, [key]);
-  const clients = useFetch(() => api.clients(partyIds), 0, [key]);
+  const { parties, partyIds, partyName, multi } = useFinance();
+  // Invoices belong to companies. The personal scope has none, so the page
+  // looks at the companies in the grant even when the toggle is on the
+  // person; with several companies in scope it narrows to those.
+  const issuerIds = useMemo(() => {
+    const orgs = parties.filter((p) => p.kind === "org").map((p) => p.id);
+    const inScope = orgs.filter((id) => partyIds.includes(id));
+    return inScope.length ? inScope : orgs;
+  }, [parties, partyIds]);
+  const key = issuerIds.join(",");
+  const invoices = useFetch(() => api.invoices(issuerIds), 30_000, [key]);
+  const clients = useFetch(() => api.clients(issuerIds), 0, [key]);
 
   const tab = (params.get("tab") as Tab) || "all";
   const q = params.get("q") ?? "";
@@ -305,6 +314,24 @@ function Invoices() {
         </Button>
       </PageTitle>
 
+      {clients.data && clientList.length === 0 ? (
+        <Alert>
+          <AlertTriangle />
+          <AlertTitle>{t("invoices.no_clients")}</AlertTitle>
+          <AlertDescription>
+            {t("invoices.needs.before")}{" "}
+            <Link href="/issuer/" className="underline">
+              {t("invoices.needs.issuer")}
+            </Link>{" "}
+            {t("invoices.needs.between")}{" "}
+            <Link href="/clients/" className="underline">
+              {t("invoices.needs.client")}
+            </Link>
+            {t("invoices.needs.after")}
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
       {invoices.loading && !invoices.data ? (
         <Skeleton className="h-24 w-full" />
       ) : (
@@ -339,25 +366,6 @@ function Invoices() {
           ]}
         />
       )}
-
-      {!clients.loading && clientList.length === 0 ? (
-        <Card className="max-w-xl">
-          <CardHeader>
-            <CardTitle>{t("invoices.no_clients")}</CardTitle>
-            <CardDescription>
-              {t("invoices.needs.before")}{" "}
-              <Link href="/issuer/" className="underline">
-                {t("invoices.needs.issuer")}
-              </Link>{" "}
-              {t("invoices.needs.between")}{" "}
-              <Link href="/clients/" className="underline">
-                {t("invoices.needs.client")}
-              </Link>
-              {t("invoices.needs.after")}
-            </CardDescription>
-          </CardHeader>
-        </Card>
-      ) : null}
 
       <Card>
         <CardHeader className="gap-3">
