@@ -175,6 +175,15 @@ export function day(iso: string | null | undefined): string {
   return new Date(`${iso}T00:00:00`).toLocaleDateString(locale(), { day: "2-digit", month: "short" });
 }
 
+/** The date of a timestamp or a bare YYYY-MM-DD, as the page's language writes it
+ *  with the year: 15 Mar 2027 or 15. ožu 2027. */
+export function dateOf(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(iso) ? new Date(`${iso}T00:00:00`) : new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString(locale(), { day: "numeric", month: "short", year: "numeric" });
+}
+
 /** A YYYY-MM-DD as the page's language writes a date: 11.08.2026. or 11 Aug 2026. */
 export function dateOnly(iso: string | null | undefined): string {
   if (!iso) return "—";

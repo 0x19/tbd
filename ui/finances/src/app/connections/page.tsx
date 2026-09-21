@@ -23,7 +23,7 @@ import { api } from "@/lib/api/client";
 import { describe, useFetch } from "@/lib/api/hooks";
 import type { Account, Connection } from "@/lib/api/schema";
 import { consentLive, daysUntil, fetchesLeft } from "@/lib/banking";
-import { day } from "@/lib/format";
+import { dateOf } from "@/lib/format";
 import { useT } from "@/lib/i18n";
 
 export default function ConnectionsPage() {
@@ -130,7 +130,7 @@ export default function ConnectionsPage() {
               hint: soonest
                 ? t(soonest.days < 30 ? "banking.kpi.consent_renew" : "banking.kpi.consent_hint", {
                     bank: soonest.c.aspsp_name,
-                    until: day(soonest.c.valid_until),
+                    until: dateOf(soonest.c.valid_until),
                   })
                 : t("banking.kpi.consent_none"),
             },

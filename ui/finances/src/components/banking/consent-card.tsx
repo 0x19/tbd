@@ -33,7 +33,7 @@ import {
   isStale,
   nextFetch,
 } from "@/lib/banking";
-import { ago, day, money, when } from "@/lib/format";
+import { ago, dateOf, day, money, when } from "@/lib/format";
 import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -79,11 +79,11 @@ export function ConsentCard({
   const line = (() => {
     switch (state) {
       case "active":
-        return t("banking.consent.active", { until: day(c.valid_until), days: days ?? 0 });
+        return t("banking.consent.active", { until: dateOf(c.valid_until), days: days ?? 0 });
       case "ending":
-        return t("banking.consent.ending", { days: days ?? 0, until: day(c.valid_until) });
+        return t("banking.consent.ending", { days: days ?? 0, until: dateOf(c.valid_until) });
       case "ended":
-        return t("banking.consent.ended", { on: day(c.valid_until) });
+        return t("banking.consent.ended", { on: dateOf(c.valid_until) });
       case "pending":
         return t("banking.consent.pending", { ago: ago(c.created_at) });
       case "removed":
@@ -121,7 +121,7 @@ export function ConsentCard({
               {c.authorized_at ? (
                 <span className="text-muted-foreground">
                   {" "}
-                  · {t("banking.consent.since", { when: day(c.authorized_at) })}
+                  · {t("banking.consent.since", { when: dateOf(c.authorized_at) })}
                 </span>
               ) : null}
             </p>
@@ -211,7 +211,7 @@ export function ConsentCard({
                           <>
                             <div>{money(closing.amount_minor, closing.currency)}</div>
                             <div className="text-muted-foreground text-[11px]">
-                              {day(closing.observed_at)}
+                              {dateOf(closing.observed_at)}
                             </div>
                           </>
                         ) : (
