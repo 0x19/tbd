@@ -23,6 +23,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
@@ -30,7 +31,6 @@ import { api } from "@/lib/api/client";
 import { describe, useFetch } from "@/lib/api/hooks";
 import type { IssuerProfile } from "@/lib/api/schema";
 import { useT } from "@/lib/i18n";
-import { cn } from "@/lib/utils";
 
 const EMPTY_ISSUER = (party_id: string): IssuerProfile => ({
   party_id,
@@ -59,8 +59,7 @@ export default function IssuerPage() {
   const orgs = useMemo(() => parties.filter((p) => p.kind === "org"), [parties]);
   const key = orgs.map((o) => o.id).join(",");
   const issuers = useFetch(() => api.issuers(orgs.map((o) => o.id)), 0, [key]);
-  const [selected, setSelected] = useState("");
-  const chosen = selected || orgs[0]?.id || "";
+  const [editing, setEditing] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const profileOf = (party: string) => issuers.data?.issuers.find((i) => i.party_id === party);
   return (
@@ -86,11 +85,7 @@ export default function IssuerPage() {
               {orgs.map((o) => {
                 const p = profileOf(o.id);
                 return (
-                  <TableRow
-                    key={o.id}
-                    className={cn("cursor-pointer", chosen === o.id && "bg-muted/50")}
-                    onClick={() => setSelected(o.id)}
-                  >
+                  <TableRow key={o.id} className="cursor-pointer" onClick={() => setEditing(o.id)}>
                     <TableCell className="font-medium">
                       {p?.legal_name || partyName(o.id)}
                       {issuers.data && !p?.legal_name ? (
@@ -119,12 +114,19 @@ export default function IssuerPage() {
         </CardContent>
       </Card>
 
-      {chosen ? (
-        <>
-          <SectionTitle title={profileOf(chosen)?.legal_name || partyName(chosen)} />
-          <IssuerForm party={chosen} onSaved={issuers.reload} />
-        </>
-      ) : null}
+      <Sheet open={editing !== null} onOpenChange={(o) => !o && setEditing(null)}>
+        <SheetContent className="w-full overflow-y-auto sm:max-w-3xl">
+          <SheetHeader>
+            <SheetTitle>{editing ? profileOf(editing)?.legal_name || partyName(editing) : ""}</SheetTitle>
+            <SheetDescription>{t("parties.issuer.description")}</SheetDescription>
+          </SheetHeader>
+          {editing ? (
+            <div className="mt-4">
+              <IssuerForm party={editing} onSaved={issuers.reload} />
+            </div>
+          ) : null}
+        </SheetContent>
+      </Sheet>
 
       <AddCompanyDialog
         open={adding}
@@ -133,7 +135,7 @@ export default function IssuerPage() {
           setAdding(false);
           reload();
           issuers.reload();
-          setSelected(partyId);
+          setEditing(partyId);
         }}
       />
     </>
