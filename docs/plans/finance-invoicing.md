@@ -78,11 +78,10 @@ Grouped by how loudly an accountant would complain.
 
 ### 3.4 eRačun and Fiskalizacija 2.0
 
-Since 1 Jan 2026 every VAT-registered company issuing to a domestic business must issue an
-e-invoice through an *informacijski posrednik*, and report collections (eIzvještavanje). It
-was deferred because the only client is non-EU, and that reasoning holds for Inorbit. It does
-not hold for a SaaS: the first Croatian customer with a domestic client needs UBL 2.1 CIUS-HR
-generation, an intermediary integration, and the inbox for received e-invoices.
+Its own section (§8), to be discussed before anything is planned. Nothing in phases 1 to 6
+depends on it, and nothing in them may make it harder: invoice kinds, line-level VAT and the
+delivery record are all shaped so an e-invoice channel is one more serialiser and one more
+channel value.
 
 ## 4. What a SaaS with hundreds of issuers is missing
 
@@ -185,8 +184,7 @@ reconciliation bundle's zip and mail path.
 3. **Per-tenant everything**: issuer branding and language, mail connectors (already per party),
    numbering (already per party), a delivery outbox with `Message-ID` dedupe, rate limits, data
    export and deletion.
-4. **eRačun** (Phase 3.4): UBL 2.1 CIUS-HR, the intermediary, eIzvještavanje, the inbox. This is
-   the one item that is not optional for a Croatian SaaS with domestic B2B customers.
+4. eRačun is not part of this phase; see §8.
 
 ## 6. What I recommend doing next, in order
 
@@ -205,7 +203,27 @@ reconciliation bundle's zip and mail path.
    (tenant = firm, many issuers, staff assignment) or companies invoicing for themselves (tenant
    = company, one issuer, maybe an invited accountant)? The tenant model differs, and Phase 6
    waits on this.
-2. **Domestic clients in the plan?** If yes, eRačun moves from Phase 6 to Phase 4.
+2. **Domestic clients in the plan?** That decides when §8 is opened.
 3. **Cancel rule** for issued invoices: confirm with the accountant that an undelivered approved
    invoice may be cancelled with its number kept, and a delivered one only by credit note.
 4. **Which software the accountant runs**, for the journal and KIR formats.
+
+## 8. eRačun and Fiskalizacija 2.0: to be discussed
+
+Not planned yet, on purpose. What is known, so the discussion starts from facts:
+
+- Since 1 Jan 2026 a VAT-registered company issuing to a domestic business issues the invoice
+  as an e-invoice (UBL 2.1, the Croatian CIUS) through an *informacijski posrednik*, and the
+  collections are reported (eIzvještavanje). Receiving domestic e-invoices is mandatory for
+  every VAT-registered company, Inorbit included, already.
+- Invoices to a non-EU client (Tenderly) are outside fiscalisation; whether eIzvještavanje
+  imposes anything on them is the one open question for the accountant
+  (`finance-accountant.md`, open question 3).
+- The intermediary is unchosen. `FiskAplikacija` is browser-only and not an integration
+  target. Criteria noted earlier: a real HTTP API with a sandbox, receiving on our behalf,
+  per-document pricing at our volume, accepting our UBL.
+- Everything above is shaped so this becomes one serialiser (invoice → UBL), one delivery
+  channel value, and one inbox (UBL → `documents` with verified fields), not a migration.
+
+To discuss: whether domestic clients are coming at all, for Inorbit or for a SaaS customer;
+which intermediary; and whether the inbox comes first, since that obligation already applies.
