@@ -42,9 +42,18 @@ same conventions; read `ui/chaos/CLAUDE.md` for what is the kit's and what is ou
   progress and outcome, a relink, a removal arrive as events; `useFetch` polls only
   while the feed is down. Link a mailbox chooses the party; the row's party select
   moves it through `ConfigureConnector`), `/connectors/callback/`, `/documents/`
-  (receipts as a ledger: search, vendor and month filters and the sums come from
-  `ListDocuments`; a row opens a sheet with the PDF inline, the fields with how each was
-  found (`found_by`), an editor that declares corrections through `UpdateDocument`
+  (receipts as a ledger for daily use. Filters in the URL: search, vendor, month, and a
+  view -- all, need a look, corrected, no amount -- over the first 200 the server
+  returns for the filters (`ListDocuments`), paged by 25 on the page. `src/lib/receipts.ts`
+  is the one place a receipt is judged: `statusOf` (reading, unreadable, incomplete,
+  guessed, read, corrected), `needsLook`, and `totals`, which adds up only amounts read
+  from a label or set by a person, so the strip at the top never counts a guess; a
+  guessed amount in a row is dotted-underlined and says so, a missing one is a dash
+  with a hint (`components/documents/status.tsx` holds the chip and the provenance
+  word). A row opens `receipt-sheet.tsx`: the PDF large on the left, the facts on the
+  right each with how it was found (`found_by`), a sentence saying why the receipt
+  needs a look, the origin (the mail's subject, sender and time, or "uploaded"), and the
+  editor in the same column, which declares corrections through `UpdateDocument`
   (including whose it is: `party_id`; `found_by.party` says whether the account that
   paid, the text or the mailbox decided), "Read again" = `ExtractDocument`, and
   "Upload" = `UploadDocument` through `upload-receipt.tsx`, which shrinks a photo to fit
