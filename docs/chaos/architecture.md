@@ -1,14 +1,27 @@
 # How chaos works
 
 ```
-crates/chaos/src
-├── main.rs            CLI: up, validate, run, check, serve, config, kinds
+crates/lab/src               the framework and the core kinds (a library other projects reuse)
+├── kind.rs            Kind, Field, describe(), markdown(): a service kind as data
+├── kinds/             one module per core kind: spec, handle, KIND with its checks
+│   ├── engine.rs, protocol.rs, ledger.rs, humans.rs, finance.rs
+│   └── mod.rs         CORE, the five above
+├── check.rs           Check and the Endpoint a check is handed
+├── service/mod.rs     the Service extension point: Service, InstanceHandle, Instance, Peers
+├── stack/mod.rs       generic runner: order, readiness, stop/start, shutdown
+├── load/
+│   ├── mod.rs         LoadConfig, Pattern
+│   ├── ops.rs         the Operation extension point, Clients, the protocol and finance operations
+│   ├── ledger_ops.rs  the ledger operations and their per-run Pool
+│   ├── generator.rs   open-loop pacer, JoinSet, drain
+│   └── metrics.rs     HDR histograms and counters, snapshot
+├── auth.rs, tls.rs    the bearer token and the trust every client carries
+└── enginelb.rs        the engine LB Envoy fronts
+
+crates/chaos/src             the binary: this project's registry, scenarios and API
+├── main.rs            CLI: up, validate, run, check, stress, serve, config, kinds
 ├── config.rs          configs/chaos/ schema, loaded via tbd_common::config
-├── kinds/             the service kinds as data: one module + one line in ALL per kind
-│   ├── mod.rs         Kind, Field, the registry, describe(), markdown()
-│   ├── engine.rs      spec, handle, KIND (fault, counters, 3 checks)
-│   ├── protocol.rs    spec, handle, KIND (depends on an engine, load target, 8 checks)
-│   └── ledger.rs      spec, handle, KIND (what `tbd new service` renders)
+├── kinds/             ALL = the core kinds plus this project's own (playground.rs)
 ├── topology.rs        [stack.<plural>.<name>] tables → InstanceSpec → launchers
 ├── api/               chaos serve
 │   ├── mod.rs         router: API under base_path, built UI under ui_path
@@ -16,13 +29,6 @@ crates/chaos/src
 │   ├── runs.rs        RunRecord/RunStore (JSON files), ActiveRun (live feed)
 │   ├── routes.rs      handlers and SSE
 │   └── error.rs       ApiError → status + {"error"}
-├── service/mod.rs     the Service extension point: Service, InstanceHandle, Instance, Peers
-├── stack/mod.rs       generic runner: order, readiness, stop/start, shutdown
-├── load/
-│   ├── mod.rs         LoadConfig, Pattern
-│   ├── ops.rs         the Operation extension point + four operations + Clients
-│   ├── generator.rs   open-loop pacer, JoinSet, drain
-│   └── metrics.rs     HDR histograms and counters, snapshot
 ├── scenario/
 │   ├── config.rs      ScenarioFile and cross-checks
 │   ├── timeline.rs    TimelineEvent and apply()
@@ -30,7 +36,7 @@ crates/chaos/src
 │   ├── executor.rs    the one executor (and the one timeline runner)
 │   └── report.rs      text rendering
 ├── stress/mod.rs      stress campaigns: the stack and the timeline around tbd_stress::run
-└── validate.rs        Endpoint, Check, Targets by kind and the concurrent runner
+└── validate.rs        Targets by kind and the concurrent runner over every kind's checks
 ```
 
 ## Services and the stack

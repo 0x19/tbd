@@ -33,4 +33,5 @@ declared and what derives from it: [extending.md](extending.md#add-a-service-kin
 | `grpc_ledger_facts` | grpc | `ledger` | append, current, history, retract, a history cut without the value, erase, restore, on a throwaway subject |
 | `grpc_humans_ping` | grpc | `humans` | `Ping` echoes the message and is labelled a stub |
 | `grpc_finance_ping` | grpc | `finance` | `Ping` echoes the message and is labelled a stub |
+| `grpc_finance_books_balanced` | grpc | `finance` | every company in the caller's grant has a balanced `TrialBalance` for the current year (rows adding up to the totals); an instance with no database, or a call with no verified caller, says so in the detail and passes |
 | `grpc_playground_ping` | grpc | `playground` | `Ping` echoes the message and is labelled a stub |

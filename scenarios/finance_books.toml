@@ -1,0 +1,51 @@
+# The books under load: the opening import and the trial balance, continuously.
+#
+# Every finance_import_opening request imports a random balanced set on three
+# accounts of the shipped chart into a year of its own and reads it back as the
+# trial balance, to the cent; every fourth set is off by one cent and must be
+# refused with INVALID_ARGUMENT. Every finance_trial_balance request reads the
+# company's current year and requires sum(debit) = sum(credit) and rows that add
+# up to the totals. Either identity failing is a `contract` failure, which no
+# max_error_rate forgives.
+#
+# Needs a Postgres: the books live in finance.* tables. This scenario points at
+# the compose database (`mise run up`, host port 15432, database `tbd`, migrated
+# by the stack) and is skipped in CI, which has none; the same identities are
+# held by crates/finance/tests/it/books.rs on every run. Imports of one year
+# serialise, so the import rate is a pair per lock, not 200/s.
+
+[scenario]
+name = "finance_books"
+description = "Opening imports come back as the trial balance to the cent, and an unbalanced one is refused"
+skip = true
+
+[stack.finances.finance-1]
+database_url = "postgres://ledger:local-ledger@127.0.0.1:15432/tbd?sslmode=disable"
+
+[load]
+rate = 40
+duration = "3s"
+warmup = "300ms"
+
+[[load.operations]]
+op = "finance_trial_balance"
+weight = 3
+
+[[load.operations]]
+op = "finance_import_opening"
+weight = 1
+
+[assertions]
+# 40/s for 3 s is 120 requests; allow the pacer's slack. An import holds the
+# operation's lock for the import-and-read pair, so its p99 sits around the
+# database's write latency, not the ping's.
+max_error_rate = 0.0
+max_p99_ms = 500
+min_requests = 80
+
+[assertions.services.finance-1]
+# The service counts a deliberate refusal as a failed request: a quarter of the
+# imports, which are a quarter of the load, so about 8 of 120; allow 20. Every
+# other failure is an operation error and caught by max_error_rate above.
+min_requests = 80
+max_failed = 20

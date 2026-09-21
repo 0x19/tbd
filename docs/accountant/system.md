@@ -29,8 +29,10 @@ What exists:
 - **UI.** Overview with a 24-month summary, accounts, transactions, categories,
   documents, reconciliation, invoices, clients, issuer, connections, connectors, mail.
   Money is BigInt minor units in the browser. No spreadsheet or report generation.
-- **Chaos coverage.** One validate check (`grpc_finance_ping`) and three load operations
-  (`finance_ping`, `finance_access`, `finance_money`) over two seeded transactions.
+- **Chaos coverage.** Two validate checks (`grpc_finance_ping`, `grpc_finance_books_balanced`)
+  and five load operations (`finance_ping`, `finance_access`, `finance_money` over two
+  seeded transactions; `finance_trial_balance` and `finance_import_opening` against a
+  Postgres, `scenarios/finance_books.toml`, skipped in CI).
 
 What does not exist anywhere in the tree:
 
@@ -81,7 +83,7 @@ The seams for a replay family exist and are documented in `docs/chaos/extending.
 - Docs are the contract: `kinds.md` is generated (`mise run chaos:docs`), `scenarios.md`,
   `api.md` (routes and SSE frames, mirrored by Zod in `ui/chaos`), `config.md`,
   `commands.md`, `extending.md`. `tbd:selfcheck` guards the anchors in shared files.
-- Stale spots the survey found: `docs/chaos/architecture.md` still lists modules under
-  `crates/chaos/src` that moved to `crates/lab`; `README.md` says three kinds and eleven
-  operations (six and fourteen now); `scenarios.md` `[stack]` example omits finances,
-  humans and playgrounds. These get fixed in the first chaos commit of this work.
+- Stale spots the survey found (`docs/chaos/architecture.md` listed modules under
+  `crates/chaos/src` that moved to `crates/lab`; `README.md` said three kinds and eleven
+  operations; `scenarios.md` `[stack]` example omitted finances, humans and playgrounds)
+  were fixed in the first chaos commit of this work, with the books operations.

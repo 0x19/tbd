@@ -45,6 +45,13 @@ engine = "engine-1"             # required; the engine this protocol forwards to
 listen = "127.0.0.1:50052"      # optional; `behavior` as for engines; no dependencies
 grace = "7d"                    # optional; the erasure window (0s to watch erasures execute)
 database_url = ""               # optional; a Postgres URL for the real store, else in memory
+
+[stack.finances.finance-1]
+listen = "127.0.0.1:50054"      # optional; `behavior` as for engines; no dependencies
+seed = "access"                 # optional; an in-memory world for the access scenarios
+database_url = ""               # optional; a Postgres URL for the real store (the books need one)
+
+[stack.humans.humans-1]         # and [stack.playgrounds.<name>]: see kinds.md for every table
 ```
 
 Instances start in dependency order (engines before the protocols that name them; a
@@ -53,7 +60,8 @@ instance keeps its port
 across a `stop` and `start`, so a restarted engine comes back where the protocol expects
 it. Scenarios run on free ports by default so they never collide with a dev stack.
 
-Load targets every instance of a kind that takes load (protocols), round-robin. Two protocols on one engine is a
+Load targets every instance of a kind that takes load (protocols, ledgers, finances; the
+`load target` column of kinds.md), round-robin. Two protocols on one engine is a
 valid way to test the protocol under a split load.
 
 ## `[load]`
@@ -106,6 +114,8 @@ Operations and what they exercise:
 | `finance_ping` | `FinanceService/Ping` over gRPC on the finance port | the message echoes **and** `stub` is still true; the service is a scaffold, and a stub flag that flips under load is a `contract` failure |
 | `finance_money` | `ListTransactions` as the owner, checking the amounts | every amount is the exact minor units it went in as, with the sign its direction implies, `EUR`, scale 2. A magnitude or a sign that changes in flight is a `contract` failure -- the quietest bug in accounting software, because the totals still look plausible |
 | `finance_access` | three `ListTransactions` calls as two different callers (`x-jwt-payload`, as Envoy delivers it): the owner, the reader, and the reader naming a party it was not granted | the owner sees both parties, the reader sees the company and **only** the company, and naming a forbidden party directly returns nothing. Any leak is a `contract` failure, which no `max_error_rate` forgives. Needs `seed = "access"` on the instance |
+| `finance_trial_balance` | `TrialBalance` of the owner's company for the current year (the first company the owner holds, made through `CreateIssuer` on an empty database and remembered per target) | `balanced`, every row's totals its opening plus its movement, and the rows adding up to the totals the service claims; anything else is a `contract` failure. Needs `database_url` on the instance; without one every call is `UNAVAILABLE`, a transport failure |
+| `finance_import_opening` | `ImportOpeningBalances` of a random balanced set on three accounts of the shipped chart into a year of its own (2001), then `TrialBalance` of that year; every fourth set is off by one cent | the balanced set comes back as the trial balance to the cent over three accounts, and the unbalanced one draws `INVALID_ARGUMENT`; accepted, or refused with anything else, is a `contract` failure. Imports of one year serialise on a lock inside the operation, so the pair runs one at a time per run. Needs `database_url` |
 
 Every operation targets one kind: the four above the ledger rows run against
 protocols, the `ledger_*` ones against ledgers, the `finance_*` ones against finances. A mix spreads each operation over its
@@ -127,7 +137,7 @@ Offsets are from the moment load starts, after warmup. Events are sorted by `at`
 ```toml
 [[timeline]]
 at = "1s"
-action = "set_behavior"         # kinds with fault injection: engines, ledgers
+action = "set_behavior"         # kinds with fault injection: the `fault` column of kinds.md
 service = "engine-1"
 [timeline.behavior]
 type = "error"
@@ -250,6 +260,12 @@ originally found.
 | `ledger_fault.toml` | `unavailable` at 50 % for one second | ledger faults surface as clean gRPC errors, bounded, then heal |
 | `ledger_erasure.toml` | a zero grace window | erase, restore, erase again: the subject is gone after the window |
 | `ledger_fuzz.toml` | seeded hostile requests | the ledger refuses cleanly and never answers `Internal` |
+| `finance_baseline.toml` | nothing | finance answers under steady gRPC load, p99 under 50 ms, and still says it is a stub |
+| `finance_fault.toml` | `unavailable` at 50 % for one second | finance faults arrive as clean gRPC statuses, bounded, then heal |
+| `finance_money.toml` | nothing | amounts come back as the exact minor units they went in as, with the right sign |
+| `finance_access.toml` | nothing | the reader never receives the owner's personal transaction |
+| `finance_access_fault.toml` | `unavailable` at 50 % for one second | the same while the service is failing |
+| `finance_books.toml` | nothing; `skip = true`, needs the compose Postgres | opening imports come back as the trial balance to the cent, and an unbalanced one is refused |
 
 ## Debugging a failing scenario
 

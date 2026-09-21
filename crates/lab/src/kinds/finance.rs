@@ -11,7 +11,10 @@ use tbd_finance::{
     config::{Connectors, Mail, Metrics, Ping, Provider, Server, Store, Sync},
     store::{MemoryStore, Transaction},
 };
-use tbd_proto::finance::v1::{PingRequest, finance_service_client::FinanceServiceClient};
+use tbd_proto::finance::v1::{
+    ListPartiesRequest, PingRequest, TrialBalanceRequest,
+    finance_service_client::FinanceServiceClient,
+};
 use tonic::transport::Endpoint;
 use tonic_health::pb::{HealthCheckRequest, health_client::HealthClient};
 
@@ -53,12 +56,20 @@ pub static KIND: Kind = Kind {
     load_target: true,
     addable: true,
     parse: crate::kind::parse::<Finance>,
-    checks: &[Check {
-        name: "grpc_finance_ping",
-        surface: "grpc",
-        doc: "`Ping` echoes the message and is labelled a stub",
-        run: |e| Box::pin(grpc_finance_ping(e)),
-    }],
+    checks: &[
+        Check {
+            name: "grpc_finance_ping",
+            surface: "grpc",
+            doc: "`Ping` echoes the message and is labelled a stub",
+            run: |e| Box::pin(grpc_finance_ping(e)),
+        },
+        Check {
+            name: "grpc_finance_books_balanced",
+            surface: "grpc",
+            doc: "every company in the caller's grant has a balanced `TrialBalance` for the current year (rows adding up to the totals); an instance with no database, or a call with no verified caller, says so in the detail and passes",
+            run: |e| Box::pin(grpc_finance_books_balanced(e)),
+        },
+    ],
 };
 
 /// `[stack.finances.<name>]` minus `listen`: a finance with an initial behaviour.
@@ -269,4 +280,55 @@ async fn grpc_finance_ping(e: Ep) -> Result<String, String> {
     } else {
         Err(format!("wrong echo {r:?}"))
     }
+}
+
+/// Every company the caller may read has a balanced trial balance for the
+/// current year. Through Envoy the caller is the validate token's subject;
+/// the check forges nothing. An instance with no database answers
+/// `UNAVAILABLE` and a call with no verified caller `UNAUTHENTICATED`; both
+/// are said in the detail and pass, so a bare instance in the registry test
+/// stays green while the check is real on a deployed stack.
+async fn grpc_finance_books_balanced(e: Ep) -> Result<String, String> {
+    let mut c = FinanceServiceClient::new(e.grpc()?);
+    let parties = match c.list_parties(ListPartiesRequest::default()).await {
+        Ok(r) => r.into_inner().parties,
+        Err(s) if s.code() == tonic::Code::Unavailable => {
+            return Ok(format!("no database: nothing to balance ({})", s.message()));
+        }
+        Err(s) if s.code() == tonic::Code::Unauthenticated => {
+            return Ok("no verified caller: nothing to balance".to_owned());
+        }
+        Err(s) => return Err(s.to_string()),
+    };
+    let mut seen = 0;
+    for p in parties.iter().filter(|p| p.kind == "org") {
+        let tb = c
+            .trial_balance(TrialBalanceRequest {
+                party_id: p.id.clone(),
+                fiscal_year: 0,
+                through_month: 0,
+            })
+            .await
+            .map_err(|s| format!("{}: {s}", p.display_name))?
+            .into_inner();
+        let (debit, credit): (i128, i128) = tb.rows.iter().fold((0, 0), |(d, c), r| {
+            (
+                d + i128::from(r.total_debit_minor),
+                c + i128::from(r.total_credit_minor),
+            )
+        });
+        if !tb.balanced
+            || debit != i128::from(tb.total_debit_minor)
+            || credit != i128::from(tb.total_credit_minor)
+        {
+            return Err(format!(
+                "{}: {} rows, debit {debit}, credit {credit}, balanced={}",
+                p.display_name,
+                tb.rows.len(),
+                tb.balanced
+            ));
+        }
+        seen += 1;
+    }
+    Ok(format!("{seen} companies balanced"))
 }

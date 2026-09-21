@@ -12,7 +12,9 @@ use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tbd_proto::finance::v1::{
-    ListTransactionsRequest as FinanceListRequest, PingRequest as FinancePingRequest,
+    CreateIssuerRequest, ImportOpeningBalancesRequest, ListPartiesRequest,
+    ListTransactionsRequest as FinanceListRequest, OpeningBalance,
+    PingRequest as FinancePingRequest, TrialBalanceRequest,
     finance_service_client::FinanceServiceClient,
 };
 use tbd_proto::protocol::v1::{PingRequest, protocol_service_client::ProtocolServiceClient};
@@ -179,6 +181,13 @@ pub enum OpKind {
     /// Money over the wire: the amounts that come back must be the exact minor
     /// units that went in, with the sign the direction implies.
     FinanceMoney,
+    /// `TrialBalance` of the owner's company for the current year: it balances
+    /// and its rows add up to its totals. Needs a database on the instance.
+    FinanceTrialBalance,
+    /// `ImportOpeningBalances` of a random balanced set, then the trial balance
+    /// equals it; every fourth set is off by one cent and must be refused.
+    /// Needs a database on the instance.
+    FinanceImportOpening,
 }
 
 /// What every operation of a run shares: the ledger subject pool and the seed.
@@ -205,7 +214,11 @@ impl OpKind {
             | Self::LedgerLifecycle
             | Self::LedgerEraseCycle
             | Self::LedgerFuzz => "ledger",
-            Self::FinancePing | Self::FinanceAccess | Self::FinanceMoney => "finance",
+            Self::FinancePing
+            | Self::FinanceAccess
+            | Self::FinanceMoney
+            | Self::FinanceTrialBalance
+            | Self::FinanceImportOpening => "finance",
         }
     }
 
@@ -220,6 +233,8 @@ impl OpKind {
             Self::FinancePing => Arc::new(FinancePing),
             Self::FinanceAccess => Arc::new(FinanceAccess),
             Self::FinanceMoney => Arc::new(FinanceMoney),
+            Self::FinanceTrialBalance => Arc::new(FinanceTrialBalance::default()),
+            Self::FinanceImportOpening => Arc::new(FinanceImportOpening::default()),
             Self::LedgerAppend => Arc::new(super::ledger_ops::Append(Arc::clone(pool))),
             Self::LedgerCurrent => Arc::new(super::ledger_ops::Current(Arc::clone(pool))),
             Self::LedgerHistory => Arc::new(super::ledger_ops::History(Arc::clone(pool))),
@@ -568,6 +583,243 @@ impl Operation for FinanceMoney {
                 "amounts changed in flight: debit {d:?} (want -4250), credit {c:?} (want 1450082)"
             ))),
         }
+    }
+}
+
+fn finance_status(s: &tonic::Status) -> OpError {
+    match s.code() {
+        tonic::Code::Unavailable | tonic::Code::Unknown => OpError::Transport,
+        code => OpError::Grpc(format!("{code:?}")),
+    }
+}
+
+/// The company the books operations run on: the first the owner owns, made
+/// through `CreateIssuer` when there is none, and remembered per target.
+/// The same path a person takes on `/issuer/`, so an instance with an empty
+/// database is usable from the first request.
+#[derive(Default)]
+struct BooksCompany {
+    per_target: Mutex<HashMap<String, String>>,
+}
+
+impl BooksCompany {
+    async fn id(&self, clients: &Clients, target: &Target) -> Result<String, OpError> {
+        let mut map = self.per_target.lock().await;
+        if let Some(id) = map.get(&target.name) {
+            return Ok(id.clone());
+        }
+        let mut client = FinanceServiceClient::new(clients.grpc(target).await?);
+        let mut list = tonic::Request::new(ListPartiesRequest::default());
+        list.metadata_mut()
+            .insert("x-jwt-payload", caller("chaos-owner"));
+        let parties = client
+            .list_parties(list)
+            .await
+            .map_err(|s| finance_status(&s))?
+            .into_inner()
+            .parties;
+        let found = parties
+            .iter()
+            .find(|p| p.kind == "org" && p.capability == "own")
+            .map(|p| p.id.clone());
+        let id = if let Some(id) = found {
+            id
+        } else {
+            let mut create = tonic::Request::new(CreateIssuerRequest {
+                legal_name: "Chaos d.o.o.".into(),
+                oib: String::new(),
+                vat_id: String::new(),
+                country_code: "HR".into(),
+            });
+            create
+                .metadata_mut()
+                .insert("x-jwt-payload", caller("chaos-owner"));
+            client
+                .create_issuer(create)
+                .await
+                .map_err(|s| finance_status(&s))?
+                .into_inner()
+                .party
+                .map(|p| p.id)
+                .ok_or_else(|| OpError::Contract("CreateIssuer returned no party".into()))?
+        };
+        map.insert(target.name.clone(), id.clone());
+        Ok(id)
+    }
+}
+
+/// The trial balance, driven continuously.
+///
+/// The one identity a ledger cannot lose: sum(debit) = sum(credit). Every
+/// request reads the owner's company for the current year and requires
+/// `balanced`, and that the rows add up to the totals the service claims.
+/// Needs a database on the instance; without one the call is `UNAVAILABLE`,
+/// a transport failure.
+#[derive(Default)]
+struct FinanceTrialBalance {
+    company: BooksCompany,
+}
+
+#[async_trait]
+impl Operation for FinanceTrialBalance {
+    fn name(&self) -> &'static str {
+        "finance_trial_balance"
+    }
+
+    async fn run(&self, clients: &Clients, target: &Target) -> Result<(), OpError> {
+        let party_id = self.company.id(clients, target).await?;
+        let mut client = FinanceServiceClient::new(clients.grpc(target).await?);
+        let mut request = tonic::Request::new(TrialBalanceRequest {
+            party_id,
+            fiscal_year: 0,
+            through_month: 0,
+        });
+        request
+            .metadata_mut()
+            .insert("x-jwt-payload", caller("chaos-owner"));
+        let tb = client
+            .trial_balance(request)
+            .await
+            .map_err(|s| finance_status(&s))?
+            .into_inner();
+        check_trial_balance(&tb)
+    }
+}
+
+/// The identities a trial balance must satisfy, whatever is in it.
+fn check_trial_balance(tb: &tbd_proto::finance::v1::TrialBalanceResponse) -> Result<(), OpError> {
+    let (mut debit, mut credit) = (0i128, 0i128);
+    for r in &tb.rows {
+        if r.total_debit_minor != r.opening_debit_minor + r.period_debit_minor
+            || r.total_credit_minor != r.opening_credit_minor + r.period_credit_minor
+            || r.balance_minor != r.total_debit_minor - r.total_credit_minor
+        {
+            return Err(OpError::Contract(format!(
+                "account {}: its totals are not its opening plus its movement",
+                r.account_code
+            )));
+        }
+        debit += i128::from(r.total_debit_minor);
+        credit += i128::from(r.total_credit_minor);
+    }
+    if debit != i128::from(tb.total_debit_minor) || credit != i128::from(tb.total_credit_minor) {
+        return Err(OpError::Contract(format!(
+            "rows add up to {debit}/{credit}, the service says {}/{}",
+            tb.total_debit_minor, tb.total_credit_minor
+        )));
+    }
+    if tb.balanced != (debit == credit) {
+        return Err(OpError::Contract(format!(
+            "balanced={} with debit {debit} and credit {credit}",
+            tb.balanced
+        )));
+    }
+    if !tb.balanced {
+        return Err(OpError::Contract(format!(
+            "the trial balance is off: debit {debit}, credit {credit}"
+        )));
+    }
+    Ok(())
+}
+
+/// The opening import, driven continuously.
+///
+/// A random balanced set on three accounts of the shipped chart goes in and
+/// must come back as the trial balance, to the cent; every fourth set is off
+/// by one cent and must draw `INVALID_ARGUMENT`, never land and never be an
+/// internal error. Imports of one year serialise on the row, so the operation
+/// holds a lock around import-then-read; the rate a scenario asks for is the
+/// rate of that pair. Needs a database on the instance.
+#[derive(Default)]
+struct FinanceImportOpening {
+    company: BooksCompany,
+    calls: std::sync::atomic::AtomicU64,
+    one_at_a_time: Mutex<()>,
+}
+
+#[async_trait]
+impl Operation for FinanceImportOpening {
+    fn name(&self) -> &'static str {
+        "finance_import_opening"
+    }
+
+    async fn run(&self, clients: &Clients, target: &Target) -> Result<(), OpError> {
+        let party_id = self.company.id(clients, target).await?;
+        let n = self
+            .calls
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let bank = i64::from(rand::random::<u32>() % 1_000_000) + 1;
+        let fee = i64::from(rand::random::<u32>() % 100_000) + 1;
+        let off = n % 4 == 3;
+        let rows = vec![
+            OpeningBalance {
+                account_code: "1000".into(),
+                debit_minor: bank,
+                credit_minor: 0,
+            },
+            OpeningBalance {
+                account_code: "4164".into(),
+                debit_minor: fee,
+                credit_minor: 0,
+            },
+            OpeningBalance {
+                account_code: "2200".into(),
+                debit_minor: 0,
+                credit_minor: bank + fee + i64::from(off),
+            },
+        ];
+        // A year of its own so nothing a person imported is touched.
+        let year = 2001;
+        let _serial = self.one_at_a_time.lock().await;
+        let mut client = FinanceServiceClient::new(clients.grpc(target).await?);
+        let mut import = tonic::Request::new(ImportOpeningBalancesRequest {
+            party_id: party_id.clone(),
+            fiscal_year: year,
+            as_of: format!("{year}-01-01"),
+            source: "imported".into(),
+            rows,
+        });
+        import
+            .metadata_mut()
+            .insert("x-jwt-payload", caller("chaos-owner"));
+        match client.import_opening_balances(import).await {
+            Ok(_) if off => {
+                return Err(OpError::Contract(
+                    "an opening off by one cent was accepted".into(),
+                ));
+            }
+            Ok(_) => {}
+            Err(s) if off && s.code() == tonic::Code::InvalidArgument => return Ok(()),
+            Err(s) if off => {
+                return Err(OpError::Contract(format!(
+                    "an opening off by one cent drew {:?}, not INVALID_ARGUMENT",
+                    s.code()
+                )));
+            }
+            Err(s) => return Err(finance_status(&s)),
+        }
+        let mut read = tonic::Request::new(TrialBalanceRequest {
+            party_id,
+            fiscal_year: year,
+            through_month: 0,
+        });
+        read.metadata_mut()
+            .insert("x-jwt-payload", caller("chaos-owner"));
+        let tb = client
+            .trial_balance(read)
+            .await
+            .map_err(|s| finance_status(&s))?
+            .into_inner();
+        check_trial_balance(&tb)?;
+        let want = bank + fee;
+        if tb.total_debit_minor != want || tb.rows.len() != 3 {
+            return Err(OpError::Contract(format!(
+                "imported {want} on both sides over 3 accounts, read back {} over {}",
+                tb.total_debit_minor,
+                tb.rows.len()
+            )));
+        }
+        Ok(())
     }
 }
 
