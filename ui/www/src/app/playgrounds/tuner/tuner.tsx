@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 import { centsOff, detectPitch, freqOfMidi, median, nearestString, noteOf, rms, TUNINGS } from "./pitch";
+import { pluck } from "./pluck";
 
 type Status = "idle" | "starting" | "listening" | "blocked" | "unsupported";
 
@@ -139,21 +140,17 @@ export function Tuner() {
     }
   };
 
-  /** A reference tone for a string: a plucked-ish triangle, a second and a half. */
+  /** A reference tone for a string: a synthesised pluck, not a beep. */
   const play = (index: number) => {
     const audio = ctx.current ?? new AudioContext();
     if (!ctx.current) ctx.current = audio;
-    const osc = audio.createOscillator();
-    const gain = audio.createGain();
-    osc.type = "triangle";
-    osc.frequency.value = freqOfMidi(tuning.strings[index]!, a4);
-    const t0 = audio.currentTime;
-    gain.gain.setValueAtTime(0.0001, t0);
-    gain.gain.exponentialRampToValueAtTime(0.5, t0 + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 1.5);
-    osc.connect(gain).connect(audio.destination);
-    osc.start(t0);
-    osc.stop(t0 + 1.55);
+    const samples = pluck(audio.sampleRate, freqOfMidi(tuning.strings[index]!, a4));
+    const buffer = audio.createBuffer(1, samples.length, audio.sampleRate);
+    buffer.copyToChannel(samples, 0);
+    const source = audio.createBufferSource();
+    source.buffer = buffer;
+    source.connect(audio.destination);
+    source.start();
     setLocked(index);
   };
 
