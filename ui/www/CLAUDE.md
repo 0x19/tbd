@@ -14,11 +14,16 @@ routed on the public `www` virtual host rather than the API host: same origin,
 no CORS, still no cookies. `/legal/` promises that a playground which processes
 what a visitor types says so on its own page — so it does, in a "what this page
 sends" section. A new playground owes the reader the same paragraph.
-`/playgrounds/tuner/` is the other kind: it opens the microphone on request and does all
-of its listening in the page (`pitch.ts` is the arithmetic, `pluck.ts` the synthesised
-reference strings, `tuner.tsx` the Web Audio),
-so its paragraph says that nothing leaves the browser -- keep it true; a tuner that
-uploads audio would break the `/legal/` promise.
+The music playgrounds (`/playgrounds/tuner/`, `fretboard/`, `spectrogram/`, `chords/`,
+`metronome/`, `ear/`) are the other kind: whatever they hear or play stays in the page.
+`src/lib/music/` is the arithmetic with no audio in it (`pitch.ts` detection and notes,
+`theory.ts` intervals, chords, voicings and the neck, `pluck.ts` a synthesised string,
+`play.ts` playing those through a context) and `src/components/playgrounds/` is what they
+share (`use-mic.ts` opens the microphone on request and hands each frame to a callback,
+`mic-panel.tsx` the status, level bar, device picker and start/stop, `fretboard.tsx` the
+neck and the chord box). Each page's paragraph says nothing leaves the browser -- keep it
+true; a page that uploaded audio would break the `/legal/` promise. The metronome's
+practice log is `localStorage`, per browser, and its page says so.
 
 - **Content lives in `src/data/site.ts`.** A copy change edits that file. Do not
   inline facts into a page.

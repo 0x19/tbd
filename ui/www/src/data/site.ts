@@ -369,6 +369,36 @@ export const playgrounds: {
     href: "/playgrounds/tuner/",
     tag: "Audio",
   },
+  {
+    name: "Fretboard trainer",
+    what: "It names a note and a string, you play it, and the same ear as the tuner says whether you did. Or it marks a spot on the neck and you name it. Streaks, and a list of the notes you keep missing.",
+    href: "/playgrounds/fretboard/",
+    tag: "Audio",
+  },
+  {
+    name: "See your voice",
+    what: "A live spectrogram of whatever the microphone hears: time left to right, pitch up the side, brightness for loudness, the fundamental found and named as it goes. Hum, whistle, hiss.",
+    href: "/playgrounds/spectrogram/",
+    tag: "Audio",
+  },
+  {
+    name: "Chord namer",
+    what: "Tap the frets you are holding and it names the chord, with the other names it could go by. Type a chord and it lays out shapes up the neck, each one strummed on tap. No microphone needed.",
+    href: "/playgrounds/chords/",
+    tag: "Theory",
+  },
+  {
+    name: "Metronome",
+    what: "Clicks on the audio clock so they never drift, tap tempo, beats per bar and subdivisions, and a practice log that lives in your browser only.",
+    href: "/playgrounds/metronome/",
+    tag: "Audio",
+  },
+  {
+    name: "Ear trainer",
+    what: "It plays two notes or a chord on the synthesised strings and you name the interval or the chord. The score gathers per answer, so the ones that fool you surface.",
+    href: "/playgrounds/ear/",
+    tag: "Theory",
+  },
 ];
 
 export const nav = [
