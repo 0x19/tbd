@@ -1594,6 +1594,126 @@
         }
       }
     },
+    "/v1/finance/filings": {
+      "get": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/ListFilings",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/ListFilings` on the `finance` backend.",
+        "operationId": "FinanceService.ListFilings",
+        "parameters": [
+          {
+            "name": "party_ids",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "explode": true
+          },
+          {
+            "name": "form",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "year",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.ListFilingsResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.ListFilingsResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/finance/filings/{id}": {
+      "get": {
+        "tags": [
+          "finance"
+        ],
+        "summary": "tbd.finance.v1.FinanceService/GetFiling",
+        "description": "Transcoded from `/tbd.finance.v1.FinanceService/GetFiling` on the `finance` backend.",
+        "operationId": "FinanceService.GetFiling",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "`tbd.finance.v1.GetFilingResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.finance.v1.GetFilingResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/finance/invoices": {
       "get": {
         "tags": [
@@ -5123,6 +5243,72 @@
           }
         }
       },
+      "tbd.finance.v1.Filing": {
+        "type": "object",
+        "description": "`tbd.finance.v1.Filing`",
+        "properties": {
+          "author": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "form": {
+            "type": "string"
+          },
+          "headline": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "id": {
+            "type": "string"
+          },
+          "obveznik": {
+            "type": "string"
+          },
+          "oib": {
+            "type": "string"
+          },
+          "parsed_at": {
+            "type": "string"
+          },
+          "parser_version": {
+            "type": "string"
+          },
+          "party_id": {
+            "type": "string"
+          },
+          "period_from": {
+            "type": "string"
+          },
+          "period_to": {
+            "type": "string"
+          },
+          "prepared_at": {
+            "type": "string"
+          },
+          "report_mark": {
+            "type": "string"
+          },
+          "rows_json": {
+            "type": "string"
+          },
+          "schema": {
+            "type": "string"
+          },
+          "values": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      },
       "tbd.finance.v1.GetDocumentResponse": {
         "type": "object",
         "description": "`tbd.finance.v1.GetDocumentResponse`",
@@ -5133,6 +5319,15 @@
           },
           "document": {
             "$ref": "#/components/schemas/tbd.finance.v1.Document"
+          }
+        }
+      },
+      "tbd.finance.v1.GetFilingResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.GetFilingResponse`",
+        "properties": {
+          "filing": {
+            "$ref": "#/components/schemas/tbd.finance.v1.Filing"
           }
         }
       },
@@ -5632,6 +5827,29 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/tbd.finance.v1.VendorCount"
+            }
+          }
+        }
+      },
+      "tbd.finance.v1.ListFilingsResponse": {
+        "type": "object",
+        "description": "`tbd.finance.v1.ListFilingsResponse`",
+        "properties": {
+          "filings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/tbd.finance.v1.Filing"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "years": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
             }
           }
         }

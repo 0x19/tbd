@@ -504,6 +504,37 @@ export const ListDocumentsResponse = z.object({
 export const DocumentResponse = z.object({ document: Document.nullable().optional() });
 export const GetDocumentResponse = z.object({ document: Document.nullable().optional(), bytes: z.string() });
 
+// An ePorezna form read from its XML. Amounts are the decimal strings as filed,
+// never rounded; `decimalToMinor` converts for a sum or `money()`.
+export const Filing = z.object({
+  id: z.string(),
+  party_id: z.string(),
+  form: z.string(),
+  schema: z.string(),
+  period_from: z.string(),
+  period_to: z.string(),
+  oib: z.string(),
+  obveznik: z.string(),
+  prepared_at: z.string(),
+  author: z.string(),
+  filename: z.string(),
+  report_mark: z.string(),
+  headline: z.record(z.string(), z.string()),
+  // Only from GetFiling; empty in a listing.
+  values: z.record(z.string(), z.string()),
+  rows_json: z.string(),
+  error: z.string(),
+  parsed_at: z.string(),
+  parser_version: z.string(),
+});
+export type Filing = z.infer<typeof Filing>;
+export const ListFilingsResponse = z.object({
+  filings: z.array(Filing),
+  total: z.number(),
+  years: z.array(z.number()),
+});
+export const GetFilingResponse = z.object({ filing: Filing.nullable().optional() });
+
 // ---- reconciliation (the accountant's month) ----
 export const Reason = z.object({ code: z.string(), args: z.record(z.string(), z.string()) });
 export type Reason = z.infer<typeof Reason>;

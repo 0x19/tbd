@@ -7,6 +7,7 @@ import * as categories from "./categories";
 import * as common from "./common";
 import * as connectors from "./connectors";
 import * as documents from "./documents";
+import * as filings from "./filings";
 import * as invoices from "./invoices";
 import * as kinds from "./kinds";
 import * as mail from "./mail";
@@ -36,6 +37,7 @@ const all = [
   documents,
   connectors,
   accountant,
+  filings,
   mail,
 ];
 

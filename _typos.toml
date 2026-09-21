@@ -16,6 +16,8 @@ extend-exclude = [
   "docs/accountant/gfi-2025.md",
   "docs/accountant/rules.md",
   "docs/accountant/email.md",
+  # An ePorezna form as filed: Croatian element names and the company's own data.
+  "crates/finance/tests/fixtures/filings/",
   "docs/accountant/expected/",
   # mobile: buf-generated Dart (protobuf's own accessor names) and Xcode's storyboard ids.
   "mobile/packages/tbd_proto/lib/gen/",
@@ -38,3 +40,6 @@ tema = "tema"
 paket = "paket"
 # A date regex's ordinal suffixes (1st, 2nd, 3rd).
 nd = "nd"
+# ePorezna's XML: the namespace path `/sheme/` (schemes) and the `Autor` element.
+sheme = "sheme"
+autor = "autor"

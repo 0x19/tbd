@@ -4,7 +4,8 @@
 //! text ([`pdf`]) and the text into fields ([`fields`]): vendor, date,
 //! amount, number. It runs on every document as it is stored, on every
 //! document it has never seen at start-up, and again on request. A person's
-//! corrections are declared and outlive any re-read.
+//! corrections are declared and outlive any re-read. A document of kind
+//! `filing` (an ePorezna form) is handed to [`crate::filings`] instead.
 
 pub mod fields;
 pub mod mail;
@@ -27,6 +28,11 @@ pub async fn read(pool: &PgPool, id: Uuid) -> Result<(), StoreError> {
     let Some(to_read) = store::to_read(pool, id).await? else {
         return Ok(());
     };
+    // An ePorezna form has its own reader, and no vendor, date or amount in
+    // the receipt sense to look for.
+    if to_read.kind == "filing" {
+        return crate::filings::read(pool, id).await;
+    }
     let bytes = store::bytes(pool, id).await?;
     let (text, error) = match pdf::text(bytes).await {
         Ok(t) => (Some(t), None),

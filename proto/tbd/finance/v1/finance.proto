@@ -448,12 +448,24 @@ service FinanceService {
 
   // A receipt a person adds by hand: a PDF from a vendor's portal, or a
   // photo of a paper receipt. Whose it is is the caller's word and final.
-  // The same bytes uploaded twice are one document.
+  // The same bytes uploaded twice are one document. An XML content type
+  // makes it a filing: an ePorezna form (PD, PDV, PDV-S, ZP, JOPPD, PD-IPO,
+  // TZ), read on the spot and refused unless its OIB is the party's.
   rpc UploadDocument(UploadDocumentRequest) returns (UploadDocumentResponse) {
     option (google.api.http) = {
       post: "/v1/finance/documents/upload"
       body: "*"
     };
+  }
+
+  // The company's ePorezna filings, newest period first, each with the
+  // form's headline figures.
+  rpc ListFilings(ListFilingsRequest) returns (ListFilingsResponse) {
+    option (google.api.http) = {get: "/v1/finance/filings"};
+  }
+  // One filing with every value the form carries and its repeated rows.
+  rpc GetFiling(GetFilingRequest) returns (GetFilingResponse) {
+    option (google.api.http) = {get: "/v1/finance/filings/{id}"};
   }
 }
 
@@ -711,7 +723,7 @@ message ListConnectorRunsResponse {
 message Document {
   string id = 1;
   string party_id = 2;
-  // invoice or receipt.
+  // invoice, receipt, or filing (an ePorezna form; see ListFilings).
   string kind = 3;
   string filename = 4;
   string content_type = 5;
@@ -745,7 +757,7 @@ message DocumentSource {
 }
 message ListDocumentsRequest {
   repeated string party_ids = 1;
-  // receipt, invoice, or empty for any.
+  // receipt, invoice, filing, or empty for any.
   string kind = 2;
   uint32 limit = 3;
   uint32 offset = 4;
@@ -769,6 +781,67 @@ message ListDocumentsResponse {
 message VendorCount {
   string vendor = 1;
   uint32 count = 2;
+}
+// An ePorezna form read from its XML. Amounts are the decimal strings as
+// filed ("177733.47"), never rounded; the page converts for display.
+message Filing {
+  // The document's id: GetDocument gives the bytes.
+  string id = 1;
+  string party_id = 2;
+  // pd, pdv, pdv_s, zp, joppd, pd_ipo or tz.
+  string form = 3;
+  // Metapodaci/Uskladjenost, e.g. ObrazacPD-v9-0.
+  string schema = 4;
+  // YYYY-MM-DD; a JOPPD's report date on both. Empty when the form says none.
+  string period_from = 5;
+  string period_to = 6;
+  string oib = 7;
+  // The taxpayer's name as written on the form.
+  string obveznik = 8;
+  // When the software prepared the form (Metapodaci/Datum), RFC 3339; empty
+  // when absent. Not when ePorezna accepted it: the XML does not say.
+  string prepared_at = 9;
+  string author = 10;
+  string filename = 11;
+  // A JOPPD's OznakaIzvjesca (yyDDD); empty otherwise.
+  string report_mark = 12;
+  // A few figures per form, keyed as in `values`: PD "1", "2", "3", "38",
+  // "44", "55", "56", "57", "59"; PDV "000", "104", "105", "200.Vrijednost",
+  // "200.Porez", "300.Vrijednost", "300.Porez", "400", "500"; JOPPD
+  // "A.PredujamPoreza.P1" and so on. Only keys the form carries.
+  map<string, string> headline = 13;
+  // Every body value by path, Podatak prefix dropped ("1", "200.Porez",
+  // "GP00", "A.Doprinosi.ZdravstvenoOsiguranje.P1"). Only from GetFiling.
+  map<string, string> values = 14;
+  // The repeated blocks (recipients, supplies, persons) as a JSON array of
+  // objects, each tagged "_kind" with its container. Only from GetFiling.
+  string rows_json = 15;
+  // Set when the form was recognised but not fully read.
+  string error = 16;
+  string parsed_at = 17;
+  string parser_version = 18;
+}
+message ListFilingsRequest {
+  repeated string party_ids = 1;
+  // One of the forms, or empty for all.
+  string form = 2;
+  // Filings whose period starts in this year; 0 for any.
+  uint32 year = 3;
+  uint32 limit = 4;
+  uint32 offset = 5;
+}
+message ListFilingsResponse {
+  repeated Filing filings = 1;
+  // Matches in all, before limit and offset.
+  uint32 total = 2;
+  // Every year with a filing in view, newest first, for a filter.
+  repeated uint32 years = 3;
+}
+message GetFilingRequest {
+  string id = 1;
+}
+message GetFilingResponse {
+  Filing filing = 1;
 }
 message MonthlyReconciliationRequest {
   string party_id = 1;

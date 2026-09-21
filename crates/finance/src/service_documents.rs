@@ -75,6 +75,90 @@ pub(crate) fn document_proto(d: DocumentRow, sources: Vec<SourceRow>) -> Documen
     }
 }
 
+/// What an upload request asks to store: the checked content type and
+/// bytes, a safe file name, and the kind. An XML content type is a filing,
+/// read here so that what is not a form never reaches the store.
+fn upload_of(
+    party_id: Uuid,
+    req: &UploadDocumentRequest,
+) -> Result<(Upload, Option<crate::filings::Parsed>), Status> {
+    let content_type = req.content_type.trim().to_ascii_lowercase();
+    let is_xml = matches!(content_type.as_str(), "application/xml" | "text/xml");
+    if !is_xml
+        && !matches!(
+            content_type.as_str(),
+            "application/pdf" | "image/jpeg" | "image/png"
+        )
+    {
+        return Err(Status::invalid_argument(
+            "content_type: want application/pdf, image/jpeg, image/png or text/xml",
+        ));
+    }
+    if req.bytes.is_empty() {
+        return Err(Status::invalid_argument("bytes: empty"));
+    }
+    if content_type == "application/pdf" && !req.bytes.starts_with(b"%PDF") {
+        return Err(Status::invalid_argument("bytes: not a pdf"));
+    }
+    let xml_body = req
+        .bytes
+        .strip_prefix(b"\xEF\xBB\xBF")
+        .unwrap_or(&req.bytes);
+    if is_xml && !xml_body.starts_with(b"<") {
+        return Err(Status::invalid_argument("bytes: not xml"));
+    }
+    let filing = if is_xml {
+        Some(
+            crate::filings::parse(&req.bytes)
+                .map_err(|e| Status::invalid_argument(format!("bytes: {e}")))?,
+        )
+    } else {
+        None
+    };
+    let filename: String = req
+        .filename
+        .trim()
+        .chars()
+        .filter(|c| !c.is_control() && *c != '/' && *c != '\\')
+        .take(120)
+        .collect();
+    let filename = if filename.is_empty() {
+        match content_type.as_str() {
+            "image/jpeg" => "receipt.jpg".to_owned(),
+            "image/png" => "receipt.png".to_owned(),
+            "application/pdf" => "receipt.pdf".to_owned(),
+            _ => "filing.xml".to_owned(),
+        }
+    } else {
+        filename
+    };
+    Ok((
+        Upload {
+            party_id,
+            filename,
+            content_type,
+            bytes: req.bytes.clone(),
+            kind: if is_xml { "filing" } else { "receipt" }.to_owned(),
+        },
+        filing,
+    ))
+}
+
+/// A form is the party's when its OIB is the party's registered one. A
+/// person has none and cannot own a filing.
+fn filing_gate(filing: &crate::filings::Parsed, party_oib: Option<&str>) -> Result<(), Status> {
+    match party_oib {
+        Some(oib) if oib == filing.header.oib => Ok(()),
+        Some(oib) => Err(Status::invalid_argument(format!(
+            "bytes: the {} is for OIB {}, the party's is {oib}",
+            filing.form, filing.header.oib
+        ))),
+        None => Err(Status::invalid_argument(
+            "party_id: a filing belongs to a company with an OIB",
+        )),
+    }
+}
+
 impl Finance {
     pub(crate) async fn rpc_list_documents(
         &self,
@@ -197,47 +281,21 @@ impl Finance {
     ) -> Result<Response<UploadDocumentResponse>, Status> {
         let req = request.get_ref();
         let party_id = uuid(&req.party_id, "party_id")?;
-        let content_type = req.content_type.trim().to_ascii_lowercase();
-        if !matches!(
-            content_type.as_str(),
-            "application/pdf" | "image/jpeg" | "image/png"
-        ) {
-            return Err(Status::invalid_argument(
-                "content_type: want application/pdf, image/jpeg or image/png",
-            ));
-        }
-        if req.bytes.is_empty() {
-            return Err(Status::invalid_argument("bytes: empty"));
-        }
-        if content_type == "application/pdf" && !req.bytes.starts_with(b"%PDF") {
-            return Err(Status::invalid_argument("bytes: not a pdf"));
-        }
-        let filename: String = req
-            .filename
-            .trim()
-            .chars()
-            .filter(|c| !c.is_control() && *c != '/' && *c != '\\')
-            .take(120)
-            .collect();
-        let filename = if filename.is_empty() {
-            let ext = match content_type.as_str() {
-                "image/jpeg" => "jpg",
-                "image/png" => "png",
-                _ => "pdf",
-            };
-            format!("receipt.{ext}")
-        } else {
-            filename
-        };
-        let up = Upload {
-            party_id,
-            filename,
-            content_type,
-            bytes: req.bytes.clone(),
-        };
+        let (up, filing) = upload_of(party_id, req)?;
         let (mut timer, pool, access, _) = self
             .invoice_context("FinanceService/UploadDocument", &request, &[])
             .await?;
+        if let Some(filing) = &filing {
+            // The party's own OIB, as registered; a person has none and
+            // cannot own a filing.
+            let oib = match crate::filings::store::org_oib(pool, party_id).await {
+                Ok(oib) => oib,
+                Err(e) => return self.done_c(&mut timer, Err(e)),
+            };
+            if let Err(status) = filing_gate(filing, oib.as_deref()) {
+                return Err(self.reject(&mut timer, status));
+            }
+        }
         let (id, new) = match store::upload(pool, &access, &up).await {
             Ok(v) => v,
             Err(e) => return self.done_c(&mut timer, Err(e)),

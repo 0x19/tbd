@@ -52,9 +52,17 @@ the replay must hit 28.209,70 at year end.
 
 Cash: 1.950,00 withdrawn and spent; the cash-box entries need the receipts behind them.
 
+## Filings from ePorezna
+
+Every form filed under the company's OIB downloads from ePorezna as XML (Pregled
+podataka, Poslani obrasci) and uploads on `/filings/` in the finance UI, where the
+service reads it into figures (`docs/finance/filings.md`). For 2025 that is the PD,
+PD-IPO, twelve PDV, PDV-S and ZP where filed, twelve JOPPD and the TZ form. The PD
+figures in `expected/pd.csv` are checked against a PD XML by the finance crate's tests.
+
 ## Payroll
 
-No payroll documents are in the folders. The monthly JOPPD and payslips are with the
+No payroll documents are in the folders; the twelve JOPPD filings carry the figures. The monthly JOPPD and payslips are with the
 accountant; the annual totals are known from the trial balance (findings.md §6) and
 suffice to replay 2025 as twelve identical months. For 2026 the service needs the
 JOPPD input.

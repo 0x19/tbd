@@ -154,6 +154,21 @@ The finance service. gRPC only. Scaffolded by `tbd new service` (docs/tbd/README
   reach -- a PDF from a vendor's portal, a photo of a paper receipt -- as the caller's
   party, declared, deduplicated on the bytes, and read at once; a source row with no
   connector (`upload:<sha>`) says where it came from. `service_documents.rs` holds the RPCs.
+- `filings/`: the company's ePorezna forms, uploaded as the XML ePorezna hands back
+  (`UploadDocument` with `text/xml`; kind `filing`). `mod.rs` recognises the form from
+  the root element (PD, PDV, PDV-S, ZP, JOPPD, PD-IPO, TZ), `header.rs`/`joppd.rs` read
+  the period, OIB and metadata, `xml.rs` flattens the body once for every form
+  (`path -> decimal string`, repeated blocks as rows tagged `_kind`; names matched by
+  local name because the official examples disagree on namespaces), `form.rs` is the
+  per-form data (row containers, headline keys, the PD row-to-key map the tests use
+  against `docs/accountant/expected/pd.csv`). The upload parses first and refuses
+  what is not a form or is for another OIB than the party's registered one (a person
+  cannot own a filing); a recognised form the reader cannot finish is stored with
+  `error`. `read` is the one writer of `finance.filings` (upload, `ExtractDocument`, the
+  backfill), stamps `parser_version`, sets the document's `extracted_at` and a one-line
+  `text` so search reaches it, and skips `party::assign`; a filing never moves party
+  (`documents::store::update` refuses). Amounts stay strings; `minor()` converts
+  exactly. `service_filings.rs` holds `ListFilings`/`GetFiling`. `docs/finance/filings.md`.
 - `reconcile/`: the accountant's month. `mod.rs` is two pure rule sets with their tests
   on the real August statement: *need* (what the accountant needs from us: `eracun` for an
   HR IBAN, since domestic B2B is e-invoiced; `none` for state-budget references (HR68),

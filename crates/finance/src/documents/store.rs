@@ -209,10 +209,13 @@ pub struct Upload {
     pub party_id: Uuid,
     /// As named by the person, kept for the page and the bundle.
     pub filename: String,
-    /// `application/pdf`, `image/jpeg` or `image/png`.
+    /// `application/pdf`, `image/jpeg`, `image/png`, or an XML type for a
+    /// filing.
     pub content_type: String,
     /// The file.
     pub bytes: Vec<u8>,
+    /// `receipt`, or `filing` for an ePorezna form.
+    pub kind: String,
 }
 
 /// Store a document a person uploaded. The same bytes for the same party
@@ -247,7 +250,7 @@ pub async fn upload(
     sqlx::query(
         "insert into finance.documents
             (id, party_id, kind, sha256, content_type, size_bytes, filename, extracted)
-         values ($1, $2, 'receipt', $3, $4, $5, $6, '{\"party\": \"declared\"}'::jsonb)",
+         values ($1, $2, $7, $3, $4, $5, $6, '{\"party\": \"declared\"}'::jsonb)",
     )
     .bind(id)
     .bind(up.party_id)
@@ -255,6 +258,7 @@ pub async fn upload(
     .bind(&up.content_type)
     .bind(i64::try_from(up.bytes.len()).unwrap_or(i64::MAX))
     .bind(&up.filename)
+    .bind(&up.kind)
     .execute(&mut *tx)
     .await
     .map_err(map_err)?;
@@ -328,8 +332,16 @@ pub async fn update(
         found_by.insert(key.to_owned(), Value::String("declared".into()));
     }
     // The party moves only to one the caller may see, and is then theirs:
-    // no re-read decides it again.
+    // no re-read decides it again. A filing never moves: it belongs to the
+    // OIB it names.
     let party = match declared.party_id {
+        Some(p) if p != doc.party_id && doc.kind == "filing" => {
+            return Err(DbError::Invalid {
+                field: "party_id",
+                reason: "a filing belongs to the OIB it names".into(),
+            }
+            .into());
+        }
         Some(p) => {
             access.require(PartyId(p), "party")?;
             found_by.insert("party".into(), Value::String("declared".into()));
@@ -371,6 +383,8 @@ pub struct ToRead {
     pub declared: bool,
     /// The file's name, whose own date settles a slash date.
     pub filename: String,
+    /// `receipt`, `filing`, ...: which reader runs.
+    pub kind: String,
 }
 
 /// What the reader needs for `id`, if the document exists.
@@ -378,13 +392,16 @@ pub struct ToRead {
 /// # Errors
 /// The database.
 pub async fn to_read(pool: &PgPool, id: Uuid) -> Result<Option<ToRead>, StoreError> {
-    let row: Option<(Uuid, Option<DateTime<Utc>>, Option<String>)> =
-        sqlx::query_as("select id, declared_at, filename from finance.documents where id = $1")
-            .bind(id)
-            .fetch_optional(pool)
-            .await
-            .map_err(map_err)?;
-    let Some((id, declared_at, filename)) = row else {
+    /// id, when a person spoke, the file name, the kind.
+    type Row = (Uuid, Option<DateTime<Utc>>, Option<String>, String);
+    let row: Option<Row> = sqlx::query_as(
+        "select id, declared_at, filename, kind from finance.documents where id = $1",
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await
+    .map_err(map_err)?;
+    let Some((id, declared_at, filename, kind)) = row else {
         return Ok(None);
     };
     let source = sources_of(pool, &[id]).await?.into_iter().next();
@@ -413,6 +430,7 @@ pub async fn to_read(pool: &PgPool, id: Uuid) -> Result<Option<ToRead>, StoreErr
         received: source.and_then(|s| s.received_at).map(|t| t.date_naive()),
         declared: declared_at.is_some(),
         filename: filename.unwrap_or_default(),
+        kind,
     }))
 }
 

@@ -9,6 +9,7 @@ mod categorise;
 mod connect;
 mod connectors;
 mod documents;
+mod filings;
 mod import;
 mod invoices;
 mod mail;

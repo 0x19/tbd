@@ -2,6 +2,7 @@ import {
   IconBuildingBank,
   IconCategory,
   IconChecklist,
+  IconFileCertificate,
   IconFileInvoice,
   IconLayoutDashboard,
   IconListDetails,
@@ -41,7 +42,10 @@ export const navGroups: NavGroup[] = [
   },
   {
     title: "nav.group.accountant",
-    items: [{ title: "nav.reconciliation", url: "/reconciliation/", icon: IconChecklist }],
+    items: [
+      { title: "nav.reconciliation", url: "/reconciliation/", icon: IconChecklist },
+      { title: "nav.filings", url: "/filings/", icon: IconFileCertificate },
+    ],
   },
   {
     title: "nav.group.communication",

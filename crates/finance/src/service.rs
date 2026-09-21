@@ -58,6 +58,9 @@ use tbd_proto::finance::v1::{
     UpdateDocumentRequest, UpdateDocumentResponse, UploadDocumentRequest, UploadDocumentResponse,
     UpsertMailTemplateRequest, UpsertMailTemplateResponse,
 };
+use tbd_proto::finance::v1::{
+    GetFilingRequest, GetFilingResponse, ListFilingsRequest, ListFilingsResponse,
+};
 use tonic::{Code, Request, Response, Status};
 use uuid::Uuid;
 
@@ -1199,6 +1202,18 @@ impl FinanceService for Finance {
         r: Request<UploadDocumentRequest>,
     ) -> Result<Response<UploadDocumentResponse>, Status> {
         self.rpc_upload_document(r).await
+    }
+    async fn list_filings(
+        &self,
+        r: Request<ListFilingsRequest>,
+    ) -> Result<Response<ListFilingsResponse>, Status> {
+        self.rpc_list_filings(r).await
+    }
+    async fn get_filing(
+        &self,
+        r: Request<GetFilingRequest>,
+    ) -> Result<Response<GetFilingResponse>, Status> {
+        self.rpc_get_filing(r).await
     }
     async fn list_mail_templates(
         &self,

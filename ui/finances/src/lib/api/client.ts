@@ -15,6 +15,7 @@ import {
   DeleteMailTemplateResponse,
   DocumentResponse,
   GetDocumentResponse,
+  GetFilingResponse,
   GetIssuerResponse,
   GetMailResponse,
   GetTransactionResponse,
@@ -31,6 +32,7 @@ import {
   ListConnectorRunsResponse,
   ListConnectorsResponse,
   ListDocumentsResponse,
+  ListFilingsResponse,
   ListInvoicesResponse,
   ListIssuersResponse,
   ListLineTemplatesResponse,
@@ -317,6 +319,10 @@ export const api = {
     offset?: number;
   }) => call(ListDocumentsResponse, `/v1/finance/documents${query({ kind: "receipt", limit: 100, ...p })}`),
   document: (id: string) => call(GetDocumentResponse, `/v1/finance/documents/${id}`),
+  // ---- filings ----
+  filings: (p: { party_ids: string[]; form?: string; year?: number; limit?: number; offset?: number }) =>
+    call(ListFilingsResponse, `/v1/finance/filings${query({ limit: 200, ...p })}`),
+  filing: (id: string) => call(GetFilingResponse, `/v1/finance/filings/${id}`),
   // ---- mail ----
   mailTemplates: (party_ids: string[]) =>
     call(ListMailTemplatesResponse, `/v1/finance/mail/templates${query({ party_ids })}`),
