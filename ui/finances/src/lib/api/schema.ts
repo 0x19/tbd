@@ -409,7 +409,12 @@ export type Mail = z.infer<typeof Mail>;
 export const SendMailResponse = z.object({ mail: Mail.nullable().optional() });
 export const ListMailResponse = z.object({ mails: z.array(Mail), total: z.number() });
 export const GetMailResponse = z.object({ mail: Mail.nullable().optional(), thread: z.array(Mail) });
-export const StartConnectorResponse = z.object({ connector_id: z.string(), url: z.string() });
+// `url` is empty for a kind linked by pasting credentials; `state` then goes to CompleteConnector.
+export const StartConnectorResponse = z.object({
+  connector_id: z.string(),
+  url: z.string(),
+  state: z.string(),
+});
 export const ConnectorResponse = z.object({ connector: Connector.nullable().optional() });
 export const TestConnectorResponse = z.object({ status: z.string() });
 

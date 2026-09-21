@@ -873,6 +873,7 @@ impl Connector for Gmail {
                     subject: subject.clone(),
                     sender: sender.clone(),
                     received_at,
+                    facts: None,
                 };
                 // A closed sink is the caller done listening (its store
                 // failed, or the run was abandoned): nothing more to fetch.
@@ -1102,6 +1103,7 @@ impl Gmail {
                         subject: subject.to_owned(),
                         sender: sender.to_owned(),
                         received_at,
+                        facts: None,
                     });
                 }
                 Err(e) => {
@@ -1143,6 +1145,7 @@ impl Gmail {
                 subject: subject.to_owned(),
                 sender: sender.to_owned(),
                 received_at,
+                facts: None,
             }
         };
         Ok(found)

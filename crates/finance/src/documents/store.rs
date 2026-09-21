@@ -472,10 +472,18 @@ pub async fn write_read(
         "update finance.documents
             set text = coalesce($2, text), extracted_at = now(),
                 -- The fields' record is rewritten; what else the row knows
-                -- (whose it is, and how that was decided) is kept.
+                -- (whose it is, and how that was decided) is kept, and so is
+                -- a field the provider stated: the reader never overrules it.
                 extracted = (coalesce(extracted, '{}'::jsonb)
-                             - 'engine' - 'error' - 'vendor' - 'date' - 'amount' - 'invoice_no') || $3,
-                vendor = $4, doc_date = $5, total_minor = $6, currency = $7, invoice_no = $8
+                             - 'engine' - 'error' - 'vendor' - 'date' - 'amount' - 'invoice_no') || $3
+                            || coalesce((select jsonb_object_agg(k, v)
+                                           from jsonb_each(coalesce(extracted, '{}'::jsonb)) as e(k, v)
+                                          where v = '\"provider\"'::jsonb), '{}'::jsonb),
+                vendor = case when extracted->>'vendor' = 'provider' then vendor else $4 end,
+                doc_date = case when extracted->>'date' = 'provider' then doc_date else $5 end,
+                total_minor = case when extracted->>'amount' = 'provider' then total_minor else $6 end,
+                currency = case when extracted->>'amount' = 'provider' then currency else $7 end,
+                invoice_no = case when extracted->>'invoice_no' = 'provider' then invoice_no else $8 end
           where id = $1",
     )
     .bind(id)
@@ -486,6 +494,51 @@ pub async fn write_read(
     .bind(fields.amount.as_ref().map(|v| v.0))
     .bind(fields.amount.as_ref().map(|v| &v.1))
     .bind(fields.invoice_no.as_ref().map(|v| &v.0))
+    .execute(pool)
+    .await
+    .map_err(map_err)?;
+    Ok(())
+}
+
+/// What the provider stated about a document, written as facts: the columns
+/// it gave, and `provider` as how each was found. `write_read` leaves such a
+/// field alone, and a person's correction still outranks it.
+///
+/// # Errors
+/// The database.
+pub async fn write_facts(
+    pool: &PgPool,
+    id: Uuid,
+    facts: &crate::connectors::Facts,
+) -> Result<(), StoreError> {
+    let mut by = serde_json::Map::new();
+    if facts.vendor.is_some() {
+        by.insert("vendor".into(), Value::String("provider".into()));
+    }
+    if facts.doc_date.is_some() {
+        by.insert("date".into(), Value::String("provider".into()));
+    }
+    if facts.total.is_some() {
+        by.insert("amount".into(), Value::String("provider".into()));
+    }
+    if facts.invoice_no.is_some() {
+        by.insert("invoice_no".into(), Value::String("provider".into()));
+    }
+    sqlx::query(
+        "update finance.documents
+            set vendor = coalesce($2, vendor), doc_date = coalesce($3, doc_date),
+                total_minor = coalesce($4, total_minor), currency = coalesce($5, currency),
+                invoice_no = coalesce($6, invoice_no),
+                extracted = coalesce(extracted, '{}'::jsonb) || $7
+          where id = $1",
+    )
+    .bind(id)
+    .bind(facts.vendor.as_deref())
+    .bind(facts.doc_date)
+    .bind(facts.total.as_ref().map(|t| t.0))
+    .bind(facts.total.as_ref().map(|t| t.1.as_str()))
+    .bind(facts.invoice_no.as_deref())
+    .bind(Value::Object(by))
     .execute(pool)
     .await
     .map_err(map_err)?;

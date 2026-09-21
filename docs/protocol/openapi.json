@@ -6055,6 +6055,9 @@
           "connector_id": {
             "type": "string"
           },
+          "state": {
+            "type": "string"
+          },
           "url": {
             "type": "string"
           }

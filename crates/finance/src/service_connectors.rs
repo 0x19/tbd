@@ -189,9 +189,10 @@ impl Finance {
             &self.connectors.redirect_url,
         )
         .await
-        .map(|(id, url)| StartConnectorResponse {
+        .map(|(id, url, state)| StartConnectorResponse {
             connector_id: id.to_string(),
             url,
+            state,
         });
         self.done_c(&mut timer, r)
     }

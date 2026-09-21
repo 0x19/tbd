@@ -399,7 +399,11 @@ function Row({
       </TableCell>
       <TableCell className="text-muted-foreground hidden max-w-96 lg:table-cell">
         <span className="block truncate text-xs" title={s ? `${s.sender} · ${s.subject}` : d.filename}>
-          {s ? s.subject || d.filename : t("documents.origin_upload_short")}
+          {s
+            ? s.sender === "e-računi"
+              ? `e-računi · ${s.subject || d.filename}`
+              : s.subject || d.filename
+            : t("documents.origin_upload_short")}
         </span>
         <span className="block truncate text-[11px]">{s ? s.sender : d.filename}</span>
       </TableCell>

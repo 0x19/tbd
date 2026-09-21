@@ -51,7 +51,10 @@ same conventions; read `ui/chaos/CLAUDE.md` for what is the kit's and what is ou
   client with its details and line templates), `/issuer/` (one form in sections), `/connectors/`
   (one flat list drawn from the `WatchConnectors` SSE feed via `useEvents`: a pull's
   progress and outcome, a relink, a removal arrive as events; `useFetch` polls only
-  while the feed is down. Link a mailbox chooses the kind, the **purpose** -- read
+  while the feed is down. Link a mailbox chooses the kind (a `token` kind such as
+  e-računi turns the dialog into a credential step: three fields, `CompleteConnector`
+  with the pasted JSON as `code` and the `state` the start returned; an `eracuni` row
+  has a _Source_ select in place of Gmail's filter), the **purpose** -- read
   receipts, send mail only, or both; `StartConnector.purpose` decides the consent Google
   is asked for, and the dialog says which -- and the party. A row shows two chips from
   `can_read` / `can_send`; a row that cannot read has no Pull, Filter or History, its
@@ -68,7 +71,8 @@ same conventions; read `ui/chaos/CLAUDE.md` for what is the kit's and what is ou
   with a hint (`components/documents/status.tsx` holds the chip and the provenance
   word). A row opens `receipt-sheet.tsx`: the PDF large on the left, the facts on the
   right each with how it was found (`found_by`), a sentence saying why the receipt
-  needs a look, the origin (the mail's subject, sender and time, or "uploaded"), and the
+  needs a look, the origin (the mail's subject, sender and time, "e-računi · number" for
+  the intermediary's, or "uploaded"; `provider` counts as sure in `sure()`), and the
   editor in the same column, which declares corrections through `UpdateDocument`
   (including whose it is: `party_id`; `found_by.party` says whether the account that
   paid, the text or the mailbox decided), "Read again" = `ExtractDocument`, and

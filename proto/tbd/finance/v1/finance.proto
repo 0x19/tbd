@@ -471,7 +471,10 @@ message StartConnectorRequest {
 }
 message StartConnectorResponse {
   string connector_id = 1;
+  // Where to send the browser; empty for a kind the person links by pasting
+  // credentials, which the page then sends to CompleteConnector with this state.
   string url = 2;
+  string state = 3;
 }
 message CompleteConnectorRequest {
   string state = 1;

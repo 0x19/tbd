@@ -114,6 +114,7 @@ export default function ConnectorsPage() {
         kinds={kinds.data?.kinds ?? []}
         parties={parties}
         defaultParty={partyIds[0] ?? ""}
+        onLinked={list.reload}
       />
 
       {list.error ? <p className="text-destructive text-sm">{list.error}</p> : null}
@@ -145,37 +146,128 @@ function LinkDialog({
   kinds,
   parties,
   defaultParty,
+  onLinked,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   kinds: ConnectorKind[];
   parties: { id: string; display_name: string }[];
   defaultParty: string;
+  /** A token kind linked without leaving the page: refresh the list. */
+  onLinked?: () => void;
 }) {
   const t = useT();
   const [kind, setKind] = useState("");
   const [party, setParty] = useState(defaultParty);
   const [purpose, setPurpose] = useState<Purpose>("both");
   const [busy, setBusy] = useState(false);
+  // A kind linked by pasting credentials: the second step of the dialog.
+  const [pending, setPending] = useState<{ state: string } | null>(null);
+  const [creds, setCreds] = useState({ username: "", secretKey: "", token: "" });
   useEffect(() => {
     if (open) {
       setParty(defaultParty);
       setKind(kinds.find((k) => k.configured)?.name ?? "");
       setPurpose("both");
+      setPending(null);
+      setCreds({ username: "", secretKey: "", token: "" });
     }
   }, [open, defaultParty, kinds]);
   const chosen = kinds.find((k) => k.name === kind);
   const purposes = (chosen?.purposes.length ? chosen.purposes : ["both"]) as Purpose[];
+  const isToken = chosen?.auth === "token";
   const start = async () => {
     setBusy(true);
     try {
       const r = await api.startConnector(party, kind, purposes.includes(purpose) ? purpose : "both");
-      window.location.href = r.url;
+      if (r.url) {
+        window.location.href = r.url;
+        return;
+      }
+      // No URL: the provider is asked with what the person pastes.
+      setPending({ state: r.state });
+      setBusy(false);
     } catch (e) {
       toast.error(describe(e));
       setBusy(false);
     }
   };
+  const link = async () => {
+    if (!pending) return;
+    setBusy(true);
+    try {
+      await api.completeConnector(pending.state, JSON.stringify(creds));
+      toast.success(t("connectors.token.linked"));
+      onOpenChange(false);
+      onLinked?.();
+    } catch (e) {
+      toast.error(describe(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const credsReady = Object.values(creds).every((v) => v.trim().length > 0);
+
+  if (pending) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {t("connectors.token.title", { kind: chosen ? kindText(t, chosen, "label") : kind })}
+            </DialogTitle>
+            <DialogDescription>{t("connectors.token.desc")}</DialogDescription>
+          </DialogHeader>
+          <form
+            className="space-y-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (credsReady && !busy) void link();
+            }}
+          >
+            <div className="space-y-1">
+              <Label className="text-xs">{t("connectors.token.username")}</Label>
+              <Input
+                value={creds.username}
+                onChange={(e) => setCreds({ ...creds, username: e.target.value })}
+                autoComplete="off"
+                autoFocus
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">{t("connectors.token.secret")}</Label>
+              <Input
+                type="password"
+                value={creds.secretKey}
+                onChange={(e) => setCreds({ ...creds, secretKey: e.target.value })}
+                autoComplete="off"
+                className="font-mono"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">{t("connectors.token.token")}</Label>
+              <Input
+                type="password"
+                value={creds.token}
+                onChange={(e) => setCreds({ ...creds, token: e.target.value })}
+                autoComplete="off"
+                className="font-mono"
+              />
+            </div>
+            <p className="text-muted-foreground text-xs">{t("connectors.token.where")}</p>
+          </form>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPending(null)} disabled={busy}>
+              {t("common.cancel")}
+            </Button>
+            <Button onClick={() => void link()} disabled={busy || !credsReady}>
+              {busy ? t("connectors.token.linking") : t("connectors.token.link")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  }
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
@@ -207,7 +299,7 @@ function LinkDialog({
               ))}
             </div>
           </div>
-          {purposes.length > 1 ? (
+          {purposes.length > 1 && !isToken ? (
             <div className="space-y-2">
               <Label>{t("connectors.purpose")}</Label>
               <div className="grid gap-2">
@@ -258,7 +350,8 @@ function LinkDialog({
           </div>
           {chosen ? (
             <p className="text-muted-foreground text-xs">
-              {t(`connectors.consent_${purpose}`)} {kindText(t, chosen, "consent_note")}
+              {isToken ? "" : `${t(`connectors.consent_${purpose}`)} `}
+              {kindText(t, chosen, "consent_note")}
             </p>
           ) : null}
         </div>
@@ -266,9 +359,11 @@ function LinkDialog({
           <Button onClick={() => void start()} disabled={busy || !kind || !party}>
             {busy
               ? t("connectors.opening")
-              : t("connectors.continue_to", {
-                  provider: chosen ? kindText(t, chosen, "label").split(" /")[0] : t("connectors.provider"),
-                })}
+              : isToken
+                ? t("common.continue")
+                : t("connectors.continue_to", {
+                    provider: chosen ? kindText(t, chosen, "label").split(" /")[0] : t("connectors.provider"),
+                  })}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -295,6 +390,13 @@ function ConnectorRow({
       return (JSON.parse(c.config || "{}") as { query?: string }).query ?? "";
     } catch {
       return "";
+    }
+  });
+  const [source, setSource] = useState(() => {
+    try {
+      return (JSON.parse(c.config || "{}") as { source?: string }).source ?? "both";
+    } catch {
+      return "both";
     }
   });
   const pulling = run !== null && run.outcome === "";
@@ -469,6 +571,33 @@ function ConnectorRow({
               >
                 {t("connectors.filter")}
               </Button>
+            ) : null}
+            {c.kind === "eracuni" ? (
+              <Select
+                value={source}
+                onValueChange={(v) =>
+                  void act("config", async () => {
+                    await api.configureConnector(c.id, { config: JSON.stringify({ source: v }) });
+                    setSource(v);
+                    return t("common.saved");
+                  })
+                }
+              >
+                <SelectTrigger
+                  className="h-8 w-56 text-xs"
+                  disabled={busy !== ""}
+                  title={t("connectors.source_hint")}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {["both", "received", "inbox"].map((v) => (
+                    <SelectItem key={v} value={v}>
+                      {t(`connectors.source.${v}`)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             ) : null}
             <Button
               variant="ghost"

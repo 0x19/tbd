@@ -6,7 +6,7 @@ import type { Document } from "@/lib/api/schema";
 
 /** A field the reader is sure about: read from a label, or set by a person. */
 export function sure(by: string | undefined): boolean {
-  return by === "label" || by === "declared";
+  return by === "label" || by === "declared" || by === "provider";
 }
 
 export type ReceiptStatus = "reading" | "unreadable" | "missing" | "guessed" | "read" | "corrected";
@@ -86,6 +86,7 @@ export function foundKey(by: string | undefined): string {
     case "text":
     case "mailbox":
     case "declared":
+    case "provider":
       return `documents.found.${by}`;
     default:
       return "documents.found.none";

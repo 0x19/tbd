@@ -146,7 +146,7 @@ pub async fn start(
     party: Uuid,
     purpose: Purpose,
     redirect_url: &str,
-) -> Result<(Uuid, String), StoreError> {
+) -> Result<(Uuid, String, String), StoreError> {
     access.require(PartyId(party), "party")?;
     if !kind.kind().purposes.contains(&purpose) {
         return Err(StoreError::Refused(format!(
@@ -180,7 +180,7 @@ pub async fn start(
     .execute(pool)
     .await
     .map_err(map_err)?;
-    Ok((id, url))
+    Ok((id, url, state))
 }
 
 /// Finish a link with the callback's state and code. The state names the
@@ -727,6 +727,11 @@ async fn store_one(
     .map_err(map_err)?;
     tx.commit().await.map_err(map_err)?;
     if stored {
+        // What the provider itself knows is written first, marked as its,
+        // so the reader fills only the rest and a re-read keeps it.
+        if let Some(facts) = &f.facts {
+            crate::documents::store::write_facts(pool, document_id, facts).await?;
+        }
         // What it says, while the next one is on the wire. A reader failure
         // is recorded on the document, not raised: the bytes are safe.
         if let Err(e) = crate::documents::read(pool, document_id).await {

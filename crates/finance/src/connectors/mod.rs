@@ -12,6 +12,7 @@
 //! without a UI change.
 
 pub mod crypto;
+pub mod eracuni;
 pub mod gmail;
 pub mod store;
 
@@ -141,6 +142,24 @@ pub struct Found {
     pub sender: String,
     /// When it arrived.
     pub received_at: Option<DateTime<Utc>>,
+    /// What the provider itself says the document is, when it knows: an
+    /// intermediary that carried the invoice knows its supplier, number,
+    /// date and total. Written as facts the reader does not second-guess.
+    pub facts: Option<Facts>,
+}
+
+/// The fields a provider states about a document. Each is optional; what is
+/// missing the reader fills from the text as usual.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Facts {
+    /// The supplier's name.
+    pub vendor: Option<String>,
+    /// The document's own date.
+    pub doc_date: Option<chrono::NaiveDate>,
+    /// The total, in minor units, with its ISO currency.
+    pub total: Option<(i64, String)>,
+    /// The supplier's number for it.
+    pub invoice_no: Option<String>,
 }
 
 /// What a linked credential may do, decided from the consent granted.
@@ -337,7 +356,10 @@ pub type KindsFactory = std::sync::Arc<dyn Fn() -> Vec<Box<dyn Connector>> + Sen
 /// Every kind the service knows, in the order the UI offers them.
 #[must_use]
 pub fn registry(config: &crate::config::Connectors) -> Vec<Box<dyn Connector>> {
-    vec![Box::new(gmail::Gmail::new(config))]
+    vec![
+        Box::new(gmail::Gmail::new(config)),
+        Box::new(eracuni::Eracuni::new()),
+    ]
 }
 
 /// The kind by name.

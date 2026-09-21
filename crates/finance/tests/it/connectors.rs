@@ -171,6 +171,7 @@ impl Connector for MockKind {
             subject: format!("Your receipt {id}"),
             sender: "billing@vendor.test".into(),
             received_at: Some(Utc::now()),
+            facts: None,
         };
         // The provider is not asked for a message already pulled.
         let mut out = Vec::new();
@@ -1014,11 +1015,21 @@ async fn start_for(
     party: Uuid,
     purpose: &str,
 ) -> tbd_proto::finance::v1::StartConnectorResponse {
+    start_kind(c, party, "mock", purpose).await
+}
+
+/// Start a link of any kind for a purpose and hand back the response.
+async fn start_kind(
+    c: &mut FinanceClient,
+    party: Uuid,
+    kind: &str,
+    purpose: &str,
+) -> tbd_proto::finance::v1::StartConnectorResponse {
     c.start_connector(as_caller(
         OWNER,
         StartConnectorRequest {
             party_id: party.to_string(),
-            kind: "mock".into(),
+            kind: kind.into(),
             purpose: purpose.into(),
         },
     ))
@@ -1116,5 +1127,163 @@ async fn a_narrower_grant_says_which_box_and_an_abandoned_link_is_swept() {
             .unwrap()
             .purposes,
         vec!["read", "send", "both"]
+    );
+}
+
+/// A kind the person links by pasting credentials, whose one document
+/// carries the provider's own facts.
+#[derive(Debug, Clone)]
+struct TokenKind;
+
+#[async_trait]
+impl Connector for TokenKind {
+    fn kind(&self) -> Kind {
+        Kind {
+            name: "tokenkind",
+            label: "Token kind",
+            description: "One invoice, with facts.",
+            auth: Auth::Token,
+            consent_note: "paste it",
+            configured: true,
+            purposes: &[Purpose::Read],
+        }
+    }
+    async fn start(&self, _ctx: &AuthContext) -> Result<String, ConnectorError> {
+        Ok(String::new())
+    }
+    async fn complete(&self, _ctx: &AuthContext, code: &str) -> Result<Linked, ConnectorError> {
+        let v: Value =
+            serde_json::from_str(code).map_err(|_| ConnectorError::Provider("not json".into()))?;
+        if v["token"] != "good" {
+            return Err(ConnectorError::Unlinked("bad token".into()));
+        }
+        Ok(Linked {
+            credentials: v,
+            external_id: "api@provider".into(),
+            label: "provider · api".into(),
+        })
+    }
+    async fn test(&self, _credentials: &Value) -> Result<String, ConnectorError> {
+        Ok("ok".into())
+    }
+    async fn pull(
+        &self,
+        _credentials: &Value,
+        _config: &Value,
+        _since: DateTime<Utc>,
+        seen: &(dyn for<'a> Fn(&'a str) -> bool + Sync),
+        sink: tokio::sync::mpsc::Sender<Found>,
+    ) -> Result<Reach, ConnectorError> {
+        if !seen("received:1") {
+            let _ = sink
+                .send(Found {
+                    external_ref: "received:1".into(),
+                    filename: "R-1.pdf".into(),
+                    content_type: "application/pdf".into(),
+                    bytes: b"%PDF-1.4 not really".to_vec(),
+                    subject: "R-1 Hetzner".into(),
+                    sender: "provider".into(),
+                    received_at: Some(Utc::now()),
+                    facts: Some(tbd_finance::connectors::Facts {
+                        vendor: Some("Hetzner Online GmbH".into()),
+                        doc_date: chrono::NaiveDate::from_ymd_opt(2026, 9, 2),
+                        total: Some((4200, "EUR".into())),
+                        invoice_no: Some("R-1".into()),
+                    }),
+                })
+                .await;
+        }
+        Ok(Reach::Complete)
+    }
+}
+
+#[tokio::test]
+async fn a_token_kind_links_by_pasting_and_its_facts_outlive_the_reader() {
+    let factory: tbd_finance::connectors::KindsFactory =
+        Arc::new(|| vec![Box::new(TokenKind) as Box<dyn Connector>]);
+    let (server, pool) = start_with_kinds(factory).await;
+    let (_, party) = seed(&pool).await;
+    let mut c = server.client().await;
+
+    // No URL to visit: the state comes back for the page to complete with.
+    let started = start_kind(&mut c, party, "tokenkind", "read").await;
+    assert!(started.url.is_empty());
+    assert!(!started.state.is_empty());
+
+    // Wrong credentials are refused and the row says so; right ones link.
+    let refused = c
+        .complete_connector(as_caller(
+            OWNER,
+            CompleteConnectorRequest {
+                state: started.state.clone(),
+                code: r#"{"token":"bad"}"#.into(),
+            },
+        ))
+        .await
+        .expect_err("bad token");
+    assert_eq!(refused.code(), Code::FailedPrecondition, "{refused}");
+    let started = start_kind(&mut c, party, "tokenkind", "read").await;
+    let linked = c
+        .complete_connector(as_caller(
+            OWNER,
+            CompleteConnectorRequest {
+                state: started.state.clone(),
+                code: r#"{"token":"good","secretKey":"s"}"#.into(),
+            },
+        ))
+        .await
+        .unwrap()
+        .into_inner()
+        .connector
+        .unwrap();
+    assert_eq!(linked.status, "linked");
+    assert_eq!(linked.external_id, "api@provider");
+    assert!(linked.can_read && !linked.can_send);
+
+    // The pull stores the document with the provider's facts, marked as its;
+    // the reader (which cannot read these bytes) leaves them; a re-read too.
+    let run = sync_and_wait(&mut c, &linked.id).await;
+    assert_eq!(run.outcome, "ok", "{}", run.error);
+    let docs = c
+        .list_documents(as_caller(
+            OWNER,
+            ListDocumentsRequest {
+                party_ids: vec![party.to_string()],
+                ..Default::default()
+            },
+        ))
+        .await
+        .unwrap()
+        .into_inner()
+        .documents;
+    assert_eq!(docs.len(), 1);
+    let d = &docs[0];
+    assert_eq!(d.vendor, "Hetzner Online GmbH");
+    assert_eq!(d.doc_date, "2026-09-02");
+    assert_eq!(d.total_minor, "4200");
+    assert_eq!(d.currency, "EUR");
+    assert_eq!(d.invoice_no, "R-1");
+    for k in ["vendor", "date", "amount", "invoice_no"] {
+        assert_eq!(
+            d.found_by.get(k).map(String::as_str),
+            Some("provider"),
+            "{k}"
+        );
+    }
+    let again = c
+        .extract_document(as_caller(
+            OWNER,
+            ExtractDocumentRequest { id: d.id.clone() },
+        ))
+        .await
+        .unwrap()
+        .into_inner()
+        .document
+        .unwrap();
+    assert_eq!(again.vendor, "Hetzner Online GmbH");
+    assert_eq!(again.total_minor, "4200");
+    assert_eq!(
+        again.found_by.get("amount").map(String::as_str),
+        Some("provider")
     );
 }

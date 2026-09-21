@@ -30,6 +30,22 @@ export const en: Dict = {
   "connectors.consent_both":
     "Google will ask for read-only access, to send mail on your behalf, and for your address.",
   "connectors.send_only_line": "send only, never pulled",
+  "connectors.token.title": "Paste the credentials for {kind}",
+  "connectors.token.desc":
+    "Nothing leaves this page except to the provider; the values are sealed at rest and never shown again.",
+  "connectors.token.username": "API user",
+  "connectors.token.secret": "API secret key",
+  "connectors.token.token": "Web-services token",
+  "connectors.token.where":
+    "In e-računi: Postavke → Web servisi. Web services must be enabled for the company first.",
+  "connectors.token.link": "Link",
+  "connectors.token.linking": "Checking with the provider…",
+  "connectors.token.linked": "Linked. The first pull runs now.",
+  "connectors.source": "Source",
+  "connectors.source_hint": "What is pulled from e-računi",
+  "connectors.source.both": "Received invoices and the inbox",
+  "connectors.source.received": "Received invoices only",
+  "connectors.source.inbox": "The e-invoice inbox only",
   "connectors.feed_error": "Feed: {error}",
   "connectors.nothing_linked": "Nothing linked yet. Link a mailbox to start collecting receipts.",
   "connectors.link_dialog_desc":
@@ -105,6 +121,22 @@ export const hr: Dict = {
   "connectors.consent_both":
     "Google će tražiti pristup samo za čitanje, slanje pošte u vaše ime i vašu adresu.",
   "connectors.send_only_line": "samo slanje, nikad se ne povlači",
+  "connectors.token.title": "Zalijepite pristupne podatke za {kind}",
+  "connectors.token.desc":
+    "Ništa ne odlazi s ove stranice osim pružatelju; vrijednosti se čuvaju zapečaćene i više se ne prikazuju.",
+  "connectors.token.username": "API korisnik",
+  "connectors.token.secret": "API tajni ključ",
+  "connectors.token.token": "Token web servisa",
+  "connectors.token.where":
+    "U e-računima: Postavke → Web servisi. Web servisi moraju prvo biti uključeni za tvrtku.",
+  "connectors.token.link": "Poveži",
+  "connectors.token.linking": "Provjeravam kod pružatelja…",
+  "connectors.token.linked": "Povezano. Prvi dohvat kreće sada.",
+  "connectors.source": "Izvor",
+  "connectors.source_hint": "Što se povlači iz e-računa",
+  "connectors.source.both": "Primljeni računi i sandučić",
+  "connectors.source.received": "Samo primljeni računi",
+  "connectors.source.inbox": "Samo sandučić e-računa",
   "connectors.feed_error": "Tok: {error}",
   "connectors.nothing_linked": "Još ništa nije povezano. Povežite sandučić da počnete prikupljati račune.",
   "connectors.link_dialog_desc":
