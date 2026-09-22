@@ -125,7 +125,7 @@ The finance service. gRPC only. Scaffolded by `tbd new service` (docs/tbd/README
   party; `{{Month}}`-style helpers are filled on the page, the service stores what was
   sent), `send` (refuses a mailbox that cannot send, an implausible address, no subject,
   and any recipient outside `[mail] allow_to` when that list is non-empty -- `local.toml`
-  lists the owner's own addresses, the accountant and the one colleague invoices go to, so a
+  lists the owner's own addresses, the accountant and the two addresses invoices go to, so a
   test never reaches anyone else; production
   lists none, so nothing is guarded there; a provider failure is a `failed` row, not an
   error), the list and thread reads, and `import_replies`, which `run_sync` calls at the

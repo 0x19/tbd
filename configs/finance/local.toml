@@ -3,11 +3,12 @@
 
 [mail]
 # A local send reaches only the owner's own addresses, the accountant -- the
-# one outside address the month's bundle is for -- and the one colleague an
+# one outside address the month's bundle is for -- and the two addresses an
 # invoice goes to. Anyone else is still refused before the provider is asked.
 allow_to = [
   "nevio@inorbit.hr",
   "nevio.vesic@gmail.com",
   "racunovodstvo.trinajstic@ri.t-com.hr",
   "andrija@tenderly.co",
+  "finances@tenderly.co",
 ]
