@@ -2,7 +2,12 @@
 # must exist so a mistyped TBD_ENV fails at start instead of running on base.
 
 [mail]
-# A local send reaches only the owner's own addresses, and the accountant --
-# the one outside address the month's bundle is for. Anyone else is still
-# refused before the provider is asked.
-allow_to = ["nevio@inorbit.hr", "nevio.vesic@gmail.com", "racunovodstvo.trinajstic@ri.t-com.hr"]
+# A local send reaches only the owner's own addresses, the accountant -- the
+# one outside address the month's bundle is for -- and the one colleague an
+# invoice goes to. Anyone else is still refused before the provider is asked.
+allow_to = [
+  "nevio@inorbit.hr",
+  "nevio.vesic@gmail.com",
+  "racunovodstvo.trinajstic@ri.t-com.hr",
+  "andrija@tenderly.co",
+]
