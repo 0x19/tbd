@@ -167,6 +167,14 @@ export function LabDemoContent() {
   return (
     <>
       <Frame className="pt-20 pb-10 sm:pt-28">
+        <p className="mb-6">
+          <Link
+            href="/lab/"
+            className="text-muted-foreground hover:text-foreground font-mono text-[11px] tracking-[0.14em] uppercase"
+          >
+            ← {t("lab.back")}
+          </Link>
+        </p>
         <p className="text-muted-foreground font-mono text-[11px] tracking-[0.18em] uppercase">
           {t("lab.demo.eyebrow")}
         </p>

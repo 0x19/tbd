@@ -26,6 +26,14 @@ export function LabDocContent({ doc }: { doc: LabDoc }) {
   return (
     <>
       <Frame className="pt-20 pb-8 sm:pt-28">
+        <p className="mb-6">
+          <Link
+            href="/lab/"
+            className="text-muted-foreground hover:text-foreground font-mono text-[11px] tracking-[0.14em] uppercase"
+          >
+            ← {t("lab.back")}
+          </Link>
+        </p>
         <p className="text-muted-foreground flex flex-wrap items-center gap-3 font-mono text-[11px] tracking-[0.18em] uppercase">
           <span>
             {label} {doc.number}
