@@ -48,6 +48,10 @@ Where things are:
   stress crate's events. The workers, model, invariants and findings are the stress
   crate's; nothing about the ledger's contract belongs here.
 - `scenario/assertions.rs` works on an immutable `Snapshot`; assertions are sync.
+- An operation reports one latency (the generator times `run()`) and may meter more
+  through `clients.meter` (`tbd_stress::metrics::Meter`: named counters and timings per
+  operation, on `OpSnapshot.counters`/`samples`); the report, the run record and the UI
+  carry them, and `absorb`/`reset` do too. `llm_generate` is the one that does.
 - `load/generator.rs` is open loop with an absolute-deadline pacer and a
   `max_in_flight` semaphore. Do not turn it closed loop; latency must not lower the
   rate.

@@ -84,11 +84,23 @@ lock, a counter).
 2. Return `Err(OpError::...)` with the right class. `Transport` for connection
    problems, `Http(status)` or `Grpc(code)` for protocol-level failures, `Contract(..)`
    for a well-formed reply that breaks the API.
-3. Add a variant to `OpKind` and map it in `OpKind::build`.
-4. Add a row to the operations table in [scenarios.md](scenarios.md#load).
+3. Add a variant to `OpKind`, map it in `OpKind::build`, and name the kind of instance
+   it runs against in `OpKind::target_kind` (the generator pairs an operation with the
+   targets of its kind; a kind that is a load target has `load_target: true` in its
+   registry entry).
+4. Add a row to the operations table in [scenarios.md](scenarios.md#load), and the
+   variant to `OpKind` in `ui/chaos/src/lib/api/schema.ts` (its `opTargetKind` reads the
+   prefix), so the Load page offers it.
+5. If the operation measures something the one latency cannot say, meter it:
+   `clients.meter.count(name(), "completion_tokens", n)` and
+   `clients.meter.sample(name(), "ttft", elapsed)`. Counters and timings land on the
+   operation's `per_op` entry (`counters`, `samples`), in the text report, in the run
+   record and on the run page; nothing to do for an operation that meters nothing.
 
 The generator adds timing, the timeout, bookkeeping and the error class `timeout`.
-Operations should not catch timeouts themselves.
+Operations should not catch timeouts themselves. The timeout covers the whole `run()`,
+a stream included: an operation that streams for seconds needs a scenario `[load]
+timeout` that allows it.
 
 ## Add a timeline action
 

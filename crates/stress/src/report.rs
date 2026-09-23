@@ -192,6 +192,28 @@ pub fn render(r: &CampaignResult) -> String {
                 "      op        {op:<18} {:>7} sent {:>6} failed   p50 {:>6.1} ms  p99 {:>6.1} ms  max {:>6.1} ms",
                 c.total, c.failed, c.latency.p50_ms, c.latency.p99_ms, c.latency.max_ms
             );
+            // What the operation metered itself: counters as totals and as a
+            // rate over the window, timings as quantiles.
+            for (name, n) in &c.counters {
+                // A rate for the eye; the precision a u64 loses in an f64 is not it.
+                #[allow(clippy::cast_precision_loss)]
+                let rate = if l.elapsed_s > 0.0 {
+                    *n as f64 / l.elapsed_s
+                } else {
+                    0.0
+                };
+                let _ = writeln!(
+                    out,
+                    "      meter     {name:<18} {n:>7} total   {rate:>8.1} /s"
+                );
+            }
+            for (name, s) in &c.samples {
+                let _ = writeln!(
+                    out,
+                    "      timing    {name:<18}                 p50 {:>6.1} ms  p99 {:>6.1} ms  max {:>6.1} ms",
+                    s.p50_ms, s.p99_ms, s.max_ms
+                );
+            }
         }
         for (class, n) in &l.errors {
             let _ = writeln!(out, "      error     {class:<18} {n:>7}");

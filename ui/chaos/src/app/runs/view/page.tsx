@@ -724,6 +724,7 @@ function Breakdown({
               </TableBody>
             </Table>
           </div>
+          <Meters snapshot={snapshot} ops={ops} />
         </CardContent>
       </Card>
       <div className="grid content-start gap-4">
@@ -847,6 +848,64 @@ export function ChecksTable({ checks }: { checks: CheckResult[] }) {
               {checks.filter((c) => c.passed).length} of {checks.length} passed
             </TableCell>
           </TableRow>
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
+/**
+ * What operations metered beside their latency: counters as totals and as a
+ * rate over the window (an LLM operation's tokens per second), timings as
+ * quantiles (its time to first token). Nothing to show for a run whose
+ * operations metered nothing.
+ */
+function Meters({ snapshot, ops }: { snapshot: LoadSnapshot; ops: string[] }) {
+  const rows = ops.flatMap((op) => {
+    const s = snapshot.per_op[op];
+    const counters = Object.entries(s.counters ?? {}).map(([name, n]) => ({
+      op,
+      name,
+      total: num(n),
+      rate: snapshot.elapsed_s > 0 ? `${(n / snapshot.elapsed_s).toFixed(1)} /s` : "–",
+      p50: "",
+      p99: "",
+    }));
+    const samples = Object.entries(s.samples ?? {}).map(([name, l]) => ({
+      op,
+      name,
+      total: "",
+      rate: "",
+      p50: `${l.p50_ms.toFixed(1)} ms`,
+      p99: `${l.p99_ms.toFixed(1)} ms`,
+    }));
+    return [...counters, ...samples];
+  });
+  if (rows.length === 0) return null;
+  return (
+    <div className="mt-4 overflow-x-auto">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Meter</TableHead>
+            <TableHead className="text-right">Total</TableHead>
+            <TableHead className="text-right">Rate</TableHead>
+            <TableHead className="text-right">p50</TableHead>
+            <TableHead className="text-right">p99</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((r) => (
+            <TableRow key={`${r.op}/${r.name}`}>
+              <TableCell className="font-mono text-xs">
+                {r.op} · {r.name}
+              </TableCell>
+              <TableCell className="text-right tabular-nums">{r.total || "–"}</TableCell>
+              <TableCell className="text-right tabular-nums">{r.rate || "–"}</TableCell>
+              <TableCell className="text-right tabular-nums">{r.p50 || "–"}</TableCell>
+              <TableCell className="text-right tabular-nums">{r.p99 || "–"}</TableCell>
+            </TableRow>
+          ))}
         </TableBody>
       </Table>
     </div>

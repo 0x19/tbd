@@ -6,6 +6,7 @@
 
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
+use super::Meter;
 use crate::tls::{Grpc, Trust, Ws};
 use async_trait::async_trait;
 use futures::{SinkExt, StreamExt};
@@ -69,13 +70,17 @@ impl OpError {
     }
 }
 
-/// Connections shared by every operation. One per load run.
+/// Connections shared by every operation, and the meter an operation may
+/// report counters and timings into. One per load run.
 pub struct Clients {
     http: reqwest::Client,
     ws: Mutex<HashMap<String, Vec<Ws>>>,
     grpc: Mutex<HashMap<String, Grpc>>,
     timeout: Duration,
     trust: Trust,
+    /// What an operation meters beside its latency (`tokens`, `ttft`, ...);
+    /// records nothing when no run is behind it.
+    pub meter: Meter,
 }
 
 impl Clients {
@@ -93,7 +98,15 @@ impl Clients {
             grpc: Mutex::new(HashMap::new()),
             timeout,
             trust,
+            meter: Meter::none(),
         }
+    }
+
+    /// Record what operations meter into the run's metrics.
+    #[must_use]
+    pub fn with_meter(mut self, meter: Meter) -> Self {
+        self.meter = meter;
+        self
     }
 
     async fn take_ws(&self, target: &Target) -> Result<Ws, OpError> {

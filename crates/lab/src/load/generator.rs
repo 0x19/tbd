@@ -11,7 +11,7 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 
 use super::{
-    LoadConfig, LoadSnapshot, Metrics,
+    LoadConfig, LoadSnapshot, Meter, Metrics,
     ops::{Clients, Operation, Target},
 };
 use crate::tls::Trust;
@@ -61,7 +61,9 @@ pub async fn run_with(
             trust.clone()
         }
     };
-    let clients = Arc::new(Clients::with_trust(config.timeout, trust));
+    let clients = Arc::new(
+        Clients::with_trust(config.timeout, trust).with_meter(Meter::new(metrics.clone())),
+    );
     let ctx = super::ops::OpContext {
         subjects: config.subjects,
         seed: config.seed,

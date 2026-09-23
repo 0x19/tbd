@@ -6,7 +6,7 @@
 use std::{
     collections::BTreeMap,
     sync::{
-        Mutex,
+        Arc, Mutex,
         atomic::{AtomicU64, Ordering},
     },
     time::{Duration, Instant},
@@ -44,8 +44,9 @@ pub struct TargetCounts {
     pub failed: u64,
 }
 
-/// Per-operation counts and latency.
-#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
+/// Per-operation counts and latency, plus whatever the operation metered
+/// itself (empty for one that meters nothing).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct OpSnapshot {
     /// Requests sent.
     pub total: u64,
@@ -53,11 +54,82 @@ pub struct OpSnapshot {
     pub failed: u64,
     /// Latency of successful requests.
     pub latency: Latency,
+    /// Counters the operation reported through [`Meter::count`], by name
+    /// (an LLM operation's `completion_tokens`, say). A rate is the counter
+    /// over the snapshot's `elapsed_s`.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub counters: BTreeMap<String, u64>,
+    /// Timings the operation reported through [`Meter::sample`], by name
+    /// (`ttft`, say), as latency quantiles.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub samples: BTreeMap<String, Latency>,
 }
 
 struct OpStats {
     counts: TargetCounts,
     hist: Histogram<u64>,
+    counters: BTreeMap<String, u64>,
+    samples: BTreeMap<String, Histogram<u64>>,
+}
+
+impl OpStats {
+    fn new() -> Self {
+        Self {
+            counts: TargetCounts::default(),
+            hist: histogram(),
+            counters: BTreeMap::new(),
+            samples: BTreeMap::new(),
+        }
+    }
+}
+
+/// What an operation may add beside the one latency the generator records
+/// for it: named counters and named timings, kept per operation. A handle
+/// over the run's [`Metrics`]; cheap to clone, and an operation that has
+/// nothing to add never touches it.
+#[derive(Clone)]
+pub struct Meter {
+    metrics: Option<Arc<Metrics>>,
+}
+
+impl Meter {
+    /// A meter that records into `metrics`.
+    #[must_use]
+    pub fn new(metrics: Arc<Metrics>) -> Self {
+        Self {
+            metrics: Some(metrics),
+        }
+    }
+
+    /// A meter that drops everything, for callers with no run behind them.
+    #[must_use]
+    pub fn none() -> Self {
+        Self { metrics: None }
+    }
+
+    /// Add `n` to the counter `name` of operation `op`.
+    pub fn count(&self, op: &str, name: &str, n: u64) {
+        if let Some(m) = &self.metrics {
+            m.count(op, name, n);
+        }
+    }
+
+    /// Record one timing under `name` for operation `op`.
+    pub fn sample(&self, op: &str, name: &str, value: Duration) {
+        if let Some(m) = &self.metrics {
+            m.sample(op, name, value);
+        }
+    }
+}
+
+impl std::fmt::Debug for Meter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(if self.metrics.is_some() {
+            "Meter(live)"
+        } else {
+            "Meter(none)"
+        })
+    }
 }
 
 /// A uniform sample of at most [`RESERVOIR`] latencies in milliseconds.
@@ -220,10 +292,7 @@ impl Metrics {
                 .per_op
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
-            let e = m.entry(op.to_owned()).or_insert_with(|| OpStats {
-                counts: TargetCounts::default(),
-                hist: histogram(),
-            });
+            let e = m.entry(op.to_owned()).or_insert_with(OpStats::new);
             e.counts.total += 1;
             if failed {
                 e.counts.failed += 1;
@@ -253,6 +322,30 @@ impl Metrics {
             .iter()
             .map(|ms| f64::from(*ms))
             .collect()
+    }
+
+    /// Add `n` to an operation's named counter (see [`Meter::count`]).
+    pub fn count(&self, op: &str, name: &str, n: u64) {
+        let mut m = self
+            .per_op
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let e = m.entry(op.to_owned()).or_insert_with(OpStats::new);
+        *e.counters.entry(name.to_owned()).or_default() += n;
+    }
+
+    /// Record one timing under an operation's named sample (see [`Meter::sample`]).
+    pub fn sample(&self, op: &str, name: &str, value: Duration) {
+        let mut m = self
+            .per_op
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let e = m.entry(op.to_owned()).or_insert_with(OpStats::new);
+        let _ = e
+            .samples
+            .entry(name.to_owned())
+            .or_insert_with(histogram)
+            .record(micros(value));
     }
 
     /// Add everything `other` counted to this, for a total over several
@@ -301,13 +394,20 @@ impl Metrics {
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
             {
-                let e = mine.entry(k.clone()).or_insert_with(|| OpStats {
-                    counts: TargetCounts::default(),
-                    hist: histogram(),
-                });
+                let e = mine.entry(k.clone()).or_insert_with(OpStats::new);
                 e.counts.total += v.counts.total;
                 e.counts.failed += v.counts.failed;
                 let _ = e.hist.add(&v.hist);
+                for (name, n) in &v.counters {
+                    *e.counters.entry(name.clone()).or_default() += n;
+                }
+                for (name, h) in &v.samples {
+                    let _ = e
+                        .samples
+                        .entry(name.clone())
+                        .or_insert_with(histogram)
+                        .add(h);
+                }
             }
         }
         {
@@ -396,6 +496,12 @@ impl Metrics {
                         total: v.counts.total,
                         failed: v.counts.failed,
                         latency: latency_of(&v.hist),
+                        counters: v.counters.clone(),
+                        samples: v
+                            .samples
+                            .iter()
+                            .map(|(name, h)| (name.clone(), latency_of(h)))
+                            .collect(),
                     },
                 )
             })
@@ -434,6 +540,57 @@ impl Metrics {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn meters_are_per_operation_and_survive_absorb_but_not_reset() {
+        let first = Metrics::new();
+        first.record("t", "generate", Ok(()), Duration::from_millis(50));
+        first.record("t", "ping", Ok(()), Duration::from_millis(1));
+        let meter = Meter::new(Arc::new(Metrics::new()));
+        drop(meter);
+        first.count("generate", "completion_tokens", 40);
+        first.count("generate", "completion_tokens", 8);
+        first.sample("generate", "ttft", Duration::from_millis(120));
+        first.sample("generate", "ttft", Duration::from_millis(80));
+
+        let snap = first.snapshot();
+        let generate = &snap.per_op["generate"];
+        assert_eq!(generate.counters["completion_tokens"], 48);
+        let ttft = &generate.samples["ttft"];
+        assert!(ttft.p50_ms >= 80.0 && ttft.max_ms >= 120.0, "{ttft:?}");
+        let ping = &snap.per_op["ping"];
+        assert!(
+            ping.counters.is_empty() && ping.samples.is_empty(),
+            "an operation that meters nothing shows nothing"
+        );
+
+        let total = Metrics::new();
+        total.count("generate", "completion_tokens", 2);
+        total.absorb(&first);
+        let snap = total.snapshot();
+        assert_eq!(snap.per_op["generate"].counters["completion_tokens"], 50);
+        assert!(snap.per_op["generate"].samples["ttft"].max_ms >= 120.0);
+
+        total.reset();
+        assert!(total.snapshot().per_op.is_empty());
+    }
+
+    #[test]
+    fn a_meter_without_metrics_records_nothing_and_a_snapshot_round_trips() {
+        Meter::none().count("x", "y", 1);
+        Meter::none().sample("x", "y", Duration::from_millis(1));
+        let m = Arc::new(Metrics::new());
+        let meter = Meter::new(m.clone());
+        meter.count("generate", "generations", 1);
+        let snap = m.snapshot();
+        let json = serde_json::to_string(&snap).unwrap_or_default();
+        let back: LoadSnapshot = serde_json::from_str(&json).unwrap_or_default();
+        assert_eq!(back.per_op["generate"].counters["generations"], 1);
+        // An older record without the maps still parses.
+        let old = r#"{"total":1,"failed":0,"latency":{"p50_ms":1.0,"p90_ms":1.0,"p99_ms":1.0,"max_ms":1.0,"mean_ms":1.0}}"#;
+        let op: OpSnapshot = serde_json::from_str(old).unwrap_or_default();
+        assert!(op.counters.is_empty() && op.samples.is_empty());
+    }
 
     fn record(m: &Metrics, n: usize, ms: u64) {
         for _ in 0..n {

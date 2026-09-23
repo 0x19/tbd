@@ -109,6 +109,11 @@ export const OpSnapshot = z.object({
   total: z.number(),
   failed: z.number(),
   latency: Latency,
+  // What the operation metered itself, beside its latency: named counters
+  // (a rate is the counter over `elapsed_s`) and named timings as quantiles.
+  // Absent from records written before meters existed.
+  counters: z.record(z.string(), z.number()).default({}),
+  samples: z.record(z.string(), Latency).default({}),
 });
 
 export const LoadSnapshot = z.object({
@@ -581,9 +586,18 @@ export const OpKind = z.enum([
   "ledger_lifecycle",
   "ledger_erase_cycle",
   "ledger_fuzz",
+  "finance_ping",
+  "finance_money",
+  "finance_access",
+  "finance_trial_balance",
+  "finance_import_opening",
+  "llm_generate",
 ]);
-/** The kind of instance an operation targets (mirrors `OpKind::target_kind`). */
-export const opTargetKind = (op: OpKind): string => (op.startsWith("ledger_") ? "ledger" : "protocol");
+/** The kind of instance an operation targets (mirrors `OpKind::target_kind`): the prefix names it, protocol otherwise. */
+export const opTargetKind = (op: OpKind): string => {
+  const prefix = op.split("_")[0];
+  return ["ledger", "finance", "llm"].includes(prefix) ? prefix : "protocol";
+};
 export type OpKind = z.infer<typeof OpKind>;
 
 /** The `[load]` table of a scenario, as JSON. */

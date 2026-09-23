@@ -13,7 +13,7 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 
 pub use generator::{Hooks, PROGRESS_INTERVAL, run, run_with};
-pub use metrics::{LoadSnapshot, Metrics};
+pub use metrics::{LoadSnapshot, Meter, Metrics};
 pub use ops::{OpKind, Target};
 
 /// `[load]` in a scenario.
