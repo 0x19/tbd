@@ -73,6 +73,15 @@ pub mod names {
     /// (`owner`, `requester`) and `outcome` (`sent`, `refused`, `failed`,
     /// `no_mailbox`, `unreachable`).
     pub const CV_NOTIFICATIONS_TOTAL: &str = "tbd_cv_notifications_total";
+    /// Counter: tokens the llm service's engines reported. Labels `tier`, `engine`,
+    /// `model`, `kind` (`prompt`, `completion`).
+    pub const LLM_TOKENS_TOTAL: &str = "tbd_llm_tokens_total";
+    /// Histogram: seconds from admitting a generation to its first text chunk.
+    /// Labels `tier`, `engine`.
+    pub const LLM_TIME_TO_FIRST_TOKEN: &str = "tbd_llm_time_to_first_token_seconds";
+    /// Gauge: 1 while the tier's engine answered its last probe, else 0. Labels
+    /// `tier`, `engine`.
+    pub const LLM_ENGINE_UP: &str = "tbd_llm_engine_up";
     /// Counter of idempotency rows purged after their TTL.
     pub const LEDGER_IDEMPOTENCY_PURGED_TOTAL: &str = "tbd_ledger_idempotency_purged_total";
     /// Gauge of outbox events not yet published.
@@ -144,6 +153,11 @@ pub fn install(addr: SocketAddr, service: &str) -> Result<(), MetricsError> {
             COUNT_BUCKETS,
         )
         .map_err(|e| MetricsError::Install(e.to_string()))?
+        .set_buckets_for_metric(
+            Matcher::Full(names::LLM_TIME_TO_FIRST_TOKEN.into()),
+            DURATION_BUCKETS,
+        )
+        .map_err(|e| MetricsError::Install(e.to_string()))?
         .install()
         .map_err(|e| MetricsError::Install(e.to_string()))?;
 
@@ -202,6 +216,7 @@ fn describe() {
     );
     describe_gauge!(names::BUILD_INFO, "Always 1; carries the version label.");
     describe_ledger();
+    describe_llm();
 }
 
 /// The ledger's metrics, described apart so each list stays readable.
@@ -286,6 +301,23 @@ fn describe_ledger() {
 }
 
 /// The ledger's outbox, analytics and table metrics.
+fn describe_llm() {
+    use metrics::{Unit, describe_counter, describe_gauge, describe_histogram};
+    describe_counter!(
+        names::LLM_TOKENS_TOTAL,
+        "Tokens the llm service's engines reported, by tier, engine, model and kind."
+    );
+    describe_histogram!(
+        names::LLM_TIME_TO_FIRST_TOKEN,
+        Unit::Seconds,
+        "Seconds from admitting a generation to its first text chunk."
+    );
+    describe_gauge!(
+        names::LLM_ENGINE_UP,
+        "1 while the tier's engine answered its last probe, else 0."
+    );
+}
+
 fn describe_ledger_outbox() {
     use metrics::{Unit, describe_counter, describe_gauge, describe_histogram};
     describe_gauge!(

@@ -1,4 +1,5 @@
-//! `llm` binary: load config, install telemetry, serve until signalled.
+//! `llm` binary: load config, refuse a stub engine in production, install
+//! telemetry, serve until signalled.
 //! Stdout is the product of `config`, so the print lint is allowed here only.
 
 #![allow(clippy::print_stdout)]
@@ -29,6 +30,8 @@ async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     let (mut config, source) = Config::load(&cli.overrides.config_dir, &cli.overrides.env)?;
     cli.overrides.apply(&mut config);
+    config.validate()?;
+    config.refuse_stub(&source.env)?;
     if let Some(Command::Config) = cli.command {
         println!("# env: {}", source.env);
         for f in &source.files {

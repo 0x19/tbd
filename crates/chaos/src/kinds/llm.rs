@@ -1,4 +1,5 @@
-//! The llm kind: an in-process `tbd-llm` with fault injection.
+//! The llm kind: an in-process `tbd-llm` with fault injection, both tiers on
+//! the stub engine (a chaos stack must never need a model server).
 //! Rendered by `tbd new service`; edit freely, the CLI never rewrites it.
 
 use std::net::SocketAddr;
@@ -6,10 +7,7 @@ use std::net::SocketAddr;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use tbd_common::fault::Behavior;
-use tbd_llm::{
-    Config, Runtime,
-    config::{Metrics, Ping, Server},
-};
+use tbd_llm::{Config, Runtime};
 use tbd_proto::llm::v1::{PingRequest, llm_service_client::LlmServiceClient};
 use tonic::transport::Endpoint;
 use tonic_health::pb::{HealthCheckRequest, health_client::HealthClient};
@@ -106,11 +104,9 @@ impl Service for Llm {
     ) -> anyhow::Result<Instance> {
         let listener = tokio::net::TcpListener::bind(listen).await?;
         let addr = listener.local_addr()?;
-        let config = Config {
-            server: Server { listen: addr },
-            metrics: Metrics { listen: None },
-            ping: Ping::default(),
-        };
+        // Both tiers on the in-process stub: a chaos stack must never need a
+        // model server, and the stub is labelled as such on every answer.
+        let config = Config::stub(addr);
         let runtime = Runtime {
             fault: tbd_common::fault::FaultHandle::new(self.behavior.clone()),
             ..Default::default()

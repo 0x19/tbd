@@ -4487,6 +4487,156 @@
         }
       }
     },
+    "/v1/llm/budget": {
+      "get": {
+        "tags": [
+          "llm"
+        ],
+        "summary": "tbd.llm.v1.LlmService/GetBudget",
+        "description": "Transcoded from `/tbd.llm.v1.LlmService/GetBudget` on the `llm` backend.",
+        "operationId": "LlmService.GetBudget",
+        "responses": {
+          "200": {
+            "description": "`tbd.llm.v1.GetBudgetResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.llm.v1.GetBudgetResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/llm/embed": {
+      "post": {
+        "tags": [
+          "llm"
+        ],
+        "summary": "tbd.llm.v1.LlmService/Embed",
+        "description": "Transcoded from `/tbd.llm.v1.LlmService/Embed` on the `llm` backend.",
+        "operationId": "LlmService.Embed",
+        "requestBody": {
+          "description": "`tbd.llm.v1.EmbedRequest`; path variables override their fields",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/tbd.llm.v1.EmbedRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "`tbd.llm.v1.EmbedResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.llm.v1.EmbedResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/llm/generate/events": {
+      "post": {
+        "tags": [
+          "llm"
+        ],
+        "summary": "tbd.llm.v1.LlmService/Generate",
+        "description": "Transcoded from `/tbd.llm.v1.LlmService/Generate` on the `llm` backend.",
+        "operationId": "LlmService.Generate",
+        "requestBody": {
+          "description": "`tbd.llm.v1.GenerateRequest`; path variables override their fields",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/tbd.llm.v1.GenerateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "A stream of `tbd.llm.v1.GenerateResponse` events, one JSON object per `data:`; a failure is an `error` event carrying `Problem`",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.llm.v1.GenerateResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/llm/models": {
+      "get": {
+        "tags": [
+          "llm"
+        ],
+        "summary": "tbd.llm.v1.LlmService/ListModels",
+        "description": "Transcoded from `/tbd.llm.v1.LlmService/ListModels` on the `llm` backend.",
+        "operationId": "LlmService.ListModels",
+        "responses": {
+          "200": {
+            "description": "`tbd.llm.v1.ListModelsResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.llm.v1.ListModelsResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/llm/ping": {
       "get": {
         "tags": [
@@ -8781,6 +8931,232 @@
           }
         }
       },
+      "tbd.llm.v1.EmbedRequest": {
+        "type": "object",
+        "description": "`tbd.llm.v1.EmbedRequest`",
+        "properties": {
+          "inputs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "tier": {
+            "type": "string",
+            "description": "`tbd.llm.v1.Tier`",
+            "enum": [
+              "TIER_UNSPECIFIED",
+              "TIER_FAST",
+              "TIER_DEEP"
+            ]
+          }
+        }
+      },
+      "tbd.llm.v1.EmbedResponse": {
+        "type": "object",
+        "description": "`tbd.llm.v1.EmbedResponse`",
+        "properties": {
+          "engine": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "stub": {
+            "type": "boolean"
+          },
+          "tier": {
+            "type": "string",
+            "description": "`tbd.llm.v1.Tier`",
+            "enum": [
+              "TIER_UNSPECIFIED",
+              "TIER_FAST",
+              "TIER_DEEP"
+            ]
+          },
+          "vectors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/tbd.llm.v1.Embedding"
+            }
+          }
+        }
+      },
+      "tbd.llm.v1.Embedding": {
+        "type": "object",
+        "description": "`tbd.llm.v1.Embedding`",
+        "properties": {
+          "values": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "float"
+            }
+          }
+        }
+      },
+      "tbd.llm.v1.GenerateRequest": {
+        "type": "object",
+        "description": "`tbd.llm.v1.GenerateRequest`",
+        "properties": {
+          "max_tokens": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/tbd.llm.v1.Message"
+            }
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "temperature": {
+            "type": "number",
+            "format": "float"
+          },
+          "tier": {
+            "type": "string",
+            "description": "`tbd.llm.v1.Tier`",
+            "enum": [
+              "TIER_UNSPECIFIED",
+              "TIER_FAST",
+              "TIER_DEEP"
+            ]
+          }
+        }
+      },
+      "tbd.llm.v1.GenerateResponse": {
+        "type": "object",
+        "description": "`tbd.llm.v1.GenerateResponse`",
+        "properties": {
+          "done": {
+            "type": "boolean"
+          },
+          "engine": {
+            "type": "string"
+          },
+          "generation_id": {
+            "type": "string"
+          },
+          "index": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "model": {
+            "type": "string"
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "stub": {
+            "type": "boolean"
+          },
+          "text": {
+            "type": "string"
+          },
+          "tier": {
+            "type": "string",
+            "description": "`tbd.llm.v1.Tier`",
+            "enum": [
+              "TIER_UNSPECIFIED",
+              "TIER_FAST",
+              "TIER_DEEP"
+            ]
+          },
+          "usage": {
+            "$ref": "#/components/schemas/tbd.llm.v1.Usage"
+          }
+        }
+      },
+      "tbd.llm.v1.GetBudgetResponse": {
+        "type": "object",
+        "description": "`tbd.llm.v1.GetBudgetResponse`",
+        "properties": {
+          "day": {
+            "type": "string"
+          },
+          "recorded": {
+            "type": "boolean"
+          },
+          "remaining": {
+            "type": "string",
+            "format": "int64"
+          },
+          "tokens_per_day": {
+            "type": "string",
+            "format": "int64"
+          },
+          "unlimited": {
+            "type": "boolean"
+          },
+          "used_today": {
+            "type": "string",
+            "format": "int64"
+          }
+        }
+      },
+      "tbd.llm.v1.ListModelsResponse": {
+        "type": "object",
+        "description": "`tbd.llm.v1.ListModelsResponse`",
+        "properties": {
+          "default_tier": {
+            "type": "string",
+            "description": "`tbd.llm.v1.Tier`",
+            "enum": [
+              "TIER_UNSPECIFIED",
+              "TIER_FAST",
+              "TIER_DEEP"
+            ]
+          },
+          "models": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/tbd.llm.v1.ModelInfo"
+            }
+          }
+        }
+      },
+      "tbd.llm.v1.Message": {
+        "type": "object",
+        "description": "`tbd.llm.v1.Message`",
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.llm.v1.ModelInfo": {
+        "type": "object",
+        "description": "`tbd.llm.v1.ModelInfo`",
+        "properties": {
+          "engine": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "stub": {
+            "type": "boolean"
+          },
+          "tier": {
+            "type": "string",
+            "description": "`tbd.llm.v1.Tier`",
+            "enum": [
+              "TIER_UNSPECIFIED",
+              "TIER_FAST",
+              "TIER_DEEP"
+            ]
+          },
+          "up": {
+            "type": "boolean"
+          }
+        }
+      },
       "tbd.llm.v1.PingResponse": {
         "type": "object",
         "description": "`tbd.llm.v1.PingResponse`",
@@ -8793,6 +9169,20 @@
           },
           "version": {
             "type": "string"
+          }
+        }
+      },
+      "tbd.llm.v1.Usage": {
+        "type": "object",
+        "description": "`tbd.llm.v1.Usage`",
+        "properties": {
+          "completion_tokens": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "prompt_tokens": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },

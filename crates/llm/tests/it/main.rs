@@ -1,8 +1,10 @@
 //! Integration tests: start the real server on an ephemeral port and drive it
-//! with the generated client.
+//! with the generated client. `conformance.rs` is the suite every engine must
+//! pass; this file covers the scaffold's Ping, health and fault injection.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+mod conformance;
 mod support;
 
 use tbd_llm::{Behavior, FaultHandle, Runtime};

@@ -16,3 +16,54 @@ listen = "0.0.0.0:9464"
 # Longest message Ping echoes; longer is INVALID_ARGUMENT. The one knob that
 # proves TOML reaches an RPC.
 max_message_len = 1024
+
+[engines]
+# The tier a request without one goes to.
+default_tier = "fast"
+# How often each engine is asked whether it is up, and how long one probe may take.
+probe_interval = "15s"
+probe_timeout = "3s"
+
+# The engines are the L1: whatever runs the weights. Each tier has the same
+# keys and only the values differ; nothing above this table names an engine.
+# They are dialled directly, like databases, so the URLs are not Envoy's.
+# `kind` is never overridable from a flag or a variable on purpose: a
+# deployment's engines are chosen in a reviewed file. "stub" is the in-process
+# test engine and is refused in production.
+[engines.fast]
+# The model that fits the GPU and answers a visitor: Ollama on the host.
+kind = "ollama"
+url = "http://127.0.0.1:11434"
+model = "gpt-oss:20b"
+# Whole-request deadline, seconds.
+timeout_secs = 120
+# The embedding model when it is not `model`; empty is the same model.
+embed_model = ""
+
+[engines.deep]
+# The large model that runs from memory for quality: llama-server on the host
+# with the experts in RAM and attention on the GPU.
+kind = "llamacpp"
+url = "http://127.0.0.1:8080"
+model = "gpt-oss-120b"
+timeout_secs = 900
+embed_model = ""
+
+[generate]
+# Bounds on one request. Anything over is INVALID_ARGUMENT; max_tokens is
+# clamped to the cap rather than refused.
+max_messages = 64
+max_message_len = 32768
+max_tokens_cap = 4096
+max_embed_inputs = 64
+
+[budget]
+# Tokens (prompt plus completion) one caller may spend per UTC day; 0 is no
+# limit. Enforced only when generations are recorded (a store is configured).
+tokens_per_day = 200000
+
+[store]
+# The Postgres schema `llm`: sessions and generations, the budget's source.
+# The URL is a credential and comes only from LLM_DATABASE_URL; empty means no
+# store: nothing is recorded and the budget is unlimited, said at start.
+max_connections = 5

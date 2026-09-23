@@ -1,19 +1,23 @@
-//! The llm service: a gRPC server.
+//! The llm service: a gRPC server over the engines that run the weights.
 //!
 //! The library exposes [`serve`], [`serve_on`] and [`serve_with`] so the same
 //! server can be run from `main`, from integration tests on an ephemeral port,
-//! and from the chaos tool with fault injection and counters attached.
+//! and from the chaos tool with fault injection and counters attached. The
+//! engines (Ollama, llama.cpp, the test stub) are built from `[engines]` here
+//! and handed to the service; nothing above [`engine`] names one.
 
 pub mod config;
+pub mod engine;
+pub mod probe;
 mod service;
 
-use std::net::SocketAddr;
+use std::{collections::BTreeMap, net::SocketAddr, sync::Arc};
 
 use tbd_proto::llm::v1::llm_service_server::LlmServiceServer;
 use tokio::net::TcpListener;
 use tonic::transport::{Server, server::TcpIncoming};
 
-pub use config::{Config, Overrides, Source};
+pub use config::{Config, Overrides, Source, Tier};
 pub use service::Llm;
 pub use tbd_common::{
     fault::{Behavior, FaultHandle},
@@ -31,6 +35,12 @@ pub enum ServeError {
         /// Underlying I/O error.
         source: std::io::Error,
     },
+    /// The configuration cannot be served from.
+    #[error("config: {0}")]
+    Config(#[from] config::ValidationError),
+    /// An engine could not be built from its configuration.
+    #[error("{0}")]
+    Engine(#[from] engine::BuildError),
     /// Reflection service could not be built from the descriptor set.
     #[error("reflection: {0}")]
     Reflection(#[from] tonic_reflection::server::Error),
@@ -74,6 +84,7 @@ pub async fn serve_with(
         addr: config.server.listen,
         source,
     })?;
+    config.validate()?;
 
     let (health_reporter, health_service) = tonic_health::server::health_reporter();
     health_reporter.set_serving::<LlmServiceServer<Llm>>().await;
@@ -83,7 +94,27 @@ pub async fn serve_with(
         .register_encoded_file_descriptor_set(tonic_health::pb::FILE_DESCRIPTOR_SET)
         .build_v1()?;
 
-    let service = Llm::new(config.ping.clone(), runtime);
+    let mut engines: BTreeMap<Tier, Arc<dyn engine::Engine>> = BTreeMap::new();
+    for tier in Tier::ALL {
+        let cfg = config.engine(tier);
+        let built = engine::build(cfg)?;
+        tracing::info!(%tier, engine = cfg.kind.as_str(), model = %cfg.model, stub = built.stub(), "engine");
+        engines.insert(tier, built);
+    }
+    if config.store.url.is_empty() {
+        tracing::warn!(
+            "no store configured: generations are not recorded and the budget is unlimited"
+        );
+    }
+    let status = probe::Status::default();
+    let prober = tokio::spawn(probe::run(
+        engines.clone(),
+        status.clone(),
+        config.engines.probe_interval,
+        config.engines.probe_timeout,
+    ));
+
+    let service = Llm::new(&config, runtime, engines, status);
 
     tracing::info!(%addr, version = tbd_common::VERSION, "llm listening");
 
@@ -92,13 +123,15 @@ pub async fn serve_with(
     // small responses stall ~40 ms on Nagle + delayed ACK.
     let incoming = TcpIncoming::from(listener).with_nodelay(Some(true));
 
-    Server::builder()
+    let served = Server::builder()
         .trace_fn(tbd_common::telemetry::grpc_request_span)
         .add_service(health_service)
         .add_service(reflection)
         .add_service(LlmServiceServer::new(service))
         .serve_with_incoming_shutdown(incoming, shutdown)
-        .await?;
+        .await;
+    prober.abort();
+    served?;
 
     tracing::info!("llm stopped");
     Ok(())
