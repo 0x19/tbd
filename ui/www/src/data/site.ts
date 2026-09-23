@@ -492,6 +492,24 @@ export const playgrounds: {
   },
 ];
 
+/**
+ * The lab (`/lab/`: RFCs, studies and demos in progress) is admins-only until the
+ * first concrete thing is published. This flag is one of the two places the flip
+ * touches; the other is the `/lab/` route in `devops/envoy/envoy.yaml`, which is
+ * the gate itself (a static site cannot keep anyone out). While `public` is false a
+ * `gated` nav item renders only for a signed-in admin (`src/lib/me.ts`), the lab
+ * pages ask not to be indexed, and the sitemap leaves them out.
+ */
+export const lab = { public: false } as const;
+
+type NavItem = {
+  readonly href: string;
+  readonly label: string;
+  readonly key: string;
+  /** Shown only to admins while `lab.public` is false. */
+  readonly gated?: boolean;
+};
+
 /** The pages in the header and footer; `key` names the label in `common.<key>`. */
 export const nav = [
   { href: "/", label: "Home", key: "home" },
@@ -499,7 +517,12 @@ export const nav = [
   { href: "/projects/", label: "Projects", key: "projects" },
   { href: "/about/", label: "About", key: "about" },
   { href: "/contact/", label: "Contact", key: "contact" },
-] as const;
+] as const satisfies readonly NavItem[];
+
+/** Whether a nav item is for this visitor: everything, unless it is gated and the lab is not public yet. */
+export function navVisible(item: NavItem, admin: boolean): boolean {
+  return !item.gated || lab.public || admin;
+}
 
 export const site = {
   title: company.name,

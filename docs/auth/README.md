@@ -39,7 +39,7 @@ issuer**, so the URL a client uses must be the one the stack was deployed with.
 
 | Client id | Who | Grant | Scope / audience | Notes |
 |---|---|---|---|---|
-| `tbd-ui` | Envoy's OAuth2 filter on the browser hosts (grafana, logs, profiles, metrics, chaosadmin, finance, cv) | authorization code + refresh | `openid offline_access email profile`, audience `tbd-ui` | confidential, `client_secret_post`; no consent screen (first party). A callback per host name: under `BASE_DOMAIN`, and under `SITE_DOMAIN` too when the company site has a domain of its own (`devops/edge/sites.d/`), since Envoy builds `redirect_uri` from the request's authority. The issuer stays `auth.<base>` |
+| `tbd-ui` | Envoy's OAuth2 filter on the browser hosts (grafana, logs, profiles, metrics, chaosadmin, finance, cv, and www for its `/lab/` route) | authorization code + refresh | `openid offline_access email profile`, audience `tbd-ui` | confidential, `client_secret_post`; no consent screen (first party). A callback per host name: under `BASE_DOMAIN`, and under `SITE_DOMAIN` too when the company site has a domain of its own (`devops/edge/sites.d/`), since Envoy builds `redirect_uri` from the request's authority. The issuer stays `auth.<base>` |
 | `tbd-chaos` | the chaos tool, CI, scripts | client credentials | `tbd.api`, audience `tbd-api` | confidential, `client_secret_basic` |
 | `tbd-app` | the mobile app (`/mobile`, `docs/mobile/README.md`) | authorization code with PKCE + refresh | `openid offline_access email profile tbd.api`, audience `tbd-api` | public client, `tbd://callback` and `localhost:3001`, post-logout `tbd://callback/signed-out`; no consent screen. A public client must send `audience=tbd-api` on the authorization request, or Hydra mints a token the API rejects |
 
@@ -148,6 +148,7 @@ Every check lives in `devops/envoy/envoy.yaml`; nothing behind Envoy checks anyt
 | `api.<domain>`, `localhost:18080`, `chaos.api.*` | `jwt_authn`, requirement `api` | `Authorization: Bearer <JWT>` signed by Hydra with audience `tbd-api` | 401 with `Jwt is missing` / `Jwt verification fails` |
 | same hosts, `/healthz`, `/readyz`, `/api/chaos/v1/healthz` | none | anything | probes and uptime checks stay unauthenticated |
 | `grafana.`, `logs.`, `profiles.`, `metrics.`, `chaosadmin.`, `finance.`, `cv.` | `oauth2` then `jwt_authn`, requirement `ui` | the ID-token cookie the OAuth2 filter set (audience `tbd-ui`), or a bearer token | redirect to `auth.<domain>` to sign in |
+| `www.` `/lab/` only | `oauth2` then `jwt_authn`, requirement `ui`, then `rbac` role `admin` | the same cookie or bearer token, and the `admin` role | redirect to sign in; 403 for a signed-in visitor without the role. The rest of the site is open; `/v1/me` on `www.` verifies the cookie without redirecting (401), so the page can show the lab entry only to admins |
 | `auth.<domain>`, `chaos.localhost` | none | anything | the sign-in itself, and the open local UI |
 
 **API calls.** The JWT filter fetches Hydra's JWKS through the internal `hydra` cluster

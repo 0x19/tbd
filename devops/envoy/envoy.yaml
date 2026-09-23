@@ -20,6 +20,9 @@
 #     oauth2 filter logs the browser in through Hydra and stores an ID token cookie,
 #     which the same JWT filter verifies (audience tbd-ui). A bearer token passes
 #     straight through, so scripts work on those hosts too.
+#   - `www.<domain>` is open, except `/lab/` (the site's lab, admins only until it is
+#     published) and `/v1/me` (the signed-in visitor, 401 rather than a redirect, so
+#     the page can decide what to show). The gate is the same oauth2 + JWT pair.
 #   - `auth.<domain>` and the local `chaos.*` host are open.
 # One value is environment-specific: the browser-facing authorization URL. The
 # file carries __AUTH_PUBLIC_URL__; the Envoy pod's init container and the compose
@@ -314,13 +317,69 @@ static_resources:
                         - match: { prefix: "/" }
                           route: { cluster: auth-ui, timeout: 15s }
                     # The company site (ui/www) at the root of the base domain. Public:
-                    # no sign-in, no token, no rate limit. The public edge rewrites the
-                    # apex Host to `www.<domain>` so this one rule serves both the apex
-                    # and the www name; locally it is http://www.localhost:18080/.
+                    # no sign-in, no token, no rate limit, except the two routes that
+                    # open this list. The public edge rewrites the apex Host to
+                    # `www.<domain>` so this one rule serves both the apex and the www
+                    # name; locally it is http://www.localhost:18080/. Every route here
+                    # says which gates are on it, so nothing is inherited by accident.
                     - name: www
                       domains: ["www.*"]
-                      typed_per_filter_config: *ui_open
                       routes:
+                        # The lab: RFCs, studies and demos in progress, admins only
+                        # until the first one is published (ui/www/CLAUDE.md names the
+                        # two places the flip touches; this route is one of them). The
+                        # oauth2 filter stays on, so a browser is sent to sign in and
+                        # comes back; a signed-in non-admin gets 403 here, never a page.
+                        - match: { prefix: "/lab/" }
+                          typed_per_filter_config:
+                            envoy.filters.http.jwt_authn:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.PerRouteConfig
+                              requirement_name: ui
+                            envoy.filters.http.rbac:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.rbac.v3.RBACPerRoute
+                              rbac:
+                                rules:
+                                  action: ALLOW
+                                  policies:
+                                    admins:
+                                      permissions: [{ any: true }]
+                                      principals:
+                                        - metadata:
+                                            filter: envoy.filters.http.jwt_authn
+                                            path: [{ key: jwt }, { key: role }]
+                                            value: { string_match: { exact: admin } }
+                          route:
+                            cluster: www
+                            timeout: 15s
+                            retry_policy:
+                              retry_on: connect-failure,refused-stream,reset,unavailable
+                              num_retries: 2
+                              per_try_timeout: 5s
+                        # The oauth2 filter answers /oauth2/callback and /oauth2/signout
+                        # itself, but only on a route where it is enabled; without this
+                        # entry the catch-all below (filter off) would swallow the
+                        # callback and the sign-in for /lab/ could never complete.
+                        - match: { prefix: "/oauth2/" }
+                          route:
+                            cluster: www
+                            timeout: 15s
+                        # Who is signed in, for the page's own decisions (which nav
+                        # items to show). A fetch, so 401 and not a redirect: the
+                        # oauth2 filter is off and the JWT filter reads the cookie it set.
+                        - match: { path: "/v1/me" }
+                          typed_per_filter_config:
+                            envoy.filters.http.oauth2:
+                              "@type": type.googleapis.com/envoy.config.route.v3.FilterConfig
+                              disabled: true
+                            envoy.filters.http.jwt_authn:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.PerRouteConfig
+                              requirement_name: ui
+                            envoy.filters.http.rbac:
+                              "@type": type.googleapis.com/envoy.config.route.v3.FilterConfig
+                              disabled: true
+                          route:
+                            cluster: protocol
+                            timeout: 15s
                         # The playground, on the same host as the site so the page
                         # and its API are same-origin and no CORS is needed. Public
                         # on purpose: the service takes no identity, accepts no
@@ -384,7 +443,18 @@ static_resources:
                           route:
                             cluster: protocol
                             timeout: 0s
+                        # The site itself: open.
                         - match: { prefix: "/" }
+                          typed_per_filter_config:
+                            envoy.filters.http.oauth2:
+                              "@type": type.googleapis.com/envoy.config.route.v3.FilterConfig
+                              disabled: true
+                            envoy.filters.http.jwt_authn:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.PerRouteConfig
+                              disabled: true
+                            envoy.filters.http.rbac:
+                              "@type": type.googleapis.com/envoy.config.route.v3.FilterConfig
+                              disabled: true
                           route:
                             cluster: www
                             timeout: 15s

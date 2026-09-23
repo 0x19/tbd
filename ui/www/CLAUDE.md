@@ -14,6 +14,17 @@ routed on the public `www` virtual host rather than the API host: same origin,
 no CORS, still no cookies. `/legal/` promises that a playground which processes
 what a visitor types says so on its own page — so it does, in a "what this page
 sends" section. A new playground owes the reader the same paragraph.
+
+The other exception is the lab. `/lab/` (RFCs, studies and demos in progress) is
+admins-only until its first page is published: Envoy gates the prefix on the `www`
+host (sign-in, then the `admin` role), and `/v1/me` on the same host tells the page
+who is signed in with a 401 instead of a redirect, so the header and footer show the
+lab entry only to an admin (`src/lib/me.ts`, `navVisible` in `src/data/site.ts`).
+The site still sets no cookie; the one an admin carries was set by Envoy's sign-in.
+Publishing the lab is one deliberate commit that touches two places: `lab.public`
+in `src/data/site.ts` and the `/lab/` route's gate in `devops/envoy/envoy.yaml`,
+and it revisits the `/legal/` sentence if the lab's demo then processes what a
+visitor types.
 The music playgrounds (`/playgrounds/tuner/`, `fretboard/`, `spectrogram/`, `chords/`,
 `metronome/`, `ear/`) are the other kind: whatever they hear or play stays in the page.
 `src/lib/music/` is the arithmetic with no audio in it (`pitch.ts` detection and notes,

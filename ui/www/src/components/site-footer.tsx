@@ -4,19 +4,21 @@ import Link from "next/link";
 
 import { Eyebrow, Frame } from "@/components/kit";
 import { Logo } from "@/components/logo";
-import { company, nav } from "@/data/site";
+import { company, nav, navVisible } from "@/data/site";
 import { useT } from "@/lib/i18n";
 import { useSite } from "@/lib/i18n/site";
+import { useIsAdmin } from "@/lib/me";
 
 export function SiteFooter() {
   const t = useT();
   const site = useSite();
+  const admin = useIsAdmin();
   const columns = [
     {
       title: t("common.pages"),
       links: [
         ...nav
-          .filter((i) => i.href !== "/")
+          .filter((i) => i.href !== "/" && navVisible(i, admin))
           .map((i) => ({ label: t(`common.${i.key}`), href: i.href, out: false })),
         { label: t("common.legal"), href: "/legal/", out: false },
         { label: t("common.terms"), href: "/terms/", out: false },

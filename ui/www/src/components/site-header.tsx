@@ -9,14 +9,16 @@ import { LangToggle } from "@/components/lang-toggle";
 import { Logo } from "@/components/logo";
 import { ThemeSwitch } from "@/components/theme-switch";
 import { Button } from "@/components/ui/button";
-import { company, cv, nav } from "@/data/site";
+import { company, cv, nav, navVisible } from "@/data/site";
 import { useT } from "@/lib/i18n";
+import { useIsAdmin } from "@/lib/me";
 import { cn } from "@/lib/utils";
 
 /** Transparent over the hero, and a hairline under it once the page moves. */
 export function SiteHeader() {
   const pathname = usePathname();
   const t = useT();
+  const admin = useIsAdmin();
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
@@ -47,7 +49,7 @@ export function SiteHeader() {
             rather than overlap the name or hide behind a menu nobody opens. */}
         <nav className="ml-auto flex min-w-0 [scrollbar-width:none] items-center gap-0.5 overflow-x-auto [&::-webkit-scrollbar]:hidden">
           {nav
-            .filter((item) => item.href !== "/")
+            .filter((item) => item.href !== "/" && navVisible(item, admin))
             .map((item) => {
               const active = pathname.startsWith(item.href);
               return (
