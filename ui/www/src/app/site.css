@@ -49,20 +49,33 @@
   }
 }
 
-/* The dashed long-haul links in the hero drawing crawl, very slowly. */
-@keyframes mesh-drift {
-  to {
-    stroke-dashoffset: -120;
+/* The packets in the hero drawing crawl along their traces, each on its own
+   route and clock; they fade in as they enter and out as they leave. */
+@keyframes mesh-packet {
+  0% {
+    offset-distance: 0%;
+    opacity: 0;
+  }
+  8% {
+    opacity: 0.75;
+  }
+  92% {
+    opacity: 0.75;
+  }
+  100% {
+    offset-distance: 100%;
+    opacity: 0;
   }
 }
 
-.mesh-link {
-  animation: mesh-drift 48s linear infinite;
+.mesh-packet {
+  opacity: 0;
+  animation: mesh-packet 14s linear infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .mesh-link {
-    animation: none;
+  .mesh-packet {
+    display: none;
   }
 }
 

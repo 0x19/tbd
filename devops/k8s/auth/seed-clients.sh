@@ -18,11 +18,23 @@ d="$BASE_DOMAIN"
 # site has one: Envoy's redirect_uri is built from the request's authority, so each
 # host name a person can sign in on must be registered. The issuer stays auth.<base>.
 site_uris=""
+site_logout_uris=""
 if [ -n "$SITE_DOMAIN" ] && [ "$SITE_DOMAIN" != "$d" ]; then
   for h in grafana logs profiles metrics chaosadmin finance cv www; do
     site_uris="$site_uris \"https://$h.$SITE_DOMAIN/oauth2/callback\","
+    site_logout_uris="$site_logout_uris \"https://$h.$SITE_DOMAIN/\","
   done
 fi
+# Where Envoy sends the browser after a sign-out (its post_logout_redirect_uri is
+# that host's root); Hydra refuses a return that is not registered.
+logout_uris="$site_logout_uris"
+for h in grafana logs profiles metrics chaosadmin finance cv www; do
+  logout_uris="$logout_uris \"https://$h.$d/\","
+done
+for h in grafana chaos finance cv www; do
+  logout_uris="$logout_uris \"http://$h.localhost:18080/\","
+done
+logout_uris="${logout_uris%,}"
 # Browser sessions on the UI hosts: Envoy's oauth2 filter is the client.
 upsert tbd-ui "{
   \"client_id\": \"tbd-ui\", \"client_name\": \"tbd web UIs\",
@@ -41,6 +53,7 @@ upsert tbd-ui "{
     \"http://finance.localhost:18080/oauth2/callback\", \"http://cv.localhost:18080/oauth2/callback\",
     \"http://www.localhost:18080/oauth2/callback\"
   ],
+  \"post_logout_redirect_uris\": [$logout_uris],
   \"skip_consent\": true, \"skip_logout_consent\": true,
   \"access_token_strategy\": \"jwt\"
 }"

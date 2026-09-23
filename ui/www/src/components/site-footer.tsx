@@ -7,12 +7,12 @@ import { Logo } from "@/components/logo";
 import { company, nav, navVisible } from "@/data/site";
 import { useT } from "@/lib/i18n";
 import { useSite } from "@/lib/i18n/site";
-import { useIsAdmin } from "@/lib/me";
+import { useMe } from "@/lib/me";
 
 export function SiteFooter() {
   const t = useT();
   const site = useSite();
-  const admin = useIsAdmin();
+  const admin = useMe()?.role === "admin";
   const columns = [
     {
       title: t("common.pages"),

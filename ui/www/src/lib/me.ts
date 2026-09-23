@@ -52,8 +52,3 @@ export function useMe(): Me | null {
   }, []);
   return me;
 }
-
-/** True only for a signed-in visitor whose token carries the `admin` role. */
-export function useIsAdmin(): boolean {
-  return useMe()?.role === "admin";
-}

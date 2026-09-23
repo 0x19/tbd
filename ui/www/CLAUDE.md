@@ -23,6 +23,12 @@ admins-only until its first page is published: Envoy gates the prefix on the `ww
 host (sign-in, then the `admin` role), and `/v1/me` on the same host tells the page
 who is signed in with a 401 instead of a redirect, so the header and footer show the
 lab entry only to an admin (`src/lib/me.ts`, `navVisible` in `src/data/site.ts`).
+`/account/` is gated by sign-in alone and is where signing in starts: the header's
+"Sign in" is a plain anchor to it (a document navigation, so the gateway can redirect;
+a client-side hop would fetch and could not), and once signed in the header shows the
+name and the page the sign-out, which ends the session at the identity stack too.
+Sessions are per host (the gateway's cookies are), so the CV host is its own sign-in;
+the identity stack remembers the person, so the second one is a silent bounce.
 The site sets no cookie for this; the one an admin carries was set by Envoy's sign-in.
 Publishing the lab is one deliberate commit that touches two places: `lab.public`
 in `src/data/site.ts` and the `/lab/` route's gate in `devops/envoy/envoy.yaml`,
@@ -150,10 +156,12 @@ practice log is `localStorage`, per browser, and its page says so.
   principles as one line each, the lab once `lab.public` is true, the email. The
   summary paragraph, the project rows and the contact hero belong to `/about/`,
   `/projects/` and `/contact/`; putting them back here is the repetition that was
-  removed. Behind the hero: the grid, and `src/components/hero-mesh.tsx`, a
-  hand-drawn chain of blocks and a mesh of points of presence in `currentColor` at a
-  whisper of opacity, roughened by an SVG turbulence filter; decoration only,
-  `aria-hidden`, and its one slow drift stops under `prefers-reduced-motion`.
+  removed. Behind the hero: the grid, anchored to the right edge, and
+  `src/components/hero-mesh.tsx` on its intersections: a small mesh of points of
+  presence routed like a board (grid-aligned and 45° traces, nodes that knock the
+  grid out, three packets crawling along it) in `currentColor`, shown from `xl` up
+  with a left fade that follows the viewport so no node sits under the headline;
+  decoration only, `aria-hidden`, and the packets stop under `prefers-reduced-motion`.
 - The pipeline on the home page (`src/components/pipeline.tsx`, data in
   `pipeline` and `rails`) is a drawing of a real system, not an illustration:
   every stage and every value is something the platform actually does. It is CSS
@@ -184,3 +192,13 @@ practice log is `localStorage`, per browser, and its page says so.
 - The image is `devops/docker/Dockerfile.www` (Caddy, `devops/docker/www.Caddyfile`);
   the deployment is `devops/k8s/www/`; Envoy's public `www.*` virtual host and the
   public edge's apex block route to it.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

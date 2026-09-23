@@ -221,7 +221,8 @@ export function HomeContent() {
   );
 }
 
-/** A faint grid behind the hero, fading out downwards. Decoration only. */
+/** A faint grid behind the hero, fading out downwards, anchored to the right edge
+ * so the mesh drawing sits on its intersections. Decoration only. */
 function Grid() {
   return (
     <div
@@ -238,6 +239,7 @@ function Grid() {
           backgroundImage:
             "linear-gradient(to right, currentColor 1px, transparent 1px), linear-gradient(to bottom, currentColor 1px, transparent 1px)",
           backgroundSize: "72px 72px",
+          backgroundPosition: "right top",
         }}
       />
     </div>

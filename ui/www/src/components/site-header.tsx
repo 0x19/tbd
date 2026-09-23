@@ -11,14 +11,15 @@ import { ThemeSwitch } from "@/components/theme-switch";
 import { Button } from "@/components/ui/button";
 import { company, cv, nav, navVisible } from "@/data/site";
 import { useT } from "@/lib/i18n";
-import { useIsAdmin } from "@/lib/me";
+import { useMe } from "@/lib/me";
 import { cn } from "@/lib/utils";
 
 /** Transparent over the hero, and a hairline under it once the page moves. */
 export function SiteHeader() {
   const pathname = usePathname();
   const t = useT();
-  const admin = useIsAdmin();
+  const me = useMe();
+  const admin = me?.role === "admin";
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
@@ -52,21 +53,41 @@ export function SiteHeader() {
             .filter((item) => item.href !== "/" && navVisible(item, admin))
             .map((item) => {
               const active = pathname.startsWith(item.href);
+              const className = cn(
+                "font-mono text-[10px] tracking-[0.12em] uppercase sm:text-[11px] sm:tracking-[0.14em]",
+                active ? "text-foreground" : "text-muted-foreground",
+              );
               return (
                 <Button key={item.href} variant="ghost" size="sm" className="shrink-0 px-2 sm:px-3" asChild>
-                  <Link
-                    href={item.href}
-                    className={cn(
-                      "font-mono text-[10px] tracking-[0.12em] uppercase sm:text-[11px] sm:tracking-[0.14em]",
-                      active ? "text-foreground" : "text-muted-foreground",
-                    )}
-                    aria-current={active ? "page" : undefined}
-                  >
-                    {t(`common.${item.key}`)}
-                  </Link>
+                  {/* A gated page must be a document navigation, so the gateway
+                      can send the browser to the sign-in; a client-side hop
+                      would fetch, and a fetch cannot follow that redirect. */}
+                  {"gated" in item && item.gated ? (
+                    <a href={item.href} className={className} aria-current={active ? "page" : undefined}>
+                      {t(`common.${item.key}`)}
+                    </a>
+                  ) : (
+                    <Link href={item.href} className={className} aria-current={active ? "page" : undefined}>
+                      {t(`common.${item.key}`)}
+                    </Link>
+                  )}
                 </Button>
               );
             })}
+          {/* Who is signed in, or the way in. `/account/` is gated at the gateway,
+              so the anchor is the sign-in for anyone who is not. */}
+          <Button variant="ghost" size="sm" className="shrink-0 px-2 sm:px-3" asChild>
+            <a
+              href="/account/"
+              className={cn(
+                "font-mono text-[10px] tracking-[0.12em] uppercase sm:text-[11px] sm:tracking-[0.14em]",
+                pathname.startsWith("/account/") ? "text-foreground" : "text-muted-foreground",
+              )}
+              aria-current={pathname.startsWith("/account/") ? "page" : undefined}
+            >
+              {me ? me.name || me.email || t("common.account") : t("common.sign_in")}
+            </a>
+          </Button>
           {/* The gated room: the same site behind a sign-in, where the full CV is.
               A plain anchor, since it is another host; whoever is signed in
               there lands on their standing, everyone else on the sign-in. */}

@@ -39,7 +39,18 @@ export const en: Dict = {
   "lab.demo.gated.label": "Behind a sign-in",
   "lab.demo.gated":
     "Anonymous model endpoints get farmed within a day, so asking needs an account, and every account has a daily token budget. Signed out, you will see the last session's transcript and the live figures; signed in, you can ask and start a run yourself.",
-  "lab.demo.signin": "Sign in on the gated site",
+  "lab.demo.signin": "Sign in on this site",
+  "account.eyebrow": "Account",
+  "account.title": "Signed in as {name}.",
+  "account.pending": "Signing you in…",
+  "account.where.label": "From here",
+  "account.lab": "The lab",
+  "account.lab_note": "RFCs, studies and demos in progress; admins only until it is published.",
+  "account.cv": "The full CV",
+  "account.cv_note": "On its own host, behind its own sign-in; the same account.",
+  "account.out.label": "Sign out",
+  "account.out.text":
+    "Signing out here ends the session everywhere: every signed-in host is sent back to the sign-in on its next page.",
   "lab.demo.sends.label": "What this page sends",
   "lab.demo.sends.text":
     "Nothing yet. This page is a description. When the demo is live, what you type is sent to the model service on this domain and recorded with your account for the budget; the page will say so here, in this section, before it does.",
@@ -82,7 +93,18 @@ export const hr: Dict = {
   "lab.demo.gated.label": "Iza prijave",
   "lab.demo.gated":
     "Anonimne krajnje točke modela netko iscrpi u danu, pa je za pitanje potreban račun, a svaki račun ima dnevni proračun tokena. Bez prijave vidiš zapis zadnje sesije i brojke uživo; s prijavom možeš pitati i sam pokrenuti test.",
-  "lab.demo.signin": "Prijavi se na zaštićenoj stranici",
+  "lab.demo.signin": "Prijavi se na ovoj stranici",
+  "account.eyebrow": "Račun",
+  "account.title": "Prijavljeni kao {name}.",
+  "account.pending": "Prijava u tijeku…",
+  "account.where.label": "Odavde",
+  "account.lab": "Laboratorij",
+  "account.lab_note": "RFC-ovi, studije i demo u nastajanju; samo za administratore dok se ne objavi.",
+  "account.cv": "Cijeli životopis",
+  "account.cv_note": "Na vlastitom hostu, iza vlastite prijave; isti račun.",
+  "account.out.label": "Odjava",
+  "account.out.text":
+    "Odjava ovdje završava sesiju posvuda: svaki prijavljeni host na sljedećoj stranici vraća na prijavu.",
   "lab.demo.sends.label": "Što ova stranica šalje",
   "lab.demo.sends.text":
     "Još ništa. Ova je stranica opis. Kad demo bude uživo, ono što upišeš šalje se servisu modela na ovoj domeni i bilježi uz tvoj račun radi proračuna; stranica će to reći ovdje, u ovom odjeljku, prije nego što to učini.",

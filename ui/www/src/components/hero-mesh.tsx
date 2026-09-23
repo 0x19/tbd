@@ -1,151 +1,237 @@
 /**
- * Two drawings behind the hero, under the grid: a chain of blocks along the
- * bottom and a mesh of points of presence upper right, in the page's own
- * colour at a whisper of opacity. Hand-drawn on purpose: the lines are bent
- * by hand and roughened by a turbulence filter, the way a diagram on a
- * whiteboard is, so it reads as a sketch and not a chart. Decoration only:
- * hidden from readers, no pointer events, and the one slow drift on the
- * dashed links stops under prefers-reduced-motion (`site.css`).
+ * One drawing behind the hero, upper right, on the same 72px grid as the
+ * hairlines under it: a small mesh of points of presence, routed the way a
+ * board is routed. Every node sits on a grid intersection, every trace runs
+ * along the grid or at 45°, a segment two traces share is drawn once, and a
+ * node knocks the trace and the grid out behind it, so the whole thing reads
+ * as one drawn system and not a doodle over a page. Three packets crawl
+ * along it (`.mesh-packet`, `site.css`) so it is alive without moving; they
+ * stop under prefers-reduced-motion. Decoration only: hidden from readers, no
+ * pointer events, and only from `xl` up, where the headline leaves room for
+ * it; the left fade moves with the viewport so no node sits under the text.
  */
-export function HeroMesh() {
-  // The points of presence, roughly a map with no map under it.
-  const pops: [number, number][] = [
-    [790, 96],
-    [900, 62],
-    [1030, 88],
-    [1140, 140],
-    [850, 190],
-    [960, 170],
-    [1080, 230],
-    [800, 300],
-    [930, 290],
-    [1050, 340],
-    [1150, 300],
-  ];
-  // Who talks to whom; a few of them long-haul, drawn dashed.
-  const links: [number, number, boolean?][] = [
-    [0, 1],
-    [1, 2],
-    [2, 3],
-    [0, 4],
-    [1, 5],
-    [4, 5],
-    [5, 2],
-    [5, 6],
-    [6, 3],
-    [4, 7],
-    [7, 8],
-    [8, 5],
-    [8, 9],
-    [9, 6],
-    [9, 10],
-    [10, 3],
-    [0, 8, true],
-    [2, 9, true],
-    [7, 10, true],
-  ];
-  // A slight bend on every edge, so none of them is ruler-straight.
-  const bend = (a: [number, number], b: [number, number], i: number) => {
-    const mx = (a[0] + b[0]) / 2;
-    const my = (a[1] + b[1]) / 2;
-    const k = ((i % 3) - 1) * 9;
-    return `M${a[0]} ${a[1]} Q${mx + k} ${my - k} ${b[0]} ${b[1]}`;
-  };
-  // The chain: blocks along the bottom, each pointing at the one before it.
-  const blocks = [110, 260, 410, 560, 710];
 
+const CELL = 72;
+const COLS = 12;
+const ROWS = 7;
+
+type Cell = readonly [number, number];
+type Pt = readonly [number, number];
+type Bend = "first" | "last";
+
+const px = ([c, r]: Cell): Pt => [c * CELL, r * CELL];
+
+/**
+ * The points of a trace from one cell to another using only horizontal,
+ * vertical and 45° segments, the diagonal taken first or last.
+ */
+function trace(a: Cell, b: Cell, diagonal: Bend = "last"): Pt[] {
+  const [ax, ay] = px(a);
+  const [bx, by] = px(b);
+  const dx = bx - ax;
+  const dy = by - ay;
+  const d = Math.min(Math.abs(dx), Math.abs(dy));
+  if (d === 0 || Math.abs(dx) === Math.abs(dy))
+    return [
+      [ax, ay],
+      [bx, by],
+    ];
+  const sx = Math.sign(dx);
+  const sy = Math.sign(dy);
+  const straight: Pt =
+    Math.abs(dx) > Math.abs(dy) ? [sx * (Math.abs(dx) - d), 0] : [0, sy * (Math.abs(dy) - d)];
+  const diag: Pt = [sx * d, sy * d];
+  const [first] = diagonal === "first" ? [diag] : [straight];
+  return [
+    [ax, ay],
+    [ax + first[0], ay + first[1]],
+    [bx, by],
+  ];
+}
+
+const path = (pts: Pt[]) => pts.map(([x, y], i) => `${i === 0 ? "M" : "L"}${x} ${y}`).join(" ");
+
+/** Several traces joined end to end, for a packet to travel along. */
+const route = (...legs: Pt[][]): string => path(legs.flatMap((l, i) => (i === 0 ? l : l.slice(1))));
+
+/** The distinct segments of a set of traces, each drawn once. */
+function segments(traces: Pt[][]): string[] {
+  const seen = new Map<string, string>();
+  for (const t of traces) {
+    for (let i = 1; i < t.length; i++) {
+      const [p, q] = [t[i - 1]!, t[i]!].sort((u, v) => u[0] - v[0] || u[1] - v[1]);
+      seen.set(`${p}|${q}`, path([p!, q!]));
+    }
+  }
+  return [...seen.values()];
+}
+
+// The nodes, by cell. `pops` are the points of presence: one address,
+// announced from three places, drawn with a dashed halo.
+const nodes = {
+  a: [5, 3],
+  b: [7, 2],
+  c: [7, 4],
+  d: [9, 1],
+  e: [9, 3],
+  f: [10, 5],
+  g: [11, 2],
+  h: [11, 4],
+  i: [6, 1],
+} as const satisfies Record<string, Cell>;
+type Node = keyof typeof nodes;
+
+const pops: Node[] = ["e", "g", "f"];
+
+const T = (x: Node, y: Node, diagonal: Bend = "last") => trace(nodes[x], nodes[y], diagonal);
+const back = (x: Node, y: Node, diagonal: Bend = "last") => T(x, y, diagonal).reverse();
+
+// Who talks to whom, and which way each trace bends.
+const links: [Node, Node, Bend][] = [
+  ["a", "b", "last"],
+  ["a", "c", "last"],
+  ["i", "b", "last"],
+  ["b", "d", "last"],
+  ["b", "e", "last"],
+  ["c", "e", "first"],
+  ["c", "f", "first"],
+  ["d", "e", "last"],
+  ["e", "f", "last"],
+  ["d", "g", "first"],
+  ["e", "g", "last"],
+  ["e", "h", "last"],
+  ["f", "h", "first"],
+  ["g", "h", "last"],
+];
+const solid = segments(links.map(([x, y, d]) => T(x, y, d)));
+
+// The long way round, dashed, up and over the top; and where the traffic
+// comes from and goes on: stubs off both edges.
+const enter: Cell = [2, 3];
+const exits: Cell[] = [
+  [COLS, 2],
+  [COLS, 4],
+];
+const dashed = segments([
+  T("a", "i"),
+  T("i", "d"),
+  trace(enter, nodes.a),
+  trace(nodes.g, exits[0]!),
+  trace(nodes.h, exits[1]!),
+]);
+
+// Three packets, each on its own route and clock, so no two are in step.
+const packets: { d: string; duration: number; delay: number }[] = [
+  {
+    d: route(
+      trace(enter, nodes.a),
+      T("a", "b"),
+      T("b", "d"),
+      T("d", "g", "first"),
+      trace(nodes.g, exits[0]!),
+    ),
+    duration: 16,
+    delay: 0,
+  },
+  {
+    d: route(
+      trace(enter, nodes.a),
+      T("a", "c"),
+      T("c", "f", "first"),
+      T("f", "h", "first"),
+      trace(nodes.h, exits[1]!),
+    ),
+    duration: 19,
+    delay: 6,
+  },
+  {
+    d: route(
+      trace(exits[0]!, nodes.g),
+      back("e", "g"),
+      back("c", "e", "first"),
+      back("a", "c"),
+      trace(nodes.a, enter),
+    ),
+    duration: 17,
+    delay: 11,
+  },
+];
+
+// The left fade follows the viewport: at 1440 it clears the headline's last
+// word, and every 100px less hides 75px more, so the ingress goes first.
+const fade =
+  "linear-gradient(to right, transparent max(0px, calc(1320px - 75vw)), black max(120px, calc(1440px - 75vw)))";
+const mask = `${fade}, linear-gradient(to bottom, black 60%, transparent 100%)`;
+
+export function HeroMesh() {
   return (
     <svg
       aria-hidden
-      className="text-foreground pointer-events-none absolute inset-0 -z-10 h-full w-full opacity-[0.11] dark:opacity-[0.15]"
-      viewBox="0 0 1200 640"
-      preserveAspectRatio="xMidYMid slice"
+      className="text-foreground pointer-events-none absolute top-0 right-0 -z-10 hidden xl:block"
+      width={COLS * CELL}
+      height={ROWS * CELL}
+      viewBox={`0 0 ${COLS * CELL} ${ROWS * CELL}`}
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.1"
       strokeLinecap="round"
       strokeLinejoin="round"
       style={{
-        maskImage: "linear-gradient(to bottom, black 0%, black 55%, transparent 100%)",
-        WebkitMaskImage: "linear-gradient(to bottom, black 0%, black 55%, transparent 100%)",
+        maskImage: mask,
+        WebkitMaskImage: mask,
+        maskComposite: "intersect",
+        WebkitMaskComposite: "source-in",
       }}
     >
-      <defs>
-        <filter id="hand" x="-5%" y="-5%" width="110%" height="110%">
-          <feTurbulence type="fractalNoise" baseFrequency="0.018" numOctaves="2" seed="7" result="n" />
-          <feDisplacementMap
-            in="SourceGraphic"
-            in2="n"
-            scale="3.2"
-            xChannelSelector="R"
-            yChannelSelector="G"
-          />
-        </filter>
-      </defs>
+      {/* ------------------------------------------------------- traces */}
+      <g strokeWidth="1" className="[stroke-opacity:0.26] dark:[stroke-opacity:0.3]">
+        {solid.map((d) => (
+          <path key={d} d={d} />
+        ))}
+      </g>
+      <g strokeWidth="1" strokeDasharray="3 5" className="[stroke-opacity:0.22] dark:[stroke-opacity:0.26]">
+        {dashed.map((d) => (
+          <path key={d} d={d} />
+        ))}
+      </g>
 
-      <g filter="url(#hand)">
-        {/* ---------------------------------------------------- the mesh */}
-        {links.map(([a, b, far], i) => (
-          <path
-            key={`${a}-${b}`}
-            d={bend(pops[a]!, pops[b]!, i)}
-            className={far ? "mesh-link" : undefined}
-            strokeDasharray={far ? "5 7" : undefined}
-            strokeWidth={far ? 0.9 : 1.1}
+      {/* ------------------------------------------------------ packets */}
+      <g fill="currentColor" stroke="none">
+        {packets.map((p) => (
+          <circle
+            key={p.d}
+            r={2.6}
+            className="mesh-packet"
+            style={{
+              offsetPath: `path("${p.d}")`,
+              animationDuration: `${p.duration}s`,
+              animationDelay: `${p.delay}s`,
+            }}
           />
         ))}
-        {pops.map(([x, y], i) => (
-          <g key={`${x}-${y}`}>
-            <circle cx={x} cy={y} r={i % 4 === 0 ? 5 : 3.5} />
-            {/* the second pass of a pen going round twice */}
-            <circle cx={x + 0.8} cy={y - 0.6} r={i % 4 === 0 ? 5.4 : 3.9} strokeWidth="0.6" />
-          </g>
-        ))}
-        {/* anycast: one address, announced from three places */}
-        <circle cx={960} cy={170} r={16} strokeDasharray="2 4" strokeWidth="0.8" />
-        <circle cx={960} cy={170} r={26} strokeDasharray="2 5" strokeWidth="0.6" />
-        <circle cx={850} cy={190} r={13} strokeDasharray="2 4" strokeWidth="0.7" />
-        <circle cx={1050} cy={340} r={13} strokeDasharray="2 4" strokeWidth="0.7" />
+      </g>
 
-        {/* --------------------------------------------------- the chain */}
-        {blocks.map((x, i) => (
-          <g key={x}>
-            <rect x={x} y={470} width={78} height={52} rx={4} />
-            <rect x={x + 1.5} y={471.5} width={78} height={52} rx={4} strokeWidth="0.5" />
-            {/* the header, then three transactions */}
-            <path d={`M${x + 8} ${482} L${x + 40} ${481.5}`} strokeWidth="1.4" />
-            <path d={`M${x + 8} ${496} L${x + 66} ${495.5}`} strokeWidth="0.8" />
-            <path d={`M${x + 8} ${504} L${x + 58} ${504.5}`} strokeWidth="0.8" />
-            <path d={`M${x + 8} ${512} L${x + 62} ${511.5}`} strokeWidth="0.8" />
-            {/* the hash of the one before */}
-            {i > 0 ? (
-              <>
-                <path d={`M${x} ${496} C${x - 24} ${494}, ${x - 48} ${498}, ${blocks[i - 1]! + 78} ${496}`} />
-                <path d={`M${x - 8} ${491} L${x - 1} ${496} L${x - 8} ${501}`} strokeWidth="0.9" />
-              </>
-            ) : null}
-          </g>
-        ))}
-        {/* a merkle tree above the third block, roots down */}
-        <g strokeWidth="0.9">
-          <circle cx={449} cy={392} r={3.5} />
-          <circle cx={425} cy={416} r={3} />
-          <circle cx={473} cy={416} r={3} />
-          <circle cx={413} cy={440} r={2.5} />
-          <circle cx={437} cy={440} r={2.5} />
-          <circle cx={461} cy={440} r={2.5} />
-          <circle cx={485} cy={440} r={2.5} />
-          <path d="M446 395 Q436 404 427 413" />
-          <path d="M452 395 Q462 404 471 413" />
-          <path d="M423 419 Q418 429 414 437" />
-          <path d="M427 419 Q432 429 436 437" />
-          <path d="M471 419 Q466 429 462 437" />
-          <path d="M475 419 Q480 429 484 437" />
-          <path d="M449 396 Q449 440 449 468" strokeDasharray="2 4" strokeWidth="0.7" />
-        </g>
-        {/* the next block, still being made */}
-        <rect x={860} y={470} width={78} height={52} rx={4} strokeDasharray="4 5" strokeWidth="0.9" />
-        <path d="M860 496 C836 494, 812 498, 788 496" strokeDasharray="4 5" strokeWidth="0.9" />
+      {/* -------------------------------------------------------- nodes */}
+      <g strokeWidth="1.2" className="[stroke-opacity:0.6] dark:[stroke-opacity:0.65]">
+        {pops.map((k) => {
+          const [x, y] = px(nodes[k]);
+          return (
+            <circle
+              key={`halo-${k}`}
+              cx={x}
+              cy={y}
+              r={13}
+              strokeDasharray="2 3.5"
+              strokeWidth="0.9"
+              className="[stroke-opacity:0.35]"
+            />
+          );
+        })}
+        {(Object.keys(nodes) as Node[]).map((k) => {
+          const [x, y] = px(nodes[k]);
+          return <circle key={k} cx={x} cy={y} r={pops.includes(k) ? 5 : 4} fill="var(--background)" />;
+        })}
+        {/* the hub: a dot in the ring */}
+        <circle cx={px(nodes.e)[0]} cy={px(nodes.e)[1]} r={1.6} fill="currentColor" stroke="none" />
       </g>
     </svg>
   );
