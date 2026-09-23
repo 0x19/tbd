@@ -67,6 +67,19 @@ recorded).
 | The probe | `[engines] probe_interval` / `probe_timeout`; `tbd_llm_engine_up` and `ListModels.up` |
 | The checks | `grpc_llm_ping`, `grpc_llm_models_lists_both_tiers`, `grpc_llm_generate_unauthenticated` (`docs/chaos/kinds.md`) |
 
+## Reproducibility
+
+Every generation's row names which build answered and which weights: the engine's
+version as it reports it (Ollama's version, llama-server's build) and the revision of
+the model (the digest Ollama lists, the file llama-server loaded), read by the probe on
+every pass and written at the start of each generation; `ListModels` shows the same
+pair per tier. The same model name with another quantisation, another chat template
+or another engine build is another model, and a benchmark that cannot say which one
+it ran against cannot be rerun. A row from before the first probe answered, or from
+before this column existed, carries an empty pair; an engine that does not say carries
+`unknown`, never a guess. The prompt template's version is not recorded yet; it joins
+this pair when the service owns one.
+
 ## The engines are dialled directly
 
 Like databases, the engines are not services of this platform: they are model servers

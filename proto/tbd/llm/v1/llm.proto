@@ -140,6 +140,11 @@ message ModelInfo {
   // The engine answered its last probe.
   bool up = 4;
   bool stub = 5;
+  // The engine's build, as it reports it, and the revision of the weights it
+  // serves (a digest, a file name): what a benchmark needs to be rerun. Empty
+  // until the first probe answered; "unknown" when the engine does not say.
+  string engine_version = 6;
+  string model_revision = 7;
 }
 
 message ListModelsResponse {

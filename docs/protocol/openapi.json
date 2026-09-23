@@ -9143,7 +9143,13 @@
           "engine": {
             "type": "string"
           },
+          "engine_version": {
+            "type": "string"
+          },
           "model": {
+            "type": "string"
+          },
+          "model_revision": {
             "type": "string"
           },
           "stub": {

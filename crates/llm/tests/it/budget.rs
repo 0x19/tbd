@@ -34,6 +34,7 @@ async fn generations_are_recorded_and_the_budget_counts_them() {
     })
     .await;
     let mut client = server.client().await;
+    support::wait_probed(&mut client).await;
 
     let (chunks, error) = support::collect(
         client
@@ -58,6 +59,11 @@ async fn generations_are_recorded_and_the_budget_counts_them() {
     assert_eq!(row.engine, "stub");
     assert!(row.stub);
     assert_eq!(row.tier, "fast");
+    assert_eq!(
+        (row.engine_version.as_str(), row.model_revision.as_str()),
+        ("stub", "stub"),
+        "the row names the build and the weights the probe read"
+    );
     assert_eq!(
         (row.prompt_tokens, row.completion_tokens),
         (

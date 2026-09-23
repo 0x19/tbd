@@ -22,8 +22,12 @@ operations in `docs/llm/README.md`; this file is the non-obvious.
   `[store]`. `EngineConfig` is a plain struct with `kind: EngineKind`, not a tagged
   enum: `deny_unknown_fields` and `flatten` do not combine. `Config::stub(addr)` is
   what tests and the chaos kind run; `refuse_stub(env)` is what `main` runs.
-- `probe.rs`: health per tier on an interval into a gauge and a shared flag. It never
-  touches the gRPC health reporter: an engine restart must not read as an outage.
+- `probe.rs`: health per tier on an interval into a gauge and a shared flag, and the
+  engine's identity (`Engine::identity`: its build and the weights' revision) kept per
+  tier, read on every pass, shown by `ListModels` and written into every generation's
+  row (`engine_version`, `model_revision`, migration 0030) so a benchmark can be rerun.
+  It never touches the gRPC health reporter: an engine restart must not read as an
+  outage.
 - `store.rs`: `llm.sessions`, `llm.generations`; `used_since` is the budget.
 
 Invariants:
@@ -36,6 +40,8 @@ Invariants:
 - The stub says so on the wire (`stub: true` on chunks, models, embeddings), no shipped
   env file selects it (the config test asserts it), and production refuses it.
 - A missing usage is zeros, never a guess. The budget counts what engines reported.
+  An identity the engine does not report is `unknown`, and a row from before the first
+  probe carries an empty one; neither is ever invented.
 - The deadline is the tier's `timeout_secs` from admission, one clock for the dial
   and the stream. reqwest clients carry only a connect timeout on purpose.
 - Engines are dialled directly, like databases; the Envoy rule does not apply.

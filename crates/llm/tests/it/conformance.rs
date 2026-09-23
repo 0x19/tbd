@@ -217,6 +217,27 @@ async fn list_models_names_both_tiers_and_the_default(fixture: Fixture) {
     }
 }
 
+/// After the first probe, `ListModels` says which build and which weights are
+/// behind each tier, from the engine's own answers: the digest Ollama lists,
+/// the build and file llama-server reports, the stub's own name.
+async fn list_models_names_the_engine_build_and_the_model_revision(fixture: Fixture) {
+    let server = support::start_on(fixture, |_| {}).await;
+    let mut client = server.client().await;
+    let resp = support::wait_probed(&mut client).await;
+    let expected = match fixture {
+        Fixture::Stub => ("stub", "stub"),
+        Fixture::Ollama => ("0.0.0-test", "sha256:feedface"),
+        Fixture::Llamacpp => ("b0-test", "llamacpp-model-q4.gguf"),
+    };
+    for m in &resp.models {
+        assert_eq!(
+            (m.engine_version.as_str(), m.model_revision.as_str()),
+            expected,
+            "{m:?}"
+        );
+    }
+}
+
 async fn embed_returns_one_vector_per_input(fixture: Fixture) {
     let name = fixture.name();
     let server = support::start_on(fixture, |_| {}).await;
@@ -352,6 +373,7 @@ macro_rules! conformance_suite {
             case!(no_caller_is_unauthenticated);
             case!(a_stuck_engine_is_a_deadline);
             case!(list_models_names_both_tiers_and_the_default);
+            case!(list_models_names_the_engine_build_and_the_model_revision);
             case!(embed_returns_one_vector_per_input);
             case!(a_request_that_breaks_the_bounds_is_invalid);
             case!(tier_deep_routes_to_the_deep_engine);

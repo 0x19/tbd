@@ -18,7 +18,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use futures::StreamExt as _;
 
-use super::{Chunk, ChunkStream, Engine, EngineError, GenerateSpec, Usage};
+use super::{Chunk, ChunkStream, Engine, EngineError, GenerateSpec, Identity, Usage};
 use crate::config::EngineKind;
 
 /// The usage every stub generation reports; the fakes report the same, so the
@@ -73,6 +73,13 @@ impl Engine for Stub {
 
     async fn health(&self) -> Result<Vec<String>, EngineError> {
         Ok(vec![self.model.clone()])
+    }
+
+    async fn identity(&self) -> Result<Identity, EngineError> {
+        Ok(Identity {
+            engine_version: "stub".to_owned(),
+            model_revision: "stub".to_owned(),
+        })
     }
 
     async fn generate(&self, spec: GenerateSpec) -> Result<ChunkStream, EngineError> {

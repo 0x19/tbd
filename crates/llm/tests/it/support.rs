@@ -14,7 +14,9 @@ use tbd_llm::{
     Config, Runtime,
     config::{EngineKind, Tier},
 };
-use tbd_proto::llm::v1::{GenerateResponse, llm_service_client::LlmServiceClient};
+use tbd_proto::llm::v1::{
+    GenerateResponse, ListModelsRequest, ListModelsResponse, llm_service_client::LlmServiceClient,
+};
 use testcontainers::{
     ContainerAsync, GenericImage, ImageExt as _, core::IntoContainerPort as _, core::WaitFor,
     runners::AsyncRunner as _,
@@ -264,8 +266,15 @@ async fn ollama_mock() -> MockServer {
     Mock::given(method("GET"))
         .and(path("/api/tags"))
         .respond_with(
-            ResponseTemplate::new(200).set_body_string(r#"{"models":[{"name":"ollama-model"}]}"#),
+            ResponseTemplate::new(200).set_body_string(
+                r#"{"models":[{"name":"ollama-model","digest":"sha256:feedface"}]}"#,
+            ),
         )
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/api/version"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(r#"{"version":"0.0.0-test"}"#))
         .mount(&server)
         .await;
     Mock::given(method("POST"))
@@ -346,6 +355,13 @@ async fn llamacpp_mock() -> MockServer {
         )
         .mount(&server)
         .await;
+    Mock::given(method("GET"))
+        .and(path("/props"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(
+            r#"{"build_info":"b0-test","model_path":"/models/llamacpp-model-q4.gguf","total_slots":1}"#,
+        ))
+        .mount(&server)
+        .await;
     Mock::given(method("POST"))
         .and(path("/v1/embeddings"))
         .respond_with(ResponseTemplate::new(200).set_body_string(
@@ -409,6 +425,28 @@ pub fn as_caller<T>(who: &Person, message: T) -> Request<T> {
         .metadata_mut()
         .insert("x-jwt-payload", payload.parse().unwrap());
     request
+}
+
+/// The probe has read every tier's identity: `ListModels` names a build and a
+/// revision for both. Bounded; panics when it never happens.
+pub async fn wait_probed(client: &mut LlmServiceClient<Channel>) -> ListModelsResponse {
+    for _ in 0..50 {
+        let resp = client
+            .list_models(Request::new(ListModelsRequest {}))
+            .await
+            .unwrap()
+            .into_inner();
+        if resp.models.len() == 2
+            && resp
+                .models
+                .iter()
+                .all(|m| !m.engine_version.is_empty() && !m.model_revision.is_empty())
+        {
+            return resp;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    panic!("the probe never read both tiers' identity");
 }
 
 /// Every chunk until the stream ends, and the error that ended it if one did.

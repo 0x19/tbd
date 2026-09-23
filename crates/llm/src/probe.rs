@@ -1,8 +1,10 @@
 //! Each tier's engine is asked, every `[engines] probe_interval`, whether it
-//! is up. The answer is a gauge (`tbd_llm_engine_up`) and the `up` flag
-//! `ListModels` reports; it never drives the gRPC health status, because an
-//! engine restart must not read as an outage of the service (`Ping`,
-//! `ListModels` and `GetBudget` still answer).
+//! is up and what it is: its build and the revision of the weights it serves.
+//! The verdict is a gauge (`tbd_llm_engine_up`) and what `ListModels` reports;
+//! the identity is what every generation's record names, so a benchmark can
+//! be rerun against the same build and the same weights. The probe never
+//! drives the gRPC health status, because an engine restart must not read as
+//! an outage of the service (`Ping`, `ListModels` and `GetBudget` still answer).
 
 use std::{
     collections::BTreeMap,
@@ -12,26 +14,53 @@ use std::{
 
 use tbd_common::metrics::names;
 
-use crate::{config::Tier, engine::Engine};
+use crate::{
+    config::Tier,
+    engine::{Engine, Identity},
+};
 
-/// The last probe's verdict per tier.
+/// What the last probe learned about one tier.
+#[derive(Debug, Clone, Default)]
+struct TierStatus {
+    up: bool,
+    identity: Identity,
+}
+
+/// The last probe's verdict and identity per tier.
 #[derive(Debug, Clone, Default)]
 pub struct Status {
-    up: Arc<RwLock<BTreeMap<Tier, bool>>>,
+    tiers: Arc<RwLock<BTreeMap<Tier, TierStatus>>>,
 }
 
 impl Status {
     /// Whether the tier answered its last probe. Unknown (no probe yet) is down.
     #[must_use]
     pub fn up(&self, tier: Tier) -> bool {
-        self.up
+        self.tiers
             .read()
-            .is_ok_and(|m| m.get(&tier).copied().unwrap_or(false))
+            .is_ok_and(|m| m.get(&tier).is_some_and(|t| t.up))
     }
 
-    fn set(&self, tier: Tier, up: bool) {
-        if let Ok(mut m) = self.up.write() {
-            m.insert(tier, up);
+    /// The tier's engine build and model revision as last learned; empty
+    /// strings until a probe answered.
+    #[must_use]
+    pub fn identity(&self, tier: Tier) -> Identity {
+        self.tiers
+            .read()
+            .ok()
+            .and_then(|m| m.get(&tier).map(|t| t.identity.clone()))
+            .unwrap_or_default()
+    }
+
+    fn set_up(&self, tier: Tier, up: bool) {
+        if let Ok(mut m) = self.tiers.write() {
+            m.entry(tier).or_default().up = up;
+        }
+    }
+
+    fn set_identity(&self, tier: Tier, identity: Identity) {
+        if let Ok(mut m) = self.tiers.write() {
+            m.entry(tier).or_default().identity = identity;
         }
     }
 }
@@ -71,9 +100,28 @@ pub async fn run(
                 _ => {}
             }
             let up = now.is_ok();
-            status.set(*tier, up);
+            status.set_up(*tier, up);
             metrics::gauge!(names::LLM_ENGINE_UP, "tier" => tier.as_str(), "engine" => engine.kind().as_str())
                 .set(if up { 1.0 } else { 0.0 });
+            if up {
+                // The identity changes when the engine or its weights do; a
+                // probe that cannot read it keeps the last one rather than
+                // pretending it went blank.
+                match tokio::time::timeout(timeout, engine.identity()).await {
+                    Ok(Ok(identity)) => {
+                        if identity != status.identity(*tier) {
+                            tracing::info!(%tier, engine = engine.kind().as_str(), build = %identity.engine_version, revision = %identity.model_revision, "engine identity");
+                        }
+                        status.set_identity(*tier, identity);
+                    }
+                    Ok(Err(error)) => {
+                        tracing::warn!(%tier, engine = engine.kind().as_str(), %error, "the engine's identity could not be read");
+                    }
+                    Err(_) => {
+                        tracing::warn!(%tier, engine = engine.kind().as_str(), "the engine's identity did not answer within {timeout:?}");
+                    }
+                }
+            }
         }
     }
 }

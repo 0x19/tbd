@@ -12,8 +12,8 @@ use async_trait::async_trait;
 use serde::Deserialize;
 
 use super::{
-    Chunk, ChunkStream, Engine, EngineError, GenerateSpec, LineParser, Usage, http_client, join,
-    lines, parse_stream, send,
+    Chunk, ChunkStream, Engine, EngineError, GenerateSpec, Identity, LineParser, UNKNOWN, Usage,
+    http_client, join, lines, parse_stream, send,
 };
 use crate::config::{EngineConfig, EngineKind};
 
@@ -125,6 +125,15 @@ struct Tags {
 #[derive(Deserialize)]
 struct Tag {
     name: String,
+    /// The blob digest of the weights, as `/api/tags` lists it.
+    #[serde(default)]
+    digest: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct Version {
+    #[serde(default)]
+    version: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -154,6 +163,34 @@ impl Engine for Ollama {
             .await
             .map_err(|e| EngineError::Protocol(format!("tags: {e}")))?;
         Ok(tags.models.into_iter().map(|t| t.name).collect())
+    }
+
+    /// `GET /api/version` for the build; the configured model's `digest` from
+    /// `GET /api/tags` for the weights.
+    async fn identity(&self) -> Result<Identity, EngineError> {
+        let resp = send(self.http.get(join(&self.url, "api/version"))).await?;
+        let version: Version = resp
+            .json()
+            .await
+            .map_err(|e| EngineError::Protocol(format!("version: {e}")))?;
+        let resp = send(self.http.get(join(&self.url, "api/tags"))).await?;
+        let tags: Tags = resp
+            .json()
+            .await
+            .map_err(|e| EngineError::Protocol(format!("tags: {e}")))?;
+        let digest = tags
+            .models
+            .into_iter()
+            .find(|t| t.name == self.model)
+            .and_then(|t| t.digest)
+            .filter(|d| !d.is_empty());
+        Ok(Identity {
+            engine_version: version
+                .version
+                .filter(|v| !v.is_empty())
+                .unwrap_or_else(|| UNKNOWN.to_owned()),
+            model_revision: digest.unwrap_or_else(|| UNKNOWN.to_owned()),
+        })
     }
 
     async fn generate(&self, spec: GenerateSpec) -> Result<ChunkStream, EngineError> {

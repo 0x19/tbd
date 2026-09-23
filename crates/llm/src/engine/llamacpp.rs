@@ -14,8 +14,8 @@ use async_trait::async_trait;
 use serde::Deserialize;
 
 use super::{
-    Chunk, ChunkStream, Engine, EngineError, GenerateSpec, LineParser, Usage, http_client, join,
-    lines, parse_stream, send,
+    Chunk, ChunkStream, Engine, EngineError, GenerateSpec, Identity, LineParser, UNKNOWN, Usage,
+    http_client, join, lines, parse_stream, send,
 };
 use crate::config::{EngineConfig, EngineKind};
 
@@ -203,6 +203,15 @@ struct ModelId {
     id: String,
 }
 
+/// `GET /props`: the server's build and the file it loaded, among other things.
+#[derive(Deserialize)]
+struct Props {
+    #[serde(default)]
+    build_info: Option<String>,
+    #[serde(default)]
+    model_path: Option<String>,
+}
+
 #[derive(Deserialize)]
 struct Embeddings {
     #[serde(default)]
@@ -238,6 +247,29 @@ impl Engine for Llamacpp {
             .await
             .map_err(|e| EngineError::Protocol(format!("models: {e}")))?;
         Ok(models.data.into_iter().map(|m| m.id).collect())
+    }
+
+    /// `GET /props`: `build_info` is the build, the file name in `model_path`
+    /// is the weights.
+    async fn identity(&self) -> Result<Identity, EngineError> {
+        let resp = send(self.http.get(join(&self.url, "props"))).await?;
+        let props: Props = resp
+            .json()
+            .await
+            .map_err(|e| EngineError::Protocol(format!("props: {e}")))?;
+        let file = props
+            .model_path
+            .as_deref()
+            .and_then(|p| p.rsplit('/').next())
+            .filter(|f| !f.is_empty())
+            .map(str::to_owned);
+        Ok(Identity {
+            engine_version: props
+                .build_info
+                .filter(|b| !b.is_empty())
+                .unwrap_or_else(|| UNKNOWN.to_owned()),
+            model_revision: file.unwrap_or_else(|| UNKNOWN.to_owned()),
+        })
     }
 
     async fn generate(&self, spec: GenerateSpec) -> Result<ChunkStream, EngineError> {

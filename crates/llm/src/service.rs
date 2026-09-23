@@ -150,6 +150,7 @@ impl Llm {
             .await
             .map_err(store_status)?;
         let id = Uuid::now_v7();
+        let identity = self.inner.probe.identity(tier);
         store::start_generation(
             pool,
             store::Start {
@@ -160,6 +161,8 @@ impl Llm {
                 engine: engine.kind().as_str(),
                 model: engine.model(),
                 stub: engine.stub(),
+                engine_version: &identity.engine_version,
+                model_revision: &identity.model_revision,
             },
         )
         .await
@@ -663,12 +666,15 @@ impl LlmService for Llm {
             .into_iter()
             .filter_map(|tier| {
                 let engine = self.inner.engines.get(&tier)?;
+                let identity = self.inner.probe.identity(tier);
                 Some(ModelInfo {
                     tier: wire_tier(tier),
                     engine: engine.kind().as_str().to_owned(),
                     model: engine.model().to_owned(),
                     up: self.inner.probe.up(tier),
                     stub: engine.stub(),
+                    engine_version: identity.engine_version,
+                    model_revision: identity.model_revision,
                 })
             })
             .collect();

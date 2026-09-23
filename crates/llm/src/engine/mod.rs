@@ -133,6 +133,19 @@ pub enum EngineError {
 /// A stream of chunks; ends after the `done` chunk or the first error.
 pub type ChunkStream = BoxStream<'static, Result<Chunk, EngineError>>;
 
+/// Which build answered, and which weights: what a benchmark needs to be
+/// rerun. `unknown` when the engine does not say; never invented.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Identity {
+    /// The engine's build, as it reports it.
+    pub engine_version: String,
+    /// The revision of the weights: a digest, a file name.
+    pub model_revision: String,
+}
+
+/// What an engine says when it does not say.
+pub const UNKNOWN: &str = "unknown";
+
 /// What runs the weights.
 #[async_trait]
 pub trait Engine: Send + Sync + fmt::Debug + 'static {
@@ -148,6 +161,8 @@ pub trait Engine: Send + Sync + fmt::Debug + 'static {
     }
     /// The models the engine serves; `Ok` means it is up.
     async fn health(&self) -> Result<Vec<String>, EngineError>;
+    /// The build and the weights behind this tier, asked on every probe.
+    async fn identity(&self) -> Result<Identity, EngineError>;
     /// Start a generation. `Err` here is "before the first chunk".
     async fn generate(&self, spec: GenerateSpec) -> Result<ChunkStream, EngineError>;
     /// One vector per input, in order.
