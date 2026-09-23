@@ -26,6 +26,7 @@ export default function CvPage() {
           {company.person}
         </h1>
         <p className="mt-4 max-w-2xl text-xl text-pretty">{company.title}</p>
+        <p className="text-muted-foreground mt-1 text-sm">{company.focus}</p>
         <p className="text-muted-foreground mt-2 font-mono text-[11px] tracking-[0.14em] uppercase">
           {company.city}
         </p>

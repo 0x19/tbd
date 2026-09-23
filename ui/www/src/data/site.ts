@@ -18,7 +18,9 @@ export const company = {
   legalName: "InOrbit d.o.o.",
   person: "Nevio Vesic",
   /** The professional title, independent of any one employer. */
-  title: "Staff Software / Protocol Engineer — Rust & Go",
+  title: "Staff Software / Protocol Engineer",
+  /** The line under the title: the scope first, the tools after it. */
+  focus: "Distributed Systems · Infrastructure · Rust · Go",
   /** What I am doing now, in one line: the about page's "Now". */
   now: "Independent, through InOrbit",
   /**

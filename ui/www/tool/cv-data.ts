@@ -27,6 +27,7 @@ writeFileSync(
     {
       person: company.person,
       title: company.title,
+      focus: company.focus,
       city: company.city,
       email: company.email,
       site: url.replace(/^https?:\/\//, ""),

@@ -26,7 +26,7 @@
 #set par(leading: 0.52em, justify: false)
 #let rule = line(length: 100%, stroke: 0.5pt + rgb("#d9d9d9"))
 
-#let section(title) = block(above: 10pt, below: 5pt, width: 100%)[
+#let section(title) = block(above: 9pt, below: 4pt, width: 100%)[
   #text(size: 7.8pt, weight: "semibold", tracking: 0.12em, fill: muted, upper(title))
   #v(-3pt)
   #rule
@@ -36,6 +36,10 @@
 #text(size: 21pt, weight: "semibold", tracking: -0.02em, d.person)
 #v(1pt)
 #text(size: 10.5pt, d.title)
+#if "focus" in d and d.focus != "" [
+  #v(1pt)
+  #text(size: 8.8pt, fill: muted, d.focus)
+]
 #v(3pt)
 #text(size: 8.6pt, fill: muted)[
   #d.city · #link("mailto:" + d.email, d.email) · #link("https://" + d.site, d.site) · #link("https://" + d.github, d.github) · #link("https://" + d.linkedin, d.linkedin)

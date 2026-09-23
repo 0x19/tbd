@@ -34,6 +34,7 @@ export default function AboutPage() {
           {company.person}
         </h1>
         <p className="mt-6 max-w-2xl text-xl text-pretty">{company.title}</p>
+        <p className="text-muted-foreground mt-1 text-sm">{company.focus}</p>
         <p className="text-muted-foreground mt-3 max-w-2xl text-pretty">
           Twenty years on the half of the stack nobody demos: the part that has to be awake at four in the
           morning.
