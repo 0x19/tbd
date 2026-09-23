@@ -17,6 +17,7 @@ use std::{
 };
 
 use futures::{StreamExt as _, stream::BoxStream};
+use sqlx::PgPool;
 use tbd_common::{
     fault::{ErrorKind, Fault, FaultHandle},
     metrics::{RequestTimer, StreamGuard, names},
@@ -29,12 +30,14 @@ use tbd_proto::llm::v1::{
 };
 use tonic::{Code, Request, Response, Status};
 use tracing::Instrument as _;
+use uuid::Uuid;
 
 use crate::{
     Runtime,
     config::{Budget, Config, Generate, Ping, Tier},
-    engine::{ChunkStream, Engine, EngineError, GenerateSpec, Message},
+    engine::{ChunkStream, Engine, EngineError, GenerateSpec, Message, Usage},
     probe,
+    store::{self, Outcome, StoreError},
 };
 
 /// The service. Cheap to clone; holds its configuration sections and shared handles.
@@ -53,6 +56,8 @@ struct Inner {
     limits: Generate,
     budget: Budget,
     probe: probe::Status,
+    /// The record; `None` runs without one (nothing recorded, no limit).
+    pool: Option<PgPool>,
 }
 
 impl Llm {
@@ -78,8 +83,94 @@ impl Llm {
                 limits: config.generate.clone(),
                 budget: config.budget.clone(),
                 probe,
+                pool: None,
             }),
         }
+    }
+
+    /// Record sessions and generations in this pool, and enforce the budget
+    /// from it. Call before the service is shared.
+    #[must_use]
+    pub fn with_pool(mut self, pool: PgPool) -> Self {
+        if let Some(inner) = Arc::get_mut(&mut self.inner) {
+            inner.pool = Some(pool);
+        }
+        self
+    }
+
+    /// Tokens the caller spent today, when there is a record.
+    async fn used_today(&self, subject: &str) -> Result<Option<u64>, Status> {
+        let Some(pool) = &self.inner.pool else {
+            return Ok(None);
+        };
+        let since = store::day_start(chrono::Utc::now());
+        store::used_since(pool, subject, since)
+            .await
+            .map(Some)
+            .map_err(store_status)
+    }
+
+    /// Refuse a caller over their daily budget. One generation in flight may
+    /// overrun: tokens are known only when it ends.
+    async fn admit_budget(&self, subject: &str) -> Result<(), Status> {
+        let limit = self.inner.budget.tokens_per_day;
+        if limit == 0 {
+            return Ok(());
+        }
+        if let Some(used) = self.used_today(subject).await?
+            && used >= limit
+        {
+            return Err(Status::resource_exhausted(format!(
+                "daily token budget spent: {used} of {limit}; it resets at 00:00 UTC"
+            )));
+        }
+        Ok(())
+    }
+
+    /// The generation's session and row, when there is a record.
+    async fn record_start(
+        &self,
+        subject: &str,
+        wanted: &str,
+        tier: Tier,
+        engine: &Arc<dyn Engine>,
+    ) -> Result<Option<Recording>, Status> {
+        let Some(pool) = &self.inner.pool else {
+            return Ok(None);
+        };
+        let wanted = if wanted.is_empty() {
+            None
+        } else {
+            Some(
+                Uuid::parse_str(wanted)
+                    .map_err(|_| Status::invalid_argument("session_id is not a UUID"))?,
+            )
+        };
+        let session_id = store::touch_session(pool, subject, wanted)
+            .await
+            .map_err(store_status)?;
+        let id = Uuid::now_v7();
+        store::start_generation(
+            pool,
+            store::Start {
+                id,
+                session_id,
+                subject,
+                tier,
+                engine: engine.kind().as_str(),
+                model: engine.model(),
+                stub: engine.stub(),
+            },
+        )
+        .await
+        .map_err(store_status)?;
+        Ok(Some(Recording {
+            pool: pool.clone(),
+            id,
+            session_id,
+            first_token_ms: None,
+            closed: false,
+        }))
     }
 
     /// Count the request, start its timer and apply any injected fault
@@ -190,6 +281,17 @@ impl Llm {
     }
 }
 
+/// Map the store's failures onto a gRPC status.
+fn store_status(e: StoreError) -> Status {
+    match e {
+        StoreError::NotFound => Status::not_found("no such session"),
+        StoreError::Db(e) => {
+            tracing::error!(error = %e, "llm store");
+            Status::unavailable("store unavailable")
+        }
+    }
+}
+
 /// Map a transport-neutral fault onto a gRPC status.
 fn status_from(fault: Fault) -> Status {
     let code = match fault.kind {
@@ -229,6 +331,43 @@ struct Meta {
     generation_id: String,
 }
 
+/// The row of one generation while it runs. Closed with its outcome by the
+/// stream; a caller who goes away first drops it unclosed, and the drop
+/// records `cancelled` so no row is left `running` by a disconnect.
+struct Recording {
+    pool: PgPool,
+    id: Uuid,
+    session_id: Uuid,
+    first_token_ms: Option<i32>,
+    closed: bool,
+}
+
+impl Recording {
+    fn close(&mut self, outcome: Outcome, error: String, usage: Option<Usage>) {
+        if self.closed {
+            return;
+        }
+        self.closed = true;
+        let pool = self.pool.clone();
+        let id = self.id;
+        let first = self.first_token_ms;
+        tokio::spawn(async move {
+            if let Err(e) = store::finish_generation(&pool, id, outcome, &error, usage, first).await
+            {
+                tracing::warn!(%id, error = %e, "recording the generation's end");
+            }
+        });
+    }
+}
+
+impl Drop for Recording {
+    fn drop(&mut self) {
+        if !self.closed && tokio::runtime::Handle::try_current().is_ok() {
+            self.close(Outcome::Cancelled, "the caller went away".to_owned(), None);
+        }
+    }
+}
+
 /// The state of one live generation, moved through the unfold.
 struct Live {
     chunks: ChunkStream,
@@ -241,6 +380,7 @@ struct Live {
     guard: StreamGuard,
     fault: FaultHandle,
     span: tracing::Span,
+    recording: Option<Recording>,
 }
 
 impl Live {
@@ -270,6 +410,9 @@ impl Live {
         self.span.in_scope(
             || tracing::info!(code = ?status.code(), chunks = self.index, "generation failed"),
         );
+        if let Some(r) = self.recording.as_mut() {
+            r.close(Outcome::Failed, status.message().to_owned(), None);
+        }
         Err(status)
     }
 }
@@ -296,8 +439,13 @@ fn live_stream(live: Live) -> BoxStream<'static, Result<GenerateResponse, Status
                         st.guard.item("out");
                         if !chunk.text.is_empty() && !st.first_seen {
                             st.first_seen = true;
+                            let elapsed = st.started.elapsed();
                             metrics::histogram!(names::LLM_TIME_TO_FIRST_TOKEN, "tier" => st.meta.tier.as_str(), "engine" => st.meta.engine)
-                                .record(st.started.elapsed().as_secs_f64());
+                                .record(elapsed.as_secs_f64());
+                            if let Some(r) = st.recording.as_mut() {
+                                r.first_token_ms =
+                                    Some(i32::try_from(elapsed.as_millis()).unwrap_or(i32::MAX));
+                            }
                         }
                         let usage = chunk.usage.map(|u| ProtoUsage {
                             prompt_tokens: u.prompt_tokens,
@@ -305,6 +453,9 @@ fn live_stream(live: Live) -> BoxStream<'static, Result<GenerateResponse, Status
                         });
                         if chunk.done {
                             st.over = true;
+                            if let Some(r) = st.recording.as_mut() {
+                                r.close(Outcome::Ok, String::new(), chunk.usage);
+                            }
                             if let Some(u) = chunk.usage {
                                 for (kind, n) in [("prompt", u.prompt_tokens), ("completion", u.completion_tokens)] {
                                     metrics::counter!(names::LLM_TOKENS_TOTAL, "tier" => st.meta.tier.as_str(), "engine" => st.meta.engine, "model" => st.meta.model.clone(), "kind" => kind)
@@ -364,13 +515,26 @@ impl LlmService for Llm {
         let (engine, timeout) = self
             .engine(chosen)
             .map_err(|s| self.reject(&mut timer, s))?;
+        self.admit_budget(&principal.sub)
+            .await
+            .map_err(|s| self.reject(&mut timer, s))?;
+        let recording = self
+            .record_start(&principal.sub, &req.session_id, chosen, engine)
+            .await
+            .map_err(|s| self.reject(&mut timer, s))?;
         let meta = Meta {
             engine: engine.kind().as_str(),
             model: engine.model().to_owned(),
             tier: chosen,
             stub: engine.stub(),
-            session_id: String::new(),
-            generation_id: String::new(),
+            session_id: recording
+                .as_ref()
+                .map(|r| r.session_id.to_string())
+                .unwrap_or_default(),
+            generation_id: recording
+                .as_ref()
+                .map(|r| r.id.to_string())
+                .unwrap_or_default(),
         };
         let span = tracing::info_span!(
             "llm.generate",
@@ -381,17 +545,26 @@ impl LlmService for Llm {
             messages = spec.messages.len(),
         );
 
+        let mut recording = recording;
         let chunks = match tokio::time::timeout(timeout, engine.generate(spec))
             .instrument(span.clone())
             .await
         {
             Ok(Ok(chunks)) => chunks,
-            Ok(Err(e)) => return Err(self.reject(&mut timer, status_of(&e))),
+            Ok(Err(e)) => {
+                let status = status_of(&e);
+                if let Some(r) = recording.as_mut() {
+                    r.close(Outcome::Failed, status.message().to_owned(), None);
+                }
+                return Err(self.reject(&mut timer, status));
+            }
             Err(_) => {
-                return Err(self.reject(
-                    &mut timer,
-                    Status::deadline_exceeded("the engine did not start answering in time"),
-                ));
+                let status =
+                    Status::deadline_exceeded("the engine did not start answering in time");
+                if let Some(r) = recording.as_mut() {
+                    r.close(Outcome::Failed, status.message().to_owned(), None);
+                }
+                return Err(self.reject(&mut timer, status));
             }
         };
         let remaining = timeout.saturating_sub(started.elapsed());
@@ -406,6 +579,7 @@ impl LlmService for Llm {
             guard: StreamGuard::open("llm_generate"),
             fault: self.runtime.fault.clone(),
             span,
+            recording,
         };
         Ok(Response::new(live_stream(live)))
     }
@@ -500,15 +674,20 @@ impl LlmService for Llm {
         request: Request<GetBudgetRequest>,
     ) -> Result<Response<GetBudgetResponse>, Status> {
         let mut timer = self.admit("LlmService/GetBudget").await?;
-        Self::principal(&request).map_err(|s| self.reject(&mut timer, s))?;
+        let principal = Self::principal(&request).map_err(|s| self.reject(&mut timer, s))?;
+        let limit = self.inner.budget.tokens_per_day;
         // Without a store nothing is recorded, so no limit can be enforced and
         // the answer says so rather than pretending a count.
+        let used = self
+            .used_today(&principal.sub)
+            .await
+            .map_err(|s| self.reject(&mut timer, s))?;
         Ok(Response::new(GetBudgetResponse {
-            tokens_per_day: self.inner.budget.tokens_per_day,
-            used_today: 0,
-            remaining: 0,
-            unlimited: true,
-            recorded: false,
+            tokens_per_day: limit,
+            used_today: used.unwrap_or(0),
+            remaining: used.map_or(0, |u| limit.saturating_sub(u)),
+            unlimited: limit == 0 || used.is_none(),
+            recorded: used.is_some(),
             day: Self::today(),
         }))
     }

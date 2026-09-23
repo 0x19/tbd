@@ -10,6 +10,7 @@ pub mod config;
 pub mod engine;
 pub mod probe;
 mod service;
+pub mod store;
 
 use std::{collections::BTreeMap, net::SocketAddr, sync::Arc};
 
@@ -41,6 +42,9 @@ pub enum ServeError {
     /// An engine could not be built from its configuration.
     #[error("{0}")]
     Engine(#[from] engine::BuildError),
+    /// The store's pool could not be built from its URL.
+    #[error("store: {0}")]
+    Store(String),
     /// Reflection service could not be built from the descriptor set.
     #[error("reflection: {0}")]
     Reflection(#[from] tonic_reflection::server::Error),
@@ -101,11 +105,24 @@ pub async fn serve_with(
         tracing::info!(%tier, engine = cfg.kind.as_str(), model = %cfg.model, stub = built.stub(), "engine");
         engines.insert(tier, built);
     }
-    if config.store.url.is_empty() {
+    // Lazy: the first query connects, so an unreachable database still lets
+    // the service listen; a generation then fails with UNAVAILABLE from the
+    // store, which is the truthful answer.
+    let pool = if config.store.url.is_empty() {
         tracing::warn!(
             "no store configured: generations are not recorded and the budget is unlimited"
         );
-    }
+        None
+    } else {
+        Some(
+            tbd_db::connect_lazy(&tbd_db::PgOptions {
+                url: config.store.url.clone(),
+                max_connections: config.store.max_connections,
+                ..tbd_db::PgOptions::default()
+            })
+            .map_err(|e| ServeError::Store(e.to_string()))?,
+        )
+    };
     let status = probe::Status::default();
     let prober = tokio::spawn(probe::run(
         engines.clone(),
@@ -114,7 +131,10 @@ pub async fn serve_with(
         config.engines.probe_timeout,
     ));
 
-    let service = Llm::new(&config, runtime, engines, status);
+    let mut service = Llm::new(&config, runtime, engines, status);
+    if let Some(pool) = pool {
+        service = service.with_pool(pool);
+    }
 
     tracing::info!(%addr, version = tbd_common::VERSION, "llm listening");
 

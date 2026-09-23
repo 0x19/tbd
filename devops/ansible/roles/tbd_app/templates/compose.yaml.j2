@@ -151,6 +151,7 @@ services:
       TBD_ENV: production
       LLM_LISTEN_ADDR: 0.0.0.0:{{ llm_port }}
       LLM_METRICS_ADDR: 0.0.0.0:9464
+      LLM_DATABASE_URL: "postgres://ledger:{{ vault_ledger_postgres_password }}@ledger-postgres:5432/tbd?sslmode=disable"
       LLM_FAST_URL: {{ llm_fast_url | default('http://host.docker.internal:11434') }}
       LLM_FAST_MODEL: {{ llm_fast_model | default('gpt-oss:20b') }}
       LLM_DEEP_URL: {{ llm_deep_url | default('http://host.docker.internal:8080') }}

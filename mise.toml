@@ -1049,6 +1049,28 @@ if [ -n "${usage_private_json_path:-}" ]; then
 fi
 """
 
+[tasks."llm:secrets"]
+description = "Create the llm Secret in tbd: llm-db (the app database URL, derived from ledger-db like cv-db). Without it the service runs, records nothing and enforces no budget."
+usage = '''
+arg "[postgres_url]" help="external app database URL; default derives from the ledger-db Secret's password on the in-cluster Postgres, database tbd"
+'''
+run = """
+kubectl apply -f devops/k8s/base/namespace.yaml >/dev/null
+if kubectl -n tbd get secret llm-db >/dev/null 2>&1; then
+  echo "llm-db exists; leaving it"
+else
+  if [ -n "${usage_postgres_url:-}" ]; then
+    url="$usage_postgres_url"
+  else
+    pw=$(kubectl -n tbd get secret ledger-db -o jsonpath='{.data.postgres-password}' | base64 -d)
+    [ -n "$pw" ] || { echo "ledger-db Secret missing; run mise run ledger:secrets first" >&2; exit 1; }
+    url="postgres://ledger:$pw@ledger-postgres.tbd.svc:5432/tbd?sslmode=disable"
+  fi
+  kubectl -n tbd create secret generic llm-db --from-literal=database-url="$url"
+  echo "llm-db created; roll the llm deployment to pick it up"
+fi
+"""
+
 [tasks."cv:grant"]
 description = "Let the cv service send mail as the owner: grant its subject (svc:cv) read access to the owner's own parties, where the linked mailbox lives (the cv binary's grant one-shot over a port-forward, the URL from the cv-db Secret). One-time."
 usage = '''

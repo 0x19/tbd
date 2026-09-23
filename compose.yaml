@@ -230,6 +230,7 @@ services:
       TBD_ENV: ${TBD_ENV:-local}
       LLM_LISTEN_ADDR: 0.0.0.0:50057
       LLM_METRICS_ADDR: 0.0.0.0:9464
+      LLM_DATABASE_URL: postgres://ledger:${LEDGER_POSTGRES_PASSWORD:-local-ledger}@ledger-postgres:5432/tbd?sslmode=disable
       # The engines run on the host, dialled directly like a database.
       LLM_FAST_URL: http://host.docker.internal:11434
       LLM_FAST_MODEL: gpt-oss:20b
