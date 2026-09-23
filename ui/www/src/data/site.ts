@@ -333,6 +333,11 @@ export const notice = {
 /** The CV page and the PDF it links: one source for both. */
 export const cv = {
   pdf: "/cv/nevio-vesic.pdf",
+  /**
+   * Where the full version lives: phone, address and references, behind a
+   * sign-in and my approval, rendered for each reader (docs/cv/README.md).
+   */
+  fullUrl: "https://cv.inorbit.hr/",
   education: "Secondary school, 2000 — 2003. Everything since, self-taught on the job.",
 } as const;
 

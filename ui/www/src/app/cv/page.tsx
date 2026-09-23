@@ -37,9 +37,16 @@ export default function CvPage() {
             </a>
           </Button>
           <Button size="lg" variant="outline" asChild>
+            <a href={cv.fullUrl}>Request the full CV</a>
+          </Button>
+          <Button size="lg" variant="outline" asChild>
             <a href={`mailto:${company.email}`}>{company.email}</a>
           </Button>
         </div>
+        <p className="text-muted-foreground mt-4 max-w-2xl text-sm text-pretty">
+          The full version, with a phone number, an address and references, is behind a sign-in: ask, I
+          approve, and you get a PDF prepared for you.
+        </p>
       </Frame>
 
       <Frame className="py-10 sm:py-14">

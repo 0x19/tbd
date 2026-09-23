@@ -51,7 +51,9 @@ practice log is `localStorage`, per browser, and its page says so.
   service as well, which renders the _full_ CV from them for approved readers
   (`docs/cv/README.md`); the JSON and the PDF are committed, `ui:www:check` fails on a
   stale JSON, so a data change is not done until both are re-rendered and committed
-  with it. Nothing in either restates an employer's confidential figures.
+  with it. Nothing in either restates an employer's confidential figures. The page's
+  "Request the full CV" button is `cv.fullUrl`, the gated site; the public page and
+  PDF never carry a phone number, an address or references.
 - **`projects` are real repositories** and `playgrounds` are things that are
   actually open (or honestly marked as being built, with `href: null`). Never
   seed either with something that does not exist.
