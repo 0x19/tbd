@@ -41,6 +41,8 @@ MENA = "MENA"
 # Croatian, where an English page carries a Croatian word on purpose: "tema" (theme)
 # in the plural-rule comment, "paket" (package) in a mail fixture.
 tema = "tema"
+# Croatian "vas" (you), in the cv UI
+vas = "vas"
 paket = "paket"
 # A date regex's ordinal suffixes (1st, 2nd, 3rd).
 nd = "nd"

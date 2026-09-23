@@ -67,6 +67,111 @@
         }
       }
     },
+    "/v1/cv/access": {
+      "get": {
+        "tags": [
+          "cv"
+        ],
+        "summary": "tbd.cv.v1.CvService/GetAccess",
+        "description": "Transcoded from `/tbd.cv.v1.CvService/GetAccess` on the `cv` backend.",
+        "operationId": "CvService.GetAccess",
+        "responses": {
+          "200": {
+            "description": "`tbd.cv.v1.GetAccessResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.cv.v1.GetAccessResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "cv"
+        ],
+        "summary": "tbd.cv.v1.CvService/RequestAccess",
+        "description": "Transcoded from `/tbd.cv.v1.CvService/RequestAccess` on the `cv` backend.",
+        "operationId": "CvService.RequestAccess",
+        "requestBody": {
+          "description": "`tbd.cv.v1.RequestAccessRequest`; path variables override their fields",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/tbd.cv.v1.RequestAccessRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "`tbd.cv.v1.RequestAccessResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.cv.v1.RequestAccessResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/cv/document": {
+      "get": {
+        "tags": [
+          "cv"
+        ],
+        "summary": "tbd.cv.v1.CvService/DownloadCv",
+        "description": "Transcoded from `/tbd.cv.v1.CvService/DownloadCv` on the `cv` backend.",
+        "operationId": "CvService.DownloadCv",
+        "responses": {
+          "200": {
+            "description": "`tbd.cv.v1.DownloadCvResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.cv.v1.DownloadCvResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/cv/ping": {
       "get": {
         "tags": [
@@ -92,6 +197,101 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/tbd.cv.v1.PingResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/cv/requests": {
+      "get": {
+        "tags": [
+          "cv"
+        ],
+        "summary": "tbd.cv.v1.CvService/ListRequests",
+        "description": "Transcoded from `/tbd.cv.v1.CvService/ListRequests` on the `cv` backend.",
+        "operationId": "CvService.ListRequests",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "`tbd.cv.v1.ListRequestsResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.cv.v1.ListRequestsResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/cv/requests/{id}/decide": {
+      "post": {
+        "tags": [
+          "cv"
+        ],
+        "summary": "tbd.cv.v1.CvService/DecideRequest",
+        "description": "Transcoded from `/tbd.cv.v1.CvService/DecideRequest` on the `cv` backend.",
+        "operationId": "CvService.DecideRequest",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "`tbd.cv.v1.DecideRequestRequest`; path variables override their fields",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/tbd.cv.v1.DecideRequestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "`tbd.cv.v1.DecideRequestResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.cv.v1.DecideRequestResponse"
                 }
               }
             }
@@ -4917,6 +5117,137 @@
           "unknown"
         ]
       },
+      "tbd.cv.v1.AccessRequest": {
+        "type": "object",
+        "description": "`tbd.cv.v1.AccessRequest`",
+        "properties": {
+          "decided_at": {
+            "type": "string"
+          },
+          "decided_by": {
+            "type": "string"
+          },
+          "downloads": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "email": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "last_download_at": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "notified_at": {
+            "type": "string"
+          },
+          "requested_at": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.cv.v1.AccessState": {
+        "type": "object",
+        "description": "`tbd.cv.v1.AccessState`",
+        "properties": {
+          "decided_at": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "notifications": {
+            "type": "boolean"
+          },
+          "notified_at": {
+            "type": "string"
+          },
+          "requested_at": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.cv.v1.DecideRequestRequest": {
+        "type": "object",
+        "description": "`tbd.cv.v1.DecideRequestRequest`",
+        "properties": {
+          "decision": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.cv.v1.DecideRequestResponse": {
+        "type": "object",
+        "description": "`tbd.cv.v1.DecideRequestResponse`",
+        "properties": {
+          "request": {
+            "$ref": "#/components/schemas/tbd.cv.v1.AccessRequest"
+          }
+        }
+      },
+      "tbd.cv.v1.DownloadCvResponse": {
+        "type": "object",
+        "description": "`tbd.cv.v1.DownloadCvResponse`",
+        "properties": {
+          "content_type": {
+            "type": "string"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "pdf": {
+            "type": "string",
+            "format": "byte"
+          }
+        }
+      },
+      "tbd.cv.v1.GetAccessResponse": {
+        "type": "object",
+        "description": "`tbd.cv.v1.GetAccessResponse`",
+        "properties": {
+          "state": {
+            "$ref": "#/components/schemas/tbd.cv.v1.AccessState"
+          }
+        }
+      },
+      "tbd.cv.v1.ListRequestsResponse": {
+        "type": "object",
+        "description": "`tbd.cv.v1.ListRequestsResponse`",
+        "properties": {
+          "requests": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/tbd.cv.v1.AccessRequest"
+            }
+          }
+        }
+      },
       "tbd.cv.v1.PingResponse": {
         "type": "object",
         "description": "`tbd.cv.v1.PingResponse`",
@@ -4929,6 +5260,24 @@
           },
           "version": {
             "type": "string"
+          }
+        }
+      },
+      "tbd.cv.v1.RequestAccessRequest": {
+        "type": "object",
+        "description": "`tbd.cv.v1.RequestAccessRequest`",
+        "properties": {
+          "note": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.cv.v1.RequestAccessResponse": {
+        "type": "object",
+        "description": "`tbd.cv.v1.RequestAccessResponse`",
+        "properties": {
+          "state": {
+            "$ref": "#/components/schemas/tbd.cv.v1.AccessState"
           }
         }
       },

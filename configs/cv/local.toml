@@ -1,2 +1,8 @@
-# cv, environment "local": nothing differs from base.toml yet. The file
-# must exist so a mistyped TBD_ENV fails at start instead of running on base.
+# cv, environment "local": the addresses the deployed cluster notifies with.
+# The finance URL and the database come from the environment (the ConfigMap
+# and the Secrets), never from here.
+
+[notify]
+from = "nevio@inorbit.hr"
+to = "nevio@inorbit.hr"
+url = "https://cv.inorbit.hr/"

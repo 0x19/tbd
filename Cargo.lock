@@ -6147,11 +6147,21 @@ name = "tbd-cv"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
+ "base64 0.22.1",
+ "chrono",
  "clap",
  "metrics",
+ "pdf-extract",
  "serde",
+ "serde_json",
+ "sqlx",
  "tbd-common",
+ "tbd-db",
+ "tbd-finance",
  "tbd-proto",
+ "tbd-render",
+ "testcontainers",
  "thiserror 2.0.20",
  "tokio",
  "toml 1.1.5+spec-1.1.0",
@@ -6159,6 +6169,8 @@ dependencies = [
  "tonic-health",
  "tonic-reflection",
  "tracing",
+ "url",
+ "uuid",
 ]
 
 [[package]]

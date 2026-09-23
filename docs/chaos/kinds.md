@@ -37,3 +37,4 @@ declared and what derives from it: [extending.md](extending.md#add-a-service-kin
 | `grpc_finance_books_balanced` | grpc | `finance` | every company in the caller's grant has a balanced `TrialBalance` for the current year (rows adding up to the totals); an instance with no database, or a call with no verified caller, says so in the detail and passes |
 | `grpc_playground_ping` | grpc | `playground` | `Ping` echoes the message and is labelled a stub |
 | `grpc_cv_ping` | grpc | `cv` | `Ping` echoes the message and is labelled a stub |
+| `grpc_cv_access_unauthenticated` | grpc | `cv` | `GetAccess` without a verified caller is UNAUTHENTICATED: identity comes from Envoy or not at all |

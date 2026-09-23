@@ -8,9 +8,9 @@ use serde::{Deserialize, Serialize};
 use tbd_common::fault::Behavior;
 use tbd_cv::{
     Config, Runtime,
-    config::{Metrics, Ping, Server},
+    config::{Finance, Metrics, Notify, Ping, Private, Render, Server, Store},
 };
-use tbd_proto::cv::v1::{PingRequest, cv_service_client::CvServiceClient};
+use tbd_proto::cv::v1::{GetAccessRequest, PingRequest, cv_service_client::CvServiceClient};
 use tonic::transport::Endpoint;
 use tonic_health::pb::{HealthCheckRequest, health_client::HealthClient};
 
@@ -37,12 +37,20 @@ pub static KIND: Kind = Kind {
     load_target: false,
     addable: true,
     parse: super::parse::<Cv>,
-    checks: &[Check {
-        name: "grpc_cv_ping",
-        surface: "grpc",
-        doc: "`Ping` echoes the message and is labelled a stub",
-        run: |e| Box::pin(grpc_cv_ping(e)),
-    }],
+    checks: &[
+        Check {
+            name: "grpc_cv_ping",
+            surface: "grpc",
+            doc: "`Ping` echoes the message and is labelled a stub",
+            run: |e| Box::pin(grpc_cv_ping(e)),
+        },
+        Check {
+            name: "grpc_cv_access_unauthenticated",
+            surface: "grpc",
+            doc: "`GetAccess` without a verified caller is UNAUTHENTICATED: identity comes from Envoy or not at all",
+            run: |e| Box::pin(grpc_cv_access_unauthenticated(e)),
+        },
+    ],
 };
 
 /// `[stack.cvs.<name>]` minus `listen`: a cv with an initial behaviour.
@@ -110,6 +118,11 @@ impl Service for Cv {
             server: Server { listen: addr },
             metrics: Metrics { listen: None },
             ping: Ping::default(),
+            store: Store::default(),
+            finance: Finance::default(),
+            notify: Notify::default(),
+            private: Private::default(),
+            render: Render::default(),
         };
         let runtime = Runtime {
             fault: tbd_common::fault::FaultHandle::new(self.behavior.clone()),
@@ -156,5 +169,16 @@ async fn grpc_cv_ping(e: Ep) -> Result<String, String> {
         Ok(format!("version={} stub={}", r.version, r.stub))
     } else {
         Err(format!("wrong echo {r:?}"))
+    }
+}
+
+/// `CvService/GetAccess` with no `x-jwt-payload` is refused as unauthenticated:
+/// a caller is whoever Envoy verified, never a claim in the request.
+async fn grpc_cv_access_unauthenticated(e: Ep) -> Result<String, String> {
+    let mut c = CvServiceClient::new(e.grpc()?);
+    match c.get_access(GetAccessRequest {}).await {
+        Err(s) if s.code() == tonic::Code::Unauthenticated => Ok("unauthenticated".into()),
+        Err(s) => Err(format!("wrong code {:?}: {}", s.code(), s.message())),
+        Ok(_) => Err("answered without a verified caller".into()),
     }
 }

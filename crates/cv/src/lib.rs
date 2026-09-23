@@ -1,13 +1,21 @@
-//! The cv service: a gRPC server.
+//! The cv service: the full CV behind sign-in and the owner's approval.
 //!
-//! The library exposes [`serve`], [`serve_on`] and [`serve_with`] so the same
-//! server can be run from `main`, from integration tests on an ephemeral port,
-//! and from the chaos tool with fault injection and counters attached.
+//! The public site carries the CV without contact details. Anyone who signed
+//! in may ask for the full version; the owner is told by mail and decides;
+//! an approved person downloads a PDF rendered for them, with their name on
+//! every page, and every download is recorded. The library exposes
+//! [`serve`], [`serve_on`] and [`serve_with`] so the same server runs from
+//! `main`, from integration tests on an ephemeral port, and from the chaos
+//! tool with fault injection and counters attached.
 
 pub mod config;
+pub mod notify;
+pub mod private;
+pub mod render;
 mod service;
+pub mod store;
 
-use std::net::SocketAddr;
+use std::{net::SocketAddr, time::Duration};
 
 use tbd_proto::cv::v1::cv_service_server::CvServiceServer;
 use tokio::net::TcpListener;
@@ -37,6 +45,15 @@ pub enum ServeError {
     /// The gRPC server failed while running.
     #[error("transport: {0}")]
     Transport(#[from] tonic::transport::Error),
+    /// The store URL does not parse.
+    #[error("store: {0}")]
+    Store(String),
+    /// The private fields did not load.
+    #[error("{0}")]
+    Private(#[from] private::PrivateError),
+    /// The finance URL does not parse.
+    #[error("finance url: {0}")]
+    Finance(tonic::transport::Error),
 }
 
 /// Bind `[server] listen` and serve until `shutdown` resolves.
@@ -64,6 +81,15 @@ pub async fn serve_on(
 }
 
 /// Serve on an already-bound listener with the embedder's [`Runtime`] attached.
+///
+/// With `[store] url` set the service is real; without it every RPC but
+/// `Ping` answers `UNAVAILABLE`, which is what a scaffolded deployment looks
+/// like before its database exists. The private fields and the notifier are
+/// each optional in the same way.
+///
+/// # Errors
+/// The listener's address cannot be read, a URL does not parse, the private
+/// fields do not load, or the server fails.
 pub async fn serve_with(
     listener: TcpListener,
     config: Config,
@@ -83,7 +109,34 @@ pub async fn serve_with(
         .register_encoded_file_descriptor_set(tonic_health::pb::FILE_DESCRIPTOR_SET)
         .build_v1()?;
 
-    let service = Cv::new(config.ping.clone(), runtime);
+    let mut service = Cv::new(config.ping.clone(), runtime)
+        .with_render_timeout(Duration::from_secs(config.render.timeout_secs));
+    if config.store.url.is_empty() {
+        tracing::info!("no store configured; every RPC but Ping answers unavailable");
+    } else {
+        // Lazy: the first query connects, so an unreachable database still
+        // lets the service listen and say so through readiness.
+        let pool = tbd_db::connect_lazy(&tbd_db::PgOptions {
+            url: config.store.url.clone(),
+            max_connections: config.store.max_connections,
+            ..tbd_db::PgOptions::default()
+        })
+        .map_err(|e| ServeError::Store(e.to_string()))?;
+        service = service.with_pool(pool);
+    }
+    let private = private::load(&config.private.json, &config.private.path)?;
+    tracing::info!(private = ?private, "private fields");
+    service = service.with_private(private);
+    let notifier =
+        notify::Notifier::new(&config.finance.url, &config.notify).map_err(ServeError::Finance)?;
+    if notifier.is_none() {
+        tracing::info!("no finance url or no notify addresses; the owner is not told of requests");
+    }
+    service = service.with_notifier(notifier);
+
+    // Fonts are parsed on the first render; do it now, off the runtime, so
+    // the first download does not pay for it.
+    tokio::task::spawn_blocking(render::warm);
 
     tracing::info!(%addr, version = tbd_common::VERSION, "cv listening");
 

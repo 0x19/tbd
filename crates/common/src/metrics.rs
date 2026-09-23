@@ -69,6 +69,10 @@ pub mod names {
     pub const LEDGER_ERASURE_TOMBSTONES_TOTAL: &str = "tbd_ledger_erasure_tombstones_total";
     /// Gauge of erasures waiting, by `state` (`pending`, `due`).
     pub const LEDGER_ERASURES_PENDING: &str = "tbd_ledger_erasures_pending";
+    /// Counter of mails the cv service tried to send through finance, by `kind`
+    /// (`owner`, `requester`) and `outcome` (`sent`, `refused`, `failed`,
+    /// `no_mailbox`, `unreachable`).
+    pub const CV_NOTIFICATIONS_TOTAL: &str = "tbd_cv_notifications_total";
     /// Counter of idempotency rows purged after their TTL.
     pub const LEDGER_IDEMPOTENCY_PURGED_TOTAL: &str = "tbd_ledger_idempotency_purged_total";
     /// Gauge of outbox events not yet published.
@@ -164,6 +168,10 @@ fn describe() {
     describe_counter!(
         names::REQUESTS_TOTAL,
         "Requests handled, by transport, route and status."
+    );
+    describe_counter!(
+        names::CV_NOTIFICATIONS_TOTAL,
+        "Mails the cv service tried to send through finance, by kind and outcome."
     );
     describe_histogram!(
         names::REQUEST_DURATION,
