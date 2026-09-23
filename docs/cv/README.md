@@ -60,8 +60,9 @@ and the date on every page. Every download is recorded.
 ```
 
 `experience` extends a public position by company name (exactly as `ui/www/src/data/site.ts`
-names it): its paragraph and lines appear under the public ones in the full CV and nowhere
-else. That is where the detail of a position that is not for a search result goes.
+names it): its paragraph replaces the public one and its lines follow the public lines, in the
+full CV and nowhere else; `summary` replaces the public summary and `achievements` go first in
+Selected work. That is where the detail of a position that is not for a search result goes.
 
 ## Setting it up
 

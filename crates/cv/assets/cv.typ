@@ -57,7 +57,7 @@
 #if private != none and private.summary != "" [ #private.summary ] else [ #d.summary ]
 
 #section("Selected work")
-#for a in (d.achievements + (if private != none { private.achievements } else { () })) [
+#for a in ((if private != none { private.achievements } else { () }) + d.achievements) [
   - #a
 ]
 
@@ -69,20 +69,16 @@
     ][
       #text(size: 8.4pt, fill: muted)[#e.when · #e.where]
     ]
+    #let more = if private != none { private.experience.find(x => x.company == e.company) } else { none }
     #v(2pt)
-    #e.body
+    #if more != none and more.body != "" [ #more.body ] else [ #e.body ]
     #if e.highlights.len() > 0 [
       #v(1pt)
       #for h in e.highlights [
         - #h
       ]
     ]
-    #let more = if private != none { private.experience.find(x => x.company == e.company) } else { none }
     #if more != none [
-      #if more.body != "" [
-        #v(2pt)
-        #more.body
-      ]
       #if more.highlights.len() > 0 [
         #v(1pt)
         #for h in more.highlights [

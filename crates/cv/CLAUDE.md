@@ -42,8 +42,9 @@ beside the real RPCs. `docs/cv/README.md` is the contract.
 - `private.rs`: the fields only the full CV carries, from `CV_PRIVATE_JSON` (the
   `cv-private` Secret) or a path outside the repository: phone, address, references, and
   `experience` -- the private half of a position, matched to the public entry by company
-  name and rendered under it -- and `summary` / `achievements`, which replace the public
-  summary and extend Selected work in the full CV. Never in git; the `Debug` form never prints a value, and a
+  name: its paragraph replaces the public one, its lines follow the public lines -- and
+  `summary` / `achievements`, which replace the public summary and lead Selected work in
+  the full CV. Never in git; the `Debug` form never prints a value, and a
   test holds that.
 - `config.rs`: layered TOML (`configs/cv`), `deny_unknown_fields`; `CV_*` overrides.
   `[notify] url` is the gated site; `admin_url()` derives the admin page from it.

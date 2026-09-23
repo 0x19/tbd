@@ -1,12 +1,12 @@
 {
   "person": "Nevio Vesic",
-  "title": "Senior software / protocol engineer",
+  "title": "Staff Software / Protocol Engineer — Rust & Go",
   "city": "Rijeka and Zagreb, Croatia",
   "email": "nevio@inorbit.hr",
   "site": "inorbit.hr",
   "github": "github.com/0x19",
   "linkedin": "www.linkedin.com/in/neviovesic/",
-  "availability": "Available from October 2026 for contract or full-time work: protocol, infrastructure and distributed systems, in Rust and Go.",
+  "availability": "Available from October 2026 for protocol, infrastructure and distributed-systems work in Rust and Go, on a B2B contract through my own company, InOrbit d.o.o.",
   "summary": "Twenty years in the unglamorous half of the stack: voice servers and SMS gateways first, then anycast networks carrying real-time traffic at sixty gigabits, then rollups, bridges and indexers, and most recently the RPC infrastructure in front of a hundred-odd blockchain networks. Ten of those years in Go, and as much Rust lately. Whatever I build for the fun of it ends up here too.",
   "about": [
     "Twenty years of building software, most of it infrastructure: distributed systems, storage, protocols and telecommunications. Ten of those years in Go, and as much Rust lately. Along the way I have led teams of up to five, and done the part of that job that is talking to management and clients rather than to a compiler.",
@@ -14,17 +14,16 @@
     "Away from the screen: a guitar, more philosophy and psychology than is strictly useful, the dogs, and my girlfriend."
   ],
   "achievements": [
-    "Early work on a Layer 1 to Layer 7 network with a distributed team, carrying over 60 Gbps, which secured a $3M+ annual contract and opened the following investment round.",
-    "One of the first WASM ports of a Layer 2 blockchain node in Go.",
-    "An optimistic EVM rollup written entirely in Go, from inception to deployment.",
-    "The first Go Solidity AST and IR parser, control-flow graph construction included.",
+    "One of the first three engineers at Subspace: a Layer 1-7 anycast network built in six months, 60+ Gbps from day one, 150+ points of presence; it won a $3M+/year contract and the next funding round. Patent-pending eBPF work.",
+    "An optimistic EVM rollup in Go, from inception to production; one of the first WASM ports of a Layer 2 node in Go.",
     "A cross-chain liquidity bridge between Ethereum and Bitcoin on multi-party computation and threshold ECDSA.",
-    "A cross-chain EVM indexer that streams an entire blockchain dataset in under ten hours."
+    "A cross-chain EVM indexer that streams an entire chain in under ten hours; a crawler at 30k req/s feeding 1-1.5 TB a day.",
+    "solgo, the first Solidity AST/IR parser in Go with control-flow graphs -- open source, used by others since."
   ],
   "experience": [
     {
       "company": "Tenderly",
-      "role": "Software engineer (L5)",
+      "role": "Software engineer, network infrastructure",
       "when": "2024–2026",
       "where": "Remote",
       "body": "Developer infrastructure for Ethereum — simulation, debugging and the systems behind them, at production volume. Backend work in Go and Rust on the systems that carry it. The contract ended in September 2026.",

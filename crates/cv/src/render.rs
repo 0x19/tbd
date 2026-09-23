@@ -165,6 +165,10 @@ mod tests {
         ] {
             assert!(t.contains(present), "full render lacks {present:?}: {t}");
         }
+        assert!(
+            !t.contains("simulation, debugging and the systems behind them"),
+            "the private paragraph replaces the public one"
+        );
         assert_eq!(
             t.matches("Prepared for Rita Reader").count(),
             full.pages,

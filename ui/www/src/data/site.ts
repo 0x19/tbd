@@ -18,7 +18,7 @@ export const company = {
   legalName: "InOrbit d.o.o.",
   person: "Nevio Vesic",
   /** The professional title, independent of any one employer. */
-  title: "Senior software / protocol engineer",
+  title: "Staff Software / Protocol Engineer — Rust & Go",
   /** What I am doing now, in one line: the about page's "Now". */
   now: "Independent, through InOrbit",
   /**
@@ -26,7 +26,7 @@ export const company = {
    * and from when. Keep it true: it is the first thing a reader acts on.
    */
   availability:
-    "Available from October 2026 for contract or full-time work: protocol, infrastructure and distributed systems, in Rust and Go.",
+    "Available from October 2026 for protocol, infrastructure and distributed-systems work in Rust and Go, on a B2B contract through my own company, InOrbit d.o.o.",
   /** Short, for the browser tab and the footer. */
   tagline: "Backend and blockchain systems.",
   /** The hero. Long enough to say something only I could say. */
@@ -88,7 +88,7 @@ export const stack = [
 export const experience = [
   {
     company: "Tenderly",
-    role: "Software engineer (L5)",
+    role: "Software engineer, network infrastructure",
     when: "2024 — 2026",
     where: "Remote",
     href: "https://tenderly.co",
@@ -201,12 +201,11 @@ export const experience = [
  * the CV, not a summary of a role.
  */
 export const achievements = [
-  "Early work on a Layer 1 to Layer 7 network with a distributed team, carrying over 60 Gbps, which secured a $3M+ annual contract and opened the following investment round.",
-  "One of the first WASM ports of a Layer 2 blockchain node in Go.",
-  "An optimistic EVM rollup written entirely in Go, from inception to deployment.",
-  "The first Go Solidity AST and IR parser, control-flow graph construction included.",
+  "One of the first three engineers at Subspace: a Layer 1-7 anycast network built in six months, 60+ Gbps from day one, 150+ points of presence; it won a $3M+/year contract and the next funding round. Patent-pending eBPF work.",
+  "An optimistic EVM rollup in Go, from inception to production; one of the first WASM ports of a Layer 2 node in Go.",
   "A cross-chain liquidity bridge between Ethereum and Bitcoin on multi-party computation and threshold ECDSA.",
-  "A cross-chain EVM indexer that streams an entire blockchain dataset in under ten hours.",
+  "A cross-chain EVM indexer that streams an entire chain in under ten hours; a crawler at 30k req/s feeding 1-1.5 TB a day.",
+  "solgo, the first Solidity AST/IR parser in Go with control-flow graphs -- open source, used by others since.",
 ] as const;
 
 /**
