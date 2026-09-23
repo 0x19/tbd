@@ -559,14 +559,17 @@ pub async fn run_sync(
             break;
         }
     }
-    finish(pool, run_id, id, Ok((&pulled, complete))).await?;
-    // What came back to the threads this mailbox sent in. After the pull's
-    // own bookkeeping: a failure here is logged, never a failed run.
+    // What came back to the threads this mailbox sent in. Before the run is
+    // closed, so a reader who waits for the run's outcome finds the replies
+    // there (the test that reads the thread the moment the run ends found
+    // one mail and no reply while the import was still running). A failure
+    // here is logged, never a failed run.
     match crate::mail::store::import_replies(pool, sealer, kind.as_ref(), row).await {
         Ok(0) => {}
         Ok(n) => tracing::info!(connector = %id, replies = n, "mail: replies imported"),
         Err(e) => tracing::warn!(connector = %id, error = %e, "mail: replies not imported"),
     }
+    finish(pool, run_id, id, Ok((&pulled, complete))).await?;
     Ok(pulled)
 }
 
