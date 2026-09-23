@@ -154,8 +154,8 @@ practice log is `localStorage`, per browser, and its page says so.
 - **The home page is the front door**, `src/components/pages/home.tsx`: every section
   shows something no other page shows and links out instead of restating it. Who and
   the availability line, three facts about now (no ticker of tags: a keyword wall is
-  the thing the site is not), four playground tiles, the pipeline drawing with the
-  principles as one line each, the lab once `lab.public` is true, the email. The
+  the thing the site is not), the pipeline drawing with the principles as one line
+  each, four playground tiles, the lab once `lab.public` is true, the email. The
   summary paragraph, the project rows and the contact hero belong to `/about/`,
   `/projects/` and `/contact/`; putting them back here is the repetition that was
   removed. Behind the hero: the grid, anchored to the right edge, and
@@ -164,11 +164,20 @@ practice log is `localStorage`, per browser, and its page says so.
   grid out, three packets crawling along it) in `currentColor`, shown from `xl` up
   with a left fade that follows the viewport so no node sits under the headline;
   decoration only, `aria-hidden`, and the packets stop under `prefers-reduced-motion`.
+  Below the hero the page is one drawing: a spine (a hairline half a gutter left of
+  the content, `left-3 sm:left-4` inside each Frame) runs from the facts strip to the
+  email, every section is a `Box` on it with a knock-out port where its rule meets
+  the line, the email's port is filled because the line ends there, and one packet
+  (`Spine`, measured with a ResizeObserver) crawls the whole way. A new home section
+  is a `Box`, so it gets its port and its stretch of the line for free.
 - The pipeline on the home page (`src/components/pipeline.tsx`, data in
   `pipeline` and `rails`) is a drawing of a real system, not an illustration:
-  every stage and every value is something the platform actually does. It is CSS
-  and hairlines rather than a diagram library — a static page should not ship a
-  canvas to draw four boxes.
+  every stage and every value is something the platform actually does. It is drawn
+  on the spine: the four layers top to bottom with the request's path through each
+  (a "packet in" dot above, a "query out" dot below, both dictionary strings), and
+  the two rails as vertical hairlines crossing every layer before each ends on its
+  own line of text. It is CSS and hairlines rather than a diagram library — a static
+  page should not ship a canvas to draw four boxes.
 - **Fonts are bundled**, not fetched: `src/fonts/` holds Inter (four weights, OFL) and
   Geist Mono (two, OFL), the same files the mobile app and the invoice PDF ship, loaded
   through `next/font/local` in the root layout. A build therefore needs no network (Google

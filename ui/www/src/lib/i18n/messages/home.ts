@@ -19,6 +19,8 @@ export const en: Dict = {
   "home.method.title": "Layer 1 to Layer 7, and the rails that cross them.",
   "home.method.lead":
     "Most of the work has been somewhere in this column — a packet on the way in, a chain on the way through, a query on the way out. The rails are the part people skip, and the part that decides whether a bad night is an incident or a shrug.",
+  "home.method.in": "packet in",
+  "home.method.out": "query out",
   "home.lab.label": "Lab",
   "home.lab.title": "Notes, RFCs and studies, as they are written.",
   "home.lab.lead":
@@ -46,6 +48,8 @@ export const hr: Dict = {
   "home.method.title": "Od prvog do sedmog sloja, i tračnice koje ih presijecaju.",
   "home.method.lead":
     "Većina posla bila je negdje u ovom stupcu -- paket na ulazu, lanac na prolazu, upit na izlazu. Tračnice su dio koji ljudi preskoče, i dio koji odlučuje je li loša noć incident ili slijeganje ramenima.",
+  "home.method.in": "paket ulazi",
+  "home.method.out": "upit izlazi",
   "home.lab.label": "Laboratorij",
   "home.lab.title": "Bilješke, RFC-ovi i studije, kako nastaju.",
   "home.lab.lead": "Razrada iza platforme i igrališta, objavljena kad je komad spreman za čitanje.",

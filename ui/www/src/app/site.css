@@ -207,3 +207,33 @@
   text-transform: uppercase;
   cursor: help;
 }
+
+/* The one packet on the home page's spine: from the hero to the last port,
+   measured by `Spine` in home.tsx, fading in at the top and out at the end. */
+@keyframes spine-packet {
+  0% {
+    transform: translate(-50%, 0);
+    opacity: 0;
+  }
+  4% {
+    opacity: 0.7;
+  }
+  96% {
+    opacity: 0.7;
+  }
+  100% {
+    transform: translate(-50%, var(--spine-end));
+    opacity: 0;
+  }
+}
+
+.spine-packet {
+  opacity: 0;
+  animation: spine-packet 70s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spine-packet {
+    display: none;
+  }
+}
