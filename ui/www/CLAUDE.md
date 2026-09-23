@@ -84,6 +84,11 @@ practice log is `localStorage`, per browser, and its page says so.
   every stage and every value is something the platform actually does. It is CSS
   and hairlines rather than a diagram library — a static page should not ship a
   canvas to draw four boxes.
+- **Fonts are bundled**, not fetched: `src/fonts/` holds Inter (four weights, OFL) and
+  Geist Mono (two, OFL), the same files the mobile app and the invoice PDF ship, loaded
+  through `next/font/local` in the root layout. A build therefore needs no network (Google
+  Fonts refused a Docker build once, and that was enough), and the page loads nothing from
+  a third party, which `/legal/` promises.
 - The layout language is `src/components/kit.tsx`: `Frame` for the measure,
   `SectionHead` for the numbered heads, `Eyebrow`, `Reveal`, `Marquee`,
   `IndexRow`, `Tag`. Build a new page from those rather than new one-off spacing.

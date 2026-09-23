@@ -2,7 +2,7 @@ import "./globals.css";
 import "./site.css";
 
 import type { Metadata } from "next";
-import { Geist_Mono, Inter } from "next/font/google";
+import localFont from "next/font/local";
 
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
@@ -14,9 +14,27 @@ import { cn } from "@/lib/utils";
 import { Providers } from "./providers";
 
 // The same faces as the rest of the surfaces: Inter for text, Geist Mono for
-// identifiers.
-const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
-const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-mono" });
+// identifiers -- bundled from `src/fonts/` (the files the mobile app and the
+// invoice PDF ship), so a build needs no network and the page loads nothing
+// from a third party.
+const inter = localFont({
+  src: [
+    { path: "../fonts/Inter-Regular.otf", weight: "400", style: "normal" },
+    { path: "../fonts/Inter-Medium.otf", weight: "500", style: "normal" },
+    { path: "../fonts/Inter-SemiBold.otf", weight: "600", style: "normal" },
+    { path: "../fonts/Inter-Bold.otf", weight: "700", style: "normal" },
+  ],
+  variable: "--font-sans",
+  display: "swap",
+});
+const geistMono = localFont({
+  src: [
+    { path: "../fonts/GeistMono-Regular.ttf", weight: "400", style: "normal" },
+    { path: "../fonts/GeistMono-Medium.ttf", weight: "500", style: "normal" },
+  ],
+  variable: "--font-mono",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   metadataBase: new URL(url),
