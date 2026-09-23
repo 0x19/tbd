@@ -21,8 +21,10 @@ export const company = {
 
 /** The public site's pages, as the header and footer list them here; `key` names the label in `nav.<key>`. */
 export const publicNav = [
-  { href: `${publicUrl}/playgrounds/`, label: "Playgrounds", key: "playgrounds" },
-  { href: `${publicUrl}/projects/`, label: "Projects", key: "projects" },
+  // The lab (`/lab/`) is admins-only on the public site until it is published; it
+  // joins this list with that flip.
+  { href: `${publicUrl}/work/`, label: "Work", key: "work" },
+  { href: `${publicUrl}/playgrounds/`, label: "Play", key: "play" },
   { href: `${publicUrl}/about/`, label: "About", key: "about" },
   { href: `${publicUrl}/contact/`, label: "Contact", key: "contact" },
 ] as const;

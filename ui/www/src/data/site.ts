@@ -466,7 +466,7 @@ export const playgrounds: {
   {
     name: "Break it",
     what: "Four real services under live traffic with an objective to hold, and a shared budget of faults to spend trying to break it. Everyone pokes the same sandbox; it heals itself. Watch it over a WebSocket, server-sent events or plain polling — the same call, three ways.",
-    href: "/playgrounds/break-it/",
+    href: "/lab/break-it/",
     tag: "Chaos",
   },
   {
@@ -528,8 +528,10 @@ type NavItem = {
 /** The pages in the header and footer; `key` names the label in `common.<key>`. */
 export const nav = [
   { href: "/", label: "Home", key: "home" },
-  { href: "/playgrounds/", label: "Playgrounds", key: "playgrounds" },
-  { href: "/projects/", label: "Projects", key: "projects" },
+  // Present, past, play: what is being built (with numbers), what shipped, what to try.
+  { href: "/lab/", label: "Lab", key: "lab", gated: true },
+  { href: "/work/", label: "Work", key: "work" },
+  { href: "/playgrounds/", label: "Play", key: "play" },
   { href: "/about/", label: "About", key: "about" },
   { href: "/contact/", label: "Contact", key: "contact" },
 ] as const satisfies readonly NavItem[];

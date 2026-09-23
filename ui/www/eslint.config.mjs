@@ -4,7 +4,7 @@ import simpleImportSort from "eslint-plugin-simple-import-sort";
 
 const eslintConfig = [
   {
-    ignores: ["src/components/ui/**"],
+    ignores: ["src/components/ui/**", "src/generated/**"],
   },
   ...nextCoreWebVitals,
   ...nextTypeScript,

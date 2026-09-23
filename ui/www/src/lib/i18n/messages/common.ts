@@ -3,8 +3,9 @@ import type { Dict } from "./index";
 
 export const en: Dict = {
   "common.home": "Home",
-  "common.playgrounds": "Playgrounds",
-  "common.projects": "Projects",
+  "common.lab": "Lab",
+  "common.work": "Work",
+  "common.play": "Play",
   "common.about": "About",
   "common.contact": "Contact",
   "common.full_cv": "Full CV",
@@ -30,8 +31,9 @@ export const en: Dict = {
 
 export const hr: Dict = {
   "common.home": "Početna",
-  "common.playgrounds": "Igrališta",
-  "common.projects": "Projekti",
+  "common.lab": "Laboratorij",
+  "common.work": "Rad",
+  "common.play": "Igra",
   "common.about": "O meni",
   "common.contact": "Kontakt",
   "common.full_cv": "Cijeli životopis",

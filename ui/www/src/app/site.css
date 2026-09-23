@@ -65,3 +65,132 @@
     animation: none;
   }
 }
+
+/* The lab's prose: RFCs and studies rendered from markdown at build time
+   (tool/lab-data.ts). The tokens are the site's; only the rhythm is set here. */
+.lab-prose {
+  font-size: 1.0625rem;
+  line-height: 1.7;
+}
+.lab-prose > * + * {
+  margin-top: 1.1em;
+}
+.lab-prose h2 {
+  margin-top: 2.4em;
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+.lab-prose h3 {
+  margin-top: 1.8em;
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+.lab-prose h4 {
+  margin-top: 1.4em;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+.lab-prose p,
+.lab-prose li {
+  text-wrap: pretty;
+}
+.lab-prose ul,
+.lab-prose ol {
+  padding-left: 1.4em;
+}
+.lab-prose ul {
+  list-style: disc;
+}
+.lab-prose ol {
+  list-style: decimal;
+}
+.lab-prose li + li {
+  margin-top: 0.35em;
+}
+.lab-prose a {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.lab-prose a:hover {
+  color: var(--muted-foreground);
+}
+.lab-prose code {
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+  padding: 0.1em 0.35em;
+  border-radius: 0.3rem;
+  background: var(--muted);
+}
+.lab-prose pre {
+  overflow-x: auto;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+.lab-prose pre code {
+  padding: 0;
+  background: none;
+}
+.lab-prose blockquote {
+  padding-left: 1.25rem;
+  border-left: 2px solid var(--border);
+  color: var(--muted-foreground);
+}
+.lab-prose table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9375rem;
+}
+.lab-prose th,
+.lab-prose td {
+  padding: 0.5rem 0.75rem 0.5rem 0;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+.lab-prose th {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: 500;
+  color: var(--muted-foreground);
+}
+.lab-prose hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+
+/* A redaction: the fact is withheld in the open, not paraphrased away. The
+   reason is in the title, so it arrives on hover. */
+.redacted {
+  display: inline-block;
+  width: 7ch;
+  height: 1em;
+  vertical-align: -0.15em;
+  margin: 0 0.1em;
+  border-radius: 2px;
+  background: var(--foreground);
+  cursor: help;
+}
+.redacted-block {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 3.5rem;
+  border-radius: 0.375rem;
+  background: var(--foreground);
+  color: var(--background);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  cursor: help;
+}

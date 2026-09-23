@@ -159,7 +159,7 @@ export const hr = {
     },
   } as Record<string, { what?: string }>,
   playgrounds: {
-    "/playgrounds/break-it/": {
+    "/lab/break-it/": {
       name: "Sruši ga",
       what: "Četiri prava servisa pod živim prometom s ciljem koji treba održati, i zajednički proračun kvarova koji trošiš pokušavajući ga srušiti. Svi bockaju isti pješčanik; sam se liječi. Gledaj ga preko WebSocketa, server-sent eventa ili običnog pollinga -- isti poziv, tri načina.",
       tag: "Kaos",

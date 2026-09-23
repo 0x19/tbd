@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# rendered by tool/lab-data.ts from docs/rfcs and docs/studies (pnpm gen)
+/src/generated/
