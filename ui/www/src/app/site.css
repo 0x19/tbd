@@ -237,3 +237,60 @@
     display: none;
   }
 }
+
+/* The facts strip's edges: a light runs round the outline with a tail, and a
+   drop falls down each divider. The dash offset grows, so the pattern moves
+   backwards along the path and the shared dash start is the head; the longer
+   strokes trail behind it. */
+@keyframes strip-run {
+  to {
+    stroke-dashoffset: 1000;
+  }
+}
+
+@keyframes strip-fall {
+  to {
+    stroke-dashoffset: 400;
+  }
+}
+
+.strip-loop > * {
+  animation: strip-run 16s linear infinite;
+}
+
+.strip-loop .strip-glow {
+  stroke-dasharray: 60 940;
+  opacity: 0.35;
+  filter: blur(3px);
+}
+
+.strip-loop .strip-tail {
+  stroke-dasharray: 60 940;
+  opacity: 0.22;
+}
+
+.strip-loop .strip-head {
+  stroke-dasharray: 14 986;
+  opacity: 0.9;
+}
+
+.strip-drop > * {
+  animation: strip-fall 7s linear infinite;
+  animation-delay: inherit;
+}
+
+.strip-drop .strip-tail {
+  stroke-dasharray: 22 378;
+  opacity: 0.22;
+}
+
+.strip-drop .strip-head {
+  stroke-dasharray: 6 394;
+  opacity: 0.9;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .strip-edge {
+    display: none;
+  }
+}

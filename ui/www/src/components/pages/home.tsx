@@ -70,16 +70,19 @@ export function HomeContent() {
               aria-hidden
               className="bg-foreground/60 absolute bottom-0 left-3 size-[5px] -translate-x-1/2 translate-y-1/2 rounded-full sm:left-4"
             />
-            <dl className="grid divide-y sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-              {now.map((f) => (
-                <div key={f.k} className="py-4 sm:px-6 sm:first:pl-0 sm:last:pr-0">
-                  <dt className="text-muted-foreground/70 font-mono text-[11px] tracking-[0.18em] uppercase">
-                    {f.k}
-                  </dt>
-                  <dd className="mt-1 text-sm text-pretty">{f.v}</dd>
-                </div>
-              ))}
-            </dl>
+            <div className="relative">
+              <StripEdge />
+              <dl className="grid divide-y sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+                {now.map((f) => (
+                  <div key={f.k} className="py-4 sm:px-6 sm:first:pl-0 sm:last:pr-0">
+                    <dt className="text-muted-foreground/70 font-mono text-[11px] tracking-[0.18em] uppercase">
+                      {f.k}
+                    </dt>
+                    <dd className="mt-1 text-sm text-pretty">{f.v}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
           </Frame>
         </div>
       </section>
@@ -219,17 +222,18 @@ export function HomeContent() {
           <span aria-hidden className="bg-border absolute top-0 left-3 h-10 w-px sm:left-4 sm:h-14" />
           <div ref={endRef} className="relative -ml-3 border-t pl-3 sm:-ml-4 sm:pl-4">
             <Port filled />
-            <div className="flex flex-col gap-4 pt-10 sm:flex-row sm:items-baseline sm:justify-between sm:gap-10">
-              <div>
-                <Eyebrow>{t("home.hi.label")}</Eyebrow>
+            <div className="pt-10">
+              <Eyebrow>{t("home.hi.label")}</Eyebrow>
+              {/* the line on the right shares the email's baseline, not the eyebrow's */}
+              <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-baseline sm:justify-between sm:gap-10">
                 <a
                   href={`mailto:${facts.email}`}
-                  className="mt-4 block text-2xl font-semibold tracking-[-0.03em] break-all transition-opacity hover:opacity-60 sm:text-4xl"
+                  className="block text-2xl font-semibold tracking-[-0.03em] break-all transition-opacity hover:opacity-60 sm:text-4xl"
                 >
                   {facts.email}
                 </a>
+                <p className="text-muted-foreground max-w-xs text-sm text-pretty">{t("home.hi.text")}</p>
               </div>
-              <p className="text-muted-foreground max-w-xs text-sm text-pretty">{t("home.hi.text")}</p>
             </div>
           </div>
         </Frame>
@@ -266,6 +270,40 @@ function Box({
       </div>
       {children}
     </Frame>
+  );
+}
+
+/**
+ * The facts strip is the first box on the path, so its edges carry the
+ * traffic: one light runs round its outline with a tail (three strokes on
+ * the same dash start, the pattern moving backwards so the start leads), and
+ * a drop falls down each divider now and then. `pathLength` normalises the
+ * dash units so the same numbers work at any width. Decoration only, and gone
+ * under prefers-reduced-motion (`site.css`).
+ */
+function StripEdge() {
+  const ring = { x: 0, y: 0, width: "100%", height: "100%", pathLength: 1000 } as const;
+  return (
+    <svg
+      aria-hidden
+      className="strip-edge text-foreground pointer-events-none absolute inset-0 h-full w-full overflow-visible"
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+    >
+      <g className="strip-loop">
+        <rect {...ring} strokeWidth="3" className="strip-glow" />
+        <rect {...ring} strokeWidth="1.5" className="strip-tail" />
+        <rect {...ring} strokeWidth="1.5" className="strip-head" />
+      </g>
+      {/* the dividers, on a wide screen only: the drop runs top to bottom */}
+      {["33.3333%", "66.6667%"].map((x, i) => (
+        <g key={x} className="strip-drop hidden sm:block" style={{ animationDelay: `${i * 3.1 + 1.2}s` }}>
+          <line x1={x} y1="100%" x2={x} y2="0" pathLength={100} strokeWidth="1.5" className="strip-tail" />
+          <line x1={x} y1="100%" x2={x} y2="0" pathLength={100} strokeWidth="1.5" className="strip-head" />
+        </g>
+      ))}
+    </svg>
   );
 }
 
