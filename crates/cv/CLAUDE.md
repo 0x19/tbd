@@ -40,8 +40,10 @@ beside the real RPCs. `docs/cv/README.md` is the contract.
   current. `private` and `reader` go in as `sys.inputs`; without them the render is the
   public CV.
 - `private.rs`: the fields only the full CV carries, from `CV_PRIVATE_JSON` (the
-  `cv-private` Secret) or a path outside the repository. Never in git; the `Debug` form
-  never prints a value, and a test holds that.
+  `cv-private` Secret) or a path outside the repository: phone, address, references, and
+  `experience` -- the private half of a position, matched to the public entry by company
+  name and rendered under it. Never in git; the `Debug` form never prints a value, and a
+  test holds that.
 - `config.rs`: layered TOML (`configs/cv`), `deny_unknown_fields`; `CV_*` overrides.
   `[notify] url` is the gated site; `admin_url()` derives the admin page from it.
 - `main.rs`: `config`, and `grant` (the one-shot above).

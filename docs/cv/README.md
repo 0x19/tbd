@@ -50,9 +50,16 @@ and the date on every page. Every download is recorded.
   "address": "Street 1, 10000 City, Croatia",
   "references": [
     { "name": "Ann Example", "role": "CTO, Example Ltd", "contact": "ann@example.com" }
+  ],
+  "experience": [
+    { "company": "Tenderly", "body": "A paragraph only the full CV carries.", "highlights": ["A line under it.", "Another."] }
   ]
 }
 ```
+
+`experience` extends a public position by company name (exactly as `ui/www/src/data/site.ts`
+names it): its paragraph and lines appear under the public ones in the full CV and nowhere
+else. That is where the detail of a position that is not for a search result goes.
 
 ## Setting it up
 

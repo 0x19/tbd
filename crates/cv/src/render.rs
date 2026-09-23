@@ -81,7 +81,7 @@ mod tests {
     #![allow(clippy::unwrap_used)]
 
     use super::*;
-    use crate::private::Reference;
+    use crate::private::{PrivateExperience, Reference};
 
     fn at() -> DateTime<Utc> {
         DateTime::parse_from_rfc3339("2026-09-23T10:00:00Z")
@@ -97,6 +97,11 @@ mod tests {
                 name: "Ann Example".into(),
                 role: "CTO, Example Ltd".into(),
                 contact: "ann@example.com".into(),
+            }],
+            experience: vec![PrivateExperience {
+                company: "Tenderly".into(),
+                body: "Built the widget balancer that fronts every network.".into(),
+                highlights: vec!["It carries nine million widgets a second.".into()],
             }],
         }
     }
@@ -124,6 +129,8 @@ mod tests {
             "Ann Example",
             "Prepared for",
             "References",
+            "widget balancer",
+            "nine million widgets",
         ] {
             assert!(!t.contains(absent), "public render carries {absent:?}");
         }
@@ -148,6 +155,8 @@ mod tests {
             "Prepared for Rita Reader",
             "rita@example.org",
             "2026-09-23",
+            "widget balancer",
+            "nine million widgets",
         ] {
             assert!(t.contains(present), "full render lacks {present:?}: {t}");
         }

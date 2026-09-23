@@ -77,6 +77,19 @@
         - #h
       ]
     ]
+    #let more = if private != none { private.experience.find(x => x.company == e.company) } else { none }
+    #if more != none [
+      #if more.body != "" [
+        #v(2pt)
+        #more.body
+      ]
+      #if more.highlights.len() > 0 [
+        #v(1pt)
+        #for h in more.highlights [
+          - #h
+        ]
+      ]
+    ]
     #v(3pt)
   ]
 ]

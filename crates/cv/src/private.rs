@@ -19,6 +19,33 @@ pub struct Private {
     /// People who will vouch, with how to reach them.
     #[serde(default)]
     pub references: Vec<Reference>,
+    /// What the full CV says about a position beyond the public paragraph:
+    /// matched to the public entry by company name.
+    #[serde(default)]
+    pub experience: Vec<PrivateExperience>,
+}
+
+/// The private half of one position.
+#[derive(Clone, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct PrivateExperience {
+    /// The company, exactly as the public entry names it.
+    pub company: String,
+    /// A paragraph under the public one; may be empty.
+    #[serde(default)]
+    pub body: String,
+    /// Lines under the public highlights.
+    #[serde(default)]
+    pub highlights: Vec<String>,
+}
+
+impl std::fmt::Debug for PrivateExperience {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PrivateExperience")
+            .field("company", &self.company)
+            .field("highlights", &self.highlights.len())
+            .finish_non_exhaustive()
+    }
 }
 
 /// One reference.
@@ -44,6 +71,7 @@ impl std::fmt::Debug for Private {
                 &if self.address.is_empty() { "" } else { "<set>" },
             )
             .field("references", &self.references.len())
+            .field("experience", &self.experience.len())
             .finish()
     }
 }
@@ -128,9 +156,21 @@ mod tests {
                 role: "CTO".into(),
                 contact: "ann@example.com".into(),
             }],
+            experience: vec![PrivateExperience {
+                company: "Acme".into(),
+                body: "Ran the secret project.".into(),
+                highlights: vec!["Carried 9 million widgets a second.".into()],
+            }],
         };
         let text = format!("{p:?}");
-        for secret in ["4567", "Benčani", "Ann", "example.com"] {
+        for secret in [
+            "4567",
+            "Benčani",
+            "Ann",
+            "example.com",
+            "secret project",
+            "widgets",
+        ] {
             assert!(!text.contains(secret), "{text}");
         }
     }
