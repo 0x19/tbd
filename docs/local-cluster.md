@@ -36,6 +36,7 @@ steps idempotently and is the template for provisioning a real box the same way.
 | `tbd` | `envoy` | 2 | edge and engine load balancer |
 | `tbd` | `protocol` | 2 | the edge gateway: REST, SSE, GraphQL, WebSocket, gRPC over the backends registered in `configs/protocol` (engine, humans, ledger), reached through Envoy's internal listener; `/readyz` reports each |
 | `tbd` | `engine` | 2 | gRPC compute |
+| `tbd` | `cv` | 1 | gRPC `cv` service, scaffolded by `tbd new service`; a stub until its RPCs land |
 | `tbd` | `playground` | 1 | gRPC `playground` service, scaffolded by `tbd new service`; a stub until its RPCs land |
 | `tbd` | `finance` | 1 | gRPC `finance` service, scaffolded by `tbd new service`; a stub until its RPCs land |
 | `tbd` | `humans` | 1 | gRPC `humans` service, scaffolded by `tbd new service`; a stub until its RPCs land |

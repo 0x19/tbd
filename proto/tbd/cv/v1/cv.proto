@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package tbd.cv.v1;
+
+import "google/api/annotations.proto";
+
+// The cv service. Ping is the liveness RPC every service carries; real
+// RPCs are added beside it.
+service CvService {
+  // Echo a message. Proves configuration, telemetry and fault injection reach
+  // an RPC.
+  rpc Ping(PingRequest) returns (PingResponse) {
+    option (google.api.http) = {get: "/v1/cv/ping"};
+  }
+}
+
+message PingRequest {
+  string message = 1;
+}
+
+message PingResponse {
+  string message = 1;
+  // Version of the binary that answered.
+  string version = 2;
+  // True while the service is a placeholder with nothing real behind it.
+  bool stub = 3;
+}

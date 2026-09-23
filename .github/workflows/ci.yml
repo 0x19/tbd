@@ -122,6 +122,8 @@ jobs:
             port: "8080"
           - bin: chaos
             port: "7700"
+          - bin: cv
+            port: "50056"
           - bin: playground
             port: "50055"
           - bin: finance

@@ -67,6 +67,48 @@
         }
       }
     },
+    "/v1/cv/ping": {
+      "get": {
+        "tags": [
+          "cv"
+        ],
+        "summary": "tbd.cv.v1.CvService/Ping",
+        "description": "Transcoded from `/tbd.cv.v1.CvService/Ping` on the `cv` backend.",
+        "operationId": "CvService.Ping",
+        "parameters": [
+          {
+            "name": "message",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "`tbd.cv.v1.PingResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.cv.v1.PingResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/engine/subjects/{subject_id}/events": {
       "get": {
         "tags": [
@@ -4874,6 +4916,21 @@
           "not_serving",
           "unknown"
         ]
+      },
+      "tbd.cv.v1.PingResponse": {
+        "type": "object",
+        "description": "`tbd.cv.v1.PingResponse`",
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "stub": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "string"
+          }
+        }
       },
       "tbd.engine.v1.Heartbeat": {
         "type": "object",

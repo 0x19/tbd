@@ -6072,6 +6072,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tbd-common",
+ "tbd-cv",
  "tbd-engine",
  "tbd-finance",
  "tbd-humans",
@@ -6139,6 +6140,25 @@ dependencies = [
  "tracing",
  "tracing-opentelemetry",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "tbd-cv"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "metrics",
+ "serde",
+ "tbd-common",
+ "tbd-proto",
+ "thiserror 2.0.20",
+ "tokio",
+ "toml 1.1.5+spec-1.1.0",
+ "tonic",
+ "tonic-health",
+ "tonic-reflection",
+ "tracing",
 ]
 
 [[package]]

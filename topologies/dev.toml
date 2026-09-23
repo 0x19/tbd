@@ -19,3 +19,6 @@ listen = "127.0.0.1:50054"
 
 [stack.playgrounds.playground-1]
 listen = "127.0.0.1:50055"
+
+[stack.cvs.cv-1]
+listen = "127.0.0.1:50056"

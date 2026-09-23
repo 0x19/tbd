@@ -41,6 +41,7 @@ hop; the same observability stack runs locally and in production.
 | `tbd-common` | telemetry (logs, OTLP traces, trace propagation, the shared gRPC span), Prometheus metrics with the shared metric names, shutdown, shared CLI flags, fault injection, the embedder `Runtime`, layered config | tokio, tracing, clap, opentelemetry, metrics, http (types) |
 | `tbd-proto` | code generated from `/proto` at build time via `protox` + `tonic-prost-build` | tonic, prost |
 | `tbd-engine` | `tbd.engine.v1.EngineService` implementation, health, reflection | common, proto |
+| `tbd-cv` | `tbd.cv.v1.CvService` implementation, health, reflection; scaffolded by `tbd new service`, a stub until its RPCs land | common, proto |
 | `tbd-playground` | `tbd.playground.v1.PlaygroundService` implementation, health, reflection; scaffolded by `tbd new service`, a stub until its RPCs land | common, proto |
 | `tbd-render` | Typst as an embedded PDF engine: a template compiled into the binary with the Inter fonts and the files it reads, inputs from JSON, pinned or unpinned PDF options; no filesystem, packages or network | typst, serde_json |
 | `tbd-finance` | `tbd.finance.v1.FinanceService` implementation, health, reflection; scaffolded by `tbd new service`, a stub until its RPCs land | common, proto, db, render |
@@ -73,6 +74,7 @@ Envoy routes, from `devops/envoy/envoy.yaml`:
 |---|---|---|
 | `/healthz`, `/readyz` (no token needed; everything else below needs a bearer JWT) | protocol | 5 s |
 | gRPC `/tbd.engine.v1.EngineService/*` | engine | none, retries on connect failure and `UNAVAILABLE` |
+| internal LB (50051) gRPC `/tbd.cv.v1.CvService/*` | cv | none, retries on connect failure and `UNAVAILABLE` |
 | internal LB (50051) gRPC `/tbd.playground.v1.PlaygroundService/*` | playground | none, retries on connect failure and `UNAVAILABLE` |
 | internal LB (50051) gRPC `/tbd.finance.v1.FinanceService/*` | finance | none, retries on connect failure and `UNAVAILABLE` |
 | internal LB (50051) gRPC `/tbd.humans.v1.HumansService/*` | humans | none, retries on connect failure and `UNAVAILABLE` |

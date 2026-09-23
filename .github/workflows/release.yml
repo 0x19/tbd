@@ -24,6 +24,8 @@ jobs:
             port: "50051"
           - bin: protocol
             port: "8080"
+          - bin: cv
+            port: "50056"
           - bin: playground
             port: "50055"
           - bin: finance

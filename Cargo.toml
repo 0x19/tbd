@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
 members = ["crates/*"]
-default-members = ["crates/engine", "crates/protocol", "crates/chaos", "crates/ledger", "crates/humans", "crates/stress", "crates/finance", "crates/playground"]
+default-members = ["crates/engine", "crates/protocol", "crates/chaos", "crates/ledger", "crates/humans", "crates/stress", "crates/finance", "crates/playground", "crates/cv"]
 
 [workspace.package]
 version = "0.1.0"
@@ -27,6 +27,7 @@ tbd-stress   = { path = "crates/stress" }
 tbd-humans   = { path = "crates/humans" }
 tbd-finance  = { path = "crates/finance" }
 tbd-playground = { path = "crates/playground" }
+tbd-cv       = { path = "crates/cv" }
 
 # async runtime
 tokio        = { version = "1.53", features = ["rt-multi-thread", "macros", "signal", "net", "sync", "time"] }

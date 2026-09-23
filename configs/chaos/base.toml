@@ -45,6 +45,7 @@ findings = ".chaos/findings"
 # Defaults for `chaos validate` and for API load runs against an external stack.
 protocol = "http://127.0.0.1:8080"
 engine = "http://127.0.0.1:50051"
+cv = "http://127.0.0.1:50056"
 playground = "http://127.0.0.1:50055"
 finance = "http://127.0.0.1:50054"
 humans = "http://127.0.0.1:50053"

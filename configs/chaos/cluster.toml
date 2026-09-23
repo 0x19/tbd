@@ -6,6 +6,7 @@
 [targets]
 protocol = "http://localhost:18080"
 engine = "http://localhost:15051"
+cv = "http://localhost:15051"
 playground = "http://localhost:15051"
 finance = "http://localhost:15051"
 humans = "http://localhost:15051"

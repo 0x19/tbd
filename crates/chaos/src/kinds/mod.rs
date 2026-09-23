@@ -11,6 +11,7 @@
 //! UI's forms all derive from [`ALL`]. `tbd new service` writes a module and a
 //! line.
 
+pub mod cv;
 pub mod playground;
 
 pub use tbd_lab::kind::{Dependency, Field, FieldInfo, FieldKind, Kind, KindInfo, Target, parse};
@@ -26,6 +27,7 @@ pub static ALL: &[&Kind] = &[
     &humans::KIND,
     &finance::KIND,
     &playground::KIND,
+    &cv::KIND,
     // tbd:kinds-end (tbd new service inserts above this line; do not edit)
 ];
 

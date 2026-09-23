@@ -65,3 +65,12 @@ pub mod playground {
             include_bytes!(concat!(env!("OUT_DIR"), "/playground_descriptor.bin"));
     }
 }
+
+pub mod cv {
+    pub mod v1 {
+        tonic::include_proto!("tbd.cv.v1");
+        /// Encoded `FileDescriptorSet` for this package, for gRPC reflection.
+        pub const DESCRIPTOR_SET: &[u8] =
+            include_bytes!(concat!(env!("OUT_DIR"), "/cv_descriptor.bin"));
+    }
+}

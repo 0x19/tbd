@@ -54,6 +54,7 @@
       loop:
         - { bin: engine, port: 50051 }
         - { bin: protocol, port: 8080 }
+        - { bin: cv, port: 50056 }
         - { bin: playground, port: 50055 }
         - { bin: finance, port: 50054 }
         - { bin: humans, port: 50053 }
@@ -61,7 +62,7 @@
       when: rebuild | bool
 
     - name: Import images into the cluster
-      command: k3d image import -m direct -c {{ cluster }} {{ registry }}/tbd-engine:{{ tag }} {{ registry }}/tbd-protocol:{{ tag }} {{ registry }}/tbd-ledger:{{ tag }} {{ registry }}/tbd-humans:{{ tag }} {{ registry }}/tbd-finance:{{ tag }} {{ registry }}/tbd-playground:{{ tag }}
+      command: k3d image import -m direct -c {{ cluster }} {{ registry }}/tbd-engine:{{ tag }} {{ registry }}/tbd-protocol:{{ tag }} {{ registry }}/tbd-ledger:{{ tag }} {{ registry }}/tbd-humans:{{ tag }} {{ registry }}/tbd-finance:{{ tag }} {{ registry }}/tbd-playground:{{ tag }} {{ registry }}/tbd-cv:{{ tag }}
       when: rebuild | bool
 
     - name: Apply observability
@@ -86,7 +87,7 @@
       changed_when: "'configured' in app.stdout or 'created' in app.stdout"
 
     - name: Roll the app onto rebuilt images
-      command: kubectl -n tbd rollout restart deployment/engine deployment/protocol deployment/ledger deployment/humans deployment/finance deployment/playground
+      command: kubectl -n tbd rollout restart deployment/engine deployment/protocol deployment/ledger deployment/humans deployment/finance deployment/playground deployment/cv
       when: rebuild | bool
 
     - name: Wait for observability
@@ -105,6 +106,7 @@
       loop:
         - deployment/engine
         - deployment/protocol
+        - deployment/cv
         - deployment/playground
         - deployment/finance
         - deployment/humans

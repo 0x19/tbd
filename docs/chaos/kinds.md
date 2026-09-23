@@ -14,6 +14,7 @@ declared and what derives from it: [extending.md](extending.md#add-a-service-kin
 | `humans` | `[stack.humans.<name>]` | grpc | yes | no | yes | no | yes | `http://127.0.0.1:50053`, `CHAOS_HUMANS_URL` | none |
 | `finance` | `[stack.finances.<name>]` | grpc | yes | no | yes | yes | yes | `http://127.0.0.1:50054`, `CHAOS_FINANCE_URL` | `database_url` (text); `seed` (text) |
 | `playground` | `[stack.playgrounds.<name>]` | grpc | yes | no | yes | no | yes | `http://127.0.0.1:50055`, `CHAOS_PLAYGROUND_URL` | none |
+| `cv` | `[stack.cvs.<name>]` | grpc | yes | no | yes | no | yes | `http://127.0.0.1:50056`, `CHAOS_CV_URL` | none |
 
 | Check | Surface | Kind | Passes when |
 |---|---|---|---|
@@ -35,3 +36,4 @@ declared and what derives from it: [extending.md](extending.md#add-a-service-kin
 | `grpc_finance_ping` | grpc | `finance` | `Ping` echoes the message and is labelled a stub |
 | `grpc_finance_books_balanced` | grpc | `finance` | every company in the caller's grant has a balanced `TrialBalance` for the current year (rows adding up to the totals); an instance with no database, or a call with no verified caller, says so in the detail and passes |
 | `grpc_playground_ping` | grpc | `playground` | `Ping` echoes the message and is labelled a stub |
+| `grpc_cv_ping` | grpc | `cv` | `Ping` echoes the message and is labelled a stub |

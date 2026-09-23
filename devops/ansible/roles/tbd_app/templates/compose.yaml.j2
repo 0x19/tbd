@@ -26,6 +26,7 @@ services:
       PROTOCOL_ENGINE_URL: http://engine:{{ engine_port }}
       PROTOCOL_HUMANS_URL: http://humans:{{ humans_port }}
       PROTOCOL_LEDGER_URL: http://ledger:{{ ledger_port }}
+      PROTOCOL_CV_URL: http://cv:{{ cv_port }}
       PROTOCOL_PLAYGROUND_URL: http://playground:{{ playground_port }}
       PROTOCOL_FINANCE_URL: http://finance:{{ finance_port }}
     ports:
@@ -127,6 +128,17 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: "{{ otlp_endpoint | default('') }}"
       PYROSCOPE_SERVER_ADDRESS: "{{ pyroscope_server | default('') }}"
     restart: unless-stopped
+  cv:
+    image: {{ cv_image }}:{{ image_tag }}
+    environment:
+      RUST_LOG: {{ rust_log }}
+      LOG_FORMAT: {{ log_format }}
+      TBD_ENV: production
+      CV_LISTEN_ADDR: 0.0.0.0:{{ cv_port }}
+      CV_METRICS_ADDR: 0.0.0.0:9464
+      OTEL_EXPORTER_OTLP_ENDPOINT: "{{ otlp_endpoint | default('') }}"
+      PYROSCOPE_SERVER_ADDRESS: "{{ pyroscope_server | default('') }}"
+    restart: unless-stopped
 {% if chaos_enabled | default(false) %}
 
   # chaos API + admin UI. Off by default; dev hosts set chaos_enabled: true.
@@ -140,6 +152,7 @@ services:
       CHAOS_LISTEN_ADDR: 0.0.0.0:7700
       CHAOS_PROTOCOL_URL: http://protocol:{{ protocol_port }}
       CHAOS_ENGINE_URL: http://engine:{{ engine_port }}
+      CHAOS_CV_URL: http://cv:{{ cv_port }}
       CHAOS_PLAYGROUND_URL: http://playground:{{ playground_port }}
       CHAOS_FINANCE_URL: http://finance:{{ finance_port }}
       CHAOS_HUMANS_URL: http://humans:{{ humans_port }}
