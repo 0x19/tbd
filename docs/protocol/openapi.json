@@ -4760,6 +4760,13 @@
             ],
             "description": "The OAuth client the call came through, if any."
           },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "E-mail address, when the token carries one (a person's ID token does)."
+          },
           "key": {
             "oneOf": [
               {
@@ -4774,6 +4781,13 @@
           "kind": {
             "type": "string",
             "description": "`person`, `client` or `service`."
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Display name, when the token carries one."
           },
           "org": {
             "type": [

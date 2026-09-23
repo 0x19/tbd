@@ -17,6 +17,8 @@ class Me {
     this.clientId,
     this.org,
     this.role,
+    this.email,
+    this.name,
   });
 
   /// From the route's JSON body, exactly as the protocol writes it.
@@ -27,6 +29,8 @@ class Me {
     org: json['org'] as String?,
     scopes: (json['scopes'] as List<Object?>? ?? const []).cast<String>(),
     role: json['role'] as String?,
+    email: json['email'] as String?,
+    name: json['name'] as String?,
   );
 
   /// The property names this type reads; compared with the OpenAPI schema.
@@ -38,6 +42,8 @@ class Me {
     'key',
     'scopes',
     'role',
+    'email',
+    'name',
   ];
 
   /// The `sub` claim: an identity id for a person, a client id otherwise.
@@ -57,6 +63,12 @@ class Me {
 
   /// `admin`, `editor`, `viewer`, or null for a machine.
   final String? role;
+
+  /// The person's e-mail address, when the token carries one.
+  final String? email;
+
+  /// The person's display name, when the token carries one.
+  final String? name;
 
   /// A signed-in person, as opposed to a machine client.
   bool get isPerson => kind == 'person';

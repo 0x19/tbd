@@ -207,6 +207,8 @@ export const Me = z.object({
   org: z.string().nullable().optional(),
   scopes: z.array(z.string()),
   role: z.string().nullable().optional(),
+  email: z.string().nullable().optional(),
+  name: z.string().nullable().optional(),
 });
 export type Me = z.infer<typeof Me>;
 

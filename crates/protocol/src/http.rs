@@ -84,6 +84,8 @@ async fn me(Caller(principal): Caller) -> Json<Me> {
         key: principal.key.map(Into::into),
         scopes: principal.scopes,
         role: principal.role,
+        email: principal.email,
+        name: principal.name,
     })
 }
 
@@ -104,6 +106,10 @@ pub struct Me {
     pub scopes: Vec<String>,
     /// Role, when the consent step stamped one.
     pub role: Option<String>,
+    /// E-mail address, when the token carries one (a person's ID token does).
+    pub email: Option<String>,
+    /// Display name, when the token carries one.
+    pub name: Option<String>,
 }
 
 /// Readiness: every required backend answers `SERVING` to a live health

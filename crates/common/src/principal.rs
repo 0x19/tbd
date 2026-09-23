@@ -41,6 +41,12 @@ pub struct Principal {
     pub scopes: Vec<String>,
     /// The person's role, when the consent step stamped one.
     pub role: Option<String>,
+    /// The person's e-mail address, when the token carries one (an ID token
+    /// does; a machine token does not). Verified by the identity provider,
+    /// not by us: a service that keys anything on it keys on Ory's word.
+    pub email: Option<String>,
+    /// The person's display name, when the token carries one.
+    pub name: Option<String>,
     /// The organisation the caller belongs to, when the id plane mints it.
     pub org: Option<String>,
     /// The key (a client or a sub-key of one) the call was made with.
@@ -100,6 +106,12 @@ impl Principal {
             kind,
             scopes: scopes(claims),
             role: claim_str(claims, "role").map(str::to_owned),
+            email: claim_str(claims, "email")
+                .filter(|s| !s.is_empty())
+                .map(str::to_owned),
+            name: claim_str(claims, "name")
+                .filter(|s| !s.is_empty())
+                .map(str::to_owned),
             org: claim_str(claims, "org").map(str::to_owned),
             key: claim_str(claims, "key").map(|id| Key {
                 id: id.to_owned(),
@@ -188,11 +200,15 @@ mod tests {
         assert_eq!(p.kind, CallerKind::Person { client_id: None });
         assert_eq!(p.kind_slug(), "person");
         assert!(p.scopes.is_empty());
+        assert_eq!(p.email, None);
+        assert_eq!(p.name, None);
 
         // Through a client, with the consent-set claims under `ext` and a
-        // space-separated scope string.
+        // space-separated scope string; an ID token's e-mail and name ride
+        // along, an empty one counts as absent.
         let p = Principal::from_claims(
             &json!({"sub": "person-2", "azp": "tbd-app", "scope": "openid tbd.api",
+                    "email": "ann@example.com", "name": "",
                     "ext": {"role": "editor", "org": "acme", "key": "k-7", "parent": "k-1"}}),
             &[],
         )
@@ -201,6 +217,8 @@ mod tests {
         assert_eq!(p.kind_slug(), "person");
         assert_eq!(p.scopes, ["openid", "tbd.api"]);
         assert_eq!(p.role.as_deref(), Some("editor"));
+        assert_eq!(p.email.as_deref(), Some("ann@example.com"));
+        assert_eq!(p.name, None);
         assert_eq!(p.org.as_deref(), Some("acme"));
         assert_eq!(
             p.key,

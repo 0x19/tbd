@@ -185,8 +185,10 @@ the pod network (`GF_AUTH_PROXY_WHITELIST`).
 
 **What the protocol does with it.** `crates/protocol/src/principal.rs` reads the
 verified claims from `x-jwt-payload` into a `Principal` on the request and the span
-(`enduser.id`, `enduser.kind`, `enduser.org`, `enduser.key`). `GET /v1/me` returns it,
-or 401 when Envoy forwarded no identity. Handlers that need the caller take `Principal`
+(`enduser.id`, `enduser.kind`, `enduser.org`, `enduser.key`). It carries the `email` and
+`name` claims too when the token has them (a person's ID token does, a machine token
+does not), verified by Ory rather than by us. `GET /v1/me` returns it, or 401 when Envoy
+forwarded no identity. Handlers that need the caller take `Principal`
 as an extractor (`Option<Principal>` where the caller is optional). The protocol never
 verifies a token itself: with services reachable only through Envoy, that would be a
 second implementation of the same check. Only the API host (`api.<domain>`,

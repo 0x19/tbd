@@ -7,7 +7,17 @@ import 'dart:io';
 
 /// Hand-written types and the schema each mirrors.
 const checks = {
-  'Me': ['subject', 'kind', 'client_id', 'org', 'key', 'scopes', 'role'],
+  'Me': [
+    'subject',
+    'kind',
+    'client_id',
+    'org',
+    'key',
+    'scopes',
+    'role',
+    'email',
+    'name',
+  ],
 };
 
 void main() {
