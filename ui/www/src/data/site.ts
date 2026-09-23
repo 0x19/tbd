@@ -34,7 +34,7 @@ export const company = {
   /** The hero. Long enough to say something only I could say. */
   headline: "Systems that stay up when it matters, and experiments that do not have to.",
   summary:
-    "Twenty years in the unglamorous half of the stack: voice servers and SMS gateways first, then anycast networks carrying real-time traffic at sixty gigabits, then rollups, bridges and indexers, and most recently the RPC infrastructure in front of a hundred-odd blockchain networks. Ten of those years in Go, and as much Rust lately. Whatever I build for the fun of it ends up here too.",
+    "Twenty years in the unglamorous half of the stack: voice servers and SMS gateways first, then anycast networks carrying real-time traffic at sixty gigabits, then rollups, bridges and indexers, and most recently the RPC infrastructure in front of a hundred-odd blockchain networks. Ten of those years in Go, and the last one in Rust. Whatever I build for the fun of it ends up here too.",
   email: "nevio@inorbit.hr",
   city: "Rijeka and Zagreb, Croatia",
   github: "https://github.com/0x19",
@@ -277,7 +277,7 @@ export const projects = [
  * The short version of how I got here. Three paragraphs, no career timeline.
  */
 export const about = [
-  "Twenty years of building software, most of it infrastructure: distributed systems, storage, protocols and telecommunications. Ten of those years in Go, and as much Rust lately. Along the way I have led teams of up to five, and done the part of that job that is talking to management and clients rather than to a compiler.",
+  "Twenty years of building software, most of it infrastructure: distributed systems, storage, protocols and telecommunications. Ten of those years in Go, and the last one in Rust. Along the way I have led teams of up to five, and done the part of that job that is talking to management and clients rather than to a compiler.",
   "The arc runs telecom, then real-time networks, then blockchain protocols. Voice servers, SMS and carrier services to begin with; then anycast TURN and SIP networks and the kernel-side packet work underneath them; then an optimistic EVM rollup, a cross-chain bridge and indexers that keep up with a chain; then two years of developer infrastructure for Ethereum at Tenderly, the RPC layer in front of a hundred-odd networks.",
   "Away from the screen: a guitar, more philosophy and psychology than is strictly useful, the dogs, and my girlfriend.",
 ] as const;

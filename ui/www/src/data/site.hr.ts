@@ -10,7 +10,7 @@ export const hr = {
     tagline: "Backend i blockchain sustavi.",
     headline: "Sustavi koji ostaju gore kad je važno, i eksperimenti koji ne moraju.",
     summary:
-      "Dvadeset godina u neglamuroznoj polovici sustava: najprije glasovni poslužitelji i SMS pristupnici, zatim anycast mreže koje nose promet u stvarnom vremenu pri šezdeset gigabita, pa rollupi, mostovi i indekseri, a najnovije RPC infrastruktura ispred stotinjak blockchain mreža. Deset od tih godina u Gou, a u zadnje vrijeme jednako toliko u Rustu. Što god gradim iz zabave, završi i ovdje.",
+      "Dvadeset godina u neglamuroznoj polovici sustava: najprije glasovni poslužitelji i SMS pristupnici, zatim anycast mreže koje nose promet u stvarnom vremenu pri šezdeset gigabita, pa rollupi, mostovi i indekseri, a najnovije RPC infrastruktura ispred stotinjak blockchain mreža. Deset od tih godina u Gou, a posljednju u Rustu. Što god gradim iz zabave, završi i ovdje.",
     availability:
       "Dostupan od listopada 2026. za protokole, infrastrukturu i distribuirane sustave u Rustu i Gou, na B2B ugovor preko vlastite tvrtke, InOrbit d.o.o.",
     now: "Samostalno, kroz InOrbit",
@@ -128,7 +128,7 @@ export const hr = {
     "solgo, prvi Solidity AST/IR parser u Gou s grafovima toka -- otvorenog koda, drugi ga otad koriste.",
   ],
   about: [
-    "Dvadeset godina gradnje softvera, većinom infrastrukture: distribuirani sustavi, pohrana, protokoli i telekomunikacije. Deset od tih godina u Gou, a u zadnje vrijeme jednako toliko u Rustu. Usput sam vodio timove do pet ljudi i radio onaj dio tog posla koji je razgovor s upravom i klijentima, a ne s prevoditeljem koda.",
+    "Dvadeset godina gradnje softvera, većinom infrastrukture: distribuirani sustavi, pohrana, protokoli i telekomunikacije. Deset od tih godina u Gou, a posljednju u Rustu. Usput sam vodio timove do pet ljudi i radio onaj dio tog posla koji je razgovor s upravom i klijentima, a ne s prevoditeljem koda.",
     "Luk ide telekom, pa mreže u stvarnom vremenu, pa blockchain protokoli. Najprije glasovni poslužitelji, SMS i usluge operatera; zatim anycast TURN i SIP mreže i kernelski rad s paketima ispod njih; zatim optimistički EVM rollup, most između lanaca i indekseri koji drže korak s lancem; pa dvije godine razvojne infrastrukture za Ethereum u Tenderlyju, RPC sloj ispred stotinjak mreža.",
     "Dalje od ekrana: gitara, više filozofije i psihologije nego što je strogo korisno, psi i moja djevojka.",
   ],
