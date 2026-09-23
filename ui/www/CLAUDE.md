@@ -24,9 +24,11 @@ host (sign-in, then the `admin` role), and `/v1/me` on the same host tells the p
 who is signed in with a 401 instead of a redirect, so the header and footer show the
 lab entry only to an admin (`src/lib/me.ts`, `navVisible` in `src/data/site.ts`).
 `/account/` is gated by sign-in alone and is where signing in starts: the header's
-"Sign in" is a plain anchor to it (a document navigation, so the gateway can redirect;
-a client-side hop would fetch and could not), and once signed in the header shows the
-name and the page the sign-out, which ends the session at the identity stack too.
+right end (`src/components/header-user.tsx`, the CV host's widget) is a "Sign in"
+button that is a plain anchor to it (a document navigation, so the gateway can
+redirect; a client-side hop would fetch and could not), and once signed in it is the
+person's initials with a menu: who, the role, the lab for an admin, and the sign-out,
+which ends the session at the identity stack too.
 Sessions are per host (the gateway's cookies are), so the CV host is its own sign-in;
 the identity stack remembers the person, so the second one is a silent bounce.
 The site sets no cookie for this; the one an admin carries was set by Envoy's sign-in.

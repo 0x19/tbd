@@ -4,12 +4,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { HeaderUser } from "@/components/header-user";
 import { Frame } from "@/components/kit";
 import { LangToggle } from "@/components/lang-toggle";
 import { Logo } from "@/components/logo";
 import { ThemeSwitch } from "@/components/theme-switch";
 import { Button } from "@/components/ui/button";
-import { company, cv, nav, navVisible } from "@/data/site";
+import { company, nav, navVisible } from "@/data/site";
 import { useT } from "@/lib/i18n";
 import { useMe } from "@/lib/me";
 import { cn } from "@/lib/utils";
@@ -74,37 +75,13 @@ export function SiteHeader() {
                 </Button>
               );
             })}
-          {/* Who is signed in, or the way in. `/account/` is gated at the gateway,
-              so the anchor is the sign-in for anyone who is not. */}
-          <Button variant="ghost" size="sm" className="shrink-0 px-2 sm:px-3" asChild>
-            <a
-              href="/account/"
-              className={cn(
-                "font-mono text-[10px] tracking-[0.12em] uppercase sm:text-[11px] sm:tracking-[0.14em]",
-                pathname.startsWith("/account/") ? "text-foreground" : "text-muted-foreground",
-              )}
-              aria-current={pathname.startsWith("/account/") ? "page" : undefined}
-            >
-              {me ? me.name || me.email || t("common.account") : t("common.sign_in")}
-            </a>
-          </Button>
-          {/* The gated room: the same site behind a sign-in, where the full CV is.
-              A plain anchor, since it is another host; whoever is signed in
-              there lands on their standing, everyone else on the sign-in. */}
-          <Button variant="ghost" size="sm" className="shrink-0 px-2 sm:px-3" asChild>
-            <a
-              href={cv.fullUrl}
-              className="text-muted-foreground font-mono text-[10px] tracking-[0.12em] uppercase sm:text-[11px] sm:tracking-[0.14em]"
-            >
-              {t("common.full_cv")} ↗
-            </a>
-          </Button>
         </nav>
         <span className="bg-border mx-1 hidden h-4 w-px shrink-0 sm:block" />
         {/* Outside the scrolling nav, so they are reachable on a phone without scrolling. */}
         <div className="flex shrink-0 items-center gap-1">
           <LangToggle />
           <ThemeSwitch />
+          <HeaderUser />
         </div>
       </Frame>
     </header>
