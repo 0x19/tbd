@@ -136,6 +136,9 @@ services:
       TBD_ENV: production
       CV_LISTEN_ADDR: 0.0.0.0:{{ cv_port }}
       CV_METRICS_ADDR: 0.0.0.0:9464
+      CV_DATABASE_URL: "postgres://ledger:{{ vault_ledger_postgres_password }}@ledger-postgres:5432/tbd?sslmode=disable"
+      CV_FINANCE_URL: http://finance:{{ finance_port }}
+      CV_PRIVATE_JSON: "{{ vault_cv_private_json | default('') }}"
       OTEL_EXPORTER_OTLP_ENDPOINT: "{{ otlp_endpoint | default('') }}"
       PYROSCOPE_SERVER_ADDRESS: "{{ pyroscope_server | default('') }}"
     restart: unless-stopped

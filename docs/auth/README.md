@@ -39,7 +39,7 @@ issuer**, so the URL a client uses must be the one the stack was deployed with.
 
 | Client id | Who | Grant | Scope / audience | Notes |
 |---|---|---|---|---|
-| `tbd-ui` | Envoy's OAuth2 filter on the browser hosts (grafana, logs, profiles, metrics, chaosadmin, finance) | authorization code + refresh | `openid offline_access email profile`, audience `tbd-ui` | confidential, `client_secret_post`; no consent screen (first party). A callback per host name: under `BASE_DOMAIN`, and under `SITE_DOMAIN` too when the company site has a domain of its own (`devops/edge/sites.d/`), since Envoy builds `redirect_uri` from the request's authority. The issuer stays `auth.<base>` |
+| `tbd-ui` | Envoy's OAuth2 filter on the browser hosts (grafana, logs, profiles, metrics, chaosadmin, finance, cv) | authorization code + refresh | `openid offline_access email profile`, audience `tbd-ui` | confidential, `client_secret_post`; no consent screen (first party). A callback per host name: under `BASE_DOMAIN`, and under `SITE_DOMAIN` too when the company site has a domain of its own (`devops/edge/sites.d/`), since Envoy builds `redirect_uri` from the request's authority. The issuer stays `auth.<base>` |
 | `tbd-chaos` | the chaos tool, CI, scripts | client credentials | `tbd.api`, audience `tbd-api` | confidential, `client_secret_basic` |
 | `tbd-app` | the mobile app (`/mobile`, `docs/mobile/README.md`) | authorization code with PKCE + refresh | `openid offline_access email profile tbd.api`, audience `tbd-api` | public client, `tbd://callback` and `localhost:3001`, post-logout `tbd://callback/signed-out`; no consent screen. A public client must send `audience=tbd-api` on the authorization request, or Hydra mints a token the API rejects |
 
@@ -111,13 +111,18 @@ a person cannot edit it, unlike their traits). New identities have no role and c
 `viewer`. The consent step stamps it into every token as `role`, plus `grafana_role`
 (`Admin`, `Editor`, `Viewer`); a changed role reaches the tokens at the next sign-in.
 
-| Who | API (`api.<domain>`) | `grafana.`, `logs.`, `profiles.`, `metrics.` | `chaosadmin.` |
+| Who | API (`api.<domain>`) | `grafana.`, `logs.`, `profiles.`, `metrics.`, `cv.` | `chaosadmin.` |
 |---|---|---|---|
 | machine token with scope `tbd.api` | yes | yes | yes |
 | person, role `admin` | with a `tbd-app` token carrying `tbd.api` | yes, Grafana Admin | yes |
 | person, role `editor` | same | yes, Grafana Editor | no (403) |
 | person, role `viewer` (default) | same | yes, Grafana Viewer | no (403) |
 | no valid token or session | no (401) | sent to sign in | sent to sign in |
+
+On `cv.` any signed-in person reaches the page and may ask; what they may then do is the
+cv service's decision, the first handler in the tree to read the token's `role`: listing
+and deciding requests need `admin`, and a download needs the owner's approval
+(`docs/cv/README.md`).
 
 Envoy's RBAC filter enforces this per host on the verified claims
 (`devops/envoy/envoy.yaml`): the API needs `scp` to contain `tbd.api`; the observability
@@ -142,7 +147,7 @@ Every check lives in `devops/envoy/envoy.yaml`; nothing behind Envoy checks anyt
 |---|---|---|---|
 | `api.<domain>`, `localhost:18080`, `chaos.api.*` | `jwt_authn`, requirement `api` | `Authorization: Bearer <JWT>` signed by Hydra with audience `tbd-api` | 401 with `Jwt is missing` / `Jwt verification fails` |
 | same hosts, `/healthz`, `/readyz`, `/api/chaos/v1/healthz` | none | anything | probes and uptime checks stay unauthenticated |
-| `grafana.`, `logs.`, `profiles.`, `metrics.`, `chaosadmin.` | `oauth2` then `jwt_authn`, requirement `ui` | the ID-token cookie the OAuth2 filter set (audience `tbd-ui`), or a bearer token | redirect to `auth.<domain>` to sign in |
+| `grafana.`, `logs.`, `profiles.`, `metrics.`, `chaosadmin.`, `finance.`, `cv.` | `oauth2` then `jwt_authn`, requirement `ui` | the ID-token cookie the OAuth2 filter set (audience `tbd-ui`), or a bearer token | redirect to `auth.<domain>` to sign in |
 | `auth.<domain>`, `chaos.localhost` | none | anything | the sign-in itself, and the open local UI |
 
 **API calls.** The JWT filter fetches Hydra's JWKS through the internal `hydra` cluster

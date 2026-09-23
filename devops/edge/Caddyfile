@@ -7,6 +7,7 @@
 #   grafana.<base>, logs.<base>, profiles.<base>, metrics.<base>, chaosadmin.<base>
 #                    Envoy :18080, which signs the browser in through Ory Hydra
 #   finance.<base>   the finance UI; the bank OAuth callback is open, the rest gated
+#   cv.<base>        the full CV behind the sign-in and the owner's approval
 #   auth.<base>      sign-in: Ory Hydra + Kratos + login pages, via Envoy :18080      public
 #   <base>           the company site (ui/www), Envoy's `www.*` host                  public
 #                    www.<base> redirects to the apex, so there is one canonical URL;
@@ -92,6 +93,12 @@ chaosadmin.{$BASE_DOMAIN} {
 # The finance service's browser surface. Envoy's `finance.*` host decides what is
 # open and what needs the login; today the only route is the bank's OAuth callback.
 finance.{$BASE_DOMAIN} {
+	import gated
+}
+
+# The full CV: request, approve, download (docs/cv/README.md). Envoy's `cv.*`
+# host signs the browser in like the others.
+cv.{$BASE_DOMAIN} {
 	import gated
 }
 

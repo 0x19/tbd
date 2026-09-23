@@ -10,6 +10,7 @@ resources:
   - ../../ledger-db
   - ../../www
   - ../../finances
+  - ../../cv-ui
   - envoy-lb.yaml
 images:
   - name: ghcr.io/0x19/tbd-engine
@@ -25,6 +26,8 @@ images:
   - name: ghcr.io/0x19/tbd-www
     newTag: dev
   - name: ghcr.io/0x19/tbd-finances-ui
+    newTag: dev
+  - name: ghcr.io/0x19/tbd-cv-ui
     newTag: dev
   - name: ghcr.io/0x19/tbd-finance
     newTag: dev

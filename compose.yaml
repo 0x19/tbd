@@ -206,6 +206,11 @@ services:
       TBD_ENV: ${TBD_ENV:-local}
       CV_LISTEN_ADDR: 0.0.0.0:50056
       CV_METRICS_ADDR: 0.0.0.0:9464
+      CV_DATABASE_URL: postgres://ledger:${LEDGER_POSTGRES_PASSWORD:-local-ledger}@ledger-postgres:5432/tbd?sslmode=disable
+      CV_FINANCE_URL: http://envoy:50051
+      # The full CV's private fields (phone, address, references) from .env; empty
+      # means the full CV carries none.
+      CV_PRIVATE_JSON: ${CV_PRIVATE_JSON:-}
     ports:
       - "9470:9464"
     restart: unless-stopped

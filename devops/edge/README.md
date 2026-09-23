@@ -13,6 +13,7 @@ internet ──443──▶ router (port forward) ──▶ this host: caddy (TL
                                                                            ├─ metrics.<base>    browser sign-in
                                                                            ├─ chaosadmin.<base> browser sign-in
                                                                            ├─ finance.<base>    browser sign-in; bank callback open
+                                                                           ├─ cv.<base>         browser sign-in
                                                                            └─ auth.<base>       the sign-in itself
 ```
 
@@ -25,6 +26,7 @@ internet ──443──▶ router (port forward) ──▶ this host: caddy (TL
 | `metrics.<base>` | Envoy 18080 | sign-in through Envoy | VictoriaMetrics UI |
 | `chaosadmin.<base>` | Envoy 18080 | sign-in through Envoy | the chaos admin UI at the root, API at `/api/chaos/v1/`; `/privacy.html` and `/terms.html` are open |
 | `finance.<base>` | Envoy 18080 | sign-in through Envoy | the finance UI; `/connect/callback` is open, because the bank redirects a browser with no session yet |
+| `cv.<base>` | Envoy 18080 | sign-in through Envoy, any role | the full CV: a visitor requests, the owner approves, an approved visitor downloads (`docs/cv/README.md`) |
 | `auth.<base>` | Envoy 18080 | none (it is the sign-in) | Ory Hydra, Ory Kratos and the login/registration/consent pages |
 | `<base>` (the apex) | Envoy 18080 | none (it is a public site) | the company site (`ui/www`); the Host is rewritten to `www.<base>` so Envoy's one public rule matches. With `SITE_DOMAIN` set to another domain, a permanent redirect there instead |
 | `www.<base>` | — | none | a permanent redirect to the site's canonical name (`SITE_DOMAIN`, the apex by default), so the site has one URL |
@@ -35,8 +37,8 @@ decides who gets in ([docs/auth/README.md](../../docs/auth/README.md)).
 
 ## Setup
 
-1. DNS: eight records (`api`, `grafana`, `logs`, `profiles`, `metrics`, `chaosadmin`,
-   `finance`, `auth`)
+1. DNS: nine records (`api`, `grafana`, `logs`, `profiles`, `metrics`, `chaosadmin`,
+   `finance`, `cv`, `auth`)
    under the base domain pointing at the public IP, or `CNAME`s to the router's DynDNS
    name. Create the record before starting Caddy for it: every failed certificate
    attempt counts toward Let's Encrypt's five failed authorizations per hostname per

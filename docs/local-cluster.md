@@ -46,6 +46,7 @@ steps idempotently and is the template for provisioning a real box the same way.
 | `tbd` | `chaos` | 1 | `chaos serve`: API and admin UI, behind Envoy at `/api/chaos/v1` and the `chaos.localhost` host |
 | `tbd` | `www` | 1 | the company site (`ui/www`) on Caddy, behind Envoy's `www.localhost` host |
 | `tbd` | `finances-ui` | 1 | the finance UI (`ui/finances`) on Caddy, behind Envoy's `finance.localhost` host and its browser login; `/v1/` on that host goes to the protocol |
+| `tbd` | `cv-ui` | 1 | the full CV's two pages (`ui/cv`) on Caddy, behind Envoy's `cv.localhost` host and its browser login; the cv service answers `/v1/cv/` through the protocol (`docs/cv/README.md`) |
 | `auth` | `postgres`, `hydra`, `kratos`, `auth-ui` | 1 each | sign-in and tokens ([auth/README.md](auth/README.md)); `auth.localhost:18080` |
 | `observability` | `victoria-metrics` | 1 | metrics store and scraper |
 | `observability` | `victoria-logs` | 1 | log store |
@@ -68,6 +69,7 @@ on this machine use.
 | 18080 | `tbd/envoy-lb` | `/api/chaos/v1/` on the same edge port and the admin UI at `http://chaos.localhost:18080/` ([chaos/ui.md](chaos/ui.md)) |
 | 18080 | `tbd/envoy-lb` | the company site at `http://www.localhost:18080/`; in public the edge serves it at the base domain itself ([../ui/www/README.md](../ui/www/README.md)) |
 | 18080 | `tbd/envoy-lb` | the finance UI at `http://finance.localhost:18080/`, signed in through Ory ([../ui/finances/README.md](../ui/finances/README.md)) |
+| 18080 | `tbd/envoy-lb` | the full CV at `http://cv.localhost:18080/`, signed in through Ory ([../ui/cv/README.md](../ui/cv/README.md)) |
 | 3000 | `observability/grafana-lb` | Grafana, admin/admin on the LAN (publicly: sign-in through Envoy) |
 | 9090 | `observability/victoria-metrics-lb` | VictoriaMetrics UI and API |
 | 14317 | `observability/otel-collector-lb` | OTLP/gRPC into the collector, for processes on the host |

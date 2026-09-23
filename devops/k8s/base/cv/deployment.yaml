@@ -39,6 +39,22 @@ spec:
           envFrom:
             - configMapRef:
                 name: tbd-env
+          env:
+            # Both optional on purpose: without the database every RPC but Ping
+            # answers UNAVAILABLE, and without the private fields the full CV
+            # carries none -- a cluster before `mise run cv:secrets` still runs.
+            - name: CV_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: cv-db
+                  key: database-url
+                  optional: true
+            - name: CV_PRIVATE_JSON
+              valueFrom:
+                secretKeyRef:
+                  name: cv-private
+                  key: private.json
+                  optional: true
           livenessProbe:
             grpc:
               port: 50056

@@ -4,7 +4,7 @@ Public TLS edge for a cluster behind a home or office router. Read `README.md` f
 
 - One Caddyfile, env-driven (`BASE_DOMAIN`, `ACME_EMAIL`, `SITE_DOMAIN`, `EDGE_HTTP_PORT`,
   `EDGE_HTTPS_PORT`). Subdomain names are fixed
-  (`api`, `grafana`, `logs`, `profiles`, `metrics`, `chaosadmin`, `finance`, `auth`),
+  (`api`, `grafana`, `logs`, `profiles`, `metrics`, `chaosadmin`, `finance`, `cv`, `auth`),
   and the base domain itself serves the company site;
   only the base is configurable, so
   DNS, docs and dashboards can rely on them. Caddy owns certificate issuance and

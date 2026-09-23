@@ -19,6 +19,7 @@ name. If you add a check, add it in both places; this page lists the mapping.
 | `stress:run` | `scenarios` | any campaign under `stress/` with a finding or an error (`chaos stress check stress/*.toml` runs first) |
 | `ui:check` | `ui` | `ui/chaos`: prettier drift, an eslint finding (React Compiler rules included), a type error; CI also runs `pnpm build` |
 | `ui:finances:check` | `ui-finances` | `ui/finances`: prettier drift, an eslint finding, a type error; CI also runs `pnpm build` |
+| `ui:cv:check` | `ui-cv` | `ui/cv`: the same for the full CV's two pages |
 | `mobile:check` | `mobile` | `mobile/`: `dart format` drift, any `dart analyze --fatal-infos` finding (very_good_analysis, strict), the `Me` type drifting from `docs/protocol/openapi.json` (`tool/openapi_check.dart`), `packages/tbd_ui/lib/src/tokens.g.dart` drifting from the web kit's `globals.css` (`tool/theme.dart --check`; `mise run mobile:gen` regenerates), any failing `flutter test` in the app or a package |
 | not in the gate | `mobile ios` (its own workflow, macOS runner) | the iOS build failing to compile, sign (the App Store Connect API key secrets, role Admin) or upload to TestFlight; runs on demand and on `mobile-v*` tags, see `mobile/README.md` |
 | not in the gate | `docker` | any image failing to build; on `main` also failing to push. The chaos image build runs `pnpm build` first so it carries the UI |

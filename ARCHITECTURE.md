@@ -86,7 +86,7 @@ Envoy routes, from `devops/envoy/envoy.yaml`:
 | everything else | protocol | 15 s, retries only when the request was never sent |
 | engine LB (50051), all gRPC | engine | none |
 | host `auth.*` | hydra / kratos / login pages, open | 15 s |
-| hosts `grafana.*`, `logs.*`, `profiles.*`, `metrics.*`, `chaosadmin.*` | the UI, after the browser login | none |
+| hosts `grafana.*`, `logs.*`, `profiles.*`, `metrics.*`, `chaosadmin.*`, `finance.*`, `cv.*` | the UI, after the browser login (`cv.*`: any role; the cv service decides the rest) | none |
 
 ## Invariants
 

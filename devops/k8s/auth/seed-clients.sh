@@ -19,7 +19,7 @@ d="$BASE_DOMAIN"
 # host name a person can sign in on must be registered. The issuer stays auth.<base>.
 site_uris=""
 if [ -n "$SITE_DOMAIN" ] && [ "$SITE_DOMAIN" != "$d" ]; then
-  for h in grafana logs profiles metrics chaosadmin finance; do
+  for h in grafana logs profiles metrics chaosadmin finance cv; do
     site_uris="$site_uris \"https://$h.$SITE_DOMAIN/oauth2/callback\","
   done
 fi
@@ -36,8 +36,9 @@ upsert tbd-ui "{
     \"https://grafana.$d/oauth2/callback\", \"https://logs.$d/oauth2/callback\",
     \"https://profiles.$d/oauth2/callback\", \"https://metrics.$d/oauth2/callback\",
     \"https://chaosadmin.$d/oauth2/callback\", \"https://finance.$d/oauth2/callback\",
+    \"https://cv.$d/oauth2/callback\",
     \"http://grafana.localhost:18080/oauth2/callback\", \"http://chaos.localhost:18080/oauth2/callback\",
-    \"http://finance.localhost:18080/oauth2/callback\"
+    \"http://finance.localhost:18080/oauth2/callback\", \"http://cv.localhost:18080/oauth2/callback\"
   ],
   \"skip_consent\": true, \"skip_logout_consent\": true,
   \"access_token_strategy\": \"jwt\"

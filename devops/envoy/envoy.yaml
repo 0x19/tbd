@@ -15,7 +15,8 @@
 # Authentication happens here and nowhere else (docs/auth/README.md):
 #   - API hosts (`api.<domain>`, the catch-all): every route except health needs a
 #     bearer JWT from Hydra (audience tbd-api), verified against Hydra's JWKS.
-#   - UI hosts (`grafana.`, `logs.`, `profiles.`, `metrics.`, `chaosadmin.`): the
+#   - UI hosts (`grafana.`, `logs.`, `profiles.`, `metrics.`, `chaosadmin.`,
+#     `finance.`, `cv.`): the
 #     oauth2 filter logs the browser in through Hydra and stores an ID token cookie,
 #     which the same JWT filter verifies (audience tbd-ui). A bearer token passes
 #     straight through, so scripts work on those hosts too.
@@ -625,6 +626,52 @@ static_resources:
                               retry_on: connect-failure,refused-stream,reset,unavailable
                               num_retries: 2
                               per_try_timeout: 5s
+                    # The full CV (docs/cv/README.md): a visitor asks, the owner
+                    # approves, an approved visitor downloads. Browser login as on
+                    # every UI host, then the widest gate there is: any signed-in
+                    # person, whatever their role, because asking is the point. What
+                    # they may do next is the cv service's decision, on the role the
+                    # token carries.
+                    - name: cv
+                      domains: ["cv.*"]
+                      typed_per_filter_config:
+                        envoy.filters.http.jwt_authn:
+                          "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.PerRouteConfig
+                          requirement_name: ui
+                        envoy.filters.http.rbac:
+                          "@type": type.googleapis.com/envoy.extensions.filters.http.rbac.v3.RBACPerRoute
+                          rbac:
+                            rules:
+                              action: ALLOW
+                              policies:
+                                cv:
+                                  permissions: [{ any: true }]
+                                  principals:
+                                    - metadata:
+                                        filter: envoy.filters.http.jwt_authn
+                                        path: [{ key: jwt }, { key: role }]
+                                        value: { string_match: { safe_regex: { regex: "^(admin|editor|viewer)$" } } }
+                      routes:
+                        # The cv RPCs through the protocol, same origin as the page.
+                        - match: { prefix: "/v1/" }
+                          route:
+                            cluster: protocol
+                            timeout: 60s
+                            retry_policy:
+                              retry_on: connect-failure,refused-stream
+                              num_retries: 1
+                        - match: { path: "/openapi.json" }
+                          route:
+                            cluster: protocol
+                            timeout: 15s
+                        - match: { prefix: "/" }
+                          route:
+                            cluster: cv-ui
+                            timeout: 15s
+                            retry_policy:
+                              retry_on: connect-failure,refused-stream,reset,unavailable
+                              num_retries: 2
+                              per_try_timeout: 5s
                     # The API: api.<domain> publicly, localhost:18080 locally. Every
                     # route needs a bearer token except the health endpoints, which
                     # probes, Envoy's own health checks and uptime monitors call.
@@ -1223,6 +1270,19 @@ static_resources:
               - endpoint:
                   address:
                     socket_address: { address: finances-ui, port_value: 8080 }
+    - name: cv-ui
+      type: STRICT_DNS
+      dns_lookup_family: V4_ONLY
+      dns_refresh_rate: 5s
+      lb_policy: ROUND_ROBIN
+      connect_timeout: 1s
+      load_assignment:
+        cluster_name: cv-ui
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address: { address: cv-ui, port_value: 8080 }
     - name: www
       type: STRICT_DNS
       dns_lookup_family: V4_ONLY

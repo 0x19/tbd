@@ -38,3 +38,9 @@ ui/finances/node_modules/
 ui/finances/.next/
 ui/finances/out/
 !devops/docker/finances.Caddyfile
+# The cv UI (ui/cv), a static export served by Caddy: Dockerfile.cv-ui.
+!ui/cv/
+ui/cv/node_modules/
+ui/cv/.next/
+ui/cv/out/
+!devops/docker/cv.Caddyfile

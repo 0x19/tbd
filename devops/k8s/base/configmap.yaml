@@ -30,6 +30,8 @@ data:
   PROTOCOL_HUMANS_URL: http://envoy:50051
   PROTOCOL_LEDGER_URL: http://envoy:50051
   PROTOCOL_CV_URL: http://envoy:50051
+  # The cv service reaches finance for the mail through the internal listener too.
+  CV_FINANCE_URL: http://envoy:50051
   PROTOCOL_PLAYGROUND_URL: http://envoy:50051
   PROTOCOL_FINANCE_URL: http://envoy:50051
   # OTLP/gRPC collector for traces. Alloy in the observability namespace.
