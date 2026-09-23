@@ -1,0 +1,238 @@
+{
+  "person": "Nevio Vesic",
+  "title": "Senior software / protocol engineer",
+  "city": "Rijeka and Zagreb, Croatia",
+  "email": "nevio@inorbit.hr",
+  "site": "inorbit.hr",
+  "github": "github.com/0x19",
+  "linkedin": "www.linkedin.com/in/neviovesic/",
+  "availability": "Available from October 2026 for contract or full-time work: protocol, infrastructure and distributed systems, in Rust and Go.",
+  "summary": "Twenty years in the unglamorous half of the stack: voice servers and SMS gateways first, then anycast networks carrying real-time traffic at sixty gigabits, then rollups, bridges and indexers. Ten of those years in Go, and as much Rust lately. Whatever I build for the fun of it ends up here too.",
+  "about": [
+    "Twenty years of building software, most of it infrastructure: distributed systems, storage, protocols and telecommunications. Ten of those years in Go, and as much Rust lately. Along the way I have led teams of up to five, and done the part of that job that is talking to management and clients rather than to a compiler.",
+    "The arc runs telecom, then real-time networks, then blockchain protocols. Voice servers, SMS and carrier services to begin with; then anycast TURN and SIP networks and the kernel-side packet work underneath them; then an optimistic EVM rollup, a cross-chain bridge and indexers that keep up with a chain. Now developer infrastructure for Ethereum at Tenderly.",
+    "Away from the screen: a guitar, more philosophy and psychology than is strictly useful, the dogs, and my girlfriend."
+  ],
+  "achievements": [
+    "Early work on a Layer 1 to Layer 7 network with a distributed team, carrying over 60 Gbps, which secured a $3M+ annual contract and opened the following investment round.",
+    "One of the first WASM ports of a Layer 2 blockchain node in Go.",
+    "An optimistic EVM rollup written entirely in Go, from inception to deployment.",
+    "The first Go Solidity AST and IR parser, control-flow graph construction included.",
+    "A cross-chain liquidity bridge between Ethereum and Bitcoin on multi-party computation and threshold ECDSA.",
+    "A cross-chain EVM indexer that streams an entire blockchain dataset in under ten hours."
+  ],
+  "experience": [
+    {
+      "company": "Tenderly",
+      "role": "Software engineer (L5)",
+      "when": "2024–2026",
+      "where": "Remote",
+      "body": "Developer infrastructure for Ethereum — simulation, debugging and the systems behind them, at production volume. Backend work in Go and Rust on the systems that carry it. The contract ended in September 2026.",
+      "highlights": [],
+      "tags": [
+        "Go",
+        "Rust",
+        "EVM"
+      ]
+    },
+    {
+      "company": "(Un)Pack",
+      "role": "Founder",
+      "when": "2023–2024",
+      "where": "Remote",
+      "body": "My own product: a platform that pulls Ethereum contracts apart at scale — source, AST and IR, bytecode, control-flow graphs — with a discovery service over GraphQL that used language models to say what a contract does and whether it looks like a rug pull. Switched off when the Tenderly work began, because running it cost more than it earned. The libraries stay public.",
+      "highlights": [
+        "Designed, built and ran it alone: crawler, storage, analysis, API and the bill.",
+        "solgo — the first Solidity AST and IR parser in Go, with control-flow graph construction; used by others since.",
+        "A crawler that peaked above 30k requests a second against the chain, feeding one to one and a half terabytes a day into Postgres and ClickHouse.",
+        "Token pricing from pool reserves directly, without Chainlink or a third-party API."
+      ],
+      "tags": [
+        "Go",
+        "Rust",
+        "Python",
+        "ClickHouse",
+        "LLM"
+      ]
+    },
+    {
+      "company": "Eiger",
+      "role": "Senior software / protocol engineer",
+      "when": "2022–2024",
+      "where": "Remote",
+      "body": "Protocol work across several chains, from research to deployment: a proprietary EVM-compatible optimistic rollup taken from inception to production, one of the first WASM ports of a Layer 2 node in Go, and a cross-chain liquidity bridge between Ethereum and Bitcoin built on multi-party computation and threshold ECDSA. Led teams of up to five, ran the research, and wrote the grant proposals that funded some of it.",
+      "highlights": [],
+      "tags": [
+        "Go",
+        "Rust",
+        "WASM",
+        "EVM",
+        "P2P",
+        "RLPx"
+      ]
+    },
+    {
+      "company": "InOrbit",
+      "role": "Owner",
+      "when": "2018–present",
+      "where": "Croatia",
+      "body": "The company the B2B work runs through; Subspace, Eiger and Tenderly were all engaged this way.",
+      "highlights": [],
+      "tags": []
+    },
+    {
+      "company": "Subspace",
+      "role": "Senior software engineer",
+      "when": "2018–2022",
+      "where": "Remote · Los Angeles",
+      "body": "A network built for traffic that cannot wait. I wrote the user-space services sitting between the kernel and the control plane, and some of the kernel side itself — IP filtering, packet rewriting, network-card caching, map management. Co-built the first version of the TURN anycast network, live in over 150 points of presence, and the first SIP anycast network on Kamailio and FreeSWITCH; also the Elixir control plane that provisioned tunnels and billed usage from a geo-aware distributed database.",
+      "highlights": [
+        "One of the first three engineers. A Layer 1 to Layer 7 network built in six months for the MENA region, carrying over 60 Gbps from the start; it secured a contract above three million dollars a year and the next funding round.",
+        "Co-conceived and co-built the first global TURN anycast network, over 150 points of presence, and the SIP anycast network on Kamailio.",
+        "User-space services between the kernel and the control plane, and the kernel side itself in eBPF: IP filtering, packet rewriting, NIC caching, map management. A patent-pending contribution on the eBPF design.",
+        "The Elixir control plane that took customer API requests and turned them into IPv4 tunnels, with usage billing from a geo-aware distributed database."
+      ],
+      "tags": [
+        "Go",
+        "Elixir",
+        "C",
+        "eBPF",
+        "Kubernetes",
+        "Kafka"
+      ]
+    },
+    {
+      "company": "Avaya",
+      "role": "Senior engineer, then software engineer on CPaaS",
+      "when": "2016–2018",
+      "where": "Croatia",
+      "body": "The TelAPI platform after its acquisition, as Zang Cloud and then Avaya CPaaS. Go microservices on the platform, then architecting the next generation of its front end and running the team that built it, including the security and compliance side — code scanning, HIPAA, GDPR, SOC.",
+      "highlights": [
+        "Led the front-end services team: planning, unblocking, delivery.",
+        "Architected the next generation of the CPaaS front end (React, Node.js, Go, Kubernetes, GCP, AWS).",
+        "Owned the security side of it: code scanning and HIPAA, GDPR and SOC compliance work."
+      ],
+      "tags": [
+        "Go",
+        "React",
+        "Node.js",
+        "Kubernetes",
+        "GCP",
+        "AWS"
+      ]
+    },
+    {
+      "company": "TelTech Systems · TelAPI",
+      "role": "Senior software engineer",
+      "when": "2014–2016",
+      "where": "Remote · New York",
+      "body": "Telecom at the protocol level: voice servers on FreeSWITCH and Kamailio, an SMS stack over SMPP with its SMSC and SMSE sides, phone-number and carrier services, and the full rewrite of those services from Python to Go. Consumer products on the same plumbing, spoofcard.com and tapeacall.com among them.",
+      "highlights": [
+        "Voice servers on FreeSWITCH and Kamailio; an SMS stack over SMPP with its SMSC and SMSE sides; phone-number and carrier services.",
+        "The full rewrite of the services from Python to Go."
+      ],
+      "tags": [
+        "Go",
+        "Python",
+        "C",
+        "FreeSWITCH",
+        "Kamailio",
+        "SMPP"
+      ]
+    },
+    {
+      "company": "TelAPI Adriatica",
+      "role": "Director",
+      "when": "2013–2015",
+      "where": "Croatia",
+      "body": "The Croatian branch, and two engineers in it. Closed when Avaya acquired the parent.",
+      "highlights": [],
+      "tags": []
+    }
+  ],
+  "earlier": [
+    {
+      "when": "2011–2014",
+      "company": "TelTech Systems",
+      "role": "Web application developer — the CPaaS front end in Zend, its documentation and API explorer"
+    },
+    {
+      "when": "2011",
+      "company": "ClkClk",
+      "role": "Web developer — the company's SaaS, then its internal administration from scratch"
+    },
+    {
+      "when": "2010–2011",
+      "company": "Adria24",
+      "role": "Web developer — the internal booking system of a tourist agency, front and back"
+    },
+    {
+      "when": "2009–2010",
+      "company": "In-tech, WebFactory",
+      "role": "Lead web developer — a book e-commerce platform; WordPress"
+    },
+    {
+      "when": "2007–2008",
+      "company": "Skin29, Design Strategist",
+      "role": "Web developer — a CMS later used by several large Croatian companies"
+    }
+  ],
+  "projects": [
+    {
+      "name": "solgo",
+      "year": "2023",
+      "what": "A Solidity parser in Go that turns contract source into a structured form you can analyse — the base for detectors, ABI work and standards discovery.",
+      "href": "github.com/unpackdev/solgo"
+    },
+    {
+      "name": "sourcify-go",
+      "year": "2023",
+      "what": "A Go client for the Sourcify API: verify a contract, fetch its metadata and sources, check what a chain already knows about an address.",
+      "href": "github.com/unpackdev/sourcify-go"
+    },
+    {
+      "name": "fdb",
+      "year": "2024",
+      "what": "A high-performance transport layer in front of embedded key-value databases such as MDBX, for the reads a node or an indexer cannot wait on.",
+      "href": "github.com/unpackdev/fdb"
+    },
+    {
+      "name": "solc-switch",
+      "year": "2023",
+      "what": "Manages every Solidity compiler version at once and compiles with the right one, concurrently, instead of juggling toolchains by hand.",
+      "href": "github.com/0x19/solc-switch"
+    },
+    {
+      "name": "go-clickhouse-orm",
+      "year": "2023",
+      "what": "Model and migration support for ClickHouse in Go, so an analytics schema is versioned like any other part of a service.",
+      "href": "github.com/0x19/go-clickhouse-orm"
+    },
+    {
+      "name": "gotostruct",
+      "year": "2015",
+      "what": "Turns a JSON object into a Go struct, as a library and as the public tool that ran at jsonstruct.com. Written because I was tired of doing it by hand.",
+      "href": "github.com/0x19/gotostruct"
+    },
+    {
+      "name": "disposable",
+      "year": "2016",
+      "what": "A JSON and gRPC API that answers one question — is this a throwaway email address? Small, public, and quietly used by strangers ever since.",
+      "href": "github.com/0x19/disposable"
+    },
+    {
+      "name": "goesl",
+      "year": "2015",
+      "what": "A FreeSWITCH Event Socket library for Go. Written in 2015 and still forked and shipped by other people — telephony was the first system I had to keep up.",
+      "href": "github.com/0x19/goesl"
+    }
+  ],
+  "languages": [
+    "English",
+    "Croatian",
+    "Bosnian",
+    "Serbian",
+    "Slovenian"
+  ],
+  "education": "Secondary school, 2000 — 2003. Everything since, self-taught on the job."
+}

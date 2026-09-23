@@ -45,11 +45,13 @@ practice log is `localStorage`, per browser, and its page says so.
 - **`/cv/` and the PDF are one record.** `experience[].highlights` are the lines the
   CV shows under a role and the about page does not; `earlier` expands the about
   page's compressed "Earlier" entry job by job, so `/cv/` leaves that entry out.
-  `mise run www:cv` writes `cv/cv.json` from `src/data/site.ts` (`tool/cv-data.ts`)
-  and Typst sets `cv/cv.typ` into `public/cv/nevio-vesic.pdf` with the invoice's
-  Inter; the PDF is committed, so a data change is not done until the PDF is
-  re-rendered and committed with it. Nothing in it restates an employer's
-  confidential figures.
+  `mise run www:cv` writes `crates/cv/assets/cv.json` from `src/data/site.ts`
+  (`tool/cv-data.ts`) and Typst sets `crates/cv/assets/cv.typ` into
+  `public/cv/nevio-vesic.pdf` with the invoice's Inter. Both files belong to the cv
+  service as well, which renders the _full_ CV from them for approved readers
+  (`docs/cv/README.md`); the JSON and the PDF are committed, `ui:www:check` fails on a
+  stale JSON, so a data change is not done until both are re-rendered and committed
+  with it. Nothing in either restates an employer's confidential figures.
 - **`projects` are real repositories** and `playgrounds` are things that are
   actually open (or honestly marked as being built, with `href: null`). Never
   seed either with something that does not exist.

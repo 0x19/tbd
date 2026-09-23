@@ -1,6 +1,7 @@
-// Writes cv/cv.json from src/data/site.ts, so the PDF (cv/cv.typ) and the /cv/
-// page draw on the same facts. Run through `mise run www:cv`; Node strips the
-// types itself, no bundler needed.
+// Writes crates/cv/assets/cv.json from src/data/site.ts, so the public PDF
+// (crates/cv/assets/cv.typ, set by `mise run www:cv`), the /cv/ page and the cv
+// service's full render all draw on the same facts. The JSON is committed and
+// CI checks it is current. Node strips the types itself, no bundler needed.
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,7 +19,7 @@ import {
 } from "../src/data/site.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const out = join(here, "..", "cv", "cv.json");
+const out = join(here, "..", "..", "..", "crates", "cv", "assets", "cv.json");
 mkdirSync(dirname(out), { recursive: true });
 writeFileSync(
   out,

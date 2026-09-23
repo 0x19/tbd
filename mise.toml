@@ -638,25 +638,30 @@ depends = ["ui:www:install"]
 dir = "ui/www"
 run = "pnpm dev"
 
-# The CV as a PDF, from the same facts as the site: tool/cv-data.ts writes cv/cv.json
-# out of src/data/site.ts and Typst sets it with the same Inter the invoices use.
-# The PDF is committed (public/cv/), so the image build needs no Typst.
+# The CV as a PDF, from the same facts as the site: tool/cv-data.ts writes
+# crates/cv/assets/cv.json out of src/data/site.ts and Typst sets
+# crates/cv/assets/cv.typ with the Inter the invoices use. Both files are the cv
+# service's too (it renders the full version from them), so the JSON is committed
+# and `ui:www:check` fails when it is stale. The PDF is committed (public/cv/), so
+# the image build needs no Typst.
 [tasks."www:cv"]
-description = "Render the CV PDF (ui/www/public/cv/) from ui/www/src/data/site.ts"
+description = "Write crates/cv/assets/cv.json from ui/www/src/data/site.ts and render the public CV PDF (ui/www/public/cv/)"
 dir = "ui/www"
 run = """
 node --no-warnings tool/cv-data.ts
-typst compile --font-path ../../crates/render/assets/fonts --ignore-system-fonts cv/cv.typ public/cv/nevio-vesic.pdf
+typst compile --font-path ../../crates/render/assets/fonts --ignore-system-fonts ../../crates/cv/assets/cv.typ public/cv/nevio-vesic.pdf
 """
 
 [tasks."ui:www:check"]
-description = "ui/www: prettier, eslint, tsc (same bar as ui/chaos)"
+description = "ui/www: prettier, eslint, tsc (same bar as ui/chaos), and the CV data in crates/cv/assets is current"
 depends = ["ui:www:install"]
 dir = "ui/www"
 run = """
 pnpm format:check
 pnpm lint
 pnpm typecheck
+node --no-warnings tool/cv-data.ts >/dev/null
+git diff --exit-code -- ../../crates/cv/assets/cv.json || { echo "crates/cv/assets/cv.json is stale: run mise run www:cv and commit it"; exit 1; }
 """
 
 # The site is published at the base domain of the public edge; a build for any

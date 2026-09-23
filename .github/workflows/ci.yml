@@ -204,6 +204,8 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm build
+      # The cv service renders from the same data: the committed JSON must be current.
+      - run: node --no-warnings tool/cv-data.ts && git diff --exit-code -- ../../crates/cv/assets/cv.json
 
   ui-finances:
     name: ui/finances (prettier + eslint + tsc + build)
