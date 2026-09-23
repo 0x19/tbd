@@ -56,7 +56,11 @@ Why the retry policies differ: `connect-failure` and `refused-stream` mean the r
 never reached an upstream, so retrying is always safe. `unavailable` is added for gRPC
 because the engine returns it for injected or real outages and the calls are idempotent
 today. Do not add `retriable-status-codes` or `5xx` to the REST route; a `POST` that
-timed out mid-flight must not be replayed by the proxy.
+timed out mid-flight must not be replayed by the proxy. The llm service's route is the
+one gRPC exception: a generation streams for seconds and is paid for in tokens, so it
+retries only `connect-failure` and `refused-stream` and has no per-try timeout. The
+shared policy's 5 s per try reset every generation slower than that and generated it
+again; at four generations a second on the CPU every failure sat on that clock.
 
 The internal listener (`:50051`) is what every protocol backend URL points at. It routes
 by gRPC service name: `/tbd.ledger.v1.LedgerService/*` to `ledger`, `/tbd.humans.v1.HumansService/*`

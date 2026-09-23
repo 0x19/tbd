@@ -1036,11 +1036,19 @@ static_resources:
                             timeout: 0s
                             retry_policy: *grpc_retry
                         # llm, matched by service name; the engine stays the catch-all.
+                        # A generation streams for seconds and is paid for in tokens:
+                        # retry only a dial that never reached the service, and never
+                        # on a clock. The shared policy's 5 s per try reset every
+                        # generation slower than that and generated it again (seen at
+                        # four generations a second on the CPU: every failure and a
+                        # p50 of 5.2 s sat on that timeout, not on the model).
                         - match: { prefix: "/tbd.llm.v1.LlmService/", grpc: {} }
                           route:
                             cluster: llm
                             timeout: 0s
-                            retry_policy: *grpc_retry
+                            retry_policy:
+                              retry_on: "connect-failure,refused-stream"
+                              num_retries: 2
                         # llm health: the grpc.health.v1 path is shared, so the protocol
                         # names the backend it is asking about in x-tbd-backend.
                         - match: { prefix: "/grpc.health.v1.Health/", grpc: {}, headers: [{ name: x-tbd-backend, string_match: { exact: llm } }] }
