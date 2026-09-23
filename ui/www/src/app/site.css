@@ -301,3 +301,52 @@
     display: none;
   }
 }
+
+/* The closing mesh's two quiet signs of life: rings that ripple out from the
+   hub on the spine (a 1-unit circle scaled up, the stroke kept at 1px), and
+   halos on the points of presence that breathe. */
+@keyframes mesh-ripple {
+  0% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  100% {
+    transform: scale(240);
+    opacity: 0;
+  }
+}
+
+.mesh-ripple {
+  transform-box: fill-box;
+  transform-origin: center;
+  opacity: 0;
+  animation: mesh-ripple 9s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+@keyframes mesh-halo {
+  0%,
+  100% {
+    transform: scale(1);
+    stroke-opacity: 0.3;
+  }
+  50% {
+    transform: scale(1.18);
+    stroke-opacity: 0.55;
+  }
+}
+
+.mesh-halo {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: mesh-halo 7s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mesh-ripple {
+    display: none;
+  }
+
+  .mesh-halo {
+    animation: none;
+  }
+}

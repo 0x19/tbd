@@ -14,7 +14,10 @@ import { type Bend, CELL, type Cell, px, route, segments, trace } from "@/lib/me
  * fabric and never as a pattern; a few dashed stubs leave off the bottom and
  * into the fade above, and three packets run away from the spine. Same 72px
  * grid as the hero, drawn as a pattern from the spine and the page's bottom
- * edge, so every node sits on an intersection at any width.
+ * edge, so every node sits on an intersection at any width. It is kept faint
+ * on purpose, and alive in two quiet ways: rings ripple out from the hub on
+ * the spine every few seconds (the reply going out) and the halos on the
+ * points of presence breathe (`.mesh-ripple`, `.mesh-halo`, `site.css`).
  *
  * `Closing` wraps the site footer in the layout: on the home page it adds
  * the room under the last strip and this drawing behind both; elsewhere it
@@ -212,7 +215,7 @@ function ClosingMesh() {
   return (
     <svg
       aria-hidden
-      className="text-foreground absolute bottom-0 left-3 overflow-visible sm:left-4"
+      className="text-foreground absolute bottom-0 left-3 overflow-visible opacity-[0.5] sm:left-4 dark:opacity-[0.38]"
       width={1}
       height={H}
       fill="none"
@@ -268,7 +271,7 @@ function ClosingMesh() {
       <g strokeWidth="1.2" className="[stroke-opacity:0.6] dark:[stroke-opacity:0.65]">
         {nodes
           .filter((n) => n.pop)
-          .map((n) => {
+          .map((n, i) => {
             const [x, y] = px(n.cell);
             return (
               <circle
@@ -278,7 +281,8 @@ function ClosingMesh() {
                 r={13}
                 strokeDasharray="2 3.5"
                 strokeWidth="0.9"
-                className="[stroke-opacity:0.35]"
+                className="mesh-halo [stroke-opacity:0.35]"
+                style={{ animationDelay: `${(i * 1.7) % 7}s` }}
               />
             );
           })}
@@ -286,6 +290,19 @@ function ClosingMesh() {
           const [x, y] = px(n.cell);
           return <circle key={`${x}-${y}`} cx={x} cy={y} r={n.pop ? 5 : 4} fill="var(--background)" />;
         })}
+        {/* the reply going out: rings that ripple from the hub every few seconds */}
+        {[0, 1, 2].map((i) => (
+          <circle
+            key={`ripple-${i}`}
+            cx={px(cell(0, A, "a"))[0]}
+            cy={px(cell(0, A, "a"))[1]}
+            r={1}
+            vectorEffect="non-scaling-stroke"
+            strokeWidth="1"
+            className="mesh-ripple"
+            style={{ animationDelay: `${i * 3}s` }}
+          />
+        ))}
         {/* the hub on the spine: a dot in the ring, like the hero's */}
         <circle
           cx={px(cell(0, A, "a"))[0]}
