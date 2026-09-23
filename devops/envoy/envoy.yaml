@@ -192,6 +192,11 @@ static_resources:
                         deny_redirect_matcher:
                           - name: ":path"
                             string_match: { prefix: "/api/" }
+                          # The site's "who am I" fetch: the filter still validates
+                          # and refreshes the session, but answers 401, never a
+                          # redirect, so the page can show a "Sign in" instead.
+                          - name: ":path"
+                            string_match: { exact: "/v1/me" }
                         # Scripts with their own bearer token skip the browser login.
                         pass_through_matcher:
                           - name: authorization
@@ -396,13 +401,12 @@ static_resources:
                             cluster: www
                             timeout: 15s
                         # Who is signed in, for the page's own decisions (which nav
-                        # items to show). A fetch, so 401 and not a redirect: the
-                        # oauth2 filter is off and the JWT filter reads the cookie it set.
+                        # items to show). The oauth2 filter stays on so the same
+                        # session check and token refresh apply as on the gated
+                        # pages; its deny_redirect_matcher turns the sign-in redirect
+                        # into a 401 for this path, which a fetch can read.
                         - match: { path: "/v1/me" }
                           typed_per_filter_config:
-                            envoy.filters.http.oauth2:
-                              "@type": type.googleapis.com/envoy.config.route.v3.FilterConfig
-                              disabled: true
                             envoy.filters.http.jwt_authn:
                               "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.PerRouteConfig
                               requirement_name: ui
