@@ -40,3 +40,5 @@ declared and what derives from it: [extending.md](extending.md#add-a-service-kin
 | `grpc_cv_ping` | grpc | `cv` | `Ping` echoes the message and is labelled a stub |
 | `grpc_cv_access_unauthenticated` | grpc | `cv` | `GetAccess` without a verified caller is UNAUTHENTICATED: identity comes from Envoy or not at all |
 | `grpc_llm_ping` | grpc | `llm` | `Ping` echoes the message and is labelled a stub |
+| `grpc_llm_models_lists_both_tiers` | grpc | `llm` | `ListModels` names the fast and the deep tier, each with its engine and model, and says whether the engine is up (a down engine is reported, not failed) |
+| `grpc_llm_generate_unauthenticated` | grpc | `llm` | `Generate` without a verified caller is UNAUTHENTICATED: a caller is whoever Envoy verified, never a claim in the request |

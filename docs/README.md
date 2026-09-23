@@ -30,6 +30,7 @@
 | You want the mobile architecture: a bearer client, PKCE, the theme from the web kit | [mobile/README.md](mobile/README.md) |
 | You are building the mobile app or a package under `/mobile` | [../mobile/CLAUDE.md](../mobile/CLAUDE.md), then [../mobile/README.md](../mobile/README.md) for devices and environments |
 | You are working on the `cv` service | [../crates/cv/CLAUDE.md](../crates/cv/CLAUDE.md) |
+| You want to run, call or deploy the `llm` service: the engines behind it, the tiers, the budget, the record | [llm/README.md](llm/README.md) |
 | You are working on the `llm` service | [../crates/llm/CLAUDE.md](../crates/llm/CLAUDE.md) |
 | A check failed in CI, or you are changing CI | [ci.md](ci.md) |
 | You want metrics, traces, logs, dashboards, or to run the local cluster | [observability.md](observability/README.md) |
