@@ -26,7 +26,7 @@ use tbd_proto::finance::v1::{
     finance_service_client::FinanceServiceClient,
 };
 use tbd_proto::llm::v1::{
-    GenerateRequest, Message as LlmMessage, llm_service_client::LlmServiceClient,
+    GenerateRequest, Message as LlmMessage, Tier as LlmTier, llm_service_client::LlmServiceClient,
 };
 use tbd_proto::protocol::v1::{PingRequest, protocol_service_client::ProtocolServiceClient};
 use tokio::sync::Mutex;
@@ -211,11 +211,14 @@ pub enum OpKind {
     /// equals it; every fourth set is off by one cent and must be refused.
     /// Needs a database on the instance.
     FinanceImportOpening,
-    /// `LlmService/Generate` of a short prompt, streamed to its done chunk.
-    /// Meters `prompt_tokens`, `completion_tokens` and `generations`, and the
-    /// time to the first text chunk as `ttft`. Runs against llms; the
-    /// generator's timeout covers the whole stream.
+    /// `LlmService/Generate` of a short prompt on the default tier, streamed
+    /// to its done chunk. Meters `prompt_tokens`, `completion_tokens`,
+    /// `generations`, `answered` and the time to the first chunk as `ttft`.
+    /// Runs against llms; the generator's timeout covers the whole stream.
     LlmGenerate,
+    /// The same on the deep tier, the large model that runs from memory, so
+    /// both tiers are measured with one instrument and told apart by name.
+    LlmGenerateDeep,
 }
 
 /// What every operation of a run shares: the ledger subject pool and the seed.
@@ -247,7 +250,7 @@ impl OpKind {
             | Self::FinanceMoney
             | Self::FinanceTrialBalance
             | Self::FinanceImportOpening => "finance",
-            Self::LlmGenerate => "llm",
+            Self::LlmGenerate | Self::LlmGenerateDeep => "llm",
         }
     }
 
@@ -265,6 +268,7 @@ impl OpKind {
             Self::FinanceTrialBalance => Arc::new(FinanceTrialBalance::default()),
             Self::FinanceImportOpening => Arc::new(FinanceImportOpening::default()),
             Self::LlmGenerate => Arc::new(LlmGenerate::default()),
+            Self::LlmGenerateDeep => Arc::new(LlmGenerate::deep()),
             Self::LedgerAppend => Arc::new(super::ledger_ops::Append(Arc::clone(pool))),
             Self::LedgerCurrent => Arc::new(super::ledger_ops::Current(Arc::clone(pool))),
             Self::LedgerHistory => Arc::new(super::ledger_ops::History(Arc::clone(pool))),
@@ -881,12 +885,27 @@ const LLM_MAX_TOKENS: u32 = 48;
 #[derive(Default)]
 struct LlmGenerate {
     next: AtomicUsize,
+    /// The tier on the wire; 0 (unspecified) is the service's default.
+    tier: i32,
+}
+
+impl LlmGenerate {
+    fn deep() -> Self {
+        Self {
+            next: AtomicUsize::new(0),
+            tier: LlmTier::Deep as i32,
+        }
+    }
 }
 
 #[async_trait]
 impl Operation for LlmGenerate {
     fn name(&self) -> &'static str {
-        "llm_generate"
+        if self.tier == LlmTier::Deep as i32 {
+            "llm_generate_deep"
+        } else {
+            "llm_generate"
+        }
     }
 
     async fn run(&self, clients: &Clients, target: &Target) -> Result<(), OpError> {
@@ -898,6 +917,7 @@ impl Operation for LlmGenerate {
                 content: LLM_PROMPTS[i].into(),
             }],
             max_tokens: Some(LLM_MAX_TOKENS),
+            tier: self.tier,
             ..Default::default()
         });
         request

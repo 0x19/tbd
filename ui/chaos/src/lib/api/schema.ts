@@ -592,6 +592,7 @@ export const OpKind = z.enum([
   "finance_trial_balance",
   "finance_import_opening",
   "llm_generate",
+  "llm_generate_deep",
 ]);
 /** The kind of instance an operation targets (mirrors `OpKind::target_kind`): the prefix names it, protocol otherwise. */
 export const opTargetKind = (op: OpKind): string => {
