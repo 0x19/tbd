@@ -234,7 +234,7 @@ services:
       # The engines run on the host, dialled directly like a database.
       LLM_FAST_URL: http://host.docker.internal:11434
       LLM_FAST_MODEL: gpt-oss:20b
-      LLM_DEEP_URL: http://host.docker.internal:8080
+      LLM_DEEP_URL: http://host.docker.internal:8081
       LLM_DEEP_MODEL: gpt-oss-120b
     ports:
       - "9471:9464"

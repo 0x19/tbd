@@ -17,7 +17,7 @@ data:
   # directly like a database; the prod overlay sets its own.
   LLM_FAST_URL: http://host.k3d.internal:11434
   LLM_FAST_MODEL: gpt-oss:20b
-  LLM_DEEP_URL: http://host.k3d.internal:8080
+  LLM_DEEP_URL: http://host.k3d.internal:8081
   LLM_DEEP_MODEL: gpt-oss-120b
   CV_LISTEN_ADDR: 0.0.0.0:50056
   CV_METRICS_ADDR: 0.0.0.0:9464

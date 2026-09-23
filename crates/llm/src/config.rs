@@ -168,7 +168,7 @@ impl Default for Engines {
             },
             deep: EngineConfig {
                 kind: EngineKind::Llamacpp,
-                url: "http://127.0.0.1:8080".to_owned(),
+                url: "http://127.0.0.1:8081".to_owned(),
                 model: "gpt-oss-120b".to_owned(),
                 timeout_secs: 900,
                 embed_model: String::new(),
