@@ -19,7 +19,7 @@ export default function AboutPage() {
 
   const facts = [
     { k: "Where", v: `${company.city}, remote` },
-    { k: "Now", v: `${company.role} at ${company.employer.name}` },
+    { k: "Now", v: company.now },
     { k: "Before", v: previously.join(", ") },
     { k: "Languages", v: languages.join(", ") },
     { k: "Email", v: company.email },

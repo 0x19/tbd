@@ -17,12 +17,16 @@ export const company = {
   name: "InOrbit",
   legalName: "InOrbit d.o.o.",
   person: "Nevio Vesic",
-  /** The title as it is actually held, in Tenderly's own levelling. */
-  role: "L5 software engineer",
   /** The professional title, independent of any one employer. */
   title: "Senior software / protocol engineer",
-  /** Where the day job is; it is why the blockchain work is not theoretical. */
-  employer: { name: "Tenderly", href: "https://tenderly.co" },
+  /** What I am doing now, in one line: the about page's "Now". */
+  now: "Independent, through InOrbit",
+  /**
+   * The one sentence under the hero that says whether I can be hired, for what,
+   * and from when. Keep it true: it is the first thing a reader acts on.
+   */
+  availability:
+    "Available from October 2026 for contract or full-time work: protocol, infrastructure and distributed systems, in Rust and Go.",
   /** Short, for the browser tab and the footer. */
   tagline: "Backend and blockchain systems.",
   /** The hero. Long enough to say something only I could say. */
@@ -34,12 +38,12 @@ export const company = {
   github: "https://github.com/0x19",
   x: "https://x.com/vesicnevio",
   linkedin: "https://www.linkedin.com/in/neviovesic/",
-  /** TODO: the registered address, as it appears in the court register. */
-  address: "",
+  /** The registered seat, as it appears in the court register (read 2026-09-21). */
+  address: "Benčani 15A, Saršoni, 51216 Viškovo, Croatia",
   /** OIB, the Croatian tax number. */
   oib: "38846238650",
-  /** TODO: MBS (court register number) and the registering commercial court. */
-  registration: "",
+  /** MBS (court register number) and the registering commercial court. */
+  registration: "081116183, Commercial Court in Rijeka",
   /** Registered in June 2018 as the vehicle for the B2B work. */
   founded: 2018 as number | null,
 } as const;
@@ -75,28 +79,48 @@ export const stack = [
 ] as const;
 
 /**
- * The working record: companies, in the order they happened. Dates come from
- * the CV; where one is genuinely open (when Eiger ended and Tenderly began) it
- * says so in words rather than guessing a month.
+ * The working record: companies, in the order they happened, newest first. Dates
+ * come from the CV. `body` is the one paragraph the about page shows; `highlights`
+ * are the lines the CV page and the PDF add under it. Nothing here restates an
+ * employer's confidential figures: what a company publishes about itself is
+ * theirs to publish.
  */
 export const experience = [
   {
     company: "Tenderly",
-    role: "L5 software engineer",
-    when: "Now",
+    role: "Software engineer (L5)",
+    when: "2024 — 2026",
     where: "Remote",
     href: "https://tenderly.co",
-    body: "Developer infrastructure for Ethereum — simulation, debugging and the systems behind them, at production volume.",
+    body: "Developer infrastructure for Ethereum — simulation, debugging and the systems behind them, at production volume. Backend work in Go and Rust on the systems that carry it. The contract ended in September 2026.",
     tags: ["Go", "Rust", "EVM"],
+    highlights: [],
+  },
+  {
+    company: "(Un)Pack",
+    role: "Founder",
+    when: "2023 — 2024",
+    where: "Remote",
+    href: "https://github.com/unpackdev",
+    body: "My own product: a platform that pulls Ethereum contracts apart at scale — source, AST and IR, bytecode, control-flow graphs — with a discovery service over GraphQL that used language models to say what a contract does and whether it looks like a rug pull. Switched off when the Tenderly work began, because running it cost more than it earned. The libraries stay public.",
+    tags: ["Go", "Rust", "Python", "ClickHouse", "LLM"],
+    highlights: [
+      "Designed, built and ran it alone: crawler, storage, analysis, API and the bill.",
+      "solgo — the first Solidity AST and IR parser in Go, with control-flow graph construction; used by others since.",
+      "A crawler that peaked above 30k requests a second against the chain, feeding one to one and a half terabytes a day into Postgres and ClickHouse.",
+      "Token pricing from pool reserves directly, without Chainlink or a third-party API.",
+    ],
   },
   {
     company: "Eiger",
     role: "Senior software / protocol engineer",
-    when: "2022 — until Tenderly",
+    when: "2022 — 2024",
     where: "Remote",
     href: "https://www.eiger.co",
     body: "Protocol work across several chains, from research to deployment: a proprietary EVM-compatible optimistic rollup taken from inception to production, one of the first WASM ports of a Layer 2 node in Go, and a cross-chain liquidity bridge between Ethereum and Bitcoin built on multi-party computation and threshold ECDSA. Led teams of up to five, ran the research, and wrote the grant proposals that funded some of it.",
     tags: ["Go", "Rust", "WASM", "EVM", "P2P", "RLPx"],
+    // The body already says it all; the CV adds nothing under this one.
+    highlights: [],
   },
   {
     company: "InOrbit",
@@ -104,8 +128,9 @@ export const experience = [
     when: "2018 — present",
     where: "Croatia",
     href: null,
-    body: "The company the B2B work runs through; Eiger and Subspace were both engaged this way.",
+    body: "The company the B2B work runs through; Subspace, Eiger and Tenderly were all engaged this way.",
     tags: [],
+    highlights: [],
   },
   {
     company: "Subspace",
@@ -115,6 +140,12 @@ export const experience = [
     href: null,
     body: "A network built for traffic that cannot wait. I wrote the user-space services sitting between the kernel and the control plane, and some of the kernel side itself — IP filtering, packet rewriting, network-card caching, map management. Co-built the first version of the TURN anycast network, live in over 150 points of presence, and the first SIP anycast network on Kamailio and FreeSWITCH; also the Elixir control plane that provisioned tunnels and billed usage from a geo-aware distributed database.",
     tags: ["Go", "Elixir", "C", "eBPF", "Kubernetes", "Kafka"],
+    highlights: [
+      "One of the first three engineers. A Layer 1 to Layer 7 network built in six months for the MENA region, carrying over 60 Gbps from the start; it secured a contract above three million dollars a year and the next funding round.",
+      "Co-conceived and co-built the first global TURN anycast network, over 150 points of presence, and the SIP anycast network on Kamailio.",
+      "User-space services between the kernel and the control plane, and the kernel side itself in eBPF: IP filtering, packet rewriting, NIC caching, map management. A patent-pending contribution on the eBPF design.",
+      "The Elixir control plane that took customer API requests and turned them into IPv4 tunnels, with usage billing from a geo-aware distributed database.",
+    ],
   },
   {
     company: "Avaya",
@@ -124,6 +155,11 @@ export const experience = [
     href: null,
     body: "The TelAPI platform after its acquisition, as Zang Cloud and then Avaya CPaaS. Go microservices on the platform, then architecting the next generation of its front end and running the team that built it, including the security and compliance side — code scanning, HIPAA, GDPR, SOC.",
     tags: ["Go", "React", "Node.js", "Kubernetes", "GCP", "AWS"],
+    highlights: [
+      "Led the front-end services team: planning, unblocking, delivery.",
+      "Architected the next generation of the CPaaS front end (React, Node.js, Go, Kubernetes, GCP, AWS).",
+      "Owned the security side of it: code scanning and HIPAA, GDPR and SOC compliance work.",
+    ],
   },
   {
     company: "TelTech Systems · TelAPI",
@@ -133,6 +169,10 @@ export const experience = [
     href: null,
     body: "Telecom at the protocol level: voice servers on FreeSWITCH and Kamailio, an SMS stack over SMPP with its SMSC and SMSE sides, phone-number and carrier services, and the full rewrite of those services from Python to Go. Consumer products on the same plumbing, spoofcard.com and tapeacall.com among them.",
     tags: ["Go", "Python", "C", "FreeSWITCH", "Kamailio", "SMPP"],
+    highlights: [
+      "Voice servers on FreeSWITCH and Kamailio; an SMS stack over SMPP with its SMSC and SMSE sides; phone-number and carrier services.",
+      "The full rewrite of the services from Python to Go.",
+    ],
   },
   {
     company: "TelAPI Adriatica",
@@ -142,6 +182,7 @@ export const experience = [
     href: null,
     body: "The Croatian branch, and two engineers in it. Closed when Avaya acquired the parent.",
     tags: [],
+    highlights: [],
   },
   {
     company: "Earlier",
@@ -151,6 +192,7 @@ export const experience = [
     href: null,
     body: "TelTech Systems, CLKCLK, Adria24, Web Factory, In-tech, Design Strategist and Skin29 — where the twenty years start, and where I learned that somebody has to run the server too.",
     tags: [],
+    highlights: [],
   },
 ] as const;
 
@@ -243,32 +285,64 @@ export const about = [
  * Where the work happened before now. Companies only, newest first; the current
  * one is in `clients`.
  */
-export const previously = ["Eiger", "Subspace", "Avaya", "TelAPI"] as const;
+export const previously = ["Tenderly", "Eiger", "Subspace", "Avaya", "TelAPI"] as const;
+
+/**
+ * The years before the record above, compressed: the CV page lists them in one
+ * block. Web work in PHP and JavaScript, mostly in Croatia.
+ */
+export const earlier = [
+  {
+    when: "2011 — 2014",
+    company: "TelTech Systems",
+    role: "Web application developer — the CPaaS front end in Zend, its documentation and API explorer",
+  },
+  {
+    when: "2011",
+    company: "ClkClk",
+    role: "Web developer — the company's SaaS, then its internal administration from scratch",
+  },
+  {
+    when: "2010 — 2011",
+    company: "Adria24",
+    role: "Web developer — the internal booking system of a tourist agency, front and back",
+  },
+  {
+    when: "2009 — 2010",
+    company: "In-tech, WebFactory",
+    role: "Lead web developer — a book e-commerce platform; WordPress",
+  },
+  {
+    when: "2007 — 2008",
+    company: "Skin29, Design Strategist",
+    role: "Web developer — a CMS later used by several large Croatian companies",
+  },
+] as const;
+
+/** The CV page and the PDF it links: one source for both. */
+export const cv = {
+  pdf: "/cv/nevio-vesic.pdf",
+  education: "Secondary school, 2000 — 2003. Everything since, self-taught on the job.",
+} as const;
 
 /** Languages I can hold a conversation in. */
 export const languages = ["English", "Croatian", "Bosnian", "Serbian", "Slovenian"] as const;
 
 /**
  * Who I work with. Clients only — my own projects live in `projects` and the
- * bio. The figures are Tenderly's own published numbers, not mine to verify,
- * and they are attributed as such on the page.
+ * bio. Empty since September 2026, and the home page then shows no section at
+ * all: an out-of-date "now" is worse than none. A client's figures, when there
+ * is one again, are quoted as theirs and labelled as published by them.
  */
-export const clients = [
-  {
-    name: "Tenderly",
-    href: "https://tenderly.co",
-    role: "L5 software engineer",
-    tagline: "Model every onchain move.",
-    what: "Tenderly is the simulation layer for onchain operations: try a transaction against live production state before any capital moves, debug what a contract actually did rather than guessing, watch production and get told the moment it misbehaves, and run all of it on RPC infrastructure spanning more than a hundred networks.",
-    mine: "I work on the backend systems underneath that — the unglamorous half, in Go and Rust, where correctness at volume is the whole job.",
-    facts: [
-      { value: "4B+", label: "transactions simulated against live state" },
-      { value: "10M+", label: "transactions debugged" },
-      { value: "50%", label: "of the top-100 DeFi protocols by value" },
-      { value: "$50B+", label: "in onchain value on systems it serves" },
-    ],
-  },
-] as const;
+export const clients: readonly {
+  name: string;
+  href: string;
+  role: string;
+  tagline: string;
+  what: string;
+  mine: string;
+  facts: readonly { label: string; value: string; note?: string }[];
+}[] = [];
 
 /**
  * The column most of the work has happened in: a packet on the way in, a
@@ -406,6 +480,7 @@ export const nav = [
   { href: "/playgrounds/", label: "Playgrounds" },
   { href: "/projects/", label: "Projects" },
   { href: "/about/", label: "About" },
+  { href: "/cv/", label: "CV" },
   { href: "/contact/", label: "Contact" },
 ] as const;
 

@@ -36,6 +36,8 @@ ix = "ix"
 [default.extend-words]
 # Year-over-year, the finance overview's second chart.
 yoy = "yoy"
+# The Middle East and North Africa region, in the CV.
+MENA = "MENA"
 # Croatian, where an English page carries a Croatian word on purpose: "tema" (theme)
 # in the plural-rule comment, "paket" (package) in a mail fixture.
 tema = "tema"

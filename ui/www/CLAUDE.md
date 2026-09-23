@@ -28,7 +28,21 @@ practice log is `localStorage`, per browser, and its page says so.
 - **Content lives in `src/data/site.ts`.** A copy change edits that file. Do not
   inline facts into a page.
 - **A `TODO` field renders as `—`** (`orDash`). Never invent a registration
-  number, an address or a founding year to fill a gap.
+  number, an address or a founding year to fill a gap. The registered seat and the
+  MBS come from the court register (read 2026-09-21, the same source as `docs/nda/`).
+- **`company.availability` is the one sentence a reader acts on.** It sits under the
+  hero and at the top of `/cv/`; keep it true (from when, for what, in what form) or
+  remove it. `company.now` is the about page's "Now". There is no employer field:
+  the current position is the first `experience` entry, and a position that ended
+  says so in its `body` with the month.
+- **`/cv/` and the PDF are one record.** `experience[].highlights` are the lines the
+  CV shows under a role and the about page does not; `earlier` expands the about
+  page's compressed "Earlier" entry job by job, so `/cv/` leaves that entry out.
+  `mise run www:cv` writes `cv/cv.json` from `src/data/site.ts` (`tool/cv-data.ts`)
+  and Typst sets `cv/cv.typ` into `public/cv/nevio-vesic.pdf` with the invoice's
+  Inter; the PDF is committed, so a data change is not done until the PDF is
+  re-rendered and committed with it. Nothing in it restates an employer's
+  confidential figures.
 - **`projects` are real repositories** and `playgrounds` are things that are
   actually open (or honestly marked as being built, with `href: null`). Never
   seed either with something that does not exist.
@@ -41,7 +55,8 @@ practice log is `localStorage`, per browser, and its page says so.
   someone would act on. Project years are facts; counters are not.
 - `clients` is **clients only** — who I work with, never my own projects, which
   belong in `projects` and the bio. It is the section that needs a hand on it:
-  keep it true or take it down, because an out-of-date "now" is worse than none.
+  keep it true or take it down, because an out-of-date "now" is worse than none;
+  an empty list hides the section and the numbering follows.
   A client's figures are quoted as theirs and labelled as published by them; do
   not restate someone else's marketing as a verified fact.
 - The mark lives twice on purpose: inline in `src/components/logo.tsx` for the

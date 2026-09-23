@@ -29,8 +29,13 @@ export default function HomePage() {
 
           <p className="text-muted-foreground mt-8 max-w-2xl text-lg text-pretty">{company.summary}</p>
 
+          <p className="mt-6 max-w-2xl border-l-2 pl-4 text-pretty">{company.availability}</p>
+
           <div className="mt-9 flex flex-wrap gap-2">
             <Button size="lg" asChild>
+              <Link href="/cv/">Read the CV</Link>
+            </Button>
+            <Button size="lg" variant="outline" asChild>
               <Link href="/playgrounds/">See the playgrounds</Link>
             </Button>
             <Button size="lg" variant="outline" asChild>
@@ -103,63 +108,65 @@ export default function HomePage() {
       </Frame>
 
       {/* --------------------------------------------------------- clients */}
-      <Frame className="py-10 sm:py-14">
-        <SectionHead n="03" label="Working with" />
-        {clients.map((c) => (
-          <Reveal key={c.name} className="mt-10">
-            <article className="border-y">
-              <div className="grid gap-8 p-8 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)] sm:gap-16 sm:p-10">
-                <div>
-                  <a
-                    href={c.href}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="group inline-flex items-baseline gap-2 text-3xl font-semibold tracking-[-0.03em] sm:text-4xl"
-                  >
-                    {c.name}
-                    <span className="text-muted-foreground text-sm transition-transform group-hover:translate-x-1">
-                      ↗
-                    </span>
-                  </a>
-                  <p className="text-muted-foreground mt-3 font-mono text-[11px] tracking-[0.18em] uppercase">
-                    {c.role}
-                  </p>
-                  <p className="mt-6 text-lg font-medium tracking-tight text-balance">
-                    &ldquo;{c.tagline}&rdquo;
-                  </p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground text-pretty">{c.what}</p>
-                  <p className="mt-4 text-pretty">{c.mine}</p>
-                </div>
-              </div>
-              <dl className="bg-border/70 grid gap-px border-t sm:grid-cols-4">
-                {c.facts.map((f) => (
-                  <div key={f.label} className="bg-background px-6 py-5">
-                    <dt className="sr-only">{f.label}</dt>
-                    <dd>
-                      <span className="block text-2xl font-semibold tracking-[-0.02em] tabular-nums">
-                        {f.value}
+      {clients.length > 0 && (
+        <Frame className="py-10 sm:py-14">
+          <SectionHead n="03" label="Working with" />
+          {clients.map((c) => (
+            <Reveal key={c.name} className="mt-10">
+              <article className="border-y">
+                <div className="grid gap-8 p-8 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)] sm:gap-16 sm:p-10">
+                  <div>
+                    <a
+                      href={c.href}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="group inline-flex items-baseline gap-2 text-3xl font-semibold tracking-[-0.03em] sm:text-4xl"
+                    >
+                      {c.name}
+                      <span className="text-muted-foreground text-sm transition-transform group-hover:translate-x-1">
+                        ↗
                       </span>
-                      <span className="text-muted-foreground mt-1.5 block text-xs text-pretty">
-                        {f.label}
-                      </span>
-                    </dd>
+                    </a>
+                    <p className="text-muted-foreground mt-3 font-mono text-[11px] tracking-[0.18em] uppercase">
+                      {c.role}
+                    </p>
+                    <p className="mt-6 text-lg font-medium tracking-tight text-balance">
+                      &ldquo;{c.tagline}&rdquo;
+                    </p>
                   </div>
-                ))}
-              </dl>
-            </article>
-            <p className="text-muted-foreground/70 mt-4 font-mono text-[11px] tracking-[0.14em] uppercase">
-              Figures published by {c.name}
-            </p>
-          </Reveal>
-        ))}
-      </Frame>
+                  <div>
+                    <p className="text-muted-foreground text-pretty">{c.what}</p>
+                    <p className="mt-4 text-pretty">{c.mine}</p>
+                  </div>
+                </div>
+                <dl className="bg-border/70 grid gap-px border-t sm:grid-cols-4">
+                  {c.facts.map((f) => (
+                    <div key={f.label} className="bg-background px-6 py-5">
+                      <dt className="sr-only">{f.label}</dt>
+                      <dd>
+                        <span className="block text-2xl font-semibold tracking-[-0.02em] tabular-nums">
+                          {f.value}
+                        </span>
+                        <span className="text-muted-foreground mt-1.5 block text-xs text-pretty">
+                          {f.label}
+                        </span>
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </article>
+              <p className="text-muted-foreground/70 mt-4 font-mono text-[11px] tracking-[0.14em] uppercase">
+                Figures published by {c.name}
+              </p>
+            </Reveal>
+          ))}
+        </Frame>
+      )}
 
       {/* ---------------------------------------------------------- method */}
       <Frame className="py-10 sm:py-14">
         <SectionHead
-          n="04"
+          n={clients.length > 0 ? "04" : "03"}
           label="How I like to build"
           title="Layer 1 to Layer 7, and the rails that cross them."
           lead="Most of the work has been somewhere in this column — a packet on the way in, a chain on the way through, a query on the way out. The rails are the part people skip, and the part that decides whether a bad night is an incident or a shrug."

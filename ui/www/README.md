@@ -99,6 +99,7 @@ redirects to it); unset, the image's default `https://inorbit.hr` applies.
 | `/playgrounds/`               | The prototypes. Empty until the first is up                                               |
 | `/projects/`                  | Every public repository, with the year it was written                                     |
 | `/about/`                     | The longer version: how I got here, where the time goes, where else I am                  |
+| `/cv/`                        | The record, role by role, and the PDF (`public/cv/`, `mise run www:cv`)                   |
 | `/contact/`                   | The address, and nothing resembling a form                                                |
 | `/legal/`                     | Company details (imprint, OIB) and the privacy notice                                     |
 | `/terms/`                     | Terms of use for the site and the playgrounds                                             |

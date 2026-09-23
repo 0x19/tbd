@@ -27,6 +27,7 @@ ANSIBLE_INVENTORY = "inventory/dev.yml"
 "cargo:bacon" = "latest"
 buf = "latest"
 typos = "latest"
+"ubi:typst/typst" = "0.15.1"
 kubectl = "latest"
 kustomize = "latest"
 k3d = "latest"
@@ -625,6 +626,17 @@ description = "Next.js dev server for the company site on :3003"
 depends = ["ui:www:install"]
 dir = "ui/www"
 run = "pnpm dev"
+
+# The CV as a PDF, from the same facts as the site: tool/cv-data.ts writes cv/cv.json
+# out of src/data/site.ts and Typst sets it with the same Inter the invoices use.
+# The PDF is committed (public/cv/), so the image build needs no Typst.
+[tasks."www:cv"]
+description = "Render the CV PDF (ui/www/public/cv/) from ui/www/src/data/site.ts"
+dir = "ui/www"
+run = """
+node --no-warnings tool/cv-data.ts
+typst compile --font-path ../../crates/finance/assets/fonts --ignore-system-fonts cv/cv.typ public/cv/nevio-vesic.pdf
+"""
 
 [tasks."ui:www:check"]
 description = "ui/www: prettier, eslint, tsc (same bar as ui/chaos)"
