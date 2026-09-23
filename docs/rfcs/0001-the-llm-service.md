@@ -134,3 +134,9 @@ the demo goes live, its page names what it sends and where, before it sends anyt
 - 2026-09-23: opened, and decided the same day: the split, the two tiers, the candidate
   models, the record and the budget. The service exists (`crates/llm`) with three engines
   and the conformance suite; the studies come next.
+- 2026-09-24: both tiers live on the workstation. The card's driver had been missing for
+  the running kernel, so the fast tier first answered from the processor at a crawl;
+  with the card back it generates at about 126 tokens a second. The deep tier, the
+  117B model with its experts in memory and attention on the card, generates at about
+  19 tokens a second, above the ten this document predicted. Both models fill the
+  card to within a gigabyte when loaded together; the first study measures the split.

@@ -92,11 +92,12 @@ and follows every convention in the root `CLAUDE.md`: config in `configs/`, a sp
 | Network | 1 Gbit uplink; a 7 GB model file takes about a minute to pull |
 | Runtimes | Ollama 0.24.0 as a service with `qwen3-vl:8b` pulled; Python 3.13 without torch or uv; Rust 1.98; Node 24 |
 
-**The GPU is dark.** The kernel was upgraded to 6.14.0-37 in May 2026 but the prebuilt
-NVIDIA module package stayed at 6.14.0-24, so `nvidia-smi` cannot talk to the driver and
-Ollama runs on the CPU. The matching package exists in the apt repository; installing
-`linux-modules-nvidia-575-open-6.14.0-37-generic` and loading the module (or rebooting)
-brings the card back. Phase 1 starts there.
+**The GPU was dark until 2026-09-24.** The kernel had been upgraded to 6.14.0-37 in May
+2026 and no prebuilt NVIDIA module followed for the 575 series, so Ollama ran on the
+CPU. The fix that worked, with no reboot: the 580 open driver from NVIDIA's own
+repository through DKMS, which builds the module for whatever kernel runs. A native
+llama.cpp build fails on this Ubuntu (CUDA 12.9 headers against glibc 2.41); the
+project's CUDA container serves the deep tier instead.
 
 **What 16 GB means.** Weights at 4-bit quantisation take roughly half a gigabyte per
 billion parameters, so models up to about 14B fit on the card with room for the KV cache;
