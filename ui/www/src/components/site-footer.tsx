@@ -1,21 +1,29 @@
+"use client";
+
 import Link from "next/link";
 
 import { Eyebrow, Frame } from "@/components/kit";
 import { Logo } from "@/components/logo";
 import { company, nav } from "@/data/site";
+import { useT } from "@/lib/i18n";
+import { useSite } from "@/lib/i18n/site";
 
 export function SiteFooter() {
+  const t = useT();
+  const site = useSite();
   const columns = [
     {
-      title: "Pages",
+      title: t("common.pages"),
       links: [
-        ...nav.filter((i) => i.href !== "/").map((i) => ({ label: i.label, href: i.href, out: false })),
-        { label: "Legal", href: "/legal/", out: false },
-        { label: "Terms", href: "/terms/", out: false },
+        ...nav
+          .filter((i) => i.href !== "/")
+          .map((i) => ({ label: t(`common.${i.key}`), href: i.href, out: false })),
+        { label: t("common.legal"), href: "/legal/", out: false },
+        { label: t("common.terms"), href: "/terms/", out: false },
       ],
     },
     {
-      title: "Elsewhere",
+      title: t("common.elsewhere"),
       links: [
         { label: "GitHub", href: company.github, out: true },
         { label: "X", href: company.x, out: true },
@@ -30,7 +38,7 @@ export function SiteFooter() {
         <div className="grid gap-10 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:gap-16">
           <div>
             <Logo size={26} />
-            <p className="text-muted-foreground mt-4 max-w-xs text-sm text-pretty">{company.tagline}</p>
+            <p className="text-muted-foreground mt-4 max-w-xs text-sm text-pretty">{site.company.tagline}</p>
             <a
               href={`mailto:${company.email}`}
               className="mt-4 inline-block text-sm font-medium underline-offset-4 hover:underline"

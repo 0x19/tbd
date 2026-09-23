@@ -5,15 +5,18 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { Frame } from "@/components/kit";
+import { LangToggle } from "@/components/lang-toggle";
 import { Logo } from "@/components/logo";
 import { ThemeSwitch } from "@/components/theme-switch";
 import { Button } from "@/components/ui/button";
 import { company, cv, nav } from "@/data/site";
+import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 /** Transparent over the hero, and a hairline under it once the page moves. */
 export function SiteHeader() {
   const pathname = usePathname();
+  const t = useT();
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
@@ -57,7 +60,7 @@ export function SiteHeader() {
                     )}
                     aria-current={active ? "page" : undefined}
                   >
-                    {item.label}
+                    {t(`common.${item.key}`)}
                   </Link>
                 </Button>
               );
@@ -70,13 +73,14 @@ export function SiteHeader() {
               href={cv.fullUrl}
               className="text-muted-foreground font-mono text-[10px] tracking-[0.12em] uppercase sm:text-[11px] sm:tracking-[0.14em]"
             >
-              Full CV ↗
+              {t("common.full_cv")} ↗
             </a>
           </Button>
         </nav>
         <span className="bg-border mx-1 hidden h-4 w-px shrink-0 sm:block" />
-        {/* Outside the scrolling nav, so it is reachable on a phone without scrolling. */}
-        <div className="shrink-0">
+        {/* Outside the scrolling nav, so they are reachable on a phone without scrolling. */}
+        <div className="flex shrink-0 items-center gap-1">
+          <LangToggle />
           <ThemeSwitch />
         </div>
       </Frame>

@@ -34,6 +34,18 @@ until they are filled in, so an empty field never reads as a real one.
 come from the CV, and where a date is genuinely open the `when` string says so
 in words rather than guessing a month.
 
+## Two languages
+
+The site reads in English or Croatian. What a page says is in
+`src/lib/i18n/messages/` (a file per page, `en` and `hr`), and the facts have a
+Croatian twin in `src/data/site.hr.ts` keyed by company, project, playground or
+stage, so an entry without a translation reads in English until it gets one.
+The first language is decided in the browser: a choice made with the EN/HR
+toggle in the header, kept in that browser; otherwise the country the request
+came from, which `/whereami` answers from Cloudflare's header (Croatia, Bosnia,
+Serbia and Montenegro read Croatian); otherwise the browser's language; otherwise
+English. Nothing about the country or the browser is stored.
+
 ## The mark
 
 The monogram: the tittle of the _i_ is the body, the _O_ is the orbit. One

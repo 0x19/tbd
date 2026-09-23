@@ -25,8 +25,8 @@ neck and the chord box). Each page's paragraph says nothing leaves the browser -
 true; a page that uploaded audio would break the `/legal/` promise. The metronome's
 practice log is `localStorage`, per browser, and its page says so.
 
-- **Content lives in `src/data/site.ts`.** A copy change edits that file. Do not
-  inline facts into a page.
+- **Content lives in `src/data/site.ts`.** A copy change edits that file, and its
+  Croatian twin in `src/data/site.hr.ts`. Do not inline facts into a page.
 - **A `TODO` field renders as `—`** (`orDash`). Never invent a registration
   number, an address or a founding year to fill a gap. The registered seat and the
   MBS come from the court register (read 2026-09-21, the same source as `docs/nda/`).
@@ -35,11 +35,28 @@ practice log is `localStorage`, per browser, and its page says so.
   remove it. `company.now` is the about page's "Now". There is no employer field:
   the current position is the first `experience` entry, and a position that ended
   says so in its `body` with the month.
+- **Two languages, English and Croatian, from `src/lib/i18n`.** The words a page
+  says are dictionaries in `src/lib/i18n/messages/` (one file per page or shared piece,
+  `en` and `hr` maps keyed `<namespace>.<slug>`, read with `useT()`); the facts stay in
+  `src/data/site.ts` and their Croatian in `src/data/site.hr.ts`, keyed by what
+  identifies an entry (a company, a project name, a playground path, a stage), merged
+  by `useSite()`. A Croatian gap reads in English, never as a key on the page and never
+  silently as a wrong fact. The first language is decided on the client, in this order:
+  a choice made with the header's EN/HR toggle (the only thing stored, `inorbit.lang`
+  in `localStorage`); the country Cloudflare saw the request from, which the site's
+  own `/whereami` answers with (`devops/docker/www.Caddyfile` echoes `CF-IPCountry`;
+  Croatia, Bosnia, Serbia and Montenegro read Croatian); the browser's language
+  (`hr`, `bs`, `sr`); English. The static export is English, so a page is
+  `app/<x>/page.tsx` for the metadata and `src/components/pages/<x>.tsx` for the words:
+  a new page or a new visible string goes into a dictionary in both languages, and
+  a new fact into both data files. The playground pages and their tools are still
+  English-only; that is the next pass, not a rule.
 - **The notice bar is temporary and truthful.** `src/components/site-notice.tsx` draws
-  `notice` from the data file above the header until it is dismissed; the dismissal
-  is one `localStorage` key carrying `notice.version` (functional storage, no consent
-  needed), and the bar says so in one sentence. The site sets no cookies, so there is
-  no cookie consent dialog and none should be added: a dialog that says "we use
+  `notice.version` from the data file and the words from `common.notice.*` above the
+  header until it is dismissed; the dismissal is one `localStorage` key carrying
+  `notice.version` (functional storage, no consent needed), and the bar says so in one
+  sentence, naming the language choice as the other key. The site sets no cookies, so
+  there is no cookie consent dialog and none should be added: a dialog that says "we use
   cookies" would be false and `/legal/` says the opposite. Empty `notice.text`
   removes the bar; a new `version` shows it again to everyone.
 - **`/about/` is the person and the record, and the PDF is the same record.** The page

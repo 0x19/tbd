@@ -492,12 +492,13 @@ export const playgrounds: {
   },
 ];
 
+/** The pages in the header and footer; `key` names the label in `common.<key>`. */
 export const nav = [
-  { href: "/", label: "Home" },
-  { href: "/playgrounds/", label: "Playgrounds" },
-  { href: "/projects/", label: "Projects" },
-  { href: "/about/", label: "About" },
-  { href: "/contact/", label: "Contact" },
+  { href: "/", label: "Home", key: "home" },
+  { href: "/playgrounds/", label: "Playgrounds", key: "playgrounds" },
+  { href: "/projects/", label: "Projects", key: "projects" },
+  { href: "/about/", label: "About", key: "about" },
+  { href: "/contact/", label: "Contact", key: "contact" },
 ] as const;
 
 export const site = {

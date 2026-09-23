@@ -1,4 +1,6 @@
-import { pipeline, rails } from "@/data/site";
+"use client";
+
+import { useSite } from "@/lib/i18n/site";
 
 /**
  * The request path as a row of stages with the two rails that run under all of
@@ -6,6 +8,7 @@ import { pipeline, rails } from "@/data/site";
  * has to read the same in both themes and at phone width.
  */
 export function Pipeline() {
+  const { pipeline, rails } = useSite();
   return (
     <div className="border-y">
       <div className="bg-border/70 grid gap-px sm:grid-cols-4">
