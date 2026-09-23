@@ -35,6 +35,13 @@ practice log is `localStorage`, per browser, and its page says so.
   remove it. `company.now` is the about page's "Now". There is no employer field:
   the current position is the first `experience` entry, and a position that ended
   says so in its `body` with the month.
+- **The notice bar is temporary and truthful.** `src/components/site-notice.tsx` draws
+  `notice` from the data file above the header until it is dismissed; the dismissal
+  is one `localStorage` key carrying `notice.version` (functional storage, no consent
+  needed), and the bar says so in one sentence. The site sets no cookies, so there is
+  no cookie consent dialog and none should be added: a dialog that says "we use
+  cookies" would be false and `/legal/` says the opposite. Empty `notice.text`
+  removes the bar; a new `version` shows it again to everyone.
 - **`/cv/` and the PDF are one record.** `experience[].highlights` are the lines the
   CV shows under a role and the about page does not; `earlier` expands the about
   page's compressed "Earlier" entry job by job, so `/cv/` leaves that entry out.

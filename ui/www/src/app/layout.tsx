@@ -6,6 +6,7 @@ import { Geist_Mono, Inter } from "next/font/google";
 
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
+import { SiteNotice } from "@/components/site-notice";
 import { StructuredData } from "@/components/structured-data";
 import { company, indexable, site, url } from "@/data/site";
 import { cn } from "@/lib/utils";
@@ -40,6 +41,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <StructuredData />
         <Providers>
           <div className="flex min-h-dvh flex-col">
+            <SiteNotice />
             <SiteHeader />
             <main className="flex-1">{children}</main>
             <SiteFooter />

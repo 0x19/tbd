@@ -319,6 +319,17 @@ export const earlier = [
   },
 ] as const;
 
+/**
+ * The bar above the header while the site is being rebuilt, and the one honest
+ * sentence about storage beside it. `version` is what a dismissal remembers:
+ * change it and everyone sees the notice once more; empty `text` removes the bar.
+ */
+export const notice = {
+  version: "2026-09",
+  text: "This site is being rebuilt and some pages are out of date. For current details, write to nevio@inorbit.hr. This notice goes away when the rebuild is done.",
+  privacy: "No cookies, no analytics: the only thing kept in your browser is that you closed this notice.",
+} as const;
+
 /** The CV page and the PDF it links: one source for both. */
 export const cv = {
   pdf: "/cv/nevio-vesic.pdf",
