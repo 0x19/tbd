@@ -19,6 +19,11 @@ Job that seeds the OAuth2 clients. Read `docs/auth/README.md` first.
 - `seed-clients.yaml` is a Job: `auth:deploy` deletes the finished one first because a
   completed Job's spec is immutable. Client ids are fixed (`tbd-ui`, `tbd-chaos`,
   `tbd-app`); secrets come from `auth-secrets`. Add a client there, not by hand.
+  `tbd-ui` gets one callback per browser host name: under `BASE_DOMAIN` and, when
+  `SITE_DOMAIN` in `auth.env` names the company site's own domain (`local:edge-env`
+  copies it from `devops/edge/.env`), under that domain too; a host name not registered
+  fails at Hydra with `invalid redirect_uri`. `auth.env` is a generated ConfigMap, so a
+  change to it rolls Hydra, Kratos and the login UI.
 - Postgres is a single StatefulSet with a 20Gi PVC; both databases are created by the
   init SQL on first start only. Deleting the PVC deletes every identity.
 - The Envoy short names `hydra`, `kratos`, `auth-ui` are ExternalName Services in

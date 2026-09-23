@@ -15,6 +15,12 @@ example.hr {
 api.example.hr {
 	import api
 }
+# Optional: the browser hosts on the site's domain. Each needs its login callback
+# registered, which `seed-clients.sh` does from SITE_DOMAIN (`mise run auth:deploy`,
+# or re-run the seed-clients Job); the sign-in itself stays on auth.<base>.
+finance.example.hr {
+	import gated
+}
 ```
 
 The domain the site is canonical on goes into `.env` as `SITE_DOMAIN=<domain>`: the base

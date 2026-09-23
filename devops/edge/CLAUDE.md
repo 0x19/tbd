@@ -36,7 +36,9 @@ Public TLS edge for a cluster behind a home or office router. Read `README.md` f
 - `sites.d/*.caddy` (git-ignored, one file per domain) serves the company site under
   a domain of its own: each file is `www.<domain>` redirecting to `<domain>`, which
   `import site`s, and may add `api.<domain>` importing `api`, the API host's snippet
-  (Envoy's API virtual host matches any name). A glob that matches nothing is not an
+  (Envoy's API virtual host matches any name), and the browser hosts importing `gated`
+  (their login callbacks come from `SITE_DOMAIN` through `seed-clients.sh`; the sign-in
+  and the issuer stay on `auth.<base>`). A glob that matches nothing is not an
   error, so the file is simply absent where the site has one domain. Behind Cloudflare's proxy the zone must be in
   *Full (strict)* SSL mode: in *Flexible* mode Cloudflare fetches the origin over
   plain HTTP, Caddy answers with its redirect to HTTPS, and the browser sees a loop.

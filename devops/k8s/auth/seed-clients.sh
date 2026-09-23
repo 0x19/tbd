@@ -1,7 +1,9 @@
 #!/bin/sh
 # Registers the OAuth2 clients this repo relies on (create or update). Runs as the
 # seed-clients Job in Kubernetes and as the seed-clients service in compose.
-# Env: HYDRA_ADMIN, AUTH_PUBLIC_URL, BASE_DOMAIN, CLIENT_UI_SECRET, CLIENT_CHAOS_SECRET.
+# Env: HYDRA_ADMIN, AUTH_PUBLIC_URL, BASE_DOMAIN, SITE_DOMAIN (optional: the company
+# site's own domain, whose browser hosts get login callbacks as well), CLIENT_UI_SECRET,
+# CLIENT_CHAOS_SECRET.
 set -e
 until curl -fsS "$HYDRA_ADMIN/health/ready" >/dev/null; do echo "waiting for hydra"; sleep 2; done
 upsert() { # $1 client id, $2 json body
@@ -12,6 +14,15 @@ upsert() { # $1 client id, $2 json body
   case "$code" in 200|201) echo "client $1: ok ($code)";; *) echo "client $1: HTTP $code"; cat /tmp/out; exit 1;; esac
 }
 d="$BASE_DOMAIN"
+# The same browser hosts under the site's own domain (devops/edge/sites.d/), when the
+# site has one: Envoy's redirect_uri is built from the request's authority, so each
+# host name a person can sign in on must be registered. The issuer stays auth.<base>.
+site_uris=""
+if [ -n "$SITE_DOMAIN" ] && [ "$SITE_DOMAIN" != "$d" ]; then
+  for h in grafana logs profiles metrics chaosadmin finance; do
+    site_uris="$site_uris \"https://$h.$SITE_DOMAIN/oauth2/callback\","
+  done
+fi
 # Browser sessions on the UI hosts: Envoy's oauth2 filter is the client.
 upsert tbd-ui "{
   \"client_id\": \"tbd-ui\", \"client_name\": \"tbd web UIs\",
@@ -21,7 +32,7 @@ upsert tbd-ui "{
   \"scope\": \"openid offline_access email profile\",
   \"audience\": [\"tbd-ui\"],
   \"token_endpoint_auth_method\": \"client_secret_post\",
-  \"redirect_uris\": [
+  \"redirect_uris\": [$site_uris
     \"https://grafana.$d/oauth2/callback\", \"https://logs.$d/oauth2/callback\",
     \"https://profiles.$d/oauth2/callback\", \"https://metrics.$d/oauth2/callback\",
     \"https://chaosadmin.$d/oauth2/callback\", \"https://finance.$d/oauth2/callback\",

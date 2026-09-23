@@ -450,14 +450,17 @@ k3d image import -m direct -c "$K3D_CLUSTER" $IMAGE_REGISTRY/tbd-engine:dev $IMA
 hide = true
 run = """
 domain="${BASE_DOMAIN:-$(grep -s '^BASE_DOMAIN=' devops/edge/.env | cut -d= -f2- | tr -d '"')}"
+# The company site's own domain, when it has one (devops/edge/.env SITE_DOMAIN): the
+# browser hosts under it need their login callbacks registered (seed-clients.sh).
+site="${SITE_DOMAIN:-$(grep -s '^SITE_DOMAIN=' devops/edge/.env | cut -d= -f2- | tr -d '"')}"
 auth_url="${domain:+https://auth.$domain}"; auth_url="${auth_url:-http://auth.localhost:18080}"
 printf 'CHAOS_PUBLIC_DOMAIN=%s\nAUTH_PUBLIC_URL=%s\n' "$domain" "$auth_url" > devops/k8s/overlays/local/edge.env
 echo "chaos UI links: ${domain:-localhost (no devops/edge/.env and BASE_DOMAIN unset)}"
 # The identity stack's public URL: the edge when there is one, else the local host name.
 if [ -n "$domain" ]; then
-  printf 'AUTH_PUBLIC_URL=https://auth.%s\nBASE_DOMAIN=%s\nAUTH_INSECURE_COOKIES=false\n' "$domain" "$domain" > devops/k8s/auth/auth.env
+  printf 'AUTH_PUBLIC_URL=https://auth.%s\nBASE_DOMAIN=%s\nSITE_DOMAIN=%s\nAUTH_INSECURE_COOKIES=false\n' "$domain" "$domain" "$site" > devops/k8s/auth/auth.env
 else
-  printf 'AUTH_PUBLIC_URL=http://auth.localhost:18080\nBASE_DOMAIN=localhost\nAUTH_INSECURE_COOKIES=true\n' > devops/k8s/auth/auth.env
+  printf 'AUTH_PUBLIC_URL=http://auth.localhost:18080\nBASE_DOMAIN=localhost\nSITE_DOMAIN=\nAUTH_INSECURE_COOKIES=true\n' > devops/k8s/auth/auth.env
 fi
 echo "auth: $(head -1 devops/k8s/auth/auth.env | cut -d= -f2)"
 """
