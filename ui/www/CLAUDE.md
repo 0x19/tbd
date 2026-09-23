@@ -118,6 +118,17 @@ practice log is `localStorage`, per browser, and its page says so.
   Site-only motion and texture live in `src/app/site.css` so that file stays
   identical to the other projects', and everything in it degrades to nothing
   under `prefers-reduced-motion`.
+- **The home page is the front door**, `src/components/pages/home.tsx`: every section
+  shows something no other page shows and links out instead of restating it. Who and
+  the availability line, three facts about now (no ticker of tags: a keyword wall is
+  the thing the site is not), four playground tiles, the pipeline drawing with the
+  principles as one line each, the lab once `lab.public` is true, the email. The
+  summary paragraph, the project rows and the contact hero belong to `/about/`,
+  `/projects/` and `/contact/`; putting them back here is the repetition that was
+  removed. Behind the hero: the grid, and `src/components/hero-mesh.tsx`, a
+  hand-drawn chain of blocks and a mesh of points of presence in `currentColor` at a
+  whisper of opacity, roughened by an SVG turbulence filter; decoration only,
+  `aria-hidden`, and its one slow drift stops under `prefers-reduced-motion`.
 - The pipeline on the home page (`src/components/pipeline.tsx`, data in
   `pipeline` and `rails`) is a drawing of a real system, not an illustration:
   every stage and every value is something the platform actually does. It is CSS

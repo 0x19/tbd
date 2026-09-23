@@ -50,36 +50,6 @@ export const company = {
   founded: 2018 as number | null,
 } as const;
 
-/** The ticker under the hero: what the work is actually made of. */
-export const stack = [
-  "Go",
-  "Rust",
-  "Elixir",
-  "C",
-  "eBPF",
-  "WASM",
-  "Solidity",
-  "EVM",
-  "RLPx",
-  "libp2p",
-  "WebRTC",
-  "SIP",
-  "gRPC",
-  "JSON-RPC",
-  "Postgres",
-  "ClickHouse",
-  "MDBX",
-  "DuckDB",
-  "Spanner",
-  "CockroachDB",
-  "Cassandra",
-  "Mongo",
-  "Kafka",
-  "Kubernetes",
-  "Envoy",
-  "OpenTelemetry",
-] as const;
-
 /**
  * The working record: companies, in the order they happened, newest first. Dates
  * come from the CV. `body` is the one paragraph the about page shows; `highlights`
@@ -545,7 +515,7 @@ export const playgrounds: {
  * `gated` nav item renders only for a signed-in admin (`src/lib/me.ts`), the lab
  * pages ask not to be indexed, and the sitemap leaves them out.
  */
-export const lab = { public: false } as const;
+export const lab = { public: false, href: "/lab/" } as const;
 
 type NavItem = {
   readonly href: string;

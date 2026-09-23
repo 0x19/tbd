@@ -48,3 +48,20 @@
     transition: none;
   }
 }
+
+/* The dashed long-haul links in the hero drawing crawl, very slowly. */
+@keyframes mesh-drift {
+  to {
+    stroke-dashoffset: -120;
+  }
+}
+
+.mesh-link {
+  animation: mesh-drift 48s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mesh-link {
+    animation: none;
+  }
+}

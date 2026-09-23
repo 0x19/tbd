@@ -2,36 +2,50 @@
 
 import Link from "next/link";
 
-import { Eyebrow, Frame, IndexRow, Marquee, Reveal, SectionHead } from "@/components/kit";
+import { HeroMesh } from "@/components/hero-mesh";
+import { Eyebrow, Frame, Reveal, SectionHead, Tag } from "@/components/kit";
 import { Pipeline } from "@/components/pipeline";
 import { Button } from "@/components/ui/button";
-import { clients, company as facts, stack } from "@/data/site";
+import { clients, company as facts, lab } from "@/data/site";
 import { useT } from "@/lib/i18n";
 import { useSite } from "@/lib/i18n/site";
 
-/** The home page in the reader's language; `app/page.tsx` carries the metadata. */
+/**
+ * The front door: every section shows something no other page shows and
+ * links out instead of restating it. Who and whether I can be hired, three
+ * facts about now, the playgrounds to click, the one drawing of how I build,
+ * the lab once it is public, and the email. The story is `/about/`, the
+ * libraries `/projects/`. `app/page.tsx` carries the metadata.
+ */
 export function HomeContent() {
   const t = useT();
-  const { company, playgrounds, principles, projects } = useSite();
+  const { company, playgrounds, principles } = useSite();
+  const open = playgrounds.filter((p) => p.href);
+
+  const now = [
+    { k: t("home.now.now"), v: company.now },
+    { k: t("home.now.building"), v: t("home.now.building_v") },
+    { k: t("home.now.based"), v: `${facts.city}, ${t("home.now.hours")}` },
+  ];
+
   return (
     <>
       {/* ---------------------------------------------------------- hero */}
       <section className="relative overflow-hidden">
         <Grid />
+        <HeroMesh />
         <Frame className="relative pt-20 pb-14 sm:pt-32 sm:pb-20">
           <Eyebrow className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <span className="text-foreground">{facts.person}</span>
             <span className="bg-border h-px w-6" />
-            <span>{facts.city}</span>
+            <span>{company.title}</span>
           </Eyebrow>
 
           <h1 className="mt-8 max-w-4xl text-[2.75rem] leading-[1.02] font-semibold tracking-[-0.035em] text-balance sm:text-6xl">
             {company.headline}
           </h1>
 
-          <p className="text-muted-foreground mt-8 max-w-2xl text-lg text-pretty">{company.summary}</p>
-
-          <p className="mt-6 max-w-2xl border-l-2 pl-4 text-pretty">{company.availability}</p>
+          <p className="mt-8 max-w-2xl border-l-2 pl-4 text-lg text-pretty">{company.availability}</p>
 
           <div className="mt-9 flex flex-wrap gap-2">
             <Button size="lg" asChild>
@@ -40,72 +54,81 @@ export function HomeContent() {
             <Button size="lg" variant="outline" asChild>
               <Link href="/playgrounds/">{t("home.see_playgrounds")}</Link>
             </Button>
-            <Button size="lg" variant="outline" asChild>
-              <Link href="/projects/">{t("home.what_built")}</Link>
-            </Button>
           </div>
         </Frame>
 
+        {/* Three facts about now, where the ticker of tags used to run. */}
         <div className="border-y">
           <Frame>
-            <Marquee items={stack} />
+            <dl className="grid divide-y sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+              {now.map((f) => (
+                <div key={f.k} className="py-4 sm:px-6 sm:first:pl-0 sm:last:pr-0">
+                  <dt className="text-muted-foreground/70 font-mono text-[11px] tracking-[0.18em] uppercase">
+                    {f.k}
+                  </dt>
+                  <dd className="mt-1 text-sm text-pretty">{f.v}</dd>
+                </div>
+              ))}
+            </dl>
           </Frame>
         </div>
       </section>
 
       {/* --------------------------------------------------- playgrounds */}
       <Frame className="py-14 sm:py-20">
-        <SectionHead n="01" label={t("home.playgrounds.label")} />
-        <Reveal className="mt-10">
-          <Link
-            href="/playgrounds/"
-            className="group hover:bg-muted/30 flex flex-col gap-8 border-y p-8 transition-colors sm:flex-row sm:items-end sm:justify-between sm:p-10"
-          >
-            <div>
-              <h2 className="max-w-2xl text-2xl font-semibold tracking-[-0.02em] text-balance sm:text-4xl">
-                {t("home.playgrounds.title")}
-              </h2>
-              <p className="text-muted-foreground mt-5 max-w-xl text-pretty">
-                {t("home.playgrounds.lead")}{" "}
-                {playgrounds.length ? t("home.playgrounds.some") : t("home.playgrounds.none")}
-              </p>
-            </div>
-            <span className="text-muted-foreground group-hover:text-foreground shrink-0 font-mono text-[11px] tracking-[0.18em] uppercase transition-colors">
-              {playgrounds.length
-                ? t("home.playgrounds.count", { n: playgrounds.length })
-                : t("home.playgrounds.coming")}
-            </span>
-          </Link>
-        </Reveal>
-      </Frame>
-
-      {/* ------------------------------------------------------- projects */}
-      <Frame className="py-10 sm:py-14">
         <SectionHead
-          n="02"
-          label={t("home.projects.label")}
-          title={t("home.projects.title")}
-          lead={t("home.projects.lead")}
+          n="01"
+          label={t("home.playgrounds.label")}
+          title={t("home.playgrounds.title")}
+          lead={t("home.playgrounds.lead")}
         />
-        <Reveal className="mt-12">
-          <div>
-            {projects.slice(0, 4).map((p, i) => (
-              <IndexRow
-                key={p.name}
-                n={String(i + 1).padStart(2, "0")}
-                name={p.name}
-                meta={p.language}
-                year={p.year}
-                href={p.href}
+        <Reveal className="mt-10">
+          <div className="bg-border/70 grid gap-px border-y sm:grid-cols-2 lg:grid-cols-4">
+            {open.slice(0, 4).map((p) => (
+              <a
+                key={p.href}
+                href={p.href!}
+                className="group bg-background hover:bg-muted/30 flex flex-col p-6 transition-colors"
               >
-                {p.what}
-              </IndexRow>
+                <div className="flex items-center gap-3">
+                  <h3 className="font-medium tracking-tight">{p.name}</h3>
+                  <Tag>{p.tag}</Tag>
+                  <span className="text-muted-foreground ml-auto transition-transform group-hover:translate-x-1">
+                    →
+                  </span>
+                </div>
+                <p className="text-muted-foreground mt-3 line-clamp-3 text-sm text-pretty">{p.what}</p>
+              </a>
             ))}
           </div>
           <Button variant="ghost" className="mt-6 -ml-4" asChild>
-            <Link href="/projects/">{t("home.projects.all")}</Link>
+            <Link href="/playgrounds/">{t("home.playgrounds.all", { n: open.length })}</Link>
           </Button>
         </Reveal>
+      </Frame>
+
+      {/* ---------------------------------------------------------- method */}
+      <Frame className="py-10 sm:py-14">
+        <SectionHead
+          n="02"
+          label={t("home.method.label")}
+          title={t("home.method.title")}
+          lead={t("home.method.lead")}
+        />
+        <Reveal className="mt-10">
+          <Pipeline />
+        </Reveal>
+        <dl className="mt-px divide-y border-b">
+          {principles.map((p, i) => (
+            <div key={p.title} className="grid gap-1 py-4 sm:grid-cols-[3rem_14rem_minmax(0,1fr)] sm:gap-6">
+              <dt className="text-muted-foreground/50 font-mono text-[11px] tabular-nums">
+                {String(i + 1).padStart(2, "0")}
+              </dt>
+              <dt className="font-medium tracking-tight">{p.title}</dt>
+              <dd className="text-muted-foreground text-sm text-pretty">{p.body}</dd>
+            </div>
+          ))}
+        </dl>
       </Frame>
 
       {/* --------------------------------------------------------- clients */}
@@ -164,52 +187,35 @@ export function HomeContent() {
         </Frame>
       )}
 
-      {/* ---------------------------------------------------------- method */}
-      <Frame className="py-10 sm:py-14">
-        <SectionHead
-          n={clients.length > 0 ? "04" : "03"}
-          label={t("home.method.label")}
-          title={t("home.method.title")}
-          lead={t("home.method.lead")}
-        />
-        <Reveal className="mt-10">
-          <Pipeline />
-        </Reveal>
-        <div className="bg-border/70 mt-px grid gap-px border-b sm:grid-cols-4">
-          {principles.map((p, i) => (
-            <Reveal key={p.title} delay={i * 60} className="h-full">
-              <div className="bg-background h-full px-6 py-6">
-                <span className="text-muted-foreground/50 font-mono text-[11px] tabular-nums">
-                  {String(i + 1).padStart(2, "0")}
-                </span>
-                <h3 className="mt-3 font-medium tracking-tight">{p.title}</h3>
-                <p className="text-muted-foreground mt-2 text-sm text-pretty">{p.body}</p>
-              </div>
-            </Reveal>
-          ))}
-        </div>
-      </Frame>
+      {/* ------------------------------------------------------------- lab */}
+      {lab.public ? (
+        <Frame className="py-10 sm:py-14">
+          <SectionHead
+            n={clients.length > 0 ? "04" : "03"}
+            label={t("home.lab.label")}
+            title={t("home.lab.title")}
+            lead={t("home.lab.lead")}
+          />
+          <Button variant="ghost" className="mt-6 -ml-4" asChild>
+            <Link href={lab.href}>{t("home.lab.cta")}</Link>
+          </Button>
+        </Frame>
+      ) : null}
 
       {/* ------------------------------------------------------------- end */}
-      <Frame className="pt-10 pb-24 sm:pt-16 sm:pb-32">
-        <Reveal>
-          <div className="border-t pt-12">
+      <Frame className="pt-10 pb-24 sm:pt-14 sm:pb-32">
+        <div className="flex flex-col gap-4 border-t pt-10 sm:flex-row sm:items-baseline sm:justify-between sm:gap-10">
+          <div>
             <Eyebrow>{t("home.hi.label")}</Eyebrow>
             <a
               href={`mailto:${facts.email}`}
-              className="mt-6 block text-3xl font-semibold tracking-[-0.03em] break-all transition-opacity hover:opacity-60 sm:text-6xl"
+              className="mt-4 block text-2xl font-semibold tracking-[-0.03em] break-all transition-opacity hover:opacity-60 sm:text-4xl"
             >
               {facts.email}
             </a>
-            <p className="text-muted-foreground mt-6 max-w-xl text-pretty">
-              {t("home.hi.text")}{" "}
-              <Link href="/about/" className="text-foreground underline-offset-4 hover:underline">
-                {t("home.hi.more")}
-              </Link>
-              .
-            </p>
           </div>
-        </Reveal>
+          <p className="text-muted-foreground max-w-xs text-sm text-pretty">{t("home.hi.text")}</p>
+        </div>
       </Frame>
     </>
   );
