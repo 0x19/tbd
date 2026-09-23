@@ -1,67 +1,49 @@
 "use client";
 
-import { IconCheck, IconMoon, IconSun } from "@tabler/icons-react";
+import { Check, Monitor, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
-import * as React from "react";
+import { useEffect, useState } from "react";
 
-import { Button, type ButtonProps } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
-interface ThemeSwitchProps {
-  align?: "start" | "center" | "end";
-  contentClassName?: string;
-  triggerClassName?: string;
-  triggerId?: string;
-  triggerSize?: ButtonProps["size"];
-  triggerVariant?: ButtonProps["variant"];
-}
-
-export function ThemeSwitch({
-  align = "end",
-  contentClassName,
-  triggerClassName,
-  triggerId,
-  triggerSize = "icon",
-  triggerVariant = "ghost",
-}: ThemeSwitchProps = {}) {
-  const t = useT();
+/** Light, dark or the system's choice — the same control the admin UI carries. */
+export function ThemeSwitch() {
   const { theme, setTheme } = useTheme();
+  // Until it mounts, the sun/moon pair is decided by CSS alone: `theme` is
+  // unknown on the server and the icon would flip after hydration.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
+  const options = [
+    { value: "light", label: "Light", icon: Sun },
+    { value: "dark", label: "Dark", icon: Moon },
+    { value: "system", label: "System", icon: Monitor },
+  ] as const;
 
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
-        <Button
-          {...(triggerId ? { id: triggerId } : {})}
-          variant={triggerVariant}
-          size={triggerSize}
-          className={cn("scale-95 rounded-full", triggerClassName)}
-          aria-label={t("nav.toggle_theme")}
-        >
-          <IconSun className="size-[1.2rem] scale-100 rotate-0 transition-all dark:scale-0 dark:-rotate-90" />
-          <IconMoon className="absolute size-[1.2rem] scale-0 rotate-90 transition-all dark:scale-100 dark:rotate-0" />
-          <span className="sr-only">{t("nav.toggle_theme")}</span>
+        <Button variant="ghost" size="icon" className="scale-95 rounded-full" aria-label="Change the theme">
+          <Sun className="size-[1.2rem] scale-100 rotate-0 transition-all dark:scale-0 dark:-rotate-90" />
+          <Moon className="absolute size-[1.2rem] scale-0 rotate-90 transition-all dark:scale-100 dark:rotate-0" />
+          <span className="sr-only">Change the theme</span>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align={align} className={contentClassName}>
-        <DropdownMenuItem onClick={() => setTheme("light")}>
-          {t("nav.theme.light")}{" "}
-          <IconCheck size={14} className={cn("ml-auto", theme !== "light" && "hidden")} />
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => setTheme("dark")}>
-          {t("nav.theme.dark")}
-          <IconCheck size={14} className={cn("ml-auto", theme !== "dark" && "hidden")} />
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => setTheme("system")}>
-          {t("nav.theme.system")}
-          <IconCheck size={14} className={cn("ml-auto", theme !== "system" && "hidden")} />
-        </DropdownMenuItem>
+      <DropdownMenuContent align="end" className="w-36">
+        {options.map((o) => (
+          <DropdownMenuItem key={o.value} onClick={() => setTheme(o.value)}>
+            <o.icon className="size-4" />
+            {o.label}
+            <Check className={cn("ml-auto size-3.5", !(mounted && theme === o.value) && "hidden")} />
+          </DropdownMenuItem>
+        ))}
       </DropdownMenuContent>
     </DropdownMenu>
   );

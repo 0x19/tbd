@@ -4,6 +4,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { useMe } from "@/app/providers";
+import { Frame, SectionHead } from "@/components/kit";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -40,14 +41,16 @@ export default function AdminPage() {
     }
   }
 
-  if (me.data && !owner) return <p className="text-muted-foreground">{t("cv.admin.not_owner")}</p>;
+  if (me.data && !owner)
+    return (
+      <Frame className="py-20">
+        <p className="text-muted-foreground">{t("cv.admin.not_owner")}</p>
+      </Frame>
+    );
 
   return (
-    <>
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight">{t("cv.admin.title")}</h1>
-        <p className="text-muted-foreground mt-1 text-sm text-pretty">{t("cv.admin.lead")}</p>
-      </div>
+    <Frame className="grid gap-6 pt-16 pb-24 sm:pt-24 sm:pb-32">
+      <SectionHead n="01" label={t("cv.admin.title")} lead={t("cv.admin.lead")} />
       <Tabs value={filter} onValueChange={setFilter}>
         <TabsList>
           {FILTERS.map((f) => (
@@ -138,6 +141,6 @@ export default function AdminPage() {
           </Table>
         </div>
       ) : null}
-    </>
+    </Frame>
   );
 }

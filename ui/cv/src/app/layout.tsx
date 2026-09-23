@@ -1,18 +1,36 @@
 import "./globals.css";
+import "./site.css";
 
 import type { Metadata } from "next";
-import { Geist_Mono, Inter } from "next/font/google";
+import localFont from "next/font/local";
 
-import { Header } from "@/components/layout/header";
+import { SiteFooter } from "@/components/site-footer";
+import { SiteHeader } from "@/components/site-header";
 import { Toaster } from "@/components/ui/sonner";
 import { cn } from "@/lib/utils";
 
 import { Providers } from "./providers";
 
-// The kit's faces: Inter for text, Geist Mono for ids and addresses. The
-// variables are the ones globals.css maps to --font-sans / --font-mono.
-const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
-const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-mono" });
+// The public site's faces, bundled the same way (`ui/www/src/fonts`): a build
+// needs no network and the page loads nothing from a third party.
+const inter = localFont({
+  src: [
+    { path: "../fonts/Inter-Regular.otf", weight: "400", style: "normal" },
+    { path: "../fonts/Inter-Medium.otf", weight: "500", style: "normal" },
+    { path: "../fonts/Inter-SemiBold.otf", weight: "600", style: "normal" },
+    { path: "../fonts/Inter-Bold.otf", weight: "700", style: "normal" },
+  ],
+  variable: "--font-sans",
+  display: "swap",
+});
+const geistMono = localFont({
+  src: [
+    { path: "../fonts/GeistMono-Regular.ttf", weight: "400", style: "normal" },
+    { path: "../fonts/GeistMono-Medium.ttf", weight: "500", style: "normal" },
+  ],
+  variable: "--font-mono",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: { default: "The full CV · Nevio Vesic", template: "%s · Nevio Vesic" },
@@ -26,10 +44,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body className="antialiased">
         <Providers>
           <div className="flex min-h-dvh flex-col">
-            <Header />
-            <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 px-4 py-8 sm:px-6 sm:py-12">
-              {children}
-            </main>
+            <SiteHeader />
+            <main className="flex-1">{children}</main>
+            <SiteFooter />
           </div>
         </Providers>
         <Toaster richColors />

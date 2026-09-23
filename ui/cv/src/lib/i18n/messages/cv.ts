@@ -3,6 +3,7 @@
 import type { Dict } from "./index";
 
 export const en: Dict = {
+  "cv.heading": "The record, with the details that are not for a search result.",
   "cv.intro":
     "The public CV on inorbit.hr carries no phone number, address or references. The full version is handed to people the owner approves, as a PDF prepared for you with your name on every page.",
   "cv.you": "You are signed in as",
@@ -53,6 +54,7 @@ export const en: Dict = {
 };
 
 export const hr: Dict = {
+  "cv.heading": "Životopis, s podacima koji nisu za tražilicu.",
   "cv.intro":
     "Javni životopis na inorbit.hr nema broj telefona, adresu ni preporuke. Cijelu verziju dobivaju osobe koje vlasnik odobri, kao PDF pripremljen za vas s vašim imenom na svakoj stranici.",
   "cv.you": "Prijavljeni ste kao",

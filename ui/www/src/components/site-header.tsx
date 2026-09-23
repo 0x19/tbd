@@ -8,7 +8,7 @@ import { Frame } from "@/components/kit";
 import { Logo } from "@/components/logo";
 import { ThemeSwitch } from "@/components/theme-switch";
 import { Button } from "@/components/ui/button";
-import { company, nav } from "@/data/site";
+import { company, cv, nav } from "@/data/site";
 import { cn } from "@/lib/utils";
 
 /** Transparent over the hero, and a hairline under it once the page moves. */
@@ -62,6 +62,17 @@ export function SiteHeader() {
                 </Button>
               );
             })}
+          {/* The gated room: the same site behind a sign-in, where the full CV is.
+              A plain anchor, since it is another host; whoever is signed in
+              there lands on their standing, everyone else on the sign-in. */}
+          <Button variant="ghost" size="sm" className="shrink-0 px-2 sm:px-3" asChild>
+            <a
+              href={cv.fullUrl}
+              className="text-muted-foreground font-mono text-[10px] tracking-[0.12em] uppercase sm:text-[11px] sm:tracking-[0.14em]"
+            >
+              Full CV ↗
+            </a>
+          </Button>
         </nav>
         <span className="bg-border mx-1 hidden h-4 w-px shrink-0 sm:block" />
         {/* Outside the scrolling nav, so it is reachable on a phone without scrolling. */}

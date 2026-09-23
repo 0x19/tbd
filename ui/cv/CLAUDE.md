@@ -1,8 +1,13 @@
 # ui/cv
 
-The gated site for the full CV: `ui/finances` reduced to two pages. Same kit, same
-conventions (`ui/finances/CLAUDE.md`, `ui/chaos/CLAUDE.md`); read those for what is the
-kit's and what is ours. `docs/cv/README.md` is the contract.
+The gated site for the full CV: two pages wearing the public site's chrome. The header,
+footer, kit (`src/components/{site-header,site-footer,kit,logo}.tsx`), motion sheet
+(`src/app/site.css`) and bundled fonts (`src/fonts/`) are `ui/www`'s, copied on purpose
+so this reads as the same site behind a sign-in; the public pages in the header and
+footer are absolute links back to it (`src/data/site.ts`, a mirror of the public data
+file's chrome facts: a copy change there is a copy change here), and the public header
+carries a "Full CV" link the other way. `docs/cv/README.md` is the contract; the API
+client and i18n follow `ui/finances`.
 
 - The API is the protocol's REST surface for `tbd.cv.v1.CvService`
   (`proto/tbd/cv/v1/cv.proto`): same origin in a build (Envoy serves the UI at the
