@@ -66,4 +66,4 @@ is a false claim.
 
 | # | Document | Status |
 |---|---|---|
-| 0001 | [The llm service, an L2 over two engines](0001-the-llm-service.md) | open |
+| 0001 | [The llm service, an L2 over two engines](0001-the-llm-service.md) | decided |
