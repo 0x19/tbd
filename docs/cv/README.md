@@ -1,6 +1,6 @@
 # The full CV, behind sign-in and approval
 
-The public site (`inorbit.hr/cv/`) carries the CV without contact details, and a
+The public site (`inorbit.hr/about/`) carries the CV without contact details, and a
 public PDF rendered from the same data. The **full** CV -- phone, postal address,
 references -- is handed out by the `cv` service on `cv.<domain>` to people who signed
 in and whom the owner approved, as a PDF rendered for that one reader with their name
@@ -26,7 +26,8 @@ and the date on every page. Every download is recorded.
    an environment whose finance `allow_to` list is set refuses strangers, and that is
    fine.
 5. Approved, the person downloads (`GET /v1/cv/document`): the PDF is rendered at that
-   moment by Typst with the reader's name, e-mail and the date in every page's footer,
+   moment by Typst with the reader's name, e-mail and the date in every page's footer
+   ("Not for redistribution without my consent"),
    and a row in `cv.downloads` keeps the time, the user agent and the address the
    gateway saw.
 

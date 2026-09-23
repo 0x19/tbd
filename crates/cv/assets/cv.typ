@@ -18,7 +18,7 @@
   numbering: none,
   footer: if reader != none {
     align(center, text(size: 7.5pt, fill: muted)[
-      Prepared for #reader.name (#reader.email) on #reader.date. Not for redistribution.
+      Prepared for #reader.name (#reader.email) on #reader.date. Not for redistribution without my consent.
     ])
   } else { none },
 )
