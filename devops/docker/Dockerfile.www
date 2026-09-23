@@ -2,6 +2,7 @@
 #   docker build -f devops/docker/Dockerfile.www -t ghcr.io/0x19/tbd-www .
 # SITE_URL is baked in at build time: it is the canonical URL and the sitemap's
 # base, and only a build whose host is the real domain asks robots to index it.
+# `mise run local:build` passes SITE_DOMAIN from devops/edge/.env (www:build-args).
 FROM node:24-alpine AS build
 ARG SITE_URL=https://inorbit.hr
 ENV NEXT_PUBLIC_SITE_URL=$SITE_URL \

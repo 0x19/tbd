@@ -2,7 +2,7 @@
 
 Public TLS edge for a cluster behind a home or office router. Read `README.md` first.
 
-- One Caddyfile, env-driven (`BASE_DOMAIN`, `ACME_EMAIL`, `EDGE_HTTP_PORT`,
+- One Caddyfile, env-driven (`BASE_DOMAIN`, `ACME_EMAIL`, `SITE_DOMAIN`, `EDGE_HTTP_PORT`,
   `EDGE_HTTPS_PORT`). Subdomain names are fixed
   (`api`, `grafana`, `logs`, `profiles`, `metrics`, `chaosadmin`, `finance`, `auth`),
   and the base domain itself serves the company site;
@@ -26,10 +26,18 @@ Public TLS edge for a cluster behind a home or office router. Read `README.md` f
   `Host` header the edge rewrites: to `www.{$BASE_DOMAIN}`, because Envoy matches the site
   on `www.*` and `envoy.yaml` must not learn the domain. `www.` redirects to the apex, so
   there is a single canonical URL and no duplicate content.
+- `SITE_DOMAIN` (compose defaults it to `BASE_DOMAIN`) is the domain the site is canonical
+  on. When it differs from the base, the base's apex and `www.` redirect there with 301
+  (`@elsewhere not host {$SITE_DOMAIN}`), and `mise run local:build` bakes the same domain
+  into the site image (`www:build-args`), so the canonical URL, the sitemap and the
+  robots rule all name the domain people actually reach. A site build that named the base
+  domain as canonical while the base served a copy told search engines the original lived
+  there, and the build's own `indexable` rule asked them to stay out of both.
 - `sites.d/*.caddy` (git-ignored, one file per domain) serves the company site under
-  further domains: each file is `www.<domain>` redirecting to `<domain>`, which
-  `import site`s. A glob that matches nothing is not an error, so the file is simply
-  absent where the site has one domain. Behind Cloudflare's proxy the zone must be in
+  a domain of its own: each file is `www.<domain>` redirecting to `<domain>`, which
+  `import site`s, and may add `api.<domain>` importing `api`, the API host's snippet
+  (Envoy's API virtual host matches any name). A glob that matches nothing is not an
+  error, so the file is simply absent where the site has one domain. Behind Cloudflare's proxy the zone must be in
   *Full (strict)* SSL mode: in *Flexible* mode Cloudflare fetches the origin over
   plain HTTP, Caddy answers with its redirect to HTTPS, and the browser sees a loop.
 - The `(gated)` snippet is every non-API host: one `reverse_proxy` to Envoy. There is no

@@ -26,9 +26,9 @@ internet ──443──▶ router (port forward) ──▶ this host: caddy (TL
 | `chaosadmin.<base>` | Envoy 18080 | sign-in through Envoy | the chaos admin UI at the root, API at `/api/chaos/v1/`; `/privacy.html` and `/terms.html` are open |
 | `finance.<base>` | Envoy 18080 | sign-in through Envoy | the finance UI; `/connect/callback` is open, because the bank redirects a browser with no session yet |
 | `auth.<base>` | Envoy 18080 | none (it is the sign-in) | Ory Hydra, Ory Kratos and the login/registration/consent pages |
-| `<base>` (the apex) | Envoy 18080 | none (it is a public site) | the company site (`ui/www`); the Host is rewritten to `www.<base>` so Envoy's one public rule matches |
-| `www.<base>` | — | none | a permanent redirect to the apex, so the site has one canonical URL |
-| `<other>`, `www.<other>` | Envoy 18080 | none | the same site under a domain of its own, one file per domain in `sites.d/` (git-ignored; `sites.d/README.md`); Caddy gets its certificate the same way |
+| `<base>` (the apex) | Envoy 18080 | none (it is a public site) | the company site (`ui/www`); the Host is rewritten to `www.<base>` so Envoy's one public rule matches. With `SITE_DOMAIN` set to another domain, a permanent redirect there instead |
+| `www.<base>` | — | none | a permanent redirect to the site's canonical name (`SITE_DOMAIN`, the apex by default), so the site has one URL |
+| `<site>`, `www.<site>`, `api.<site>` | Envoy 18080 | none / the API's | the site under a domain of its own (`SITE_DOMAIN`), one file per domain in `sites.d/` (git-ignored; `sites.d/README.md`), optionally with the API on that domain too; Caddy gets the certificates the same way |
 
 Caddy adds TLS and nothing else: every host is one `reverse_proxy` to Envoy, and Envoy
 decides who gets in ([docs/auth/README.md](../../docs/auth/README.md)).
@@ -44,7 +44,8 @@ decides who gets in ([docs/auth/README.md](../../docs/auth/README.md)).
 2. On the router, forward TCP 80 and TCP 443 (and UDP 443 for HTTP/3) to this machine.
    80 is needed for the certificate challenge and redirects to 443.
 3. `cp devops/edge/.env.example devops/edge/.env`, fill in `BASE_DOMAIN` and
-   `ACME_EMAIL`.
+   `ACME_EMAIL`; `SITE_DOMAIN` too when the company site is canonical on a domain of its
+   own (its `sites.d/` file serves it, the base domain redirects to it).
 4. `mise run edge:up` (also after any Caddyfile change: it reloads the running Caddy
    gracefully). The first start requests one certificate per host;
    `mise run edge:logs` shows them being issued. A host whose DNS does not resolve yet

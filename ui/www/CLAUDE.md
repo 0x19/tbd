@@ -63,7 +63,13 @@ practice log is `localStorage`, per browser, and its page says so.
   `IndexRow`, `Tag`. Build a new page from those rather than new one-off spacing.
 - `NEXT_PUBLIC_SITE_URL` decides the canonical URL, the sitemap base and whether
   robots may index the build (only `inorbit.hr` may). It is a build argument, not
-  a runtime variable — a static export has no runtime.
+  a runtime variable — a static export has no runtime. `mise run local:build` takes it
+  from `SITE_DOMAIN` in `devops/edge/.env`, never from the platform's `BASE_DOMAIN`:
+  the edge redirects the base domain to the site, so a build naming the base as
+  canonical pointed search engines at a redirect and asked them to index nothing.
+- `src/components/structured-data.tsx` is the JSON-LD (`Organization`, `Person`,
+  `WebSite`) in the root layout, built from `src/data/site.ts` like everything else;
+  it states only what the page states, and never an employer.
 - `/legal/` carries the imprint and privacy; `/terms/` covers the site and the
   playgrounds. A playground that processes what a visitor types says so on its
   own page.

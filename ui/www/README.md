@@ -81,8 +81,9 @@ the page never lists something that is not there.
 `devops/docker/Dockerfile.www`) is the canonical URL and the base of
 `sitemap.xml`. **Only a build whose host ends in `inorbit.hr` asks robots to
 index it**; every other build — the one on the development domain, for instance
-— ships `Disallow: /`. `mise run local:build` passes the base domain of
-`devops/edge/.env`, so the development deployment is never indexed by accident.
+— ships `Disallow: /`. `mise run local:build` passes `SITE_DOMAIN` from
+`devops/edge/.env` (the site's own domain, not the platform's `BASE_DOMAIN`, which
+redirects to it); unset, the image's default `https://inorbit.hr` applies.
 
 | Where                         | How it gets there                                                                                                                                                    |
 | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

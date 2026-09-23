@@ -6,6 +6,7 @@ import { Geist_Mono, Inter } from "next/font/google";
 
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
+import { StructuredData } from "@/components/structured-data";
 import { company, indexable, site, url } from "@/data/site";
 import { cn } from "@/lib/utils";
 
@@ -36,6 +37,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="en" suppressHydrationWarning className={cn("font-sans", inter.variable, geistMono.variable)}>
       <body className="antialiased">
+        <StructuredData />
         <Providers>
           <div className="flex min-h-dvh flex-col">
             <SiteHeader />

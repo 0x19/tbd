@@ -138,7 +138,8 @@ internet ─443─▶ FRITZ!Box (port forward) ─▶ host: Caddy (TLS) ─▶ E
    machine: another stack's Envoy holds them), set `EDGE_HTTP_PORT`/`EDGE_HTTPS_PORT`
    and forward external 80 → that port and 443 → that port.
 3. **Start the edge.** Copy `devops/edge/.env.example` to `devops/edge/.env`, fill in
-   `BASE_DOMAIN` and `ACME_EMAIL`, then `mise run edge:up`. `mise run edge:logs` shows the certificates being issued.
+   `BASE_DOMAIN` and `ACME_EMAIL` (and `SITE_DOMAIN` when the company site is canonical on
+   a domain of its own, `devops/edge/sites.d/README.md`), then `mise run edge:up`. `mise run edge:logs` shows the certificates being issued.
 4. **Verify from outside** (a phone off Wi-Fi, or any other network):
 
    ```sh

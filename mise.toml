@@ -635,10 +635,14 @@ pnpm typecheck
 
 # The site is published at the base domain of the public edge; a build for any
 # other host asks robots to stay away, so the canonical URL is a build argument.
+# The site's own domain (SITE_DOMAIN in the environment or devops/edge/.env), never
+# the platform's BASE_DOMAIN: the base domain redirects to the site, and a build that
+# named the base as canonical told search engines the site lived there. Unset, the
+# image's default (https://inorbit.hr) applies.
 [tasks."www:build-args"]
 hide = true
 run = """
-domain="${BASE_DOMAIN:-$(grep -s '^BASE_DOMAIN=' devops/edge/.env | cut -d= -f2- | tr -d '"')}"
+domain="${SITE_DOMAIN:-$(grep -s '^SITE_DOMAIN=' devops/edge/.env | cut -d= -f2- | tr -d '"')}"
 [ -n "$domain" ] && echo "--build-arg SITE_URL=https://$domain"
 """
 
@@ -1007,7 +1011,7 @@ echo "loading for ${secs}s (8 workers) ..."; wait; echo "done"
 """
 
 [tasks."edge:up"]
-description = "Public TLS edge on the host: Caddy with Let's Encrypt for api/grafana/logs/profiles/metrics.<BASE_DOMAIN> (settings in devops/edge/.env)"
+description = "Public TLS edge on the host: Caddy with Let's Encrypt for api/grafana/logs/profiles/metrics.<BASE_DOMAIN> and the site on SITE_DOMAIN (settings in devops/edge/.env)"
 run = """
 docker compose -f devops/edge/compose.yaml up -d
 docker compose -f devops/edge/compose.yaml exec caddy caddy reload --config /etc/caddy/Caddyfile
