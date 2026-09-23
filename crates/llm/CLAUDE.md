@@ -51,6 +51,7 @@ Invariants:
 - `TCP_NODELAY` is set on `TcpIncoming`, not the server builder.
 
 Tests: `tests/it/conformance.rs` is one suite run three times (stub, wiremock Ollama,
-wiremock llama.cpp) through `conformance_suite!`; `tests/it/budget.rs` needs Docker
-(a migrated Postgres) or `TBD_TEST_DATABASE_URL`; `tests/it/main.rs` is the scaffold's
+wiremock llama.cpp) through `conformance_suite!`; `tests/it/budget.rs` runs on the
+shared test Postgres (`tbd_db::testing`: `TBD_TEST_DATABASE_URL`, or the one reusable
+container; `mise run test:db:reset` removes it); `tests/it/main.rs` is the scaffold's
 Ping, health and fault injection. Unit tests sit next to each parser.

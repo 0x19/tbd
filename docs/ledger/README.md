@@ -148,7 +148,8 @@ caller only.
 
 **Tests.** `crates/ledger/tests/it/conformance.rs` is the contract, generic over the
 backend, run on the memory store always and on Postgres in `pg::*` against a real
-server: a container each test starts through Docker, or the server named by
+server: the one reusable test container (`tbd-test-postgres`, shared with every other
+crate's tests through `tbd_db::testing`), or the server named by
 `LEDGER_TEST_DATABASE_URL` (an admin URL; every test creates its own database), which is
 what CI's `services:` block provides. `pg::cascade_leaves_zero_rows_except_the_erasure`
 is the proof the design asks for.

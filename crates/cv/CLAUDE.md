@@ -59,7 +59,7 @@ Invariants:
   internal listener, and the mail is the only thing this service asks of it.
 
 Tests: `tests/it/main.rs` boots the server on port 0 with the shipped `configs/cv` and
-env `local`; `start_with_store()` gives a fresh migrated database (testcontainers, or
-`TBD_TEST_DATABASE_URL`). `access.rs` is the whole flow; `mail.rs` boots a real finance
+env `local`; `start_with_store()` gives a fresh migrated database on the shared test Postgres
+(`tbd_db::testing`: the one reusable container, or `TBD_TEST_DATABASE_URL`). `access.rs` is the whole flow; `mail.rs` boots a real finance
 (`tbd_finance::serve_with_kinds`) with a mock mailbox on the same database and proves
 the owner's mail goes out and the stranger's does not.

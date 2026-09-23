@@ -42,6 +42,8 @@ mod access;
 mod error;
 mod identity;
 mod pool;
+#[cfg(feature = "testing")]
+pub mod testing;
 
 pub use access::{Access, bind_rls_user};
 pub use error::{DbError, map_err};

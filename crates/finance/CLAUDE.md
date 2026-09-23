@@ -254,6 +254,7 @@ Invariants:
 Tests: `tests/it/main.rs` boots the server on port 0 through `support.rs` with the
 shipped `configs/finance` and env `local`, and exposes the `Runtime` so tests can
 inject faults and read counters. `start_with_store()` gives a fresh migrated database
-(testcontainers, or `TBD_TEST_DATABASE_URL`). `banking.rs` runs the real client against
+on the shared test Postgres (`tbd_db::testing`: the one reusable container, or
+`TBD_TEST_DATABASE_URL`). `banking.rs` runs the real client against
 wiremock; `sync.rs` and `connect.rs` run the worker and the consent flow against the
 `Mock` bank, counting its calls -- the interesting number is usually zero.

@@ -1,37 +1,26 @@
 //! The Postgres store against a real server: the conformance suite, plus
 //! what only Postgres can prove (the cascade leaves zero rows).
 //!
-//! Each test gets its own database. The server comes from
-//! `LEDGER_TEST_DATABASE_URL` (an admin URL on a running Postgres, the CI
-//! `services:` block) or, when unset, from a container this test starts
-//! through Docker. With neither, the test fails and says so: a store test
-//! never silently passes.
+//! Each test gets its own database on the shared test Postgres
+//! (`tbd_db::testing`): `LEDGER_TEST_DATABASE_URL` (an admin URL on a running
+//! Postgres, the CI `services:` block) or, when unset, the one reusable
+//! container. With neither, the test fails and says so: a store test never
+//! silently passes.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use std::time::Duration;
 
-use sqlx::PgPool;
 use tbd_ledger::store::{
     Source, Store, SubjectId,
     pg::{PgOptions, PgStore},
 };
 
-use testcontainers::{
-    ContainerAsync, GenericImage, ImageExt,
-    core::{IntoContainerPort, WaitFor},
-    runners::AsyncRunner,
-};
-
 use crate::conformance;
 
-const IMAGE: (&str, &str) = ("pgvector/pgvector", "0.8.6-pg17-trixie");
-
-/// A store on its own database, and the container that serves it when one
-/// was started (dropped with the test, removing the container).
+/// A store on its own database.
 pub struct PgTest {
     pub store: PgStore,
-    _container: Option<ContainerAsync<GenericImage>>,
 }
 
 impl std::ops::Deref for PgTest {
@@ -42,73 +31,17 @@ impl std::ops::Deref for PgTest {
     }
 }
 
-/// An admin URL: the environment's, or a fresh container's.
-async fn admin_url() -> (String, Option<ContainerAsync<GenericImage>>) {
-    if let Ok(url) = std::env::var("LEDGER_TEST_DATABASE_URL")
-        && !url.trim().is_empty()
-    {
-        return (url, None);
-    }
-    let container = GenericImage::new(IMAGE.0, IMAGE.1)
-        .with_exposed_port(5432.tcp())
-        .with_wait_for(WaitFor::message_on_stderr(
-            "database system is ready to accept connections",
-        ))
-        .with_env_var("POSTGRES_USER", "test")
-        .with_env_var("POSTGRES_PASSWORD", "test")
-        .with_env_var("POSTGRES_DB", "postgres")
-        .start()
-        .await
-        .unwrap_or_else(|e| {
-            panic!(
-                "the Postgres store tests need Docker (to start {}:{}) or LEDGER_TEST_DATABASE_URL: {e}",
-                IMAGE.0, IMAGE.1
-            )
-        });
-    let port = container.get_host_port_ipv4(5432).await.unwrap();
-    let host = container.get_host().await.unwrap();
-    (
-        format!("postgres://test:test@{host}:{port}/postgres?sslmode=disable"),
-        Some(container),
-    )
-}
-
-/// Connect to `url`, retrying while the server finishes starting.
-async fn connect(url: &str) -> PgPool {
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(60);
-    loop {
-        match PgPool::connect(url).await {
-            Ok(pool) => return pool,
-            Err(e) if tokio::time::Instant::now() < deadline => {
-                tracing::debug!(error = %e, "postgres not ready yet");
-                tokio::time::sleep(Duration::from_millis(250)).await;
-            }
-            Err(e) => panic!("connect {url}: {e}"),
-        }
-    }
-}
-
 /// A migrated store on a fresh database.
 pub async fn store() -> PgTest {
-    let (admin_url, container) = admin_url().await;
-    let admin = connect(&admin_url).await;
-    let database = format!("ledger_test_{}", uuid::Uuid::now_v7().simple());
-    sqlx::query(sqlx::AssertSqlSafe(format!("create database {database}")))
-        .execute(&admin)
-        .await
-        .unwrap();
-    let options: sqlx::postgres::PgConnectOptions = admin_url.parse().unwrap();
+    let url = tbd_db::testing::fresh_database("LEDGER_TEST_DATABASE_URL", "ledger_test").await;
+    let options: sqlx::postgres::PgConnectOptions = url.parse().unwrap();
     let pool = sqlx::postgres::PgPoolOptions::new()
         .max_connections(8)
         .acquire_timeout(Duration::from_secs(10))
-        .connect_lazy_with(options.database(&database));
+        .connect_lazy_with(options);
     let store = PgStore::from_pool(pool);
     store.migrate().await.unwrap();
-    drop(admin);
-    PgTest {
-        store,
-        _container: container,
-    }
+    PgTest { store }
 }
 
 crate::conformance_suite!(pg, async { crate::pg::store().await });

@@ -132,7 +132,7 @@ tokio-tungstenite = "0.29"
 sqlx = { version = "0.9", default-features = false, features = [
   "runtime-tokio", "tls-rustls-ring-webpki", "postgres", "macros", "migrate", "uuid", "chrono", "json",
 ] }
-testcontainers = { version = "0.27", default-features = false, features = ["ring"] }
+testcontainers = { version = "0.27", default-features = false, features = ["ring", "reusable-containers"] }
 wiremock       = "0.6"
 clickhouse = { version = "0.15", default-features = false, features = ["lz4", "uuid", "chrono"] }
 

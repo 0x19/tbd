@@ -216,7 +216,7 @@ async fn finance_with_mailbox(
 #[allow(clippy::too_many_lines)]
 #[tokio::test]
 async fn the_owner_is_told_through_the_linked_mailbox_and_the_stranger_is_not() {
-    let (url, pool, _container) = support::database().await;
+    let (url, pool) = support::database().await;
     let (finance_url, sent, _stop_finance) = finance_with_mailbox(&url, &pool).await;
 
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();

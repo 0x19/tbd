@@ -17,10 +17,6 @@ use tbd_llm::{
 use tbd_proto::llm::v1::{
     GenerateResponse, ListModelsRequest, ListModelsResponse, llm_service_client::LlmServiceClient,
 };
-use testcontainers::{
-    ContainerAsync, GenericImage, ImageExt as _, core::IntoContainerPort as _, core::WaitFor,
-    runners::AsyncRunner as _,
-};
 use tokio::{net::TcpListener, sync::oneshot};
 use tonic::{Request, Status, transport::Channel};
 use tonic_health::pb::health_client::HealthClient;
@@ -34,66 +30,21 @@ pub struct Server {
     pub runtime: Runtime,
     _stop: oneshot::Sender<()>,
     _mocks: Vec<MockServer>,
-    container: Option<ContainerAsync<GenericImage>>,
 }
 
-const IMAGE: (&str, &str) = ("pgvector/pgvector", "0.8.6-pg17-trixie");
-
-/// A fresh, migrated database: its URL and the pool the test reads with.
-///
-/// The server comes from `TBD_TEST_DATABASE_URL` or, when unset, a container
-/// this test starts. With neither the test fails and says so.
-pub async fn database() -> (String, PgPool, Option<ContainerAsync<GenericImage>>) {
-    let (admin_url, container) = admin_url().await;
-    let admin = PgPool::connect(&admin_url).await.unwrap();
-    let database = format!("llm_test_{}", uuid::Uuid::now_v7().simple());
-    sqlx::query(sqlx::AssertSqlSafe(format!("create database {database}")))
-        .execute(&admin)
-        .await
-        .unwrap();
-    drop(admin);
-    let url = {
-        let mut u = url::Url::parse(&admin_url).unwrap();
-        u.set_path(&database);
-        u.to_string()
-    };
+/// A fresh, migrated database on the shared test Postgres (`tbd_db::testing`:
+/// `TBD_TEST_DATABASE_URL`, or the one reusable container every crate's tests
+/// share; nothing is started per test and nothing leaks). With neither the
+/// test fails and says so.
+pub async fn database() -> (String, PgPool) {
+    let url = tbd_db::testing::fresh_database(tbd_db::testing::ENV, "llm_test").await;
     let pool = sqlx::postgres::PgPoolOptions::new()
         .max_connections(8)
         .connect(&url)
         .await
         .unwrap();
     tbd_db::migrate(&pool).await.unwrap();
-    (url, pool, container)
-}
-
-async fn admin_url() -> (String, Option<ContainerAsync<GenericImage>>) {
-    if let Ok(url) = std::env::var("TBD_TEST_DATABASE_URL")
-        && !url.trim().is_empty()
-    {
-        return (url, None);
-    }
-    let container = GenericImage::new(IMAGE.0, IMAGE.1)
-        .with_exposed_port(5432.tcp())
-        .with_wait_for(WaitFor::message_on_stderr(
-            "database system is ready to accept connections",
-        ))
-        .with_env_var("POSTGRES_USER", "test")
-        .with_env_var("POSTGRES_PASSWORD", "test")
-        .with_env_var("POSTGRES_DB", "postgres")
-        .start()
-        .await
-        .unwrap_or_else(|e| {
-            panic!(
-                "these tests need Docker (to start {}:{}) or TBD_TEST_DATABASE_URL: {e}",
-                IMAGE.0, IMAGE.1
-            )
-        });
-    let port = container.get_host_port_ipv4(5432).await.unwrap();
-    let host = container.get_host().await.unwrap();
-    (
-        format!("postgres://test:test@{host}:{port}/postgres?sslmode=disable"),
-        Some(container),
-    )
+    (url, pool)
 }
 
 /// Both tiers on `fixture`, recording into a fresh migrated database.
@@ -101,13 +52,12 @@ pub async fn start_with_store(
     fixture: Fixture,
     adjust: impl FnOnce(&mut Config),
 ) -> (Server, PgPool) {
-    let (url, pool, container) = database().await;
-    let mut server = start_fixtures(fixture, fixture, Runtime::default(), |c| {
+    let (url, pool) = database().await;
+    let server = start_fixtures(fixture, fixture, Runtime::default(), |c| {
         c.store.url = url;
         adjust(c);
     })
     .await;
-    server.container = container;
     (server, pool)
 }
 
@@ -198,7 +148,6 @@ pub async fn start_fixtures(
         runtime,
         _stop: stop,
         _mocks: mocks,
-        container: None,
     }
 }
 
