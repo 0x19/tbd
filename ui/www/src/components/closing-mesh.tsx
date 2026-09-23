@@ -1,62 +1,220 @@
-import { CELL, type Cell, path, px, route, segments, trace } from "@/lib/mesh";
+"use client";
+
+import { usePathname } from "next/navigation";
+
+import { Frame } from "@/components/kit";
+import { type Bend, CELL, type Cell, px, route, segments, trace } from "@/lib/mesh";
 
 /**
- * The last drawing, under the strip the reply leaves by: the hero's mesh
- * turned outward. The reply drops out of the strip's corner onto a bus that
- * runs the whole width of the page, and from the bus the traces fan out to
- * points of presence on both sides and off the bottom, with packets running
- * away from the spine. Same 72px grid as the hero, drawn here as a pattern
- * whose origin is the spine, so every node sits on an intersection whatever
- * the viewport; the band clips it and fades it into the footer. Decoration
- * only: `aria-hidden`, no pointer events, packets stop under
- * prefers-reduced-motion (`.mesh-packet`, `site.css`).
+ * The end of the home page's story, behind the footer: the network the reply
+ * goes back out into, the hero's mesh grown to the whole width. It is
+ * anchored to the bottom of the page and strongest there, fading upward to
+ * nothing just under the strip the reply left by. Two hand-laid tiles of
+ * nodes alternate across the width, joined at their seams, so it reads as one
+ * fabric and never as a pattern; a few dashed stubs leave off the bottom and
+ * into the fade above, and three packets run away from the spine. Same 72px
+ * grid as the hero, drawn as a pattern from the spine and the page's bottom
+ * edge, so every node sits on an intersection at any width.
+ *
+ * `Closing` wraps the site footer in the layout: on the home page it adds
+ * the room under the last strip and this drawing behind both; elsewhere it
+ * is the footer alone. Decoration only: `aria-hidden`, no pointer events,
+ * packets stop under prefers-reduced-motion (`.mesh-packet`, `site.css`).
  */
+export function Closing({ children }: { children: React.ReactNode }) {
+  const home = usePathname() === "/";
+  if (!home) return <>{children}</>;
+  return (
+    <div className="relative">
+      <div aria-hidden className="h-40 sm:h-56" />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 -z-10 overflow-hidden"
+        style={{
+          maskImage: "linear-gradient(to top, black 0%, black 30%, rgba(0, 0, 0, 0.55) 62%, transparent 97%)",
+          WebkitMaskImage:
+            "linear-gradient(to top, black 0%, black 30%, rgba(0, 0, 0, 0.55) 62%, transparent 97%)",
+        }}
+      >
+        <Frame className="relative h-full">
+          <ClosingMesh />
+        </Frame>
+      </div>
+      {children}
+    </div>
+  );
+}
 
-const ROWS = 4;
-// Far enough either way for a 2560px screen with the spine near its middle.
-const REACH = 40;
+const ROWS = 8;
+const H = ROWS * CELL;
+const TILE = 10;
+// Tiles either side of the spine: enough for a 2560px screen with the spine
+// near its middle.
+const TILES = 4;
 
-// The bus along row 1, and where it branches. `pop` marks a point of
-// presence with a halo; `down` a branch that leaves off the bottom.
-const branches: { at: number; to: Cell; pop?: boolean; down?: Cell }[] = [
-  { at: -7, to: [-7, 3] },
-  { at: -3, to: [-5, 3], pop: true, down: [-6, ROWS] },
-  { at: 3, to: [5, 3], pop: true, down: [6, ROWS] },
-  { at: 7, to: [7, 3], down: [7, ROWS] },
-  { at: 11, to: [13, 3], pop: true, down: [14, ROWS] },
-  { at: 15, to: [15, 3] },
-  { at: 19, to: [21, 3], pop: true, down: [22, ROWS] },
-  { at: 24, to: [24, 3], down: [24, ROWS] },
-  { at: 28, to: [30, 3], pop: true },
-  { at: 33, to: [33, 3], down: [33, ROWS] },
+// Rows count from the page's bottom edge here, so the densest row is the
+// lowest: a cell is (col, rowFromBottom).
+const at = ([c, r]: Cell): Cell => [c, ROWS - r];
+
+type Tile = {
+  nodes: Record<string, Cell>;
+  links: [string, string, Bend?][];
+  pops: string[];
+  stubs: [string, Cell][];
+};
+
+// Two tiles of ten columns, laid by hand like the hero's mesh.
+const A: Tile = {
+  nodes: {
+    a: [0, 2],
+    b: [2, 4],
+    c: [2, 1],
+    d: [4, 3],
+    e: [5, 5],
+    f: [6, 1],
+    g: [7, 3],
+    h: [9, 4],
+    i: [9, 2],
+    j: [5, 7],
+  },
+  links: [
+    ["a", "b"],
+    ["a", "c"],
+    ["b", "d"],
+    ["c", "d", "first"],
+    ["d", "e"],
+    ["d", "g"],
+    ["c", "f"],
+    ["f", "g"],
+    ["g", "h"],
+    ["g", "i"],
+    ["e", "h"],
+    ["e", "j"],
+  ],
+  pops: ["d", "h"],
+  stubs: [
+    ["f", [6, 0]],
+    ["j", [5, 8]],
+    ["h", [9, 6]],
+  ],
+};
+const B: Tile = {
+  nodes: {
+    a: [0, 3],
+    b: [1, 1],
+    c: [3, 2],
+    d: [3, 5],
+    e: [5, 4],
+    f: [5, 1],
+    g: [7, 2],
+    h: [8, 5],
+    i: [9, 3],
+    j: [9, 1],
+    k: [8, 7],
+  },
+  links: [
+    ["a", "b"],
+    ["a", "c"],
+    ["c", "d"],
+    ["c", "e"],
+    ["c", "f"],
+    ["d", "e"],
+    ["e", "g"],
+    ["f", "g"],
+    ["e", "h"],
+    ["g", "i"],
+    ["g", "j"],
+    ["h", "i", "first"],
+    ["h", "k"],
+  ],
+  pops: ["e", "i"],
+  stubs: [
+    ["b", [1, 0]],
+    ["k", [8, 8]],
+    ["d", [3, 7]],
+  ],
+};
+// The seams: which node of one tile reaches which node of the next.
+const seams: { from: [Tile, string]; to: [Tile, string]; bend?: Bend }[] = [
+  { from: [A, "i"], to: [B, "a"] },
+  { from: [A, "h"], to: [B, "a"] },
+  { from: [B, "i"], to: [A, "a"] },
+  { from: [B, "j"], to: [A, "c"] },
 ];
 
-const drop = trace([0, 0], [0, 1]);
-const bus = trace([-REACH, 1], [REACH, 1]);
-const solid = segments([drop, bus, ...branches.map((b) => trace([b.at, 1], b.to))]);
-// The long haul between the points of presence, dashed, and the branches
-// that leave off the bottom.
-const haul = trace([-REACH, 3], [REACH, 3]);
-const dashed = segments([haul, ...branches.flatMap((b) => (b.down ? [trace(b.to, b.down)] : []))]);
+const variant = (k: number) => (k % 2 === 0 ? A : B);
+const cell = (k: number, t: Tile, n: string): Cell => {
+  const [c, r] = t.nodes[n]!;
+  return at([c + k * TILE, r]);
+};
 
-const out = (b: (typeof branches)[number]) =>
-  route(drop, trace([0, 1], [b.at, 1]), trace([b.at, 1], b.to), ...(b.down ? [trace(b.to, b.down)] : []));
+const solidTraces: ReturnType<typeof trace>[] = [];
+const dashedTraces: ReturnType<typeof trace>[] = [];
+const nodes: { cell: Cell; pop: boolean }[] = [];
+for (let k = -TILES; k <= TILES; k++) {
+  const t = variant(k);
+  for (const [x, y, bend] of t.links) solidTraces.push(trace(cell(k, t, x), cell(k, t, y), bend));
+  for (const [x, to] of t.stubs) dashedTraces.push(trace(cell(k, t, x), at([to[0] + k * TILE, to[1]])));
+  for (const n of Object.keys(t.nodes)) nodes.push({ cell: cell(k, t, n), pop: t.pops.includes(n) });
+  if (k < TILES) {
+    const next = variant(k + 1);
+    for (const s of seams) {
+      if (s.from[0] !== t || s.to[0] !== next) continue;
+      solidTraces.push(trace(cell(k, t, s.from[1]), cell(k + 1, next, s.to[1]), s.bend));
+    }
+  }
+}
+const solid = segments(solidTraces);
+const dashed = segments(dashedTraces);
 
-// Packets, each leaving by a different branch on its own clock.
+// Three packets: right along the fabric, left along it, and one off the bottom.
+const T = (k: number, n: string, k2: number, n2: string, bend?: Bend) =>
+  trace(cell(k, variant(k), n), cell(k2, variant(k2), n2), bend);
 const packets = [
-  { d: out(branches[4]!), duration: 11, delay: 0 },
-  { d: out(branches[1]!), duration: 8, delay: 3 },
-  { d: out(branches[6]!), duration: 15, delay: 6 },
-  { d: out(branches[3]!), duration: 8, delay: 10 },
+  {
+    d: route(
+      T(0, "a", 0, "b"),
+      T(0, "b", 0, "d"),
+      T(0, "d", 0, "g"),
+      T(0, "g", 0, "i"),
+      T(0, "i", 1, "a"),
+      T(1, "a", 1, "c"),
+      T(1, "c", 1, "e"),
+      T(1, "e", 1, "g"),
+      T(1, "g", 1, "i"),
+      T(1, "i", 2, "a"),
+    ),
+    duration: 18,
+    delay: 0,
+  },
+  {
+    d: route(
+      T(0, "a", -1, "i"),
+      T(-1, "i", -1, "g"),
+      T(-1, "g", -1, "f"),
+      T(-1, "f", -1, "c"),
+      T(-1, "c", -1, "a"),
+      T(-1, "a", -2, "i"),
+      T(-2, "i", -2, "g"),
+      T(-2, "g", -2, "d"),
+    ),
+    duration: 15,
+    delay: 5,
+  },
+  {
+    d: route(T(0, "a", 0, "c"), T(0, "c", 0, "f"), trace(cell(0, A, "f"), at([6, 0]))),
+    duration: 7,
+    delay: 11,
+  },
 ];
 
-export function ClosingMesh() {
+function ClosingMesh() {
   return (
     <svg
       aria-hidden
-      className="text-foreground pointer-events-none absolute top-0 left-3 overflow-visible sm:left-4"
+      className="text-foreground absolute bottom-0 left-3 overflow-visible sm:left-4"
       width={1}
-      height={ROWS * CELL}
+      height={H}
       fill="none"
       stroke="currentColor"
       strokeLinecap="round"
@@ -67,12 +225,12 @@ export function ClosingMesh() {
           <path d={`M${CELL} 0 H0 V${CELL}`} strokeWidth="1" shapeRendering="crispEdges" />
         </pattern>
       </defs>
-      {/* the grid, from the spine outwards */}
+      {/* the grid, from the spine and the bottom edge outwards */}
       <rect
-        x={-REACH * CELL}
-        y={0}
-        width={2 * REACH * CELL}
-        height={ROWS * CELL}
+        x={-(TILES + 1) * TILE * CELL}
+        y={-4 * CELL}
+        width={2 * (TILES + 1) * TILE * CELL}
+        height={H + 4 * CELL}
         fill="url(#closing-grid)"
         stroke="none"
         className="opacity-[0.06] dark:opacity-[0.09]"
@@ -108,13 +266,13 @@ export function ClosingMesh() {
 
       {/* -------------------------------------------------------- nodes */}
       <g strokeWidth="1.2" className="[stroke-opacity:0.6] dark:[stroke-opacity:0.65]">
-        {branches
-          .filter((b) => b.pop)
-          .map((b) => {
-            const [x, y] = px(b.to);
+        {nodes
+          .filter((n) => n.pop)
+          .map((n) => {
+            const [x, y] = px(n.cell);
             return (
               <circle
-                key={`halo-${b.at}`}
+                key={`halo-${x}-${y}`}
                 cx={x}
                 cy={y}
                 r={13}
@@ -124,18 +282,18 @@ export function ClosingMesh() {
               />
             );
           })}
-        {branches.map((b) => {
-          const [x, y] = px(b.to);
-          return <circle key={b.at} cx={x} cy={y} r={b.pop ? 5 : 4} fill="var(--background)" />;
+        {nodes.map((n) => {
+          const [x, y] = px(n.cell);
+          return <circle key={`${x}-${y}`} cx={x} cy={y} r={n.pop ? 5 : 4} fill="var(--background)" />;
         })}
-        {/* the junctions on the bus, the spine's own first */}
-        {[{ at: 0 }, ...branches].map((b) => {
-          const [x, y] = px([b.at, 1]);
-          return <circle key={`bus-${b.at}`} cx={x} cy={y} r={1.6} fill="currentColor" stroke="none" />;
-        })}
-        {/* where the reply leaves the strip: the same dot as the hero's origin */}
-        <circle cx={0} cy={0} r={2.5} fill="var(--foreground)" fillOpacity={0.6} stroke="none" />
-        <path d={path(drop)} strokeWidth="1" className="[stroke-opacity:0.26]" />
+        {/* the hub on the spine: a dot in the ring, like the hero's */}
+        <circle
+          cx={px(cell(0, A, "a"))[0]}
+          cy={px(cell(0, A, "a"))[1]}
+          r={1.6}
+          fill="currentColor"
+          stroke="none"
+        />
       </g>
     </svg>
   );

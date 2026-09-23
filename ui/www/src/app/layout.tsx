@@ -4,6 +4,7 @@ import "./site.css";
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 
+import { Closing } from "@/components/closing-mesh";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { SiteNotice } from "@/components/site-notice";
@@ -62,7 +63,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             <SiteNotice />
             <SiteHeader />
             <main className="flex-1">{children}</main>
-            <SiteFooter />
+            <Closing>
+              <SiteFooter />
+            </Closing>
           </div>
         </Providers>
       </body>

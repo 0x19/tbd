@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
-import { ClosingMesh } from "@/components/closing-mesh";
 import { HeroMesh } from "@/components/hero-mesh";
 import { Eyebrow, Frame, Reveal, SectionHead, Tag } from "@/components/kit";
 import { Pipeline } from "@/components/pipeline";
@@ -253,22 +252,6 @@ export function HomeContent() {
                 </div>
               </dl>
             </div>
-          </Frame>
-        </div>
-
-        {/* ------------------------------------------------------ closing */}
-        {/* The reply leaves and disperses: the hero's mesh turned outward,
-            full width, fading into the footer. */}
-        <div
-          aria-hidden
-          className="relative h-56 overflow-hidden sm:h-72"
-          style={{
-            maskImage: "linear-gradient(to bottom, black 35%, transparent 100%)",
-            WebkitMaskImage: "linear-gradient(to bottom, black 35%, transparent 100%)",
-          }}
-        >
-          <Frame className="relative h-full">
-            <ClosingMesh />
           </Frame>
         </div>
       </div>
