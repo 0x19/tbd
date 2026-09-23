@@ -12,6 +12,7 @@
 //! line.
 
 pub mod cv;
+pub mod llm;
 pub mod playground;
 
 pub use tbd_lab::kind::{Dependency, Field, FieldInfo, FieldKind, Kind, KindInfo, Target, parse};
@@ -28,6 +29,7 @@ pub static ALL: &[&Kind] = &[
     &finance::KIND,
     &playground::KIND,
     &cv::KIND,
+    &llm::KIND,
     // tbd:kinds-end (tbd new service inserts above this line; do not edit)
 ];
 

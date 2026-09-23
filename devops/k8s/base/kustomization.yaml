@@ -6,6 +6,7 @@ resources:
   - configmap.yaml
   - engine
   - protocol
+  - llm
   - cv
   - playground
   - finance

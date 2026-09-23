@@ -333,9 +333,13 @@ run = "cargo run -p tbd-playground"
 description = "Run the cv service (gRPC on CV_LISTEN_ADDR)"
 run = "cargo run -p tbd-cv"
 
+[tasks."run:llm"]
+description = "Run the llm service (gRPC on LLM_LISTEN_ADDR)"
+run = "cargo run -p tbd-llm"
+
 [tasks.dev]
 description = "Both services in one terminal (parallel, output prefixed per service)"
-depends = ["run:engine", "run:protocol", "run:ledger", "run:humans", "run:finance", "run:playground", "run:cv"]
+depends = ["run:engine", "run:protocol", "run:ledger", "run:humans", "run:finance", "run:playground", "run:cv", "run:llm"]
 
 [tasks."watch:engine"]
 description = "Engine with auto-reload on file change (bacon)"
@@ -365,6 +369,10 @@ run = "bacon playground"
 description = "Cv with auto-reload on file change (bacon)"
 run = "bacon cv"
 
+[tasks."watch:llm"]
+description = "Llm with auto-reload on file change (bacon)"
+run = "bacon llm"
+
 # --------------------------------------------------------------- docker ----
 
 [tasks."docker:build"]
@@ -374,6 +382,7 @@ run = [
   "docker build -f devops/docker/Dockerfile --build-arg BIN=engine   --build-arg PORT=50051 -t $IMAGE_REGISTRY/tbd-engine:$IMAGE_TAG .",
   "docker build -f devops/docker/Dockerfile --build-arg BIN=protocol --build-arg PORT=8080  -t $IMAGE_REGISTRY/tbd-protocol:$IMAGE_TAG .",
   "docker build -f devops/docker/Dockerfile --build-arg BIN=chaos    --build-arg PORT=7700  -t $IMAGE_REGISTRY/tbd-chaos:$IMAGE_TAG .",
+  "docker build -f devops/docker/Dockerfile --build-arg BIN=llm --build-arg PORT=50057 -t $IMAGE_REGISTRY/tbd-llm:$IMAGE_TAG .",
   "docker build -f devops/docker/Dockerfile --build-arg BIN=cv --build-arg PORT=50056 -t $IMAGE_REGISTRY/tbd-cv:$IMAGE_TAG .",
   "docker build -f devops/docker/Dockerfile --build-arg BIN=playground --build-arg PORT=50055 -t $IMAGE_REGISTRY/tbd-playground:$IMAGE_TAG .",
   "docker build -f devops/docker/Dockerfile --build-arg BIN=finance --build-arg PORT=50054 -t $IMAGE_REGISTRY/tbd-finance:$IMAGE_TAG .",
@@ -387,6 +396,7 @@ run = [
   "docker push $IMAGE_REGISTRY/tbd-engine:$IMAGE_TAG",
   "docker push $IMAGE_REGISTRY/tbd-protocol:$IMAGE_TAG",
   "docker push $IMAGE_REGISTRY/tbd-chaos:$IMAGE_TAG",
+  "docker push $IMAGE_REGISTRY/tbd-llm:$IMAGE_TAG",
   "docker push $IMAGE_REGISTRY/tbd-cv:$IMAGE_TAG",
   "docker push $IMAGE_REGISTRY/tbd-playground:$IMAGE_TAG",
   "docker push $IMAGE_REGISTRY/tbd-finance:$IMAGE_TAG",
@@ -445,6 +455,7 @@ mise run ui:build
 docker build -f devops/docker/Dockerfile --build-arg BIN=engine   --build-arg PORT=50051 -t $IMAGE_REGISTRY/tbd-engine:dev .
 docker build -f devops/docker/Dockerfile --build-arg BIN=protocol --build-arg PORT=8080  -t $IMAGE_REGISTRY/tbd-protocol:dev .
 docker build -f devops/docker/Dockerfile --build-arg BIN=chaos    --build-arg PORT=7700  -t $IMAGE_REGISTRY/tbd-chaos:dev .
+docker build -f devops/docker/Dockerfile --build-arg BIN=llm --build-arg PORT=50057 -t $IMAGE_REGISTRY/tbd-llm:dev .
 docker build -f devops/docker/Dockerfile --build-arg BIN=cv --build-arg PORT=50056 -t $IMAGE_REGISTRY/tbd-cv:dev .
 docker build -f devops/docker/Dockerfile --build-arg BIN=playground --build-arg PORT=50055 -t $IMAGE_REGISTRY/tbd-playground:dev .
 docker build -f devops/docker/Dockerfile --build-arg BIN=finance --build-arg PORT=50054 -t $IMAGE_REGISTRY/tbd-finance:dev .
@@ -454,7 +465,7 @@ docker build -f devops/docker/Dockerfile.auth-ui $(mise run -q auth:ui-build-arg
 docker build -f devops/docker/Dockerfile.www $(mise run -q www:build-args) -t $IMAGE_REGISTRY/tbd-www:dev .
 docker build -f devops/docker/Dockerfile.finances -t $IMAGE_REGISTRY/tbd-finances-ui:dev .
 docker build -f devops/docker/Dockerfile.cv-ui -t $IMAGE_REGISTRY/tbd-cv-ui:dev .
-k3d image import -m direct -c "$K3D_CLUSTER" $IMAGE_REGISTRY/tbd-engine:dev $IMAGE_REGISTRY/tbd-protocol:dev $IMAGE_REGISTRY/tbd-chaos:dev $IMAGE_REGISTRY/tbd-cv:dev $IMAGE_REGISTRY/tbd-playground:dev $IMAGE_REGISTRY/tbd-finance:dev $IMAGE_REGISTRY/tbd-humans:dev $IMAGE_REGISTRY/tbd-ledger:dev $IMAGE_REGISTRY/tbd-auth-ui:dev $IMAGE_REGISTRY/tbd-www:dev $IMAGE_REGISTRY/tbd-finances-ui:dev $IMAGE_REGISTRY/tbd-cv-ui:dev
+k3d image import -m direct -c "$K3D_CLUSTER" $IMAGE_REGISTRY/tbd-engine:dev $IMAGE_REGISTRY/tbd-protocol:dev $IMAGE_REGISTRY/tbd-chaos:dev $IMAGE_REGISTRY/tbd-llm:dev $IMAGE_REGISTRY/tbd-cv:dev $IMAGE_REGISTRY/tbd-playground:dev $IMAGE_REGISTRY/tbd-finance:dev $IMAGE_REGISTRY/tbd-humans:dev $IMAGE_REGISTRY/tbd-ledger:dev $IMAGE_REGISTRY/tbd-auth-ui:dev $IMAGE_REGISTRY/tbd-www:dev $IMAGE_REGISTRY/tbd-finances-ui:dev $IMAGE_REGISTRY/tbd-cv-ui:dev
 """
 
 # The chaos UI links to grafana.<domain>, logs.<domain>, ... of the public edge.
@@ -994,7 +1005,7 @@ mise run ledger:deploy
 kubectl apply -k devops/k8s/overlays/local
 kubectl -n observability rollout status statefulset/victoria-metrics statefulset/victoria-logs statefulset/tempo --timeout=180s
 kubectl -n observability rollout status statefulset/pyroscope deployment/otel-collector deployment/grafana --timeout=300s
-kubectl -n tbd rollout status deployment/engine deployment/protocol deployment/envoy deployment/chaos deployment/cv deployment/playground deployment/finance deployment/humans deployment/ledger --timeout=180s
+kubectl -n tbd rollout status deployment/engine deployment/protocol deployment/envoy deployment/chaos deployment/llm deployment/cv deployment/playground deployment/finance deployment/humans deployment/ledger --timeout=180s
 mise run local:urls
 """
 
@@ -1006,8 +1017,8 @@ mise run local:build
 kubectl apply -k devops/k8s/overlays/local
 kubectl -n tbd rollout status statefulset/ledger-postgres statefulset/clickhouse --timeout=180s
 mise run db:migrate
-kubectl -n tbd rollout restart deployment/engine deployment/protocol deployment/chaos deployment/ledger deployment/humans deployment/finance deployment/www deployment/playground deployment/cv deployment/finances-ui deployment/cv-ui
-kubectl -n tbd rollout status deployment/engine deployment/protocol deployment/chaos deployment/cv deployment/playground deployment/finance deployment/humans deployment/ledger deployment/www deployment/finances-ui deployment/cv-ui --timeout=180s
+kubectl -n tbd rollout restart deployment/engine deployment/protocol deployment/chaos deployment/ledger deployment/humans deployment/finance deployment/www deployment/playground deployment/cv deployment/finances-ui deployment/cv-ui deployment/llm
+kubectl -n tbd rollout status deployment/engine deployment/protocol deployment/chaos deployment/llm deployment/cv deployment/playground deployment/finance deployment/humans deployment/ledger deployment/www deployment/finances-ui deployment/cv-ui --timeout=180s
 """
 
 [tasks."cv:secrets"]

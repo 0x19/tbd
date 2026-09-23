@@ -4487,6 +4487,48 @@
         }
       }
     },
+    "/v1/llm/ping": {
+      "get": {
+        "tags": [
+          "llm"
+        ],
+        "summary": "tbd.llm.v1.LlmService/Ping",
+        "description": "Transcoded from `/tbd.llm.v1.LlmService/Ping` on the `llm` backend.",
+        "operationId": "LlmService.Ping",
+        "parameters": [
+          {
+            "name": "message",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "`tbd.llm.v1.PingResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.llm.v1.PingResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/me": {
       "get": {
         "tags": [
@@ -8736,6 +8778,21 @@
         "properties": {
           "tombstone": {
             "$ref": "#/components/schemas/tbd.ledger.v1.Fact"
+          }
+        }
+      },
+      "tbd.llm.v1.PingResponse": {
+        "type": "object",
+        "description": "`tbd.llm.v1.PingResponse`",
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "stub": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "string"
           }
         }
       },

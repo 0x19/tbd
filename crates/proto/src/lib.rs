@@ -74,3 +74,12 @@ pub mod cv {
             include_bytes!(concat!(env!("OUT_DIR"), "/cv_descriptor.bin"));
     }
 }
+
+pub mod llm {
+    pub mod v1 {
+        tonic::include_proto!("tbd.llm.v1");
+        /// Encoded `FileDescriptorSet` for this package, for gRPC reflection.
+        pub const DESCRIPTOR_SET: &[u8] =
+            include_bytes!(concat!(env!("OUT_DIR"), "/llm_descriptor.bin"));
+    }
+}

@@ -6078,6 +6078,7 @@ dependencies = [
  "tbd-humans",
  "tbd-lab",
  "tbd-ledger",
+ "tbd-llm",
  "tbd-playground",
  "tbd-proto",
  "tbd-protocol",
@@ -6341,6 +6342,25 @@ dependencies = [
  "tracing",
  "url",
  "uuid",
+]
+
+[[package]]
+name = "tbd-llm"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "metrics",
+ "serde",
+ "tbd-common",
+ "tbd-proto",
+ "thiserror 2.0.20",
+ "tokio",
+ "toml 1.1.5+spec-1.1.0",
+ "tonic",
+ "tonic-health",
+ "tonic-reflection",
+ "tracing",
 ]
 
 [[package]]

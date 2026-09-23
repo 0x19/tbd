@@ -55,9 +55,16 @@ need_stdout = true
 background = false
 on_change_strategy = "kill_then_restart"
 
+[jobs.llm]
+command = ["cargo", "run", "-p", "tbd-llm", "--color", "always"]
+need_stdout = true
+background = false
+on_change_strategy = "kill_then_restart"
+
 [keybindings]
 e = "job:engine"
 p = "job:protocol"
+m = "job:llm"
 c = "job:cv"
 g = "job:playground"
 f = "job:finance"

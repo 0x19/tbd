@@ -8,7 +8,7 @@
 #                     x-tbd-backend header, so service replicas are a pure scale-out.
 #   :9901  admin      /ready, /stats/prometheus, /clusters, /config_dump.
 #
-# Clusters resolve by DNS name: `engine`, `protocol`, `cv`, `playground`, `finance`, `humans`, `ledger`, `chaos`, `otel-collector`,
+# Clusters resolve by DNS name: `engine`, `protocol`, `llm`, `cv`, `playground`, `finance`, `humans`, `ledger`, `chaos`, `otel-collector`,
 # `hydra`, `kratos`, `auth-ui`, `grafana`, `victoria-logs`, `pyroscope`,
 # `victoria-metrics`.
 #
@@ -970,6 +970,19 @@ static_resources:
                             cluster: cv
                             timeout: 0s
                             retry_policy: *grpc_retry
+                        # llm, matched by service name; the engine stays the catch-all.
+                        - match: { prefix: "/tbd.llm.v1.LlmService/", grpc: {} }
+                          route:
+                            cluster: llm
+                            timeout: 0s
+                            retry_policy: *grpc_retry
+                        # llm health: the grpc.health.v1 path is shared, so the protocol
+                        # names the backend it is asking about in x-tbd-backend.
+                        - match: { prefix: "/grpc.health.v1.Health/", grpc: {}, headers: [{ name: x-tbd-backend, string_match: { exact: llm } }] }
+                          route:
+                            cluster: llm
+                            timeout: 0s
+                            retry_policy: *grpc_retry
                         - match: { prefix: "/" }
                           route:
                             cluster: engine
@@ -1191,6 +1204,37 @@ static_resources:
           healthy_threshold: 1
           grpc_health_check:
             service_name: tbd.cv.v1.CvService
+      outlier_detection:
+        consecutive_gateway_failure: 5
+        interval: 5s
+        base_ejection_time: 30s
+        max_ejection_percent: 50
+
+    - name: llm
+      type: STRICT_DNS
+      dns_lookup_family: V4_ONLY
+      dns_refresh_rate: 5s
+      lb_policy: LEAST_REQUEST
+      connect_timeout: 1s
+      typed_extension_protocol_options:
+        envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+          "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+          explicit_http_config:
+            http2_protocol_options: {}
+      load_assignment:
+        cluster_name: llm
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address: { address: llm, port_value: 50057 }
+      health_checks:
+        - timeout: 1s
+          interval: 5s
+          unhealthy_threshold: 2
+          healthy_threshold: 1
+          grpc_health_check:
+            service_name: tbd.llm.v1.LlmService
       outlier_detection:
         consecutive_gateway_failure: 5
         interval: 5s

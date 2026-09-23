@@ -79,6 +79,7 @@ pull request, and pushes them only on `main`, tagged with the short commit SHA a
 - `ghcr.io/<ORG>/tbd-engine`
 - `ghcr.io/<ORG>/tbd-protocol`
 - `ghcr.io/<ORG>/tbd-chaos`
+- `ghcr.io/<ORG>/tbd-llm`
 - `ghcr.io/<ORG>/tbd-cv`
 - `ghcr.io/<ORG>/tbd-playground`
 - `ghcr.io/<ORG>/tbd-finance`

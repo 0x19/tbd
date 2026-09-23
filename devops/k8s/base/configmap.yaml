@@ -11,6 +11,8 @@ data:
   ENGINE_METRICS_ADDR: 0.0.0.0:9464
   PROTOCOL_LISTEN_ADDR: 0.0.0.0:8080
   PROTOCOL_METRICS_ADDR: 0.0.0.0:9464
+  LLM_LISTEN_ADDR: 0.0.0.0:50057
+  LLM_METRICS_ADDR: 0.0.0.0:9464
   CV_LISTEN_ADDR: 0.0.0.0:50056
   CV_METRICS_ADDR: 0.0.0.0:9464
   PLAYGROUND_LISTEN_ADDR: 0.0.0.0:50055
@@ -29,6 +31,7 @@ data:
   PROTOCOL_ENGINE_URL: http://envoy:50051
   PROTOCOL_HUMANS_URL: http://envoy:50051
   PROTOCOL_LEDGER_URL: http://envoy:50051
+  PROTOCOL_LLM_URL: http://envoy:50051
   PROTOCOL_CV_URL: http://envoy:50051
   # The cv service reaches finance for the mail through the internal listener too.
   CV_FINANCE_URL: http://envoy:50051

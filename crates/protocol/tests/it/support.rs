@@ -78,6 +78,7 @@ pub async fn start() -> Stack {
             // Registered and never up, like a scaffolded service before its
             // first deploy: its routes exist and answer `unavailable`.
             ("humans".to_owned(), "http://127.0.0.1:1".to_owned()),
+            ("llm".to_owned(), "http://127.0.0.1:1".to_owned()),
             ("cv".to_owned(), "http://127.0.0.1:1".to_owned()),
             ("playground".to_owned(), "http://127.0.0.1:1".to_owned()),
             ("finance".to_owned(), format!("http://{finance_addr}")),

@@ -21,6 +21,8 @@ images:
     newTag: dev
   - name: ghcr.io/0x19/tbd-cv
     newTag: dev
+  - name: ghcr.io/0x19/tbd-llm
+    newTag: dev
 patches:
   - target:
       kind: Deployment
@@ -85,6 +87,16 @@ patches:
   - target:
       kind: Deployment
       name: cv
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+      - op: replace
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: Always
+  - target:
+      kind: Deployment
+      name: llm
     patch: |-
       - op: replace
         path: /spec/replicas

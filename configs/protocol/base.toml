@@ -46,6 +46,10 @@ required = false
 url = "http://127.0.0.1:50056"
 service = "tbd.cv.v1.CvService"
 required = false
+[services.llm]
+url = "http://127.0.0.1:50057"
+service = "tbd.llm.v1.LlmService"
+required = false
 # tbd:services-end (tbd new service inserts above this line; do not edit)
 
 [health]

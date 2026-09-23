@@ -5,6 +5,7 @@
 [targets]
 protocol = "https://api.example.invalid"
 engine = "https://engine.api.example.invalid"
+llm = "https://engine.api.example.invalid"
 cv = "https://engine.api.example.invalid"
 playground = "https://engine.api.example.invalid"
 finance = "https://engine.api.example.invalid"
