@@ -103,6 +103,8 @@ mod tests {
                 body: "Built the widget balancer that fronts every network.".into(),
                 highlights: vec!["It carries nine million widgets a second.".into()],
             }],
+            summary: "Twenty years, most of them balancing widgets.".into(),
+            achievements: vec!["The widget balancer itself.".into()],
         }
     }
 
@@ -131,6 +133,7 @@ mod tests {
             "References",
             "widget balancer",
             "nine million widgets",
+            "balancing widgets",
         ] {
             assert!(!t.contains(absent), "public render carries {absent:?}");
         }
@@ -157,6 +160,8 @@ mod tests {
             "2026-09-23",
             "widget balancer",
             "nine million widgets",
+            "balancing widgets",
+            "The widget balancer itself.",
         ] {
             assert!(t.contains(present), "full render lacks {present:?}: {t}");
         }

@@ -23,6 +23,13 @@ pub struct Private {
     /// matched to the public entry by company name.
     #[serde(default)]
     pub experience: Vec<PrivateExperience>,
+    /// A summary that replaces the public one in the full CV; empty keeps
+    /// the public one.
+    #[serde(default)]
+    pub summary: String,
+    /// Lines added to the public "Selected work" in the full CV.
+    #[serde(default)]
+    pub achievements: Vec<String>,
 }
 
 /// The private half of one position.
@@ -72,6 +79,11 @@ impl std::fmt::Debug for Private {
             )
             .field("references", &self.references.len())
             .field("experience", &self.experience.len())
+            .field(
+                "summary",
+                &if self.summary.is_empty() { "" } else { "<set>" },
+            )
+            .field("achievements", &self.achievements.len())
             .finish()
     }
 }
@@ -161,9 +173,12 @@ mod tests {
                 body: "Ran the secret project.".into(),
                 highlights: vec!["Carried 9 million widgets a second.".into()],
             }],
+            summary: "Twenty years of secret projects.".into(),
+            achievements: vec!["The secret widget.".into()],
         };
         let text = format!("{p:?}");
         for secret in [
+            "secret",
             "4567",
             "Benčani",
             "Ann",

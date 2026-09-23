@@ -54,10 +54,10 @@
 ]
 
 #section("Summary")
-#d.summary
+#if private != none and private.summary != "" [ #private.summary ] else [ #d.summary ]
 
 #section("Selected work")
-#for a in d.achievements [
+#for a in (d.achievements + (if private != none { private.achievements } else { () })) [
   - #a
 ]
 

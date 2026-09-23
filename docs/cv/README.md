@@ -53,7 +53,9 @@ and the date on every page. Every download is recorded.
   ],
   "experience": [
     { "company": "Tenderly", "body": "A paragraph only the full CV carries.", "highlights": ["A line under it.", "Another."] }
-  ]
+  ],
+  "summary": "A summary that replaces the public one in the full CV; leave it out to keep the public one.",
+  "achievements": ["A line added to Selected work in the full CV."]
 }
 ```
 
