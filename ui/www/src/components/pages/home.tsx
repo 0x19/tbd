@@ -218,25 +218,42 @@ export function HomeContent() {
         ) : null}
 
         {/* ------------------------------------------------------------ end */}
-        <Frame className="relative pt-10 pb-24 sm:pt-14 sm:pb-32">
-          <span aria-hidden className="bg-border absolute top-0 left-3 h-10 w-px sm:left-4 sm:h-14" />
-          <div ref={endRef} className="relative -ml-3 border-t pl-3 sm:-ml-4 sm:pl-4">
-            <Port filled />
-            <div className="pt-10">
-              <Eyebrow>{t("home.hi.label")}</Eyebrow>
-              {/* the line on the right shares the email's baseline, not the eyebrow's */}
-              <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-baseline sm:justify-between sm:gap-10">
-                <a
-                  href={`mailto:${facts.email}`}
-                  className="block text-2xl font-semibold tracking-[-0.03em] break-all transition-opacity hover:opacity-60 sm:text-4xl"
-                >
-                  {facts.email}
-                </a>
-                <p className="text-muted-foreground max-w-xs text-sm text-pretty">{t("home.hi.text")}</p>
-              </div>
+        {/* The reply leaves by the same kind of box the request came in by:
+            the strip under the hero, mirrored, with the spine ending on its
+            corner and its light running the other way. */}
+        <div ref={endRef} className="relative mb-24 border-y sm:mb-32">
+          <Frame className="relative">
+            <span aria-hidden className="absolute top-0 left-3 sm:left-4">
+              <Port filled />
+            </span>
+            <div className="relative">
+              <StripEdge reverse dividers={["56.5217%"]} />
+              <dl className="grid divide-y sm:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] sm:divide-x sm:divide-y-0">
+                <div className="py-5 sm:pr-8">
+                  <dt className="text-muted-foreground/70 font-mono text-[11px] tracking-[0.18em] uppercase">
+                    {t("home.hi.label")}
+                  </dt>
+                  <dd className="mt-2">
+                    <a
+                      href={`mailto:${facts.email}`}
+                      className="text-2xl font-semibold tracking-[-0.03em] break-all transition-opacity hover:opacity-60 sm:text-4xl"
+                    >
+                      {facts.email}
+                    </a>
+                  </dd>
+                </div>
+                <div className="py-5 sm:pl-8">
+                  <dt className="text-muted-foreground/70 font-mono text-[11px] tracking-[0.18em] uppercase">
+                    {t("home.hi.how")}
+                  </dt>
+                  <dd className="text-muted-foreground mt-2 max-w-xs text-sm text-pretty">
+                    {t("home.hi.text")}
+                  </dd>
+                </div>
+              </dl>
             </div>
-          </div>
-        </Frame>
+          </Frame>
+        </div>
       </div>
     </>
   );
@@ -274,36 +291,58 @@ function Box({
 }
 
 /**
- * The facts strip is the first box on the path, so its edges carry the
- * traffic: one light runs round its outline with a tail (three strokes on
- * the same dash start, the pattern moving backwards so the start leads), and
- * a drop falls down each divider now and then. `pathLength` normalises the
- * dash units so the same numbers work at any width. Decoration only, and gone
- * under prefers-reduced-motion (`site.css`).
+ * A strip's edges carry the traffic: one light runs round its outline with a
+ * tail (three strokes on the same dash start, the pattern moving backwards so
+ * the start leads), and a drop falls down each divider now and then. The
+ * outline sits half a gutter out, on the spine's own line, so the light never
+ * runs along the text's edge and the strip's corner is where the spine begins
+ * or ends. `reverse` mirrors the loop for the strip the reply leaves by.
+ * `pathLength` normalises the dash units so the same numbers work at any
+ * width. Decoration only, and gone under prefers-reduced-motion (`site.css`).
  */
-function StripEdge() {
+function StripEdge({
+  reverse,
+  dividers = ["33.3333%", "66.6667%"],
+}: {
+  reverse?: boolean;
+  dividers?: string[];
+}) {
   const ring = { x: 0, y: 0, width: "100%", height: "100%", pathLength: 1000 } as const;
+  const svg = "strip-edge text-foreground pointer-events-none absolute overflow-visible";
   return (
-    <svg
-      aria-hidden
-      className="strip-edge text-foreground pointer-events-none absolute inset-0 h-full w-full overflow-visible"
-      fill="none"
-      stroke="currentColor"
-      strokeLinecap="round"
-    >
-      <g className="strip-loop">
-        <rect {...ring} strokeWidth="3" className="strip-glow" />
-        <rect {...ring} strokeWidth="1.5" className="strip-tail" />
-        <rect {...ring} strokeWidth="1.5" className="strip-head" />
-      </g>
-      {/* the dividers, on a wide screen only: the drop runs top to bottom */}
-      {["33.3333%", "66.6667%"].map((x, i) => (
-        <g key={x} className="strip-drop hidden sm:block" style={{ animationDelay: `${i * 3.1 + 1.2}s` }}>
-          <line x1={x} y1="100%" x2={x} y2="0" pathLength={100} strokeWidth="1.5" className="strip-tail" />
-          <line x1={x} y1="100%" x2={x} y2="0" pathLength={100} strokeWidth="1.5" className="strip-head" />
+    <>
+      <svg
+        aria-hidden
+        className={cn(
+          svg,
+          "-inset-x-3 inset-y-0 h-full w-[calc(100%+1.5rem)] sm:-inset-x-4 sm:w-[calc(100%+2rem)]",
+        )}
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+      >
+        <g className={cn("strip-loop", reverse && "strip-reverse")}>
+          <rect {...ring} strokeWidth="3" className="strip-glow" />
+          <rect {...ring} strokeWidth="1.5" className="strip-tail" />
+          <rect {...ring} strokeWidth="1.5" className="strip-head" />
         </g>
-      ))}
-    </svg>
+      </svg>
+      {/* the dividers, on a wide screen only: the drop runs top to bottom */}
+      <svg
+        aria-hidden
+        className={cn(svg, "inset-0 hidden h-full w-full sm:block")}
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+      >
+        {dividers.map((x, i) => (
+          <g key={x} className="strip-drop" style={{ animationDelay: `${i * 3.1 + 1.2}s` }}>
+            <line x1={x} y1="100%" x2={x} y2="0" pathLength={100} strokeWidth="1.5" className="strip-tail" />
+            <line x1={x} y1="100%" x2={x} y2="0" pathLength={100} strokeWidth="1.5" className="strip-head" />
+          </g>
+        ))}
+      </svg>
+    </>
   );
 }
 

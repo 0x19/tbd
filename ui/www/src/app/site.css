@@ -274,6 +274,13 @@
   opacity: 0.9;
 }
 
+/* The strip the reply leaves by: the same loop, mirrored, so it runs the other way. */
+.strip-reverse {
+  transform: scaleX(-1);
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
 .strip-drop > * {
   animation: strip-fall 7s linear infinite;
   animation-delay: inherit;

@@ -27,6 +27,7 @@ export const en: Dict = {
     "The working-out behind the platform and the playgrounds, published when a piece is ready to be read.",
   "home.lab.cta": "Into the lab →",
   "home.hi.label": "Say hi",
+  "home.hi.how": "What happens",
   "home.hi.text": "No form, no funnel. One person reading the mail.",
 };
 
@@ -55,5 +56,6 @@ export const hr: Dict = {
   "home.lab.lead": "Razrada iza platforme i igrališta, objavljena kad je komad spreman za čitanje.",
   "home.lab.cta": "U laboratorij →",
   "home.hi.label": "Javi se",
+  "home.hi.how": "Što slijedi",
   "home.hi.text": "Bez obrasca, bez lijevka. Poštu čita jedna osoba.",
 };

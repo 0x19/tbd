@@ -167,8 +167,12 @@ practice log is `localStorage`, per browser, and its page says so.
   Below the hero the page is one drawing: a spine (a hairline half a gutter left of
   the content, `left-3 sm:left-4` inside each Frame) runs from the facts strip to the
   email, every section is a `Box` on it with a knock-out port where its rule meets
-  the line, the email's port is filled because the line ends there, and one packet
-  (`Spine`, measured with a ResizeObserver) crawls the whole way. A new home section
+  the line, and one packet (`Spine`, measured with a ResizeObserver) crawls the whole
+  way. The page opens and closes with the same kind of box: the facts strip under
+  the hero is where the request comes in and the email strip at the end is where
+  the reply leaves, so both carry `StripEdge` (a light round the outline, drops down
+  the dividers, mirrored on the last one) and the spine runs from the first strip's
+  corner to a filled port on the last one's. A new home section
   is a `Box`, so it gets its port and its stretch of the line for free.
 - The pipeline on the home page (`src/components/pipeline.tsx`, data in
   `pipeline` and `rails`) is a drawing of a real system, not an illustration:
