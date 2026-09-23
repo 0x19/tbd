@@ -206,8 +206,6 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm build
-      # The cv service renders from the same data: the committed JSON must be current.
-      - run: node --no-warnings tool/cv-data.ts && git diff --exit-code -- ../../crates/cv/assets/cv.json
 
   ui-finances:
     name: ui/finances (prettier + eslint + tsc + build)
@@ -252,6 +250,33 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm build
+
+  ui-www:
+    name: ui/www (lab render + prettier + eslint + tsc + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ui/www
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: ui/www/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: ui/www/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      # Renders docs/rfcs and docs/studies for the lab; a public page that leaks
+      # a host, address, port, path, secret or cluster name fails here with file:line.
+      - run: pnpm gen
+      - run: pnpm format:check
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm build
+      # The cv service renders from the same data: the committed JSON must be current.
+      - run: node --no-warnings tool/cv-data.ts && git diff --exit-code -- ../../crates/cv/assets/cv.json
 
   mobile:
     name: mobile (format + analyze + drift checks + tests)

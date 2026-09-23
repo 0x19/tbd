@@ -12,6 +12,8 @@ extend-exclude = [
   "ui/cv/src/lib/i18n/messages/",
   "ui/www/src/lib/i18n/messages/",
   "ui/www/src/data/site.hr.ts",
+  # The lab's redaction denylist: resource names, not words.
+  "docs/lab/redaction.json",
   # The accountant's NDA: the Croatian version, which the checker reads as English.
   "docs/nda/nda.hr.md",
   # Merchant names as printed on bank statements; a rule must match them as spelled.

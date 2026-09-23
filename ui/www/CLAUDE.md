@@ -11,7 +11,7 @@ sentence is a promise. The one cookie the site sets is the language a visitor
 picked (`inorbit.lang`, two letters, on the parent domain so `cv.` reads the same),
 and `/legal/` names it.
 
-The one exception is a playground. `/playgrounds/break-it/` calls the gateway on
+The one exception is a playground. `/lab/break-it/` (Break it, the lab's first demo) calls the gateway on
 the same origin (`/v1/playground/*` and `/v1/ws`), which is why those paths are
 routed on the public `www` virtual host rather than the API host: same origin,
 no CORS, no cookie of its own. `/legal/` promises that a playground which processes
@@ -28,6 +28,7 @@ Publishing the lab is one deliberate commit that touches two places: `lab.public
 in `src/data/site.ts` and the `/lab/` route's gate in `devops/envoy/envoy.yaml`,
 and it revisits the `/legal/` sentence if the lab's demo then processes what a
 visitor types.
+
 The music playgrounds (`/playgrounds/tuner/`, `fretboard/`, `spectrogram/`, `chords/`,
 `metronome/`, `ear/`) are the other kind: whatever they hear or play stays in the page.
 `src/lib/music/` is the arithmetic with no audio in it (`pitch.ts` detection and notes,
@@ -39,6 +40,30 @@ neck and the chord box). Each page's paragraph says nothing leaves the browser -
 true; a page that uploaded audio would break the `/legal/` promise. The metronome's
 practice log is `localStorage`, per browser, and its page says so.
 
+- **The lab's pages are markdown in the repository**, `docs/rfcs/` and
+  `docs/studies/` (their READMEs are the conventions), rendered at build time by
+  `tool/lab-data.ts` into the gitignored `src/generated/lab/` (`pnpm gen`, run before
+  dev, build, lint and typecheck, and as `mise run www:lab`; `next dev` does not watch
+  `docs/`, so re-run it after an edit). `public: true` in a page's front matter is the
+  publish switch; a private page is not rendered, not checked and may not be linked
+  from a public one. A public page is refused, with `file:line`, when it names an
+  internal host, an address, a port, a path into the machine or the deployment, a
+  secret or the shape of the gate, a cluster name, a word from
+  `docs/lab/redaction.json`, or loads anything from elsewhere (`tool/lab-redaction.ts`
+  is the list). A fact that belongs in the narrative is withheld in the open with
+  `[REDACTED: reason]` or a ` ```redacted ` block, never paraphrased away; both
+  render as a black bar with the reason on hover. A published RFC is a living
+  document: a change that alters what it says updates it in the same commit. The prose
+  is English in both languages; only the chrome (`messages/lab.ts`) translates. The
+  www image copies the three docs folders in so the same generator runs in the build.
+  A static export refuses a dynamic route with no pages, so an empty list yields one
+  placeholder slug that answers with the 404 (`app/lab/rfc/[slug]/page.tsx`).
+- **Three sections for what was made, one rule each.** `/lab/` is what is being built
+  now, with numbers and a status stamp; `/work/` (the `projects` data) is what
+  shipped, finished, with a date and a link; `/playgrounds/` ("Play") is what to try
+  for fun. A lab subject that finishes graduates to `/work/` with one line pointing
+  back. `/projects/` and `/playgrounds/break-it/` only send the browser on, kept for
+  old links; neither is in the sitemap.
 - **Content lives in `src/data/site.ts`.** A copy change edits that file, and its
   Croatian twin in `src/data/site.hr.ts`. Do not inline facts into a page.
 - **A `TODO` field renders as `—`** (`orDash`). Never invent a registration
@@ -154,8 +179,8 @@ practice log is `localStorage`, per browser, and its page says so.
 - `/legal/` carries the imprint and privacy; `/terms/` covers the site and the
   playgrounds. A playground that processes what a visitor types says so on its
   own page.
-- Same bar as the other projects: `mise run ui:www:check` (prettier, eslint,
-  tsc) is in `mise run ci`.
+- Same bar as the other projects: `mise run ui:www:check` (the lab render and its
+  redaction check, prettier, eslint, tsc) is in `mise run ci`, as the `ui-www` job.
 - The image is `devops/docker/Dockerfile.www` (Caddy, `devops/docker/www.Caddyfile`);
   the deployment is `devops/k8s/www/`; Envoy's public `www.*` virtual host and the
   public edge's apex block route to it.

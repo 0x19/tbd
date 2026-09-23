@@ -26,11 +26,16 @@
 !ui/auth/
 ui/auth/node_modules/
 ui/auth/.next/
-# The company site (Dockerfile.www builds it from source; never its outputs).
+# The company site (Dockerfile.www builds it from source; never its outputs), and
+# the markdown its lab renders at build time.
 !ui/www/
 ui/www/node_modules/
 ui/www/.next/
 ui/www/out/
+ui/www/src/generated/
+!docs/rfcs/
+!docs/studies/
+!docs/lab/
 !devops/docker/www.Caddyfile
 # The finance UI (Dockerfile.finances builds it from source; never its outputs).
 !ui/finances/

@@ -40,6 +40,7 @@
 | You are deploying | [../devops/README.md](../devops/README.md) |
 | You want the earlier product thinking | [design/](design/README.md), idea material only |
 | You want the fun ideas we might build next, such as the interview simulator and the personal LLM stack | [ideas/](ideas/README.md), idea material only |
+| You are writing an RFC or a study for the site's lab, or its page failed the redaction check | [rfcs/README.md](rfcs/README.md), [studies/README.md](studies/README.md) |
 
 Every crate and the `devops/` and `scenarios/` directories also carry a `CLAUDE.md` with
 the non-obvious facts about that directory: boundaries, invariants, gotchas. They are

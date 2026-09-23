@@ -88,6 +88,16 @@ Append an entry to `playgrounds` in `src/data/site.ts`:
 label instead of a dead link. An empty array renders the honest empty state, so
 the page never lists something that is not there.
 
+## The lab
+
+`docs/rfcs/` and `docs/studies/` are the source; `pnpm gen` (or `mise run www:lab`)
+renders every page marked `public: true` into `src/generated/lab/` and refuses to
+write anything when a public page leaks (a host, an address, a port, a path, a
+secret, a cluster name), printing `file:line [rule] "text"`. The generator runs
+before `dev`, `build`, `lint` and `typecheck`; `next dev` does not watch `docs/`, so
+run it again after editing a page. The conventions, the redaction syntax and the
+living-document rule are in `docs/rfcs/README.md`.
+
 ## Where it is published
 
 `NEXT_PUBLIC_SITE_URL` (the `SITE_URL` build argument of
@@ -106,14 +116,15 @@ redirects to it); unset, the image's default `https://inorbit.hr` applies.
 
 ## Pages
 
-| Path                          | What it is                                                                                                                                                                     |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `/`                           | Who this is, the playgrounds, what I have built, what I am doing now, how I like to build                                                                                      |
-| `/playgrounds/`               | The prototypes. Empty until the first is up                                                                                                                                    |
-| `/projects/`                  | Every public repository, with the year it was written                                                                                                                          |
-| `/about/`                     | The person and the record: the story, selected work, every position, the PDF (`public/cv/`, `mise run www:cv`); the full version is behind `cv.<domain>` (`docs/cv/README.md`) |
-| `/cv/`                        | Sends the browser to `/about/`; kept for old links and the PDF beside it                                                                                                       |
-| `/contact/`                   | The address, and nothing resembling a form                                                                                                                                     |
-| `/legal/`                     | Company details (imprint, OIB) and the privacy notice                                                                                                                          |
-| `/terms/`                     | Terms of use for the site and the playgrounds                                                                                                                                  |
-| `/robots.txt`, `/sitemap.xml` | Generated at build time from `src/data/site.ts`                                                                                                                                |
+| Path                          | What it is                                                                                                                                                                              |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/`                           | Who this is, the playgrounds, what I have built, what I am doing now, how I like to build                                                                                               |
+| `/lab/`                       | What is being built now: the live demos (Break it, the model demo once it is up), the RFCs and the studies, rendered from `docs/rfcs/` and `docs/studies/`; admins-only until published |
+| `/playgrounds/`               | "Play": the music tools. Break it lives under the lab                                                                                                                                   |
+| `/work/`                      | Every public repository, with the year it was written (`/projects/` sends the browser here)                                                                                             |
+| `/about/`                     | The person and the record: the story, selected work, every position, the PDF (`public/cv/`, `mise run www:cv`); the full version is behind `cv.<domain>` (`docs/cv/README.md`)          |
+| `/cv/`                        | Sends the browser to `/about/`; kept for old links and the PDF beside it                                                                                                                |
+| `/contact/`                   | The address, and nothing resembling a form                                                                                                                                              |
+| `/legal/`                     | Company details (imprint, OIB) and the privacy notice                                                                                                                                   |
+| `/terms/`                     | Terms of use for the site and the playgrounds                                                                                                                                           |
+| `/robots.txt`, `/sitemap.xml` | Generated at build time from `src/data/site.ts`                                                                                                                                         |

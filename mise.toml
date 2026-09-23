@@ -81,8 +81,16 @@ run = [
   "buf lint proto",
 ]
 
+[tasks."test:db:reset"]
+description = "Remove the shared test containers (tbd-test-postgres, tbd-test-clickhouse); the next test run starts fresh ones. For an image bump or a corrupted volume, never routine"
+run = """
+for name in tbd-test-postgres tbd-test-clickhouse; do
+  if docker inspect "$name" >/dev/null 2>&1; then docker rm -f "$name" >/dev/null && echo "removed $name"; else echo "$name: not running"; fi
+done
+"""
+
 [tasks.test]
-description = "Unit + integration tests (nextest) and doctests. The ledger's store tests need Docker or LEDGER_TEST_DATABASE_URL / LEDGER_TEST_CLICKHOUSE_URL; with neither they are skipped with a warning (and fail under CI=1)"
+description = "Unit + integration tests (nextest) and doctests. Database-backed tests share one reusable Postgres container (tbd-test-postgres; ClickHouse: tbd-test-clickhouse) or use TBD_TEST_DATABASE_URL / LEDGER_TEST_*_URL; test:db:reset removes the containers. The ledger's store tests need Docker or LEDGER_TEST_DATABASE_URL / LEDGER_TEST_CLICKHOUSE_URL; with neither they are skipped with a warning (and fail under CI=1)"
 # The progress bar writes carriage returns, which smear into one line when
 # output goes through mise. The per-test list is what we want anyway.
 env = { NEXTEST_HIDE_PROGRESS_BAR = "1" }
@@ -690,11 +698,18 @@ node --no-warnings tool/cv-data.ts
 typst compile --font-path ../../crates/render/assets/fonts --ignore-system-fonts ../../crates/cv/assets/cv.typ public/cv/nevio-vesic.pdf
 """
 
+[tasks."www:lab"]
+description = "Render docs/rfcs and docs/studies into ui/www/src/generated/lab (gitignored) and run the redaction check: a public page that names a host, an address, a port, a path, a secret or a cluster name fails with file:line"
+depends = ["ui:www:install"]
+dir = "ui/www"
+run = "pnpm gen"
+
 [tasks."ui:www:check"]
-description = "ui/www: prettier, eslint, tsc (same bar as ui/chaos), and the CV data in crates/cv/assets is current"
+description = "ui/www: the lab render and its redaction check, prettier, eslint, tsc (same bar as ui/chaos), and the CV data in crates/cv/assets is current"
 depends = ["ui:www:install"]
 dir = "ui/www"
 run = """
+pnpm gen
 pnpm format:check
 pnpm lint
 pnpm typecheck
