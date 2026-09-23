@@ -114,7 +114,14 @@ impl Llm {
     /// overrun: tokens are known only when it ends.
     async fn admit_budget(&self, subject: &str) -> Result<(), Status> {
         let limit = self.inner.budget.tokens_per_day;
-        if limit == 0 {
+        if limit == 0
+            || self
+                .inner
+                .budget
+                .unlimited_subjects
+                .iter()
+                .any(|s| s == subject)
+        {
             return Ok(());
         }
         if let Some(used) = self.used_today(subject).await?

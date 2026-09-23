@@ -62,6 +62,11 @@ max_embed_inputs = 64
 # Tokens (prompt plus completion) one caller may spend per UTC day; 0 is no
 # limit. Enforced only when generations are recorded (a store is configured).
 tokens_per_day = 200000
+# Subjects the limit does not apply to: the platform's own instruments, never
+# a person. The chaos tool's load operations call as chaos-load and would
+# spend a day's budget in a few minutes of measurement (they did, on the
+# first day). Their generations are still recorded.
+unlimited_subjects = ["chaos-load"]
 
 [store]
 # The Postgres schema `llm`: sessions and generations, the budget's source.

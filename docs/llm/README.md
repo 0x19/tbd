@@ -66,7 +66,7 @@ recorded).
 | The engines | `crates/llm/src/engine/`: the trait, `ollama.rs`, `llamacpp.rs`, `stub.rs`; one match on the kind, in `build` |
 | The tiers | `configs/llm/base.toml` `[engines.fast]` and `[engines.deep]`: `kind`, `url`, `model`, `timeout_secs`, `embed_model` (the tier embeds only when it is set); URLs and models per environment through `LLM_FAST_URL`, `LLM_FAST_MODEL`, `LLM_DEEP_URL`, `LLM_DEEP_MODEL` |
 | The record | schema `llm` in the shared app database, migration `0029_llm.sql`, Secret `llm-db` from `mise run llm:secrets`, then `mise run db:migrate` |
-| The budget | `[budget] tokens_per_day` (0 is no limit); enforced only when generations are recorded |
+| The budget | `[budget] tokens_per_day` (0 is no limit); enforced only when generations are recorded; `unlimited_subjects` exempts the platform's own instruments (the chaos tool's `chaos-load`), never a person |
 | The probe | `[engines] probe_interval` / `probe_timeout`; `tbd_llm_engine_up` and `ListModels.up` |
 | The checks | `grpc_llm_ping`, `grpc_llm_models_lists_both_tiers`, `grpc_llm_generate_unauthenticated` (`docs/chaos/kinds.md`) |
 

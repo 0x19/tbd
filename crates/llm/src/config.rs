@@ -262,12 +262,18 @@ pub struct Budget {
     /// Tokens (prompt plus completion) one caller may spend per UTC day;
     /// 0 is no limit. Enforced only when generations are recorded.
     pub tokens_per_day: u64,
+    /// Subjects the limit does not apply to: the platform's own instruments
+    /// (the chaos tool's load subject), never a person. Their generations are
+    /// still recorded.
+    #[serde(default)]
+    pub unlimited_subjects: Vec<String>,
 }
 
 impl Default for Budget {
     fn default() -> Self {
         Self {
             tokens_per_day: 200_000,
+            unlimited_subjects: vec!["chaos-load".to_owned()],
         }
     }
 }

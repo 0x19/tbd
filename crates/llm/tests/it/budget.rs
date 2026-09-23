@@ -231,6 +231,49 @@ async fn without_a_limit_the_budget_is_unlimited_but_still_recorded() {
     assert_eq!(budget.used_today, PER_GENERATION);
 }
 
+#[tokio::test]
+async fn an_unlimited_subject_is_recorded_but_never_refused() {
+    let (server, pool) = support::start_with_store(Fixture::Stub, |c| {
+        c.budget.tokens_per_day = 1;
+        c.budget.unlimited_subjects = vec![OTHER.subject.to_owned()];
+    })
+    .await;
+    let mut client = server.client().await;
+    // The limited caller is refused on the second try; the instrument never is.
+    let (chunks, _) = support::collect(
+        client
+            .generate(support::as_caller(&VISITOR, ask("one", "")))
+            .await
+            .unwrap()
+            .into_inner(),
+    )
+    .await;
+    wait_for(&pool, &chunks[0].generation_id, "ok").await;
+    let err = client
+        .generate(support::as_caller(&VISITOR, ask("two", "")))
+        .await
+        .unwrap_err();
+    assert_eq!(err.code(), Code::ResourceExhausted);
+    for _ in 0..3 {
+        let (chunks, error) = support::collect(
+            client
+                .generate(support::as_caller(&OTHER, ask("measure", "")))
+                .await
+                .unwrap()
+                .into_inner(),
+        )
+        .await;
+        assert!(error.is_none());
+        wait_for(&pool, &chunks[0].generation_id, "ok").await;
+    }
+    let budget = client
+        .get_budget(support::as_caller(&OTHER, GetBudgetRequest {}))
+        .await
+        .unwrap()
+        .into_inner();
+    assert_eq!(budget.used_today, 3 * PER_GENERATION, "still recorded");
+}
+
 /// The row once it has reached `status`, or a panic after a few seconds.
 async fn wait_for(pool: &sqlx::PgPool, id: &str, status: &str) -> tbd_llm::store::GenerationRow {
     let id = Uuid::parse_str(id).unwrap();
