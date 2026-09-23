@@ -11,6 +11,15 @@
 	@health path /healthz
 	respond @health "ok" 200
 
+	# The visitor's country, as Cloudflare saw it, for the first language; the
+	# same route as the public site's (`www.Caddyfile`), never cached.
+	@whereami path /whereami
+	handle @whereami {
+		header Cache-Control "no-store"
+		header Content-Type "text/plain; charset=utf-8"
+		respond "{header.CF-IPCountry}" 200
+	}
+
 	# Hashed asset names never change. Pages must revalidate every time, or a
 	# browser sits on yesterday's copy for the length of the max-age and a deploy
 	# looks like it did nothing; a revalidation of an unchanged page is a 304.

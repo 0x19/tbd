@@ -19,10 +19,10 @@ export const company = {
   founded: 2018,
 } as const;
 
-/** The public site's pages, as the header and footer list them here. */
+/** The public site's pages, as the header and footer list them here; `key` names the label in `nav.<key>`. */
 export const publicNav = [
-  { href: `${publicUrl}/playgrounds/`, label: "Playgrounds" },
-  { href: `${publicUrl}/projects/`, label: "Projects" },
-  { href: `${publicUrl}/about/`, label: "About" },
-  { href: `${publicUrl}/contact/`, label: "Contact" },
+  { href: `${publicUrl}/playgrounds/`, label: "Playgrounds", key: "playgrounds" },
+  { href: `${publicUrl}/projects/`, label: "Projects", key: "projects" },
+  { href: `${publicUrl}/about/`, label: "About", key: "about" },
+  { href: `${publicUrl}/contact/`, label: "Contact", key: "contact" },
 ] as const;

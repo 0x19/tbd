@@ -289,6 +289,51 @@ export const about = [
 export const previously = ["Tenderly", "Eiger", "Subspace", "Avaya", "TelAPI"] as const;
 
 /**
+ * The path in chapters, for the about page: the eras, not the positions. The
+ * positions, with their dates and the lines under each, are `experience` and
+ * the PDF; a chapter says what the years were about and names where. Nothing
+ * here restates an employer's confidential figures.
+ */
+export const chapters = [
+  {
+    when: "2007 — 2014",
+    title: "Web, then the server under it",
+    body: "Agencies and product shops in Rijeka and New Jersey, PHP and JavaScript: a CMS, a booking system, an e-commerce platform, the front end of a CPaaS. Where I learned that someone has to keep the server up, and that it might as well be me.",
+    where: "Skin29 · Design Strategist · In-tech · WebFactory · Adria24 · ClkClk · TelTech Systems",
+  },
+  {
+    when: "2013 — 2018",
+    title: "Telecom at the protocol level",
+    body: "Voice servers on FreeSWITCH and Kamailio, an SMS stack over SMPP, carrier and number services, and a rewrite of all of it from Python into Go; then, after the acquisition, the architecture of the CPaaS front end and the team that built it, with the security and compliance side thrown in.",
+    where: "TelAPI · TelAPI Adriatica · Avaya",
+  },
+  {
+    when: "2018 — 2022",
+    title: "Networks for traffic that cannot wait",
+    body: "One of the first three engineers at Subspace: an anycast network from Layer 1 to Layer 7, built in six months for a region and running above sixty gigabits from the start; anycast TURN and SIP on 150-plus points of presence; the packet work in eBPF underneath, and a patent filing on it.",
+    where: "Subspace, through InOrbit",
+  },
+  {
+    when: "2022 — 2024",
+    title: "Blockchain protocols",
+    body: "An optimistic EVM rollup from idea to production, one of the first WASM ports of a layer-two node in Go, a liquidity bridge between Ethereum and Bitcoin on multi-party computation; on the side, (Un)Pack, a contract-analysis product of my own, and the solgo parser it left behind in the open.",
+    where: "Eiger · (Un)Pack",
+  },
+  {
+    when: "2024 — 2026",
+    title: "Ethereum infrastructure",
+    body: "Two years of developer infrastructure at Tenderly: the RPC layer in front of a hundred-odd networks, in Go and Rust, at production scale. The contract ended in September 2026.",
+    where: "Tenderly, through InOrbit",
+  },
+  {
+    when: "2026 —",
+    title: "Independent, through InOrbit",
+    body: "This platform, the playgrounds on it, and the next contract: protocols, infrastructure and distributed systems in Rust and Go, B2B through my own company.",
+    where: "InOrbit d.o.o.",
+  },
+] as const;
+
+/**
  * The years before the record above, compressed: the CV page lists them in one
  * block. Web work in PHP and JavaScript, mostly in Croatia.
  */

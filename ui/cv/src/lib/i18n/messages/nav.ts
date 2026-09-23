@@ -12,6 +12,16 @@ export const en: Dict = {
   "nav.theme.dark": "Dark",
   "nav.theme.system": "System",
   "nav.site": "inorbit.hr",
+  "nav.playgrounds": "Playgrounds",
+  "nav.projects": "Projects",
+  "nav.about": "About",
+  "nav.contact": "Contact",
+  "nav.pages": "Pages",
+  "nav.elsewhere": "Elsewhere",
+  "nav.legal": "Legal",
+  "nav.terms": "Terms",
+  "nav.language": "Language",
+  "nav.tagline": "Backend and blockchain systems.",
 };
 
 export const hr: Dict = {
@@ -25,4 +35,14 @@ export const hr: Dict = {
   "nav.theme.dark": "Tamna",
   "nav.theme.system": "Sustav",
   "nav.site": "inorbit.hr",
+  "nav.playgrounds": "Igrališta",
+  "nav.projects": "Projekti",
+  "nav.about": "O meni",
+  "nav.contact": "Kontakt",
+  "nav.pages": "Stranice",
+  "nav.elsewhere": "Drugdje",
+  "nav.legal": "Pravno",
+  "nav.terms": "Uvjeti",
+  "nav.language": "Jezik",
+  "nav.tagline": "Backend i blockchain sustavi.",
 };

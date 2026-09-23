@@ -1,4 +1,4 @@
-// The about page: the person and the record. Keys are `about.<slug>`.
+// The about page: the person, the path in chapters, the colophon. Keys are `about.<slug>`.
 import type { Dict } from "./index";
 
 export const en: Dict = {
@@ -13,16 +13,22 @@ export const en: Dict = {
   "about.facts.before": "Before",
   "about.facts.languages": "Languages",
   "about.facts.email": "Email",
-  "about.work.label": "Selected work",
-  "about.work.title": "Five things, specifically.",
-  "about.work.lead": "Every one of these had a date, a team and something that had to work at the end of it.",
-  "about.experience.label": "Experience",
-  "about.experience.title": "Where the work happened.",
-  "about.earlier.label": "Earlier",
-  "about.earlier.lead": "Web work, mostly in PHP and JavaScript, before the systems work began.",
-  "about.oss.label": "Open source",
-  "about.oss.lead": "Left in the open because they are more useful read than kept in a drawer.",
-  "about.education.label": "Languages and education",
+  "about.path.label": "The path",
+  "about.path.title": "Five chapters, and a sixth that has just started.",
+  "about.path.lead":
+    "Position by position, with the dates and the lines under each, is the PDF. This is the shape of it.",
+  "about.path.pdf": "The positions, in the PDF →",
+  "about.colophon.label": "Colophon",
+  "about.colophon.built": "Built with",
+  "about.colophon.built_v":
+    "Next.js exported to static files, served by Caddy behind Envoy; the playgrounds talk to a Rust platform on the same origin.",
+  "about.colophon.type": "Set in",
+  "about.colophon.type_v": "Inter and Geist Mono, bundled with the page and loaded from nowhere else.",
+  "about.colophon.tracking": "Tracking",
+  "about.colophon.tracking_v": "None. One cookie for the language, and only if you pick one.",
+  "about.colophon.pdf": "The PDF",
+  "about.colophon.pdf_v":
+    "Rendered by Typst from the same data as this page; the full version, behind the sign-in, from the same template with the private fields filled in.",
 };
 
 export const hr: Dict = {
@@ -37,15 +43,19 @@ export const hr: Dict = {
   "about.facts.before": "Prije",
   "about.facts.languages": "Jezici",
   "about.facts.email": "E-pošta",
-  "about.work.label": "Odabrani rad",
-  "about.work.title": "Pet stvari, konkretno.",
-  "about.work.lead": "Svaka je od njih imala datum, tim i nešto što je na kraju moralo raditi.",
-  "about.experience.label": "Iskustvo",
-  "about.experience.title": "Gdje se posao događao.",
-  "about.earlier.label": "Ranije",
-  "about.earlier.lead":
-    "Web posao, uglavnom u PHP-u i JavaScriptu, prije nego što je počeo rad na sustavima.",
-  "about.oss.label": "Otvoreni kod",
-  "about.oss.lead": "Ostavljeno na otvorenom jer više vrijedi pročitano nego u ladici.",
-  "about.education.label": "Jezici i obrazovanje",
+  "about.path.label": "Put",
+  "about.path.title": "Pet poglavlja, i šesto koje je tek počelo.",
+  "about.path.lead": "Položaj po položaj, s datumima i redcima ispod svakog, jest PDF. Ovo je njegov oblik.",
+  "about.path.pdf": "Položaji, u PDF-u →",
+  "about.colophon.label": "Kolofon",
+  "about.colophon.built": "Izgrađeno s",
+  "about.colophon.built_v":
+    "Next.js izvezen u statične datoteke, poslužuje ih Caddy iza Envoya; igrališta razgovaraju s Rust platformom na istom ishodištu.",
+  "about.colophon.type": "Slovni rez",
+  "about.colophon.type_v": "Inter i Geist Mono, u paketu sa stranicom i ni odakle drugdje.",
+  "about.colophon.tracking": "Praćenje",
+  "about.colophon.tracking_v": "Nikakvo. Jedan kolačić za jezik, i to samo ako ga odabereš.",
+  "about.colophon.pdf": "PDF",
+  "about.colophon.pdf_v":
+    "Slaže ga Typst iz istih podataka kao ovu stranicu; cijela verzija, iza prijave, iz istog predloška s ispunjenim privatnim poljima.",
 };

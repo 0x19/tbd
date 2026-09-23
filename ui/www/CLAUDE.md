@@ -5,13 +5,16 @@ see what was built and to try a playground, not to be sold to. Keep the voice
 first person and plain, and keep sales language out — no "let's talk about your
 project", no capability deck, no funnel.
 
-Static export, no server, no cookies and no third-party embeds — keep it that
-way: the privacy notice on `/legal/` says so, and that sentence is a promise.
+Static export, no server, no analytics, no tracking cookie and no third-party
+embeds — keep it that way: the privacy notice on `/legal/` says so, and that
+sentence is a promise. The one cookie the site sets is the language a visitor
+picked (`inorbit.lang`, two letters, on the parent domain so `cv.` reads the same),
+and `/legal/` names it.
 
 The one exception is a playground. `/playgrounds/break-it/` calls the gateway on
 the same origin (`/v1/playground/*` and `/v1/ws`), which is why those paths are
 routed on the public `www` virtual host rather than the API host: same origin,
-no CORS, still no cookies. `/legal/` promises that a playground which processes
+no CORS, no cookie of its own. `/legal/` promises that a playground which processes
 what a visitor types says so on its own page — so it does, in a "what this page
 sends" section. A new playground owes the reader the same paragraph.
 
@@ -20,7 +23,7 @@ admins-only until its first page is published: Envoy gates the prefix on the `ww
 host (sign-in, then the `admin` role), and `/v1/me` on the same host tells the page
 who is signed in with a 401 instead of a redirect, so the header and footer show the
 lab entry only to an admin (`src/lib/me.ts`, `navVisible` in `src/data/site.ts`).
-The site still sets no cookie; the one an admin carries was set by Envoy's sign-in.
+The site sets no cookie for this; the one an admin carries was set by Envoy's sign-in.
 Publishing the lab is one deliberate commit that touches two places: `lab.public`
 in `src/data/site.ts` and the `/lab/` route's gate in `devops/envoy/envoy.yaml`,
 and it revisits the `/legal/` sentence if the lab's demo then processes what a
@@ -53,11 +56,14 @@ practice log is `localStorage`, per browser, and its page says so.
   identifies an entry (a company, a project name, a playground path, a stage), merged
   by `useSite()`. A Croatian gap reads in English, never as a key on the page and never
   silently as a wrong fact. The first language is decided on the client, in this order:
-  a choice made with the header's EN/HR toggle (the only thing stored, `inorbit.lang`
-  in `localStorage`); the country Cloudflare saw the request from, which the site's
-  own `/whereami` answers with (`devops/docker/www.Caddyfile` echoes `CF-IPCountry`;
-  Croatia, Bosnia, Serbia and Montenegro read Croatian); the browser's language
-  (`hr`, `bs`, `sr`); English. The static export is English, so a page is
+  a choice made with the header's EN/HR toggle (the only thing stored: the cookie
+  `inorbit.lang` on the registrable domain, so `www.` and `cv.` share it, plus a copy
+  in `localStorage` for a dev server with no domain); the country Cloudflare saw the
+  request from, which the site's own `/whereami` answers with
+  (`devops/docker/www.Caddyfile` echoes `CF-IPCountry`; Croatia, Bosnia, Serbia and
+  Montenegro read Croatian); the browser's language (`hr`, `bs`, `sr`); English.
+  `ui/cv/src/lib/i18n/index.tsx` is the same file and `cv.Caddyfile` the same route, so
+  the gated site decides the same way and follows the same choice. The static export is English, so a page is
   `app/<x>/page.tsx` for the metadata and `src/components/pages/<x>.tsx` for the words:
   a new page or a new visible string goes into a dictionary in both languages, and
   a new fact into both data files. The playground pages and their tools are still
@@ -66,16 +72,17 @@ practice log is `localStorage`, per browser, and its page says so.
   `notice.version` from the data file and the words from `common.notice.*` above the
   header until it is dismissed; the dismissal is one `localStorage` key carrying
   `notice.version` (functional storage, no consent needed), and the bar says so in one
-  sentence, naming the language choice as the other key. The site sets no cookies, so
-  there is no cookie consent dialog and none should be added: a dialog that says "we use
-  cookies" would be false and `/legal/` says the opposite. Empty `notice.text`
+  sentence, naming the language cookie as the other thing kept. Both are functional and
+  first-party, so there is no cookie consent dialog and none should be added: a dialog
+  that says "we use cookies" for tracking would be false and `/legal/` says the opposite. Empty `notice.text`
   removes the bar; a new `version` shows it again to everyone.
-- **`/about/` is the person and the record, and the PDF is the same record.** The page
-  opens with who, the title and `focus`, the availability line and three buttons (the
-  PDF, the full CV behind the sign-in, the address), then the story, Selected work,
-  every position with `experience[].highlights`, the 2007–2014 years job by job
-  (`earlier`, so the timeline's compressed "Earlier" entry is left out of the
-  positions), the open-source work, languages and education. `/cv/` only sends the
+- **`/about/` is the person; the PDF is the record.** The page opens with who, the
+  title and `focus`, the availability line and three buttons (the PDF, the full CV
+  behind the sign-in, the address), then the story (`about`) with the facts beside it,
+  the path in `chapters` (eras with a sentence and where, not positions), and a
+  colophon. It does not list positions, highlights, selected work, the earlier years,
+  the open-source work or education: those are the PDF and `/projects/`, and repeating
+  them here was the complaint that shaped the page. `/cv/` only sends the
   browser to `/about/`, kept for old links and for the PDF beside it. `mise run www:cv`
   writes `crates/cv/assets/cv.json` from `src/data/site.ts` (`tool/cv-data.ts`) and
   Typst sets `crates/cv/assets/cv.typ` into `public/cv/nevio-vesic.pdf` with the

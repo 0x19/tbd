@@ -94,6 +94,32 @@ export const hr = {
       role: "Web programer -- CMS koji je poslije koristilo više velikih hrvatskih tvrtki",
     },
   } as Record<string, { role?: string }>,
+  chapters: [
+    {
+      title: "Web, pa poslužitelj ispod njega",
+      body: "Agencije i male tvrtke u Rijeci i New Jerseyju, PHP i JavaScript: CMS, sustav rezervacija, platforma za e-trgovinu, sučelje jednog CPaaS-a. Gdje sam naučio da netko mora držati poslužitelj na nogama, i da to mogu biti ja.",
+    },
+    {
+      title: "Telekom na razini protokola",
+      body: "Glasovni poslužitelji na FreeSWITCH-u i Kamailiju, SMS stog preko SMPP-a, usluge operatera i brojeva, i prepisivanje svega toga iz Pythona u Go; zatim, nakon preuzimanja, arhitektura CPaaS sučelja i tim koji ga je gradio, sa sigurnošću i usklađenošću povrh toga.",
+    },
+    {
+      title: "Mreže za promet koji ne može čekati",
+      body: "Jedan od prva tri inženjera u Subspaceu: anycast mreža od prvog do sedmog sloja, izgrađena u šest mjeseci za jednu regiju i od početka iznad šezdeset gigabita; anycast TURN i SIP na više od 150 točaka prisutnosti; rad s paketima u eBPF-u ispod svega, i prijava patenta na njemu.",
+    },
+    {
+      title: "Blockchain protokoli",
+      body: "Optimistički EVM rollup od zamisli do produkcije, jedan od prvih WASM portova čvora druge razine u Gou, most likvidnosti između Ethereuma i Bitcoina na višestranačkom računanju; sa strane (Un)Pack, vlastiti proizvod za analizu ugovora, i parser solgo koji je ostavio za sobom na otvorenom.",
+    },
+    {
+      title: "Ethereum infrastruktura",
+      body: "Dvije godine razvojne infrastrukture u Tenderlyju: RPC sloj ispred stotinjak mreža, u Gou i Rustu, u produkcijskom obujmu. Ugovor je završio u rujnu 2026.",
+    },
+    {
+      title: "Samostalno, kroz InOrbit",
+      body: "Ova platforma, igrališta na njoj i sljedeći ugovor: protokoli, infrastruktura i distribuirani sustavi u Rustu i Gou, B2B kroz vlastitu tvrtku.",
+    },
+  ] as { title?: string; body?: string; where?: string }[],
   achievements: [
     "Jedan od prva tri inženjera u Subspaceu: anycast mreža od prvog do sedmog sloja izgrađena u šest mjeseci, više od 60 Gbps od prvog dana, više od 150 točaka prisutnosti; donijela je ugovor vrijedan više od tri milijuna dolara godišnje i sljedeći krug financiranja. Prijava patenta na eBPF radu.",
     "Optimistički EVM rollup u Gou, od zamisli do produkcije; jedan od prvih WASM portova čvora druge razine u Gou.",

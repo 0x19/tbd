@@ -41,7 +41,8 @@ The site reads in English or Croatian. What a page says is in
 Croatian twin in `src/data/site.hr.ts` keyed by company, project, playground or
 stage, so an entry without a translation reads in English until it gets one.
 The first language is decided in the browser: a choice made with the EN/HR
-toggle in the header, kept in that browser; otherwise the country the request
+toggle in the header, kept as one cookie on inorbit.hr so the CV site reads the
+same; otherwise the country the request
 came from, which `/whereami` answers from Cloudflare's header (Croatia, Bosnia,
 Serbia and Montenegro read Croatian); otherwise the browser's language; otherwise
 English. Nothing about the country or the browser is stored.

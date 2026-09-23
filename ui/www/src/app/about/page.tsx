@@ -5,7 +5,7 @@ import { company } from "@/data/site";
 
 export const metadata: Metadata = {
   title: "About",
-  description: `${company.person} — ${company.title}. The record, role by role, with a PDF to keep.`,
+  description: `${company.person} — ${company.title}. Who I am, the path in chapters, and the CV as a PDF.`,
   alternates: { canonical: "/about/" },
 };
 

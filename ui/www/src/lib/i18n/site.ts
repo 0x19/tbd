@@ -33,6 +33,7 @@ export type Site = {
   earlier: { when: string; company: string; role: string }[];
   achievements: string[];
   about: string[];
+  chapters: { when: string; title: string; body: string; where: string }[];
   projects: { name: string; year: string; what: string; language: string; href: string }[];
   playgrounds: { name: string; what: string; href: string | null; tag: string }[];
   principles: { title: string; body: string }[];
@@ -49,6 +50,7 @@ function english(): Site {
     earlier: en.earlier.map((e) => ({ ...e })),
     achievements: [...en.achievements],
     about: [...en.about],
+    chapters: en.chapters.map((c) => ({ ...c })),
     projects: en.projects.map((p) => ({ ...p })),
     playgrounds: en.playgrounds.map((p) => ({ ...p })),
     principles: en.principles.map((p) => ({ ...p })),
@@ -66,6 +68,7 @@ function croatian(): Site {
   s.earlier = s.earlier.map((e) => ({ ...e, ...(hr.earlier[e.company] ?? {}) }));
   s.achievements = hr.achievements.length === s.achievements.length ? [...hr.achievements] : s.achievements;
   s.about = hr.about.length === s.about.length ? [...hr.about] : s.about;
+  s.chapters = s.chapters.map((c, i) => ({ ...c, ...(hr.chapters[i] ?? {}) }));
   s.projects = s.projects.map((p) => ({ ...p, ...(hr.projects[p.name] ?? {}) }));
   s.playgrounds = s.playgrounds.map((p) => ({ ...p, ...(p.href ? (hr.playgrounds[p.href] ?? {}) : {}) }));
   s.principles = s.principles.map((p, i) => ({ ...p, ...(hr.principles[i] ?? {}) }));

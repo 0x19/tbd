@@ -20,7 +20,7 @@ export const en: Dict = {
   "common.notice.text":
     "This site is being rebuilt and some pages are out of date. For current details, write to {email}. This notice goes away when the rebuild is done.",
   "common.notice.privacy":
-    "No cookies, no analytics: the only things kept in your browser are that you closed this notice and the language you chose.",
+    "No analytics, no tracking. Your browser keeps two things at most: that you closed this notice, and the language you pick with the switch, as one cookie so the CV site reads the same.",
   "common.notice.ok": "Understood",
   "common.notice.aria": "Site notice",
   "common.404.title": "There is nothing at this address.",
@@ -47,7 +47,7 @@ export const hr: Dict = {
   "common.notice.text":
     "Stranica se preuređuje i neke su stranice zastarjele. Za aktualne podatke pišite na {email}. Ova obavijest nestaje kad preuređenje završi.",
   "common.notice.privacy":
-    "Bez kolačića, bez analitike: u vašem pregledniku ostaje samo to da ste zatvorili ovu obavijest i jezik koji ste odabrali.",
+    "Bez analitike, bez praćenja. Vaš preglednik čuva najviše dvije stvari: da ste zatvorili ovu obavijest, i jezik koji odaberete prekidačem, kao jedan kolačić da ga i stranica sa životopisom čita.",
   "common.notice.ok": "Razumijem",
   "common.notice.aria": "Obavijest",
   "common.404.title": "Na ovoj adresi nema ničega.",

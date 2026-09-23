@@ -5,11 +5,13 @@
 // missing English one to the key, so a gap shows as a key and is never silent.
 //
 // The first language is decided, in this order: a choice the visitor made
-// here before (kept in their own browser); the country Cloudflare saw them
-// from, which the site's own `/whereami` answers with (Croatia, Bosnia,
-// Serbia and Montenegro read Croatian); the browser's language; English.
-// Only a choice the visitor makes with the toggle is kept, so the country
-// and the browser keep deciding for everyone else.
+// with the toggle (one first-party cookie on the parent domain, so the gated
+// site on cv.<domain> reads the same; the visitor's own storage as well, for a
+// dev server with no domain); the country Cloudflare saw them from, which the
+// site's own `/whereami` answers with (Croatia, Bosnia, Serbia and Montenegro
+// read Croatian); the browser's language; English. Only a choice the visitor
+// makes with the toggle is kept, so the country and the browser keep deciding
+// for everyone else. `ui/cv/src/lib/i18n/index.tsx` is this file, on purpose.
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
 import { type Lang, LANGS, messages } from "./messages";
@@ -17,7 +19,9 @@ import { type Lang, LANGS, messages } from "./messages";
 export type { Lang };
 export { LANGS };
 
+/** The cookie and the storage key: two letters, nothing about the person. */
 const KEY = "inorbit.lang";
+const YEAR = 60 * 60 * 24 * 365;
 /** Countries whose visitors read Croatian without asking. */
 const CROATIAN_COUNTRIES = new Set(["HR", "BA", "RS", "ME"]);
 /** Browser languages that read Croatian without asking. */
@@ -42,10 +46,46 @@ export function translate(lang: Lang, key: string, vars?: Vars): string {
   return raw.replace(/\{(\w+)\}/g, (m, k: string) => (k in vars ? String(vars[k]) : m));
 }
 
+function isLang(v: unknown): v is Lang {
+  return v === "en" || v === "hr";
+}
+
+/**
+ * The domain the cookie is set on: the registrable name (`inorbit.hr`, so
+ * `www.` and `cv.` share it), or none on localhost and IP addresses.
+ */
+function cookieDomain(): string | null {
+  const host = window.location.hostname;
+  if (!host.includes(".") || /^[\d.]+$/.test(host) || host.endsWith(".localhost")) return null;
+  return host.split(".").slice(-2).join(".");
+}
+
+function readCookie(): Lang | null {
+  try {
+    const m = document.cookie.match(/(?:^|;\s*)inorbit\.lang=([^;]*)/);
+    const v = m?.[1];
+    return isLang(v) ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCookie(l: Lang) {
+  try {
+    const domain = cookieDomain();
+    const secure = window.location.protocol === "https:" ? "; Secure" : "";
+    document.cookie = `${KEY}=${l}; Path=/; Max-Age=${YEAR}; SameSite=Lax${domain ? `; Domain=${domain}` : ""}${secure}`;
+  } catch {
+    // no document, or cookies refused: the storage below still holds it here
+  }
+}
+
 function stored(): Lang | null {
+  const fromCookie = readCookie();
+  if (fromCookie) return fromCookie;
   try {
     const saved = window.localStorage.getItem(KEY);
-    return saved === "en" || saved === "hr" ? saved : null;
+    return isLang(saved) ? saved : null;
   } catch {
     return null;
   }
@@ -101,10 +141,11 @@ export function LangProvider({ children }: { children: ReactNode }) {
   }, [lang]);
   const setLang = useCallback((l: Lang) => {
     setLangState(l);
+    writeCookie(l);
     try {
       window.localStorage.setItem(KEY, l);
     } catch {
-      // storage blocked; the choice lasts the page
+      // storage blocked; the cookie, or failing that the page, keeps the choice
     }
   }, []);
   const value = useMemo<Ctx>(

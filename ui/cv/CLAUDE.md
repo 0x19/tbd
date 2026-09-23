@@ -30,7 +30,12 @@ client and i18n follow `ui/finances`.
   and Withdraw (`DecideRequest`); the service's state machine decides what is allowed,
   the page only hides what cannot apply.
 - Two languages from the first string (`src/lib/i18n`, `messages/{nav,cv}.ts`); the
-  toggle is the finances UI's.
+  toggle is the finances UI's, the provider is the public site's file
+  (`ui/www/src/lib/i18n/index.tsx`): the choice is the `inorbit.lang` cookie on the
+  parent domain, so a visitor who picked Croatian on `inorbit.hr` reads Croatian here
+  and the other way round, and with no choice the country (`/whereami` in
+  `cv.Caddyfile`) and the browser decide the same way. The public page names in the
+  header and footer are `nav.<key>` from `publicNav`, never literals.
 - Static export, `trailingSlash: true`, no `basePath`; served by Caddy from
   `devops/docker/Dockerfile.cv-ui`. `mise run ui:cv:check` (prettier, eslint, tsc) is in
   `mise run ci`.

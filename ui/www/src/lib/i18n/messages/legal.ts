@@ -14,9 +14,9 @@ export const en: Dict = {
   "legal.rows.email": "Email",
   "legal.privacy": "Privacy",
   "legal.p1":
-    "This site sets no cookies, runs no analytics and embeds nothing from a third party. Pages are static files; nothing you do here is recorded beyond the web server's own access log, which keeps the request line, the response status and the time, and is rotated.",
+    "This site runs no analytics, sets no tracking cookie and embeds nothing from a third party. Pages are static files; nothing you do here is recorded beyond the web server's own access log, which keeps the request line, the response status and the time, and is rotated.",
   "legal.p2":
-    "The site reads in English or Croatian. The first time, it asks the web server which country your request came from and looks at your browser's language, and keeps neither; only a language you pick with the switch in the header is stored, in your own browser, next to the note that you closed the notice bar. Both are functional storage, not tracking.",
+    "The site reads in English or Croatian. The first time, it asks the web server which country your request came from and looks at your browser's language, and keeps neither. Only a language you pick with the switch in the header is kept: one first-party cookie holding two letters, set for inorbit.hr so that the CV site reads in the same language, and a copy in your browser's storage next to the note that you closed the notice bar. These are functional, not tracking, and need no consent.",
   "legal.p3":
     "If you email me, I keep that email and my reply for as long as the conversation is useful, and I do not pass it to anyone. To have it deleted, write to",
   "legal.p4a":
@@ -38,9 +38,9 @@ export const hr: Dict = {
   "legal.rows.email": "E-pošta",
   "legal.privacy": "Privatnost",
   "legal.p1":
-    "Ova stranica ne postavlja kolačiće, ne vodi analitiku i ne ugrađuje ništa s treće strane. Stranice su statične datoteke; ništa što ovdje radite ne bilježi se osim u dnevniku pristupa web poslužitelja, koji čuva redak zahtjeva, status odgovora i vrijeme, i rotira se.",
+    "Ova stranica ne vodi analitiku, ne postavlja kolačiće za praćenje i ne ugrađuje ništa s treće strane. Stranice su statične datoteke; ništa što ovdje radite ne bilježi se osim u dnevniku pristupa web poslužitelja, koji čuva redak zahtjeva, status odgovora i vrijeme, i rotira se.",
   "legal.p2":
-    "Stranica se čita na engleskom ili hrvatskom. Prvi put pita web poslužitelj iz koje je zemlje stigao vaš zahtjev i pogleda jezik vašeg preglednika, a ne čuva ni jedno ni drugo; sprema se samo jezik koji odaberete prekidačem u zaglavlju, u vašem pregledniku, uz bilješku da ste zatvorili traku s obavijesti. Oboje je funkcionalna pohrana, ne praćenje.",
+    "Stranica se čita na engleskom ili hrvatskom. Prvi put pita web poslužitelj iz koje je zemlje stigao vaš zahtjev i pogleda jezik vašeg preglednika, a ne čuva ni jedno ni drugo. Čuva se samo jezik koji odaberete prekidačem u zaglavlju: jedan kolačić prve strane s dva slova, postavljen za inorbit.hr da i stranica sa životopisom čita na istom jeziku, i njegova kopija u pohrani preglednika uz bilješku da ste zatvorili traku s obavijesti. To je funkcionalno, ne praćenje, i ne traži privolu.",
   "legal.p3":
     "Ako mi pošaljete e-poštu, čuvam tu poruku i svoj odgovor dok je razgovor koristan i ne prosljeđujem je nikome. Za brisanje pišite na",
   "legal.p4a":

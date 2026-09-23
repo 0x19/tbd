@@ -1,20 +1,24 @@
+"use client";
+
 import { Eyebrow, Frame } from "@/components/kit";
 import { Logo } from "@/components/logo";
 import { company, publicNav, publicUrl } from "@/data/site";
+import { useT } from "@/lib/i18n";
 
 /** The public site's footer, its links absolute; the same shape as `ui/www`'s. */
 export function SiteFooter() {
+  const t = useT();
   const columns = [
     {
-      title: "Pages",
+      title: t("nav.pages"),
       links: [
-        ...publicNav.map((p) => ({ label: p.label, href: p.href })),
-        { label: "Legal", href: `${publicUrl}/legal/` },
-        { label: "Terms", href: `${publicUrl}/terms/` },
+        ...publicNav.map((p) => ({ label: t(`nav.${p.key}`), href: p.href })),
+        { label: t("nav.legal"), href: `${publicUrl}/legal/` },
+        { label: t("nav.terms"), href: `${publicUrl}/terms/` },
       ],
     },
     {
-      title: "Elsewhere",
+      title: t("nav.elsewhere"),
       links: [
         { label: "GitHub", href: company.github },
         { label: "X", href: company.x },
@@ -29,7 +33,7 @@ export function SiteFooter() {
         <div className="grid gap-10 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:gap-16">
           <div>
             <Logo size={26} />
-            <p className="text-muted-foreground mt-4 max-w-xs text-sm text-pretty">{company.tagline}</p>
+            <p className="text-muted-foreground mt-4 max-w-xs text-sm text-pretty">{t("nav.tagline")}</p>
             <a
               href={`mailto:${company.email}`}
               className="mt-4 inline-block text-sm font-medium underline-offset-4 hover:underline"

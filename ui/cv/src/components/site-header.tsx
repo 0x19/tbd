@@ -66,7 +66,7 @@ export function SiteHeader() {
               className={cn(item, "text-muted-foreground")}
               asChild
             >
-              <a href={p.href}>{p.label}</a>
+              <a href={p.href}>{t(`nav.${p.key}`)}</a>
             </Button>
           ))}
           <span className="bg-border mx-1 h-4 w-px shrink-0" />
