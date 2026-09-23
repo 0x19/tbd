@@ -97,8 +97,16 @@ protocol's problem envelope. On the multiplexed socket the frame is
 `{"type":"call","id":"1","rpc":"tbd.llm.v1.LlmService/Generate","body":{...}}` and
 the chunks come back as `data` frames for that id (`docs/protocol/README.md`).
 
+## Measuring it
+
+The chaos tool's `llm_generate` operation streams generations and meters
+`prompt_tokens`, `completion_tokens`, `generations` and `ttft` beside the latency of
+each stream (`docs/chaos/scenarios.md`); `scenarios/llm_baseline.toml` runs it on the
+stub engines in CI, and the same scenario pointed at the deployed service
+(`--target llm=…`, a higher `rate`) is the instrument the studies read tokens per
+second and time to first token from.
+
 ## Not done yet
 
-Batching across callers, a prompt or semantic cache, retrieval over the repositories,
-a budget for embeddings, and a `tokens per second` load operation for chaos. Each is
-a study of its own.
+Batching across callers, a prompt or semantic cache, retrieval over the repositories
+and a budget for embeddings. Each is a study of its own.

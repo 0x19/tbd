@@ -15,7 +15,7 @@ declared and what derives from it: [extending.md](extending.md#add-a-service-kin
 | `finance` | `[stack.finances.<name>]` | grpc | yes | no | yes | yes | yes | `http://127.0.0.1:50054`, `CHAOS_FINANCE_URL` | `database_url` (text); `seed` (text) |
 | `playground` | `[stack.playgrounds.<name>]` | grpc | yes | no | yes | no | yes | `http://127.0.0.1:50055`, `CHAOS_PLAYGROUND_URL` | none |
 | `cv` | `[stack.cvs.<name>]` | grpc | yes | no | yes | no | yes | `http://127.0.0.1:50056`, `CHAOS_CV_URL` | none |
-| `llm` | `[stack.llms.<name>]` | grpc | yes | no | yes | no | yes | `http://127.0.0.1:50057`, `CHAOS_LLM_URL` | none |
+| `llm` | `[stack.llms.<name>]` | grpc | yes | no | yes | yes | yes | `http://127.0.0.1:50057`, `CHAOS_LLM_URL` | none |
 
 | Check | Surface | Kind | Passes when |
 |---|---|---|---|

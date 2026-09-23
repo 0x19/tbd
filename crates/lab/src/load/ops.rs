@@ -4,7 +4,14 @@
 //! variant and mapping it in [`OpKind::build`]. Errors are classified into a
 //! short string so the report can group them.
 
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{
+    collections::HashMap,
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
+    time::{Duration, Instant},
+};
 
 use super::Meter;
 use crate::tls::{Grpc, Trust, Ws};
@@ -17,6 +24,9 @@ use tbd_proto::finance::v1::{
     ListTransactionsRequest as FinanceListRequest, OpeningBalance,
     PingRequest as FinancePingRequest, TrialBalanceRequest,
     finance_service_client::FinanceServiceClient,
+};
+use tbd_proto::llm::v1::{
+    GenerateRequest, Message as LlmMessage, llm_service_client::LlmServiceClient,
 };
 use tbd_proto::protocol::v1::{PingRequest, protocol_service_client::ProtocolServiceClient};
 use tokio::sync::Mutex;
@@ -201,6 +211,11 @@ pub enum OpKind {
     /// equals it; every fourth set is off by one cent and must be refused.
     /// Needs a database on the instance.
     FinanceImportOpening,
+    /// `LlmService/Generate` of a short prompt, streamed to its done chunk.
+    /// Meters `prompt_tokens`, `completion_tokens` and `generations`, and the
+    /// time to the first text chunk as `ttft`. Runs against llms; the
+    /// generator's timeout covers the whole stream.
+    LlmGenerate,
 }
 
 /// What every operation of a run shares: the ledger subject pool and the seed.
@@ -232,6 +247,7 @@ impl OpKind {
             | Self::FinanceMoney
             | Self::FinanceTrialBalance
             | Self::FinanceImportOpening => "finance",
+            Self::LlmGenerate => "llm",
         }
     }
 
@@ -248,6 +264,7 @@ impl OpKind {
             Self::FinanceMoney => Arc::new(FinanceMoney),
             Self::FinanceTrialBalance => Arc::new(FinanceTrialBalance::default()),
             Self::FinanceImportOpening => Arc::new(FinanceImportOpening::default()),
+            Self::LlmGenerate => Arc::new(LlmGenerate::default()),
             Self::LedgerAppend => Arc::new(super::ledger_ops::Append(Arc::clone(pool))),
             Self::LedgerCurrent => Arc::new(super::ledger_ops::Current(Arc::clone(pool))),
             Self::LedgerHistory => Arc::new(super::ledger_ops::History(Arc::clone(pool))),
@@ -758,9 +775,7 @@ impl Operation for FinanceImportOpening {
 
     async fn run(&self, clients: &Clients, target: &Target) -> Result<(), OpError> {
         let party_id = self.company.id(clients, target).await?;
-        let n = self
-            .calls
-            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let n = self.calls.fetch_add(1, Ordering::Relaxed);
         let bank = i64::from(rand::random::<u32>() % 1_000_000) + 1;
         let fee = i64::from(rand::random::<u32>() % 100_000) + 1;
         let off = n % 4 == 3;
@@ -842,4 +857,105 @@ fn uuid_like() -> String {
         rand::random::<u64>(),
         rand::random::<u64>()
     )
+}
+
+/// The prompts `llm_generate` rotates through: short, fixed, and several, so
+/// the engine's prompt cache is neither always hot nor always cold. The
+/// answers are not checked; the stream's shape is.
+const LLM_PROMPTS: [&str; 4] = [
+    "In one sentence, what is a load balancer?",
+    "Name three properties of a good retry policy.",
+    "Explain idempotency to a new engineer in two sentences.",
+    "What does p99 latency tell you that the mean does not?",
+];
+
+/// Longest completion asked for; the engine may stop earlier.
+const LLM_MAX_TOKENS: u32 = 48;
+
+/// `LlmService/Generate` streamed to the end. One request is one generation;
+/// its latency is the whole stream, and the meter carries what a latency
+/// cannot: tokens per second and the time to the first token.
+#[derive(Default)]
+struct LlmGenerate {
+    next: AtomicUsize,
+}
+
+#[async_trait]
+impl Operation for LlmGenerate {
+    fn name(&self) -> &'static str {
+        "llm_generate"
+    }
+
+    async fn run(&self, clients: &Clients, target: &Target) -> Result<(), OpError> {
+        let mut client = LlmServiceClient::new(clients.grpc(target).await?);
+        let i = self.next.fetch_add(1, Ordering::Relaxed) % LLM_PROMPTS.len();
+        let mut request = tonic::Request::new(GenerateRequest {
+            messages: vec![LlmMessage {
+                role: "user".into(),
+                content: LLM_PROMPTS[i].into(),
+            }],
+            max_tokens: Some(LLM_MAX_TOKENS),
+            ..Default::default()
+        });
+        request
+            .metadata_mut()
+            .insert("x-jwt-payload", caller("chaos-load"));
+        let started = Instant::now();
+        let mut stream = client
+            .generate(request)
+            .await
+            .map_err(|s| finance_status(&s))?
+            .into_inner();
+
+        let mut index = 0u32;
+        let mut first_text: Option<Duration> = None;
+        let mut stub: Option<bool> = None;
+        loop {
+            let chunk = match stream.message().await {
+                Ok(Some(c)) => c,
+                Ok(None) => {
+                    return Err(OpError::Contract(
+                        "the stream ended without a done chunk".into(),
+                    ));
+                }
+                Err(s) => return Err(finance_status(&s)),
+            };
+            if chunk.index != index {
+                return Err(OpError::Contract(format!(
+                    "chunk index {} where {index} was due",
+                    chunk.index
+                )));
+            }
+            index += 1;
+            match stub {
+                None => stub = Some(chunk.stub),
+                Some(s) if s != chunk.stub => {
+                    return Err(OpError::Contract(
+                        "the stub flag changed within one stream".into(),
+                    ));
+                }
+                Some(_) => {}
+            }
+            if first_text.is_none() && !chunk.text.is_empty() {
+                first_text = Some(started.elapsed());
+            }
+            if chunk.done {
+                let Some(usage) = chunk.usage else {
+                    return Err(OpError::Contract("the done chunk carries no usage".into()));
+                };
+                let op = self.name();
+                clients
+                    .meter
+                    .count(op, "prompt_tokens", u64::from(usage.prompt_tokens));
+                clients
+                    .meter
+                    .count(op, "completion_tokens", u64::from(usage.completion_tokens));
+                clients.meter.count(op, "generations", 1);
+                if let Some(t) = first_text {
+                    clients.meter.sample(op, "ttft", t);
+                }
+                return Ok(());
+            }
+        }
+    }
 }

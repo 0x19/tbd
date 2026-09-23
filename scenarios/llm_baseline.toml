@@ -1,0 +1,34 @@
+# The llm service under steady load, on its stub engines: every generation
+# streams to its done chunk, the chunks are well formed, and the meters say
+# how fast. No model server is needed here; the stub answers in-process.
+#
+# `llm_generate` streams one short prompt per request and meters
+# prompt_tokens, completion_tokens, generations and ttft (time to first
+# token). Against a real engine the same scenario is the study's instrument:
+# raise `rate`, point `--target llm=` at the deployed service, and read the
+# meter lines. The timeout is generous on purpose: it covers the whole stream,
+# and a real engine takes seconds per generation.
+
+[scenario]
+name = "llm_baseline"
+description = "LLM generations under steady gRPC load on the stub engines: no errors, every stream done, tokens and TTFT metered"
+
+[stack.llms.llm-1]
+
+[load]
+rate = 20
+duration = "3s"
+warmup = "300ms"
+timeout = "120s"
+
+[[load.operations]]
+op = "llm_generate"
+weight = 1
+
+[assertions]
+max_error_rate = 0.0
+min_requests = 40
+
+[assertions.services.llm-1]
+min_requests = 40
+max_failed = 0

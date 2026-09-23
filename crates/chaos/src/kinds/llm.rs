@@ -34,7 +34,7 @@ pub static KIND: Kind = Kind {
     fault: true,
     store_fault: false,
     counters: true,
-    load_target: false,
+    load_target: true,
     addable: true,
     parse: super::parse::<Llm>,
     checks: &[
