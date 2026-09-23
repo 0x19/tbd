@@ -873,8 +873,11 @@ const LLM_PROMPTS: [&str; 4] = [
     "What does p99 latency tell you that the mean does not?",
 ];
 
-/// Longest completion asked for; the engine may stop earlier.
-const LLM_MAX_TOKENS: u32 = 48;
+/// Longest completion asked for; the engine may stop earlier. Long enough
+/// that decoding, not the per-request overhead, is what a run measures (48
+/// tokens made the card and the processor look the same), and long enough
+/// for a reasoning model to get past its reasoning most of the time.
+const LLM_MAX_TOKENS: u32 = 256;
 
 /// `LlmService/Generate` streamed to the end. One request is one generation;
 /// its latency is the whole stream, and the meter carries what a latency

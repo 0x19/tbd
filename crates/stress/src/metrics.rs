@@ -219,11 +219,13 @@ impl Default for Metrics {
     }
 }
 
-/// 1 µs .. 60 s, three significant figures.
+/// 1 µs .. 10 min, three significant figures. A request path is normally
+/// milliseconds, but a streamed generation queued behind a large model runs
+/// for a minute or more, and a cap at 60 s flattened exactly those.
 fn histogram() -> Histogram<u64> {
     // These bounds are valid, so construction cannot fail; the fallback keeps
     // the function total without an `unwrap`.
-    Histogram::new_with_bounds(1, 60_000_000, 3)
+    Histogram::new_with_bounds(1, 600_000_000, 3)
         .or_else(|_| Histogram::new(3))
         .unwrap_or_else(|_| unreachable!("a 3-sigfig histogram is always constructible"))
 }
@@ -231,7 +233,7 @@ fn histogram() -> Histogram<u64> {
 fn micros(latency: Duration) -> u64 {
     u64::try_from(latency.as_micros())
         .unwrap_or(u64::MAX)
-        .clamp(1, 60_000_000)
+        .clamp(1, 600_000_000)
 }
 
 fn latency_of(hist: &Histogram<u64>) -> Latency {
