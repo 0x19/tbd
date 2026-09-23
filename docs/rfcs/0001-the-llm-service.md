@@ -2,7 +2,7 @@
 title: The llm service, an L2 over two engines
 status: decided
 date: 2026-09-23
-public: true
+public: false
 summary: A service of this platform that serves open-weight models from one workstation, split into the engines that run the weights and the layer that owns the contract, the budget and the record; two models from day one, one that fits the graphics card and one that runs from memory.
 ---
 
@@ -42,8 +42,10 @@ about who is asking.
 owns:
 
 - the contract: one streaming RPC that takes a conversation and returns chunks, an
-  embedding RPC, a models RPC that says what is behind each tier and whether it is
-  up, and a budget RPC that tells a caller where they stand;
+  embedding RPC for the tiers whose engine declares one (a chat model does not embed,
+  whatever it would answer if asked), a models RPC that says what is behind each tier,
+  whether it is up and which build and weights it is, and a budget RPC that tells a
+  caller where they stand;
 - identity and budget: the caller is whoever the gateway verified, never a claim in the
   request; each caller has a daily token budget, summed from the record, and a request
   over it is refused with the count and the reset time;
@@ -99,16 +101,28 @@ card, and the numbers pick the one that stays.
 **The deep tier** runs from system memory, served by llama.cpp with the attention and
 the cache on the card and the expert weights in RAM. The model is OpenAI's 117 billion
 parameter open-weight release, about 5 billion active per token, at its native 4-bit.
-The reason is bandwidth, not capacity: this machine's memory is eight sticks of
-DDR4-2133 in four channels, roughly 68 GB/s in theory, so a model whose *active*
-weights read about 3 GB per token stays above ten tokens a second, and one whose active
-set is four times that would crawl. A faster memory kit is the single cheapest upgrade
+The reason is bandwidth, not capacity, and it is a hypothesis to test rather than a
+number to quote: this machine's memory is eight sticks of DDR4-2133 in four channels,
+roughly 68 GB/s in theory, a ceiling consistent with double-digit tokens a second for a
+model whose *active* weights read about 3 GB per token, and with a crawl for one whose
+active set is four times that. Decode from system memory is not only a memory read:
+the processor's arithmetic, the transfers to the card, expert dispatch, cache behaviour
+and the engine's own overhead all sit between the ceiling and the number. The study
+measures how close the stack gets. A faster memory kit is the single cheapest upgrade
 this machine has, and it is noted, not planned.
 
 **The record** lives in the platform's Postgres, in the service's own schema, keyed by
 the verified subject. Without the database the service still runs: it records nothing
 and enforces no budget, and it says so at start and on the wire, because a demo must
 never mistake "unlimited" for "under budget".
+
+**Reproducibility.** The same model name over another quantisation, another chat
+template or another engine build is another model, and a benchmark that cannot say
+which one it ran against cannot be rerun six months later. So every generation's row
+names the engine's build and the revision of the weights (a digest, a file name) as the
+service read them from the engine, and the models RPC shows the pair per tier; an
+engine that does not say is recorded as unknown, never guessed. The prompt template's
+version joins that pair once the service owns one.
 
 **The engines are dialled directly**, like databases, not through the gateway; they are
 model servers on the machine with the weights, not services of the platform. Their
@@ -134,6 +148,10 @@ the demo goes live, its page names what it sends and where, before it sends anyt
 - 2026-09-23: opened, and decided the same day: the split, the two tiers, the candidate
   models, the record and the budget. The service exists (`crates/llm`) with three engines
   and the conformance suite; the studies come next.
+- 2026-09-24: after review. The deep tier's throughput is stated as a hypothesis with
+  the ceiling and what sits under it, not as a number; the record names the engine
+  build and the model revision per generation; embedding is a capability a tier
+  declares, not something every engine is assumed to do.
 - 2026-09-24: both tiers live on the workstation. The card's driver had been missing for
   the running kernel, so the fast tier first answered from the processor at a crawl;
   with the card back it generates at about 126 tokens a second. The deep tier, the

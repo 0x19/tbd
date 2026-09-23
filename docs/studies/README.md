@@ -29,6 +29,28 @@ The body, in this order: The question, What we believed, What we built, What we
 measured (tables, with the method next to them), What surprised us, What we would do
 differently, Glossary (the terms that were new that week, in one line each).
 
+## The series as planned
+
+Subject to the measurements, and the order may change; nothing here is a commitment.
+Each one is baseline, implementation, measurement, what failed, result.
+
+1. What a 16 GB card really does: both tiers, both candidate models, measured by the
+   chaos tool.
+2. How fast can a 120 billion parameter mixture-of-experts run from DDR4: the
+   hypothesis in RFC 0001 against the stack.
+3. Replacing the model server: loading the weights ourselves.
+4. The tokenizer.
+5. The KV cache.
+6. Batching.
+7. Sampling.
+8. Retrieval over my own source.
+9. Can the model interview its author.
+10. Fine-tuning against retrieval, measured.
+
+The engine of our own (3 to 7) is a parallel track against the baselines, never the
+critical path of the service: each layer has to say what the baseline does, what ours
+does, where the bottleneck was and what it did after the fix, or it is not a study.
+
 ## Index
 
 | # | Study | Status |
