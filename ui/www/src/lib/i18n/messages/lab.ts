@@ -31,7 +31,7 @@ export const en: Dict = {
   "lab.back": "Back to the lab",
   "lab.demo.eyebrow": "Lab · demo",
   "lab.demo.title": "Ask the platform",
-  "lab.demo.tag": "Soon",
+  "lab.demo.tag": "Live",
   "lab.demo.card":
     "A model served from one workstation, answering questions about this platform, while the chaos tool hammers it and the numbers stay on screen. Behind a sign-in.",
   "lab.demo.lead":
@@ -51,9 +51,30 @@ export const en: Dict = {
   "account.out.label": "Sign out",
   "account.out.text":
     "Signing out here ends the session everywhere: every signed-in host is sent back to the sign-in on its next page.",
+  "lab.demo.tiers.label": "The tiers",
+  "lab.demo.tiers.lead":
+    "Two engines behind one service: the model that fits the card, and the large one that runs from memory. Up means the engine answered its last probe.",
+  "lab.demo.up": "up",
+  "lab.demo.down": "down",
+  "lab.demo.stub": "stub",
+  "lab.demo.no_models": "The service did not answer. It is either down or you are not allowed in.",
+  "lab.demo.budget": "Your budget today ({day}): {used} of {limit} tokens used.",
+  "lab.demo.budget_unrecorded": "Nothing is recorded, so no budget applies.",
+  "lab.demo.ask.label": "Ask",
+  "lab.demo.ask.lead":
+    "One question, one answer, streamed as the engine sends it. The numbers are measured here, in your browser, from what the engine reported.",
+  "lab.demo.ask.placeholder": "Why is the ledger on two databases?",
+  "lab.demo.ask.tier": "tier",
+  "lab.demo.ask.button": "Ask",
+  "lab.demo.ask.running": "Answering…",
+  "lab.demo.ask.stop": "Stop",
+  "lab.demo.first": "first chunk",
+  "lab.demo.total": "total",
+  "lab.demo.tokens": "tokens in + out",
+  "lab.demo.rate": "rate",
   "lab.demo.sends.label": "What this page sends",
   "lab.demo.sends.text":
-    "Nothing yet. This page is a description. When the demo is live, what you type is sent to the model service on this domain and recorded with your account for the budget; the page will say so here, in this section, before it does.",
+    "What you type in the box is sent to the model service on this domain, with your account, when you press Ask, and nowhere else. The service records who asked, which tier and engine answered, how many tokens it took and how it ended, for your daily budget; it does not store the question or the answer.",
 };
 
 export const hr: Dict = {
@@ -85,7 +106,7 @@ export const hr: Dict = {
   "lab.back": "Natrag u laboratorij",
   "lab.demo.eyebrow": "Laboratorij · demo",
   "lab.demo.title": "Pitaj platformu",
-  "lab.demo.tag": "Uskoro",
+  "lab.demo.tag": "Uživo",
   "lab.demo.card":
     "Model posluživan s jedne radne stanice odgovara na pitanja o ovoj platformi dok ga alat za kaos opterećuje, a brojke ostaju na ekranu. Iza prijave.",
   "lab.demo.lead":
@@ -105,7 +126,28 @@ export const hr: Dict = {
   "account.out.label": "Odjava",
   "account.out.text":
     "Odjava ovdje završava sesiju posvuda: svaki prijavljeni host na sljedećoj stranici vraća na prijavu.",
+  "lab.demo.tiers.label": "Razine",
+  "lab.demo.tiers.lead":
+    "Dva motora iza jednog servisa: model koji stane na karticu i veliki koji radi iz memorije. „Up” znači da je motor odgovorio na zadnju provjeru.",
+  "lab.demo.up": "up",
+  "lab.demo.down": "down",
+  "lab.demo.stub": "stub",
+  "lab.demo.no_models": "Servis nije odgovorio. Ili ne radi ili ti pristup nije dopušten.",
+  "lab.demo.budget": "Tvoj proračun danas ({day}): potrošeno {used} od {limit} tokena.",
+  "lab.demo.budget_unrecorded": "Ništa se ne bilježi, pa proračun ne vrijedi.",
+  "lab.demo.ask.label": "Pitaj",
+  "lab.demo.ask.lead":
+    "Jedno pitanje, jedan odgovor, prenesen kako ga motor šalje. Brojke se mjere ovdje, u tvom pregledniku, iz onoga što je motor prijavio.",
+  "lab.demo.ask.placeholder": "Zašto je ledger na dvije baze?",
+  "lab.demo.ask.tier": "razina",
+  "lab.demo.ask.button": "Pitaj",
+  "lab.demo.ask.running": "Odgovara…",
+  "lab.demo.ask.stop": "Stani",
+  "lab.demo.first": "prvi dio",
+  "lab.demo.total": "ukupno",
+  "lab.demo.tokens": "tokeni ulaz + izlaz",
+  "lab.demo.rate": "brzina",
   "lab.demo.sends.label": "Što ova stranica šalje",
   "lab.demo.sends.text":
-    "Još ništa. Ova je stranica opis. Kad demo bude uživo, ono što upišeš šalje se servisu modela na ovoj domeni i bilježi uz tvoj račun radi proračuna; stranica će to reći ovdje, u ovom odjeljku, prije nego što to učini.",
+    "Ono što upišeš u polje šalje se servisu modela na ovoj domeni, s tvojim računom, kad pritisneš Pitaj, i nikamo drugamo. Servis bilježi tko je pitao, koja je razina i motor odgovorili, koliko je tokena trebalo i kako je završilo, radi tvog dnevnog proračuna; ne pohranjuje ni pitanje ni odgovor.",
 };

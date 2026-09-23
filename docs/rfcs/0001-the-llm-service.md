@@ -2,7 +2,7 @@
 title: The llm service, an L2 over two engines
 status: decided
 date: 2026-09-23
-public: false
+public: true
 summary: A service of this platform that serves open-weight models from one workstation, split into the engines that run the weights and the layer that owns the contract, the budget and the record; two models from day one, one that fits the graphics card and one that runs from memory.
 ---
 

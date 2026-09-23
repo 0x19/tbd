@@ -197,6 +197,9 @@ static_resources:
                           # redirect, so the page can show a "Sign in" instead.
                           - name: ":path"
                             string_match: { exact: "/v1/me" }
+                          # The lab's demo calls the model service from the page.
+                          - name: ":path"
+                            string_match: { prefix: "/v1/llm/" }
                         # Scripts with their own bearer token skip the browser login.
                         pass_through_matcher:
                           - name: authorization
@@ -400,6 +403,32 @@ static_resources:
                           route:
                             cluster: www
                             timeout: 15s
+                        # The lab's demo: the model service, called from the lab's
+                        # pages on this origin. Same gate as the lab (sign-in, then
+                        # the admin role while it is unpublished), the oauth2 filter
+                        # answering a fetch with 401 through deny_redirect_matcher.
+                        # 0s: /v1/llm/generate/events streams.
+                        - match: { prefix: "/v1/llm/" }
+                          typed_per_filter_config:
+                            envoy.filters.http.jwt_authn:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.PerRouteConfig
+                              requirement_name: ui
+                            envoy.filters.http.rbac:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.rbac.v3.RBACPerRoute
+                              rbac:
+                                rules:
+                                  action: ALLOW
+                                  policies:
+                                    admins:
+                                      permissions: [{ any: true }]
+                                      principals:
+                                        - metadata:
+                                            filter: envoy.filters.http.jwt_authn
+                                            path: [{ key: jwt }, { key: role }]
+                                            value: { string_match: { exact: admin } }
+                          route:
+                            cluster: protocol
+                            timeout: 0s
                         # Who is signed in, for the page's own decisions (which nav
                         # items to show). The oauth2 filter stays on so the same
                         # session check and token refresh apply as on the gated
