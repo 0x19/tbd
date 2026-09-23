@@ -26,6 +26,7 @@ pub struct Llamacpp {
     url: String,
     model: String,
     embed_model: String,
+    embeds: bool,
 }
 
 impl Llamacpp {
@@ -40,6 +41,7 @@ impl Llamacpp {
             url: cfg.url.clone(),
             model: cfg.model.clone(),
             embed_model: cfg.embed_model().to_owned(),
+            embeds: !cfg.embed_model.is_empty(),
         })
     }
 }
@@ -238,6 +240,10 @@ impl Engine for Llamacpp {
 
     fn embed_model(&self) -> &str {
         &self.embed_model
+    }
+
+    fn embeds(&self) -> bool {
+        self.embeds
     }
 
     async fn health(&self) -> Result<Vec<String>, EngineError> {

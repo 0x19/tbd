@@ -635,6 +635,14 @@ impl LlmService for Llm {
         let (engine, timeout) = self
             .engine(chosen)
             .map_err(|s| self.reject(&mut timer, s))?;
+        if !engine.embeds() {
+            return Err(self.reject(
+                &mut timer,
+                Status::failed_precondition(format!(
+                    "tier {chosen} has no embedding model; set [engines.{chosen}] embed_model"
+                )),
+            ));
+        }
         let vectors = match tokio::time::timeout(timeout, engine.embed(req.inputs)).await {
             Ok(Ok(v)) => v,
             Ok(Err(e)) => return Err(self.reject(&mut timer, status_of(&e))),
@@ -675,6 +683,7 @@ impl LlmService for Llm {
                     stub: engine.stub(),
                     engine_version: identity.engine_version,
                     model_revision: identity.model_revision,
+                    embeds: engine.embeds(),
                 })
             })
             .collect();

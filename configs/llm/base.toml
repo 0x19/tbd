@@ -37,7 +37,8 @@ url = "http://127.0.0.1:11434"
 model = "gpt-oss:20b"
 # Whole-request deadline, seconds.
 timeout_secs = 120
-# The embedding model when it is not `model`; empty is the same model.
+# The embedding model, when this tier embeds at all. Empty: it does not, and
+# Embed on it is refused before any engine is asked; a chat model does not embed.
 embed_model = ""
 
 [engines.deep]

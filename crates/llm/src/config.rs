@@ -207,7 +207,8 @@ pub struct EngineConfig {
     pub model: String,
     /// Whole-request deadline for a generation or an embedding.
     pub timeout_secs: u64,
-    /// The embedding model, when it is not `model`. Empty: the same model.
+    /// The embedding model, when the tier embeds at all. Empty: the tier does
+    /// not embed, and `Embed` on it is refused before any engine is asked.
     pub embed_model: String,
 }
 
@@ -352,6 +353,7 @@ impl Config {
             e.kind = EngineKind::Stub;
             e.url = String::new();
             "stub-model".clone_into(&mut e.model);
+            "stub-embed".clone_into(&mut e.embed_model);
             e.timeout_secs = 30;
         }
         Self {

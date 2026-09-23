@@ -48,7 +48,10 @@ answer, which the load operation counts (`answered`) and the studies report rath
 hide.
 
 `Embed` (`POST /v1/llm/embed`) returns one vector per input from the tier's embedding
-model, not budgeted in this phase. `ListModels` (`GET /v1/llm/models`, no caller
+model, for the tiers that declare one (`ModelInfo.embeds`: `[engines.<tier>]
+embed_model` is set); a tier without one refuses with `FAILED_PRECONDITION` before any
+engine is asked, because a chat model does not embed, whatever it would answer if
+asked. Not budgeted in this phase. `ListModels` (`GET /v1/llm/models`, no caller
 needed: the demo's readiness) names each tier's engine and model and whether the
 engine answered its last probe. `GetBudget` (`GET /v1/llm/budget`) is the caller's
 day: `used_today`, `remaining`, and two flags that keep it honest, `recorded` (a store
@@ -61,7 +64,7 @@ recorded).
 |---|---|
 | The service | `crates/llm` (`crates/llm/CLAUDE.md`), proto `proto/tbd/llm/v1/llm.proto`, REST through the protocol under `/v1/llm/` |
 | The engines | `crates/llm/src/engine/`: the trait, `ollama.rs`, `llamacpp.rs`, `stub.rs`; one match on the kind, in `build` |
-| The tiers | `configs/llm/base.toml` `[engines.fast]` and `[engines.deep]`: `kind`, `url`, `model`, `timeout_secs`, `embed_model`; URLs and models per environment through `LLM_FAST_URL`, `LLM_FAST_MODEL`, `LLM_DEEP_URL`, `LLM_DEEP_MODEL` |
+| The tiers | `configs/llm/base.toml` `[engines.fast]` and `[engines.deep]`: `kind`, `url`, `model`, `timeout_secs`, `embed_model` (the tier embeds only when it is set); URLs and models per environment through `LLM_FAST_URL`, `LLM_FAST_MODEL`, `LLM_DEEP_URL`, `LLM_DEEP_MODEL` |
 | The record | schema `llm` in the shared app database, migration `0029_llm.sql`, Secret `llm-db` from `mise run llm:secrets`, then `mise run db:migrate` |
 | The budget | `[budget] tokens_per_day` (0 is no limit); enforced only when generations are recorded |
 | The probe | `[engines] probe_interval` / `probe_timeout`; `tbd_llm_engine_up` and `ListModels.up` |

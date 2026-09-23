@@ -240,7 +240,10 @@ async fn list_models_names_the_engine_build_and_the_model_revision(fixture: Fixt
 
 async fn embed_returns_one_vector_per_input(fixture: Fixture) {
     let name = fixture.name();
-    let server = support::start_on(fixture, |_| {}).await;
+    let server = support::start_on(fixture, |c| {
+        "embed-model".clone_into(&mut c.engines.fast.embed_model);
+    })
+    .await;
     let mut client = server.client().await;
     let resp = client
         .embed(support::as_caller(
@@ -257,6 +260,32 @@ async fn embed_returns_one_vector_per_input(fixture: Fixture) {
     assert!(resp.vectors.iter().all(|v| !v.values.is_empty()));
     assert_eq!(resp.engine, name);
     assert_eq!(resp.tier, Tier::Fast as i32);
+}
+
+/// Embedding is a capability a tier declares by naming an embedding model; a
+/// tier without one refuses before any engine is asked, whatever the engine
+/// would have answered.
+async fn embed_on_a_tier_without_an_embedding_model_is_refused(fixture: Fixture) {
+    let server = support::start_on(fixture, |c| {
+        c.engines.fast.embed_model = String::new();
+        c.engines.deep.embed_model = String::new();
+    })
+    .await;
+    let mut client = server.client().await;
+    let err = client
+        .embed(support::as_caller(
+            &VISITOR,
+            EmbedRequest {
+                inputs: vec!["x".into()],
+                tier: Tier::Fast as i32,
+            },
+        ))
+        .await
+        .unwrap_err();
+    assert_eq!(err.code(), Code::FailedPrecondition, "{err:?}");
+    assert!(err.message().contains("embed_model"), "{}", err.message());
+    let models = support::wait_probed(&mut client).await;
+    assert!(models.models.iter().all(|m| !m.embeds));
 }
 
 async fn a_request_that_breaks_the_bounds_is_invalid(fixture: Fixture) {
@@ -375,6 +404,7 @@ macro_rules! conformance_suite {
             case!(list_models_names_both_tiers_and_the_default);
             case!(list_models_names_the_engine_build_and_the_model_revision);
             case!(embed_returns_one_vector_per_input);
+            case!(embed_on_a_tier_without_an_embedding_model_is_refused);
             case!(a_request_that_breaks_the_bounds_is_invalid);
             case!(tier_deep_routes_to_the_deep_engine);
             case!(without_a_store_the_budget_says_so);

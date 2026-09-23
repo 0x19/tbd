@@ -194,12 +194,13 @@ async fn grpc_llm_models_lists_both_tiers(e: Ep) -> Result<String, String> {
         .iter()
         .map(|m| {
             format!(
-                "{}={}:{} up={} stub={}",
+                "{}={}:{} up={} stub={} embeds={}",
                 if m.tier == 1 { "fast" } else { "deep" },
                 m.engine,
                 m.model,
                 m.up,
-                m.stub
+                m.stub,
+                m.embeds
             )
         })
         .collect();

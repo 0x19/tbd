@@ -44,6 +44,9 @@ Invariants:
   probe carries an empty one; neither is ever invented.
 - The deadline is the tier's `timeout_secs` from admission, one clock for the dial
   and the stream. reqwest clients carry only a connect timeout on purpose.
+- Embedding is a capability, not an assumption: `Engine::embeds()` is true only when
+  the tier's `embed_model` is configured, `Embed` refuses otherwise before any dial,
+  and `ListModels` says so (`embeds`). `Config::stub` sets one so tests embed.
 - Engines are dialled directly, like databases; the Envoy rule does not apply.
 - `TCP_NODELAY` is set on `TcpIncoming`, not the server builder.
 

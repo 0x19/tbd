@@ -32,14 +32,17 @@ pub const USAGE: Usage = Usage {
 #[derive(Debug, Clone)]
 pub struct Stub {
     model: String,
+    embeds: bool,
 }
 
 impl Stub {
-    /// A stub serving `model` (any name; `stub-model` by convention).
+    /// A stub serving `model` (any name; `stub-model` by convention), embedding
+    /// only when told to, like every engine.
     #[must_use]
-    pub fn new(model: &str) -> Self {
+    pub fn new(model: &str, embeds: bool) -> Self {
         Self {
             model: model.to_owned(),
+            embeds,
         }
     }
 }
@@ -65,6 +68,10 @@ impl Engine for Stub {
 
     fn embed_model(&self) -> &str {
         &self.model
+    }
+
+    fn embeds(&self) -> bool {
+        self.embeds
     }
 
     fn stub(&self) -> bool {
@@ -166,7 +173,7 @@ mod tests {
 
     #[tokio::test]
     async fn streams_the_words_then_a_done_chunk_with_the_fixed_usage() {
-        let items: Vec<_> = Stub::new("m")
+        let items: Vec<_> = Stub::new("m", true)
             .generate(spec("hello there world"))
             .await
             .unwrap_or_else(|e| panic!("{e}"))
@@ -184,7 +191,7 @@ mod tests {
 
     #[tokio::test]
     async fn the_error_marker_yields_two_chunks_then_an_error() {
-        let items: Vec<_> = Stub::new("m")
+        let items: Vec<_> = Stub::new("m", true)
             .generate(spec("<<error>> a b c"))
             .await
             .unwrap_or_else(|e| panic!("{e}"))
@@ -198,7 +205,7 @@ mod tests {
     #[tokio::test]
     async fn the_down_marker_fails_before_the_first_chunk() {
         assert!(matches!(
-            Stub::new("m").generate(spec("<<down>>")).await.err(),
+            Stub::new("m", true).generate(spec("<<down>>")).await.err(),
             Some(EngineError::Unavailable(_))
         ));
     }

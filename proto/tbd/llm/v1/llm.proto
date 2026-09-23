@@ -23,7 +23,9 @@ service LlmService {
       body: "*"
     };
   }
-  // Embed one or more texts with the tier's embedding model.
+  // Embed one or more texts with the tier's embedding model, for the tiers
+  // whose engine declares one (`ModelInfo.embeds`); FAILED_PRECONDITION
+  // otherwise.
   rpc Embed(EmbedRequest) returns (EmbedResponse) {
     option (google.api.http) = {
       post: "/v1/llm/embed"
@@ -145,6 +147,9 @@ message ModelInfo {
   // until the first probe answered; "unknown" when the engine does not say.
   string engine_version = 6;
   string model_revision = 7;
+  // The tier has an embedding model configured; Embed on a tier without one
+  // is refused before any engine is asked. A chat model does not embed.
+  bool embeds = 8;
 }
 
 message ListModelsResponse {

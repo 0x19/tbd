@@ -9140,6 +9140,9 @@
         "type": "object",
         "description": "`tbd.llm.v1.ModelInfo`",
         "properties": {
+          "embeds": {
+            "type": "boolean"
+          },
           "engine": {
             "type": "string"
           },

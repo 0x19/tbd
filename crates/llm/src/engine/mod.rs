@@ -153,8 +153,12 @@ pub trait Engine: Send + Sync + fmt::Debug + 'static {
     fn kind(&self) -> EngineKind;
     /// The model this engine is configured to serve.
     fn model(&self) -> &str;
-    /// The model this engine embeds with.
+    /// The model this engine embeds with; meaningful only when [`Engine::embeds`].
     fn embed_model(&self) -> &str;
+    /// Whether this tier embeds at all: true only when an embedding model was
+    /// configured explicitly. An engine that serves a chat model does not embed
+    /// with it, whatever it would answer if asked.
+    fn embeds(&self) -> bool;
     /// True only for the test stub.
     fn stub(&self) -> bool {
         false
@@ -187,7 +191,7 @@ pub fn build(cfg: &EngineConfig) -> Result<Arc<dyn Engine>, BuildError> {
     let kind = cfg.kind.as_str();
     let fail = |reason: String| BuildError { kind, reason };
     Ok(match cfg.kind {
-        EngineKind::Stub => Arc::new(stub::Stub::new(&cfg.model)),
+        EngineKind::Stub => Arc::new(stub::Stub::new(&cfg.model, !cfg.embed_model.is_empty())),
         EngineKind::Ollama => Arc::new(ollama::Ollama::new(cfg).map_err(fail)?),
         EngineKind::Llamacpp => Arc::new(llamacpp::Llamacpp::new(cfg).map_err(fail)?),
     })
