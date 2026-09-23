@@ -93,14 +93,14 @@ redirects to it); unset, the image's default `https://inorbit.hr` applies.
 
 ## Pages
 
-| Path                          | What it is                                                                                                                              |
-| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `/`                           | Who this is, the playgrounds, what I have built, what I am doing now, how I like to build                                               |
-| `/playgrounds/`               | The prototypes. Empty until the first is up                                                                                             |
-| `/projects/`                  | Every public repository, with the year it was written                                                                                   |
-| `/about/`                     | The longer version: how I got here, where the time goes, where else I am                                                                |
-| `/cv/`                        | The record, role by role, and the PDF (`public/cv/`, `mise run www:cv`); the full version is behind `cv.<domain>` (`docs/cv/README.md`) |
-| `/contact/`                   | The address, and nothing resembling a form                                                                                              |
-| `/legal/`                     | Company details (imprint, OIB) and the privacy notice                                                                                   |
-| `/terms/`                     | Terms of use for the site and the playgrounds                                                                                           |
-| `/robots.txt`, `/sitemap.xml` | Generated at build time from `src/data/site.ts`                                                                                         |
+| Path                          | What it is                                                                                                                                                                     |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `/`                           | Who this is, the playgrounds, what I have built, what I am doing now, how I like to build                                                                                      |
+| `/playgrounds/`               | The prototypes. Empty until the first is up                                                                                                                                    |
+| `/projects/`                  | Every public repository, with the year it was written                                                                                                                          |
+| `/about/`                     | The person and the record: the story, selected work, every position, the PDF (`public/cv/`, `mise run www:cv`); the full version is behind `cv.<domain>` (`docs/cv/README.md`) |
+| `/cv/`                        | Sends the browser to `/about/`; kept for old links and the PDF beside it                                                                                                       |
+| `/contact/`                   | The address, and nothing resembling a form                                                                                                                                     |
+| `/legal/`                     | Company details (imprint, OIB) and the privacy notice                                                                                                                          |
+| `/terms/`                     | Terms of use for the site and the playgrounds                                                                                                                                  |
+| `/robots.txt`, `/sitemap.xml` | Generated at build time from `src/data/site.ts`                                                                                                                                |

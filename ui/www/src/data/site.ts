@@ -497,7 +497,6 @@ export const nav = [
   { href: "/playgrounds/", label: "Playgrounds" },
   { href: "/projects/", label: "Projects" },
   { href: "/about/", label: "About" },
-  { href: "/cv/", label: "CV" },
   { href: "/contact/", label: "Contact" },
 ] as const;
 

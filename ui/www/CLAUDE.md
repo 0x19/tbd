@@ -31,7 +31,7 @@ practice log is `localStorage`, per browser, and its page says so.
   number, an address or a founding year to fill a gap. The registered seat and the
   MBS come from the court register (read 2026-09-21, the same source as `docs/nda/`).
 - **`company.availability` is the one sentence a reader acts on.** It sits under the
-  hero and at the top of `/cv/`; keep it true (from when, for what, in what form) or
+  hero and at the top of `/about/`; keep it true (from when, for what, in what form) or
   remove it. `company.now` is the about page's "Now". There is no employer field:
   the current position is the first `experience` entry, and a position that ended
   says so in its `body` with the month.
@@ -42,18 +42,22 @@ practice log is `localStorage`, per browser, and its page says so.
   no cookie consent dialog and none should be added: a dialog that says "we use
   cookies" would be false and `/legal/` says the opposite. Empty `notice.text`
   removes the bar; a new `version` shows it again to everyone.
-- **`/cv/` and the PDF are one record.** `experience[].highlights` are the lines the
-  CV shows under a role and the about page does not; `earlier` expands the about
-  page's compressed "Earlier" entry job by job, so `/cv/` leaves that entry out.
-  `mise run www:cv` writes `crates/cv/assets/cv.json` from `src/data/site.ts`
-  (`tool/cv-data.ts`) and Typst sets `crates/cv/assets/cv.typ` into
-  `public/cv/nevio-vesic.pdf` with the invoice's Inter. Both files belong to the cv
-  service as well, which renders the _full_ CV from them for approved readers
-  (`docs/cv/README.md`); the JSON and the PDF are committed, `ui:www:check` fails on a
-  stale JSON, so a data change is not done until both are re-rendered and committed
-  with it. Nothing in either restates an employer's confidential figures. The page's
-  "Request the full CV" button is `cv.fullUrl`, the gated site; the public page and
-  PDF never carry a phone number, an address or references.
+- **`/about/` is the person and the record, and the PDF is the same record.** The page
+  opens with who, the title and `focus`, the availability line and three buttons (the
+  PDF, the full CV behind the sign-in, the address), then the story, Selected work,
+  every position with `experience[].highlights`, the 2007–2014 years job by job
+  (`earlier`, so the timeline's compressed "Earlier" entry is left out of the
+  positions), the open-source work, languages and education. `/cv/` only sends the
+  browser to `/about/`, kept for old links and for the PDF beside it. `mise run www:cv`
+  writes `crates/cv/assets/cv.json` from `src/data/site.ts` (`tool/cv-data.ts`) and
+  Typst sets `crates/cv/assets/cv.typ` into `public/cv/nevio-vesic.pdf` with the
+  invoice's Inter. Both files belong to the cv service as well, which renders the
+  _full_ CV from them for approved readers (`docs/cv/README.md`); the JSON and the PDF
+  are committed, `ui:www:check` fails on a stale JSON, so a data change is not done
+  until both are re-rendered and committed with it. Nothing in either restates an
+  employer's confidential figures. The page's "Request the full CV" button is
+  `cv.fullUrl`, the gated site; the public page and PDF never carry a phone number, an
+  address or references.
 - **`projects` are real repositories** and `playgrounds` are things that are
   actually open (or honestly marked as being built, with `href: null`). Never
   seed either with something that does not exist.

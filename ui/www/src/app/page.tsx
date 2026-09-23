@@ -33,7 +33,7 @@ export default function HomePage() {
 
           <div className="mt-9 flex flex-wrap gap-2">
             <Button size="lg" asChild>
-              <Link href="/cv/">Read the CV</Link>
+              <Link href="/about/">Read the CV</Link>
             </Button>
             <Button size="lg" variant="outline" asChild>
               <Link href="/playgrounds/">See the playgrounds</Link>
