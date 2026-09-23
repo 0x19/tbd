@@ -172,7 +172,12 @@ practice log is `localStorage`, per browser, and its page says so.
   the hero is where the request comes in and the email strip at the end is where
   the reply leaves, so both carry `StripEdge` (a light round the outline, drops down
   the dividers, mirrored on the last one) and the spine runs from the first strip's
-  corner to a filled port on the last one's. A new home section
+  corner to a filled port on the last one's. Under the last strip,
+  `src/components/closing-mesh.tsx` is the hero's mesh turned outward: the reply
+  drops out of the strip's corner onto a bus across the whole width and fans out to
+  points of presence, on the same grid drawn as a pattern from the spine, clipped by
+  the band and faded into the footer. `src/lib/mesh.ts` is the arithmetic both
+  drawings share. A new home section
   is a `Box`, so it gets its port and its stretch of the line for free.
 - The pipeline on the home page (`src/components/pipeline.tsx`, data in
   `pipeline` and `rails`) is a drawing of a real system, not an illustration:

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
+import { ClosingMesh } from "@/components/closing-mesh";
 import { HeroMesh } from "@/components/hero-mesh";
 import { Eyebrow, Frame, Reveal, SectionHead, Tag } from "@/components/kit";
 import { Pipeline } from "@/components/pipeline";
@@ -221,7 +222,7 @@ export function HomeContent() {
         {/* The reply leaves by the same kind of box the request came in by:
             the strip under the hero, mirrored, with the spine ending on its
             corner and its light running the other way. */}
-        <div ref={endRef} className="relative mb-24 border-y sm:mb-32">
+        <div ref={endRef} className="relative border-y">
           <Frame className="relative">
             <span aria-hidden className="absolute top-0 left-3 sm:left-4">
               <Port filled />
@@ -252,6 +253,22 @@ export function HomeContent() {
                 </div>
               </dl>
             </div>
+          </Frame>
+        </div>
+
+        {/* ------------------------------------------------------ closing */}
+        {/* The reply leaves and disperses: the hero's mesh turned outward,
+            full width, fading into the footer. */}
+        <div
+          aria-hidden
+          className="relative h-56 overflow-hidden sm:h-72"
+          style={{
+            maskImage: "linear-gradient(to bottom, black 35%, transparent 100%)",
+            WebkitMaskImage: "linear-gradient(to bottom, black 35%, transparent 100%)",
+          }}
+        >
+          <Frame className="relative h-full">
+            <ClosingMesh />
           </Frame>
         </div>
       </div>

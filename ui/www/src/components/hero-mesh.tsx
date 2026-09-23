@@ -11,60 +11,10 @@
  * it; the left fade moves with the viewport so no node sits under the text.
  */
 
-const CELL = 72;
+import { type Bend, CELL, type Cell, px, route, segments, trace } from "@/lib/mesh";
+
 const COLS = 12;
 const ROWS = 7;
-
-type Cell = readonly [number, number];
-type Pt = readonly [number, number];
-type Bend = "first" | "last";
-
-const px = ([c, r]: Cell): Pt => [c * CELL, r * CELL];
-
-/**
- * The points of a trace from one cell to another using only horizontal,
- * vertical and 45° segments, the diagonal taken first or last.
- */
-function trace(a: Cell, b: Cell, diagonal: Bend = "last"): Pt[] {
-  const [ax, ay] = px(a);
-  const [bx, by] = px(b);
-  const dx = bx - ax;
-  const dy = by - ay;
-  const d = Math.min(Math.abs(dx), Math.abs(dy));
-  if (d === 0 || Math.abs(dx) === Math.abs(dy))
-    return [
-      [ax, ay],
-      [bx, by],
-    ];
-  const sx = Math.sign(dx);
-  const sy = Math.sign(dy);
-  const straight: Pt =
-    Math.abs(dx) > Math.abs(dy) ? [sx * (Math.abs(dx) - d), 0] : [0, sy * (Math.abs(dy) - d)];
-  const diag: Pt = [sx * d, sy * d];
-  const [first] = diagonal === "first" ? [diag] : [straight];
-  return [
-    [ax, ay],
-    [ax + first[0], ay + first[1]],
-    [bx, by],
-  ];
-}
-
-const path = (pts: Pt[]) => pts.map(([x, y], i) => `${i === 0 ? "M" : "L"}${x} ${y}`).join(" ");
-
-/** Several traces joined end to end, for a packet to travel along. */
-const route = (...legs: Pt[][]): string => path(legs.flatMap((l, i) => (i === 0 ? l : l.slice(1))));
-
-/** The distinct segments of a set of traces, each drawn once. */
-function segments(traces: Pt[][]): string[] {
-  const seen = new Map<string, string>();
-  for (const t of traces) {
-    for (let i = 1; i < t.length; i++) {
-      const [p, q] = [t[i - 1]!, t[i]!].sort((u, v) => u[0] - v[0] || u[1] - v[1]);
-      seen.set(`${p}|${q}`, path([p!, q!]));
-    }
-  }
-  return [...seen.values()];
-}
 
 // The nodes, by cell. `pops` are the points of presence: one address,
 // announced from three places, drawn with a dashed halo.
