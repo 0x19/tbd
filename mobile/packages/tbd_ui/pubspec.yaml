@@ -19,7 +19,7 @@ dev_dependencies:
 
 flutter:
   # The web kit's faces, bundled so nothing is fetched at runtime: Inter (the
-  # same files the invoice PDF is set in, crates/finance/assets/fonts) and
+  # same files the invoice PDF is set in, crates/render/assets/fonts) and
   # Geist Mono (SIL OFL, fonts/LICENSE-GeistMono.txt).
   fonts:
     - family: Inter

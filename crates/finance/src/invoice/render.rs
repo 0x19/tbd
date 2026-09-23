@@ -9,84 +9,25 @@
 
 use std::sync::LazyLock;
 
-use chrono::{Datelike, Timelike};
 use chrono_tz::Europe::Zagreb;
-use typst::{
-    foundations::{Array, Datetime, Dict, Smart, Str, Value},
-    syntax::{DiagSpanKind, Source},
-};
-use typst_as_lib::{TypstEngine, TypstTemplateMainFile, conversions::IntoSource as _};
-use typst_layout::PagedDocument;
-use typst_pdf::{PdfOptions, Timestamp};
+use tbd_render::{Engine, Template, pinned};
+pub use tbd_render::{RenderError, Rendered};
 
 use super::{Client, InvoiceDoc, Issuer, Line, VatTreatment, money, quantity};
 
 static TEMPLATE: &str = include_str!("../../assets/invoice.typ");
 static MARK: &[u8] = include_bytes!("../../assets/mark.svg");
-/// Inter, the four weights. Shared with the mail printer.
-pub(crate) static FONTS: [&[u8]; 4] = [
-    include_bytes!("../../assets/fonts/Inter-Regular.otf"),
-    include_bytes!("../../assets/fonts/Inter-Medium.otf"),
-    include_bytes!("../../assets/fonts/Inter-SemiBold.otf"),
-    include_bytes!("../../assets/fonts/Inter-Bold.otf"),
-];
-
-/// The template as a Typst source with a name, so a diagnostic's span can be
-/// turned back into a line of `invoice.typ`.
-static SOURCE: LazyLock<Source> = LazyLock::new(|| ("invoice.typ", TEMPLATE).into_source());
 
 /// Built once: parsing the fonts is the expensive part.
-static ENGINE: LazyLock<TypstEngine<TypstTemplateMainFile>> = LazyLock::new(|| {
-    TypstEngine::builder()
-        .main_file(SOURCE.clone())
-        .fonts(FONTS)
-        .with_static_file_resolver([("mark.svg", MARK)])
-        .build()
+static ENGINE: LazyLock<Engine> = LazyLock::new(|| {
+    Engine::new(
+        Template {
+            name: "invoice.typ",
+            source: TEMPLATE,
+        },
+        [("mark.svg", MARK)],
+    )
 });
-
-/// A compile failure with every diagnostic pointed at its line.
-fn describe(error: &typst_as_lib::TypstAsLibError) -> String {
-    match error {
-        typst_as_lib::TypstAsLibError::TypstSource(diagnostics) => diagnostics
-            .iter()
-            .map(|d| {
-                let start = match d.span.get() {
-                    DiagSpanKind::Number { id, num, sub_range } if id == SOURCE.id() => {
-                        SOURCE.range(num, sub_range).map(|r| r.start)
-                    }
-                    DiagSpanKind::Range { id, range } if id == SOURCE.id() => Some(range.start),
-                    _ => None,
-                };
-                let line = start
-                    .and_then(|b| SOURCE.lines().byte_to_line(b))
-                    .map_or_else(|| "?".to_owned(), |l| (l + 1).to_string());
-                let hints: Vec<String> = d.hints.iter().map(|h| h.v.to_string()).collect();
-                format!(
-                    "invoice.typ:{line}: {}{}",
-                    d.message,
-                    if hints.is_empty() {
-                        String::new()
-                    } else {
-                        format!(" ({})", hints.join("; "))
-                    }
-                )
-            })
-            .collect::<Vec<_>>()
-            .join("\n"),
-        other => other.to_string(),
-    }
-}
-
-/// Why a render failed. Never `Internal` for a timeout; callers map it.
-#[derive(Debug, thiserror::Error)]
-pub enum RenderError {
-    /// The template did not compile against this document.
-    #[error("typst: {0}")]
-    Compile(String),
-    /// The PDF could not be written.
-    #[error("pdf: {0}")]
-    Pdf(String),
-}
 
 /// Watermark text for a document that is not an issued invoice.
 #[must_use]
@@ -94,52 +35,20 @@ pub fn watermark(doc: &InvoiceDoc) -> &'static str {
     if doc.number_preview { "PREVIEW" } else { "" }
 }
 
-/// A rendered document.
-#[derive(Debug, Clone)]
-pub struct Rendered {
-    /// The PDF.
-    pub pdf: Vec<u8>,
-    /// How many pages it took. An invoice is one; two means the lines
-    /// overflowed and the legal footer moved.
-    pub pages: usize,
-}
-
 /// Render to PDF. CPU-bound: call from `spawn_blocking`.
+///
+/// The PDF's id and time are pinned to the invoice, so the same document
+/// renders to the same bytes. The printed time is Zagreb's; the PDF's own
+/// clock is UTC.
 ///
 /// # Errors
 /// The template fails on this document, or the PDF cannot be written.
 pub fn render(doc: &InvoiceDoc) -> Result<Rendered, RenderError> {
-    let mut inputs = Dict::new();
-    inputs.insert(Str::from("doc"), to_typst(&input(doc)));
-    let compiled = ENGINE
-        .compile_with_input::<_, PagedDocument>(inputs)
-        .output
-        .map_err(|e| RenderError::Compile(describe(&e)))?;
-
-    // Pinned id and time: the same document renders to the same bytes. The
-    // PDF's own clock is UTC; the printed time is Zagreb's.
-    let at = doc.issued_at;
-    let stamp = Datetime::from_ymd_hms(
-        at.year(),
-        u8::try_from(at.month()).unwrap_or(1),
-        u8::try_from(at.day()).unwrap_or(1),
-        u8::try_from(at.hour()).unwrap_or(0),
-        u8::try_from(at.minute()).unwrap_or(0),
-        u8::try_from(at.second()).unwrap_or(0),
-    )
-    .and_then(|d| Timestamp::new_utc(d).into());
     let ident = format!("inorbit-invoice-{}", doc.number);
-    let options = PdfOptions {
-        ident: Smart::Custom(ident),
-        timestamp: stamp,
-        ..PdfOptions::default()
-    };
-    let pdf =
-        typst_pdf::pdf(&compiled, &options).map_err(|e| RenderError::Pdf(format!("{e:?}")))?;
-    Ok(Rendered {
-        pdf,
-        pages: compiled.pages().len(),
-    })
+    ENGINE.render(
+        &serde_json::json!({ "doc": input(doc) }),
+        &pinned(&ident, doc.issued_at),
+    )
 }
 
 /// What the template reads: every value pre-formatted, so the template holds
@@ -191,24 +100,6 @@ fn input(doc: &InvoiceDoc) -> serde_json::Value {
         "note": doc.note,
         "watermark": watermark(doc),
     })
-}
-
-/// JSON to Typst values, structurally.
-fn to_typst(v: &serde_json::Value) -> Value {
-    match v {
-        serde_json::Value::Null => Value::None,
-        serde_json::Value::Bool(b) => Value::Bool(*b),
-        serde_json::Value::Number(n) => n
-            .as_i64()
-            .map_or_else(|| Value::Float(n.as_f64().unwrap_or(0.0)), Value::Int),
-        serde_json::Value::String(s) => Value::Str(Str::from(s.as_str())),
-        serde_json::Value::Array(a) => Value::Array(a.iter().map(to_typst).collect::<Array>()),
-        serde_json::Value::Object(o) => Value::Dict(
-            o.iter()
-                .map(|(k, v)| (Str::from(k.as_str()), to_typst(v)))
-                .collect::<Dict>(),
-        ),
-    }
 }
 
 /// The August 2026 invoice, as the template sees it. For tests and for

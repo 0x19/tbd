@@ -44,8 +44,9 @@ The finance service. gRPC only. Scaffolded by `tbd new service` (docs/tbd/README
 - `invoice/`: drafts, previews, approvals (`store.rs`), the gapless counter
   (`numbering.rs`, a locked row per `(party, year, premises, device)`, never a
   sequence; the year is the year of approval), integer totals (`totals.rs`), and
-  the Typst renderer (`render.rs`: template, Inter and the mark compiled in; PDF id
-  and date pinned, so a render is a pure function of the document). The approval
+  the Typst renderer (`render.rs`: the template and the mark compiled in, set through
+  the shared `tbd-render` engine, which carries Inter; PDF id and date pinned, so a
+  render is a pure function of the document). The approval
   names the preview's content hash; a changed draft is FAILED_PRECONDITION. A draft's
   header (client of the same party, currency, VAT treatment, series) changes through
   `UpdateInvoice` until approval; a draft is deleted (`DeleteInvoice`), never

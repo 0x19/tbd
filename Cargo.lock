@@ -6201,6 +6201,7 @@ dependencies = [
  "tbd-common",
  "tbd-db",
  "tbd-proto",
+ "tbd-render",
  "testcontainers",
  "thiserror 2.0.20",
  "tokio",
@@ -6211,10 +6212,6 @@ dependencies = [
  "tonic-health",
  "tonic-reflection",
  "tracing",
- "typst",
- "typst-as-lib",
- "typst-layout",
- "typst-pdf",
  "url",
  "uuid",
  "wiremock",
@@ -6393,6 +6390,19 @@ dependencies = [
  "utoipa",
  "utoipa-axum",
  "uuid",
+]
+
+[[package]]
+name = "tbd-render"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "serde_json",
+ "thiserror 2.0.20",
+ "typst",
+ "typst-as-lib",
+ "typst-layout",
+ "typst-pdf",
 ]
 
 [[package]]

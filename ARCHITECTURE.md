@@ -42,7 +42,8 @@ hop; the same observability stack runs locally and in production.
 | `tbd-proto` | code generated from `/proto` at build time via `protox` + `tonic-prost-build` | tonic, prost |
 | `tbd-engine` | `tbd.engine.v1.EngineService` implementation, health, reflection | common, proto |
 | `tbd-playground` | `tbd.playground.v1.PlaygroundService` implementation, health, reflection; scaffolded by `tbd new service`, a stub until its RPCs land | common, proto |
-| `tbd-finance` | `tbd.finance.v1.FinanceService` implementation, health, reflection; scaffolded by `tbd new service`, a stub until its RPCs land | common, proto |
+| `tbd-render` | Typst as an embedded PDF engine: a template compiled into the binary with the Inter fonts and the files it reads, inputs from JSON, pinned or unpinned PDF options; no filesystem, packages or network | typst, serde_json |
+| `tbd-finance` | `tbd.finance.v1.FinanceService` implementation, health, reflection; scaffolded by `tbd new service`, a stub until its RPCs land | common, proto, db, render |
 | `tbd-humans` | `tbd.humans.v1.HumansService` implementation, health, reflection; scaffolded by `tbd new service`, a stub until its RPCs land | common, proto |
 | `tbd-ledger` | the facts ledger: `store::Store` (Postgres via sqlx, or in memory), outbox drained into ClickHouse, erasure sweeper, and the thin `tbd.ledger.v1.LedgerService` over it; readiness follows the store | common, proto |
 | `tbd-protocol` | axum router: REST, SSE, WebSocket bridge, GraphQL, protocol gRPC; a registry of traced, measured gRPC backends from `[services]` in `configs/protocol`; the descriptor-driven transcoder that serves every `google.api.http`-annotated RPC over REST or SSE | common, proto |

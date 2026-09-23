@@ -635,7 +635,7 @@ description = "Render the CV PDF (ui/www/public/cv/) from ui/www/src/data/site.t
 dir = "ui/www"
 run = """
 node --no-warnings tool/cv-data.ts
-typst compile --font-path ../../crates/finance/assets/fonts --ignore-system-fonts cv/cv.typ public/cv/nevio-vesic.pdf
+typst compile --font-path ../../crates/render/assets/fonts --ignore-system-fonts cv/cv.typ public/cv/nevio-vesic.pdf
 """
 
 [tasks."ui:www:check"]

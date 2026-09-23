@@ -100,7 +100,7 @@ holds layout and nothing else.
 
 The mark is `image("mark.svg")` from a static resolver; the wordmark is set in
 Inter next to it (Typst does not shape text inside SVG). Fonts: Inter Regular,
-Medium, SemiBold, Bold (OFL), under `crates/finance/assets/fonts/`.
+Medium, SemiBold, Bold (OFL), under `crates/render/assets/fonts/` (the shared `tbd-render` crate, which is the Typst engine itself).
 
 For eyes: `INVOICE_SAMPLE_OUT=/tmp/sample.pdf cargo nextest run -p tbd-finance -E 'test(invoice::render::)'`
 writes the August 2026 sample.

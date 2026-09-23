@@ -11,20 +11,18 @@ use std::sync::LazyLock;
 
 use chrono::{DateTime, Utc};
 use regex::Regex;
-use typst::foundations::{Dict, Str, Value};
-use typst_as_lib::{TypstEngine, TypstTemplateMainFile, conversions::IntoSource as _};
-use typst_layout::PagedDocument;
-use typst_pdf::PdfOptions;
-
-use crate::invoice::render::FONTS;
+use tbd_render::{Engine, RenderError, Template, unpinned};
 
 static TEMPLATE: &str = include_str!("../../assets/mail.typ");
 
-static ENGINE: LazyLock<TypstEngine<TypstTemplateMainFile>> = LazyLock::new(|| {
-    TypstEngine::builder()
-        .main_file(("mail.typ", TEMPLATE).into_source())
-        .fonts(FONTS)
-        .build()
+static ENGINE: LazyLock<Engine> = LazyLock::new(|| {
+    Engine::new(
+        Template {
+            name: "mail.typ",
+            source: TEMPLATE,
+        },
+        [],
+    )
 });
 
 /// More than this is not a receipt; it is a newsletter, and the page keeps
@@ -59,43 +57,36 @@ pub enum MailError {
     Pdf(String),
 }
 
+impl From<RenderError> for MailError {
+    fn from(e: RenderError) -> Self {
+        match e {
+            RenderError::Compile(s) => Self::Compile(s),
+            RenderError::Pdf(s) => Self::Pdf(s),
+        }
+    }
+}
+
 /// Print the mail. CPU-bound: call from `spawn_blocking`.
 ///
 /// # Errors
 /// The template fails on this mail, or the PDF cannot be written.
 pub fn print(mail: &Mail) -> Result<Vec<u8>, MailError> {
     let text: String = mail.text.chars().take(MAX_CHARS).collect();
-    let lines: Vec<Value> = text
-        .lines()
-        .map(|l| Value::Str(Str::from(l.trim_end())))
-        .collect();
-    let mut doc = Dict::new();
-    let put = |d: &mut Dict, k: &str, v: &str| {
-        d.insert(Str::from(k), Value::Str(Str::from(v)));
-    };
-    put(&mut doc, "message_id", &mail.message_id);
-    put(&mut doc, "mailbox", &mail.mailbox);
-    put(&mut doc, "from", &mail.from);
-    put(&mut doc, "subject", &mail.subject);
-    put(
-        &mut doc,
-        "received",
-        &mail
+    let lines: Vec<&str> = text.lines().map(str::trim_end).collect();
+    let doc = serde_json::json!({
+        "message_id": mail.message_id,
+        "mailbox": mail.mailbox,
+        "from": mail.from,
+        "subject": mail.subject,
+        "received": mail
             .received
             .map(|t| t.format("%Y-%m-%d %H:%M UTC").to_string())
             .unwrap_or_default(),
-    );
-    doc.insert(
-        Str::from("lines"),
-        Value::Array(lines.into_iter().collect()),
-    );
-    let mut inputs = Dict::new();
-    inputs.insert(Str::from("doc"), Value::Dict(doc));
-    let compiled = ENGINE
-        .compile_with_input::<_, PagedDocument>(inputs)
-        .output
-        .map_err(|e| MailError::Compile(format!("{e:?}")))?;
-    typst_pdf::pdf(&compiled, &PdfOptions::default()).map_err(|e| MailError::Pdf(format!("{e:?}")))
+        "lines": lines,
+    });
+    Ok(ENGINE
+        .render(&serde_json::json!({ "doc": doc }), &unpinned())?
+        .pdf)
 }
 
 static BLOCKS: LazyLock<Regex> = LazyLock::new(|| {
