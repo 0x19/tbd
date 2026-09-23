@@ -22,6 +22,7 @@ fn ask(text: &str) -> GenerateRequest {
         max_tokens: None,
         temperature: None,
         session_id: String::new(),
+        reasoning: None,
     }
 }
 
@@ -55,8 +56,18 @@ async fn chunks_carry_engine_model_tier_and_stub(fixture: Fixture) {
     let done: Vec<_> = chunks.iter().filter(|c| c.done).collect();
     assert_eq!(done.len(), 1, "exactly one done chunk, the last");
     assert!(chunks.last().unwrap().done);
-    let text: String = chunks.iter().map(|c| c.text.as_str()).collect();
-    assert_eq!(text, "Hello there world");
+    // Every engine reasons first in the fixtures; the answer is the chunks
+    // that are not reasoning, and reasoning is marked so a client can hide it.
+    assert!(
+        chunks.iter().any(|c| c.reasoning && !c.text.is_empty()),
+        "a reasoning chunk is marked as such: {chunks:?}"
+    );
+    let answer: String = chunks
+        .iter()
+        .filter(|c| !c.reasoning)
+        .map(|c| c.text.as_str())
+        .collect();
+    assert_eq!(answer, "Hello there world");
 }
 
 async fn usage_counts_arrive_on_the_done_chunk(fixture: Fixture) {
@@ -93,10 +104,9 @@ async fn an_engine_failure_mid_stream_is_an_error_item_after_the_chunks(fixture:
         .unwrap()
         .into_inner();
     let (chunks, error) = support::collect(stream).await;
-    assert_eq!(
-        chunks.len(),
-        2,
-        "two chunks arrive before the engine goes: {chunks:?}"
+    assert!(
+        chunks.iter().filter(|c| !c.reasoning).count() == 2,
+        "two answer chunks arrive before the engine goes: {chunks:?}"
     );
     assert!(chunks.iter().all(|c| !c.done));
     let status = error.expect("an error item ends the stream");
@@ -172,7 +182,10 @@ async fn a_stuck_engine_is_a_deadline(fixture: Fixture) {
         // The stub sends one chunk and then nothing: the deadline hits on the stream.
         Ok(resp) => {
             let (chunks, error) = support::collect(resp.into_inner()).await;
-            assert!(chunks.len() <= 1, "{chunks:?}");
+            assert!(
+                chunks.iter().filter(|c| !c.reasoning).count() <= 1,
+                "{chunks:?}"
+            );
             error.expect("the stream ends with the deadline").code()
         }
     };

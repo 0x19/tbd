@@ -21,6 +21,7 @@ fn ask(text: &str, session_id: &str) -> GenerateRequest {
         max_tokens: None,
         temperature: None,
         session_id: session_id.to_owned(),
+        reasoning: None,
     }
 }
 

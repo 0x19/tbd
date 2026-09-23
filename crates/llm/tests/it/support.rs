@@ -203,6 +203,7 @@ pub async fn start_fixtures(
 /// Ollama on the wire: `/api/chat` as NDJSON, `/api/tags`, `/api/embed`.
 async fn ollama_mock() -> MockServer {
     let server = MockServer::start().await;
+    let thinking = "{\"model\":\"ollama-model\",\"message\":{\"role\":\"assistant\",\"content\":\"\",\"thinking\":\"hm\"},\"done\":false}\n";
     let line = |content: &str, done: bool| {
         if done {
             format!(
@@ -250,7 +251,7 @@ async fn ollama_mock() -> MockServer {
         .and(path("/api/chat"))
         .respond_with(ResponseTemplate::new(200).set_body_raw(
             format!(
-                "{}{}{}{}",
+                "{thinking}{}{}{}{}",
                 line("Hello", false),
                 line(" there", false),
                 line(" world", false),
@@ -286,6 +287,7 @@ async fn llamacpp_mock() -> MockServer {
             "data: {{\"model\":\"llamacpp-model\",\"choices\":[{{\"index\":0,\"delta\":{{\"content\":\"{content}\"}},\"finish_reason\":null}}]}}\n\n"
         )
     };
+    let reasoning = "data: {\"model\":\"llamacpp-model\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\"hm\"},\"finish_reason\":null}]}\n\n";
     let finish = "data: {\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n";
     let usage = format!(
         "data: {{\"choices\":[],\"usage\":{{\"prompt_tokens\":{PROMPT_TOKENS},\"completion_tokens\":{COMPLETION_TOKENS}}}}}\n\n"
@@ -328,7 +330,7 @@ async fn llamacpp_mock() -> MockServer {
         .and(path("/v1/chat/completions"))
         .respond_with(ResponseTemplate::new(200).set_body_raw(
             format!(
-                "{}{}{}{finish}{usage}{done}",
+                "{reasoning}{}{}{}{finish}{usage}{done}",
                 delta("Hello"),
                 delta(" there"),
                 delta(" world")

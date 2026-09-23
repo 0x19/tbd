@@ -70,6 +70,9 @@ struct Choice {
 struct Delta {
     #[serde(default)]
     content: Option<String>,
+    /// The model's reasoning, when the server separates it (`--reasoning-format`).
+    #[serde(default)]
+    reasoning_content: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -149,7 +152,18 @@ impl LineParser for Parser {
         }
         let mut out = Vec::new();
         for choice in ev.choices {
-            let text = choice.delta.and_then(|d| d.content).unwrap_or_default();
+            let (text, reasoning) = choice
+                .delta
+                .map(|d| {
+                    (
+                        d.content.unwrap_or_default(),
+                        d.reasoning_content.unwrap_or_default(),
+                    )
+                })
+                .unwrap_or_default();
+            if !reasoning.is_empty() {
+                out.push(Ok(Chunk::reasoning(reasoning, self.model.clone())));
+            }
             if !text.is_empty() {
                 out.push(Ok(Chunk::text(text, self.model.clone())));
             }
@@ -238,6 +252,10 @@ impl Engine for Llamacpp {
         }
         if let Some(t) = spec.temperature {
             body["temperature"] = t.into();
+        }
+        if let Some(think) = spec.reasoning {
+            // llama-server's chat templates take this switch for models that reason.
+            body["chat_template_kwargs"] = serde_json::json!({ "enable_thinking": think });
         }
         let resp = send(
             self.http

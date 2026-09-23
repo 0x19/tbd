@@ -273,6 +273,7 @@ impl Llm {
             messages,
             max_tokens,
             temperature: req.temperature,
+            reasoning: req.reasoning,
         })
     }
 
@@ -390,12 +391,14 @@ impl Live {
         done: bool,
         usage: Option<ProtoUsage>,
         model: Option<String>,
+        reasoning: bool,
     ) -> GenerateResponse {
         GenerateResponse {
             text,
             index: self.index,
             done,
             usage,
+            reasoning,
             engine: self.meta.engine.to_owned(),
             model: model.unwrap_or_else(|| self.meta.model.clone()),
             tier: wire_tier(self.meta.tier),
@@ -464,7 +467,13 @@ fn live_stream(live: Live) -> BoxStream<'static, Result<GenerateResponse, Status
                             }
                             st.span.in_scope(|| tracing::info!(chunks = st.index + 1, usage = ?chunk.usage, elapsed_ms = st.started.elapsed().as_millis(), "generation done"));
                         }
-                        let resp = st.response(chunk.text, chunk.done, usage, chunk.model);
+                        let resp = st.response(
+                            chunk.text,
+                            chunk.done,
+                            usage,
+                            chunk.model,
+                            chunk.reasoning,
+                        );
                         st.index += 1;
                         Ok(resp)
                     }

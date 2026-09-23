@@ -54,6 +54,8 @@ pub struct GenerateSpec {
     pub max_tokens: Option<u32>,
     /// Sampling temperature.
     pub temperature: Option<f32>,
+    /// Whether the model may reason before answering; `None` is the engine's default.
+    pub reasoning: Option<bool>,
 }
 
 /// Tokens spent, as the engine reported them.
@@ -77,6 +79,8 @@ pub struct Chunk {
     pub usage: Option<Usage>,
     /// The model the engine says it used, when it says.
     pub model: Option<String>,
+    /// The text is the model's reasoning, not its answer.
+    pub reasoning: bool,
 }
 
 impl Chunk {
@@ -86,6 +90,14 @@ impl Chunk {
             done: false,
             usage: None,
             model,
+            reasoning: false,
+        }
+    }
+
+    fn reasoning(text: impl Into<String>, model: Option<String>) -> Self {
+        Self {
+            reasoning: true,
+            ..Self::text(text, model)
         }
     }
 
@@ -95,6 +107,7 @@ impl Chunk {
             done: true,
             usage: Some(usage),
             model,
+            reasoning: false,
         }
     }
 }

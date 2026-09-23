@@ -9009,6 +9009,9 @@
               "$ref": "#/components/schemas/tbd.llm.v1.Message"
             }
           },
+          "reasoning": {
+            "type": "boolean"
+          },
           "session_id": {
             "type": "string"
           },
@@ -9046,6 +9049,9 @@
           },
           "model": {
             "type": "string"
+          },
+          "reasoning": {
+            "type": "boolean"
           },
           "session_id": {
             "type": "string"

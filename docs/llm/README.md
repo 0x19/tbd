@@ -38,6 +38,15 @@ is done when it passes it, not when it worked once.
    the reason, or `cancelled` when the caller went away first. The counts feed the
    metrics and tomorrow's budget.
 
+**Reasoning.** A model that reasons before it answers (the fast tier's candidate does)
+streams its reasoning first. The service passes it on as chunks marked `reasoning`, so a
+client can show or hide it and the answer is the chunks without it; the request's
+`reasoning` (unset, true, false) turns that on or off where the engine allows (Ollama's
+`think`, llama-server's `enable_thinking`). Reasoning spends the token budget before any
+answer appears: a short `max_tokens` with reasoning on can end with a done chunk and no
+answer, which the load operation counts (`answered`) and the studies report rather than
+hide.
+
 `Embed` (`POST /v1/llm/embed`) returns one vector per input from the tier's embedding
 model, not budgeted in this phase. `ListModels` (`GET /v1/llm/models`, no caller
 needed: the demo's readiness) names each tier's engine and model and whether the

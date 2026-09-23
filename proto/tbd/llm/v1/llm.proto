@@ -77,6 +77,11 @@ message GenerateRequest {
   // A session of the caller's to continue; empty starts a new one. Sessions
   // are a record, not a memory: the request carries the whole conversation.
   string session_id = 5;
+  // Whether the model may reason before it answers, for models that can.
+  // Unset leaves the engine's default. Reasoning spends the token budget
+  // before any answer appears; a short `max_tokens` with reasoning on can end
+  // with no answer at all.
+  optional bool reasoning = 6;
 }
 
 message Usage {
@@ -103,6 +108,9 @@ message GenerateResponse {
   // Empty when the service runs without a store.
   string session_id = 9;
   string generation_id = 10;
+  // The chunk is the model's reasoning, not its answer. A client shows or
+  // hides it; the answer is the chunks without it.
+  bool reasoning = 11;
 }
 
 message EmbedRequest {

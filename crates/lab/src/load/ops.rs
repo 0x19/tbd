@@ -874,7 +874,10 @@ const LLM_MAX_TOKENS: u32 = 48;
 
 /// `LlmService/Generate` streamed to the end. One request is one generation;
 /// its latency is the whole stream, and the meter carries what a latency
-/// cannot: tokens per second and the time to the first token.
+/// cannot: tokens per second, the time to the first token (reasoning or
+/// answer, whichever comes first) and how many generations produced an
+/// answer at all, since a reasoning model can spend a short budget thinking
+/// and end with nothing to show.
 #[derive(Default)]
 struct LlmGenerate {
     next: AtomicUsize,
@@ -909,6 +912,7 @@ impl Operation for LlmGenerate {
 
         let mut index = 0u32;
         let mut first_text: Option<Duration> = None;
+        let mut answered = false;
         let mut stub: Option<bool> = None;
         loop {
             let chunk = match stream.message().await {
@@ -939,6 +943,9 @@ impl Operation for LlmGenerate {
             if first_text.is_none() && !chunk.text.is_empty() {
                 first_text = Some(started.elapsed());
             }
+            if !chunk.reasoning && !chunk.text.is_empty() {
+                answered = true;
+            }
             if chunk.done {
                 let Some(usage) = chunk.usage else {
                     return Err(OpError::Contract("the done chunk carries no usage".into()));
@@ -951,6 +958,7 @@ impl Operation for LlmGenerate {
                     .meter
                     .count(op, "completion_tokens", u64::from(usage.completion_tokens));
                 clients.meter.count(op, "generations", 1);
+                clients.meter.count(op, "answered", u64::from(answered));
                 if let Some(t) = first_text {
                     clients.meter.sample(op, "ttft", t);
                 }

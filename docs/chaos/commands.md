@@ -161,9 +161,9 @@ Field notes:
 - `load` is absent when the scenario has no `[load]`.
 - `per_op.<op>.counters` and `samples` are what the operation metered itself beside its
   latency, by name: counters as totals over the window (a rate is the counter divided by
-  `elapsed_s`; `llm_generate` reports `prompt_tokens`, `completion_tokens` and
-  `generations`, so tokens per second is `completion_tokens / elapsed_s`), samples as
-  latency quantiles (`llm_generate` reports `ttft`, the time to the first text chunk).
+  `elapsed_s`; `llm_generate` reports `prompt_tokens`, `completion_tokens`, `generations` and
+  `answered`, so tokens per second is `completion_tokens / elapsed_s`), samples as
+  latency quantiles (`llm_generate` reports `ttft`, the time to the first chunk).
   Both are left out when empty, and records written before meters existed have neither.
   The text report prints them as `meter` and `timing` lines under the operation.
 - `latency` covers successful requests only; failures are counted, not timed.

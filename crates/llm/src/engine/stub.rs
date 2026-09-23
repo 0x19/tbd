@@ -8,6 +8,10 @@
 //! - `<<refuse>>`: refused before the first chunk.
 //! - `<<error>>`: two chunks, then the engine goes away.
 //! - `<<hang>>`: one chunk, then nothing, forever.
+//!
+//! Every generation opens with one reasoning chunk, as a reasoning model
+//! would, so the contract that reasoning is marked and kept out of the
+//! answer is exercised on every engine.
 
 use std::time::Duration;
 
@@ -97,18 +101,21 @@ impl Engine for Stub {
         } else {
             words.len()
         };
-        let stream = futures::stream::iter(words.into_iter().take(take).enumerate())
-            .then({
-                let model = model.clone();
-                move |(i, w)| {
+        let thought = Chunk::reasoning("thinking", model.clone());
+        let stream = futures::stream::once(async move { Ok(thought) })
+            .chain(
+                futures::stream::iter(words.into_iter().take(take).enumerate()).then({
                     let model = model.clone();
-                    async move {
-                        tokio::time::sleep(Duration::from_millis(1)).await;
-                        let text = if i == 0 { w } else { format!(" {w}") };
-                        Ok(Chunk::text(text, model))
+                    move |(i, w)| {
+                        let model = model.clone();
+                        async move {
+                            tokio::time::sleep(Duration::from_millis(1)).await;
+                            let text = if i == 0 { w } else { format!(" {w}") };
+                            Ok(Chunk::text(text, model))
+                        }
                     }
-                }
-            })
+                }),
+            )
             .chain(futures::stream::once(async move {
                 if error {
                     Err(EngineError::Unavailable("stub: went away".to_owned()))
@@ -146,6 +153,7 @@ mod tests {
             }],
             max_tokens: None,
             temperature: None,
+            reasoning: None,
         }
     }
 
@@ -161,7 +169,8 @@ mod tests {
             .iter()
             .map(|i| i.as_ref().map(|c| c.text.clone()).unwrap_or_default())
             .collect();
-        assert_eq!(texts, ["hello", " there", " world", ""]);
+        assert_eq!(texts, ["thinking", "hello", " there", " world", ""]);
+        assert!(items[0].as_ref().is_ok_and(|c| c.reasoning));
         let last = items.last().and_then(|i| i.as_ref().ok()).cloned();
         assert_eq!(last.and_then(|c| c.usage), Some(USAGE));
     }
@@ -174,9 +183,9 @@ mod tests {
             .unwrap_or_else(|e| panic!("{e}"))
             .collect()
             .await;
-        assert_eq!(items.len(), 3);
-        assert!(items[0].is_ok() && items[1].is_ok());
-        assert!(matches!(items[2], Err(EngineError::Unavailable(_))));
+        assert_eq!(items.len(), 4, "reasoning, two words, the error");
+        assert!(items[0].is_ok() && items[1].is_ok() && items[2].is_ok());
+        assert!(matches!(items[3], Err(EngineError::Unavailable(_))));
     }
 
     #[tokio::test]

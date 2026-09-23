@@ -3,8 +3,10 @@
 //!
 //! Wire shapes (Ollama's API reference): a chat line is
 //! `{"model":..,"message":{"role":"assistant","content":".."},"done":false}`;
-//! the last line has `"done":true` with `prompt_eval_count` and `eval_count`;
-//! an error line is `{"error":".."}`.
+//! a reasoning model streams `message.thinking` before any `content`; the
+//! last line has `"done":true` with `prompt_eval_count` and `eval_count`;
+//! an error line is `{"error":".."}`. `think` in the request turns reasoning
+//! on or off for models that can.
 
 use async_trait::async_trait;
 use serde::Deserialize;
@@ -60,6 +62,8 @@ struct ChatLine {
 struct ChatMessage {
     #[serde(default)]
     content: String,
+    #[serde(default)]
+    thinking: String,
 }
 
 /// Parses `/api/chat` lines.
@@ -85,7 +89,13 @@ impl LineParser for Parser {
             self.model = parsed.model;
         }
         let mut out = Vec::new();
-        let text = parsed.message.map(|m| m.content).unwrap_or_default();
+        let (text, thinking) = parsed
+            .message
+            .map(|m| (m.content, m.thinking))
+            .unwrap_or_default();
+        if !thinking.is_empty() {
+            out.push(Ok(Chunk::reasoning(thinking, self.model.clone())));
+        }
         if !text.is_empty() {
             out.push(Ok(Chunk::text(text, self.model.clone())));
         }
@@ -154,12 +164,15 @@ impl Engine for Ollama {
         if let Some(t) = spec.temperature {
             options.insert("temperature".into(), t.into());
         }
-        let body = serde_json::json!({
+        let mut body = serde_json::json!({
             "model": self.model,
             "messages": spec.messages.iter().map(|m| serde_json::json!({"role": m.role, "content": m.content})).collect::<Vec<_>>(),
             "stream": true,
             "options": options,
         });
+        if let Some(think) = spec.reasoning {
+            body["think"] = think.into();
+        }
         let resp = send(self.http.post(join(&self.url, "api/chat")).json(&body)).await?;
         Ok(parse_stream(lines(resp), Parser::default()))
     }
