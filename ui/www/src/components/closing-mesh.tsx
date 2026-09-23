@@ -19,17 +19,18 @@ import { type Bend, CELL, type Cell, px, route, segments, trace } from "@/lib/me
  * the spine every few seconds (the reply going out) and the halos on the
  * points of presence breathe (`.mesh-ripple`, `.mesh-halo`, `site.css`).
  *
- * `Closing` wraps the site footer in the layout: on the home page it adds
- * the room under the last strip and this drawing behind both; elsewhere it
- * is the footer alone. Decoration only: `aria-hidden`, no pointer events,
+ * `Closing` wraps the site footer in the layout: on the home page it adds a
+ * little room under the last strip, drops the footer's own top rule so the
+ * strip's bottom edge is the one line there, and puts this drawing behind
+ * both; elsewhere it is the footer alone. Decoration only: `aria-hidden`, no pointer events,
  * packets stop under prefers-reduced-motion (`.mesh-packet`, `site.css`).
  */
 export function Closing({ children }: { children: React.ReactNode }) {
   const home = usePathname() === "/";
   if (!home) return <>{children}</>;
   return (
-    <div className="relative">
-      <div aria-hidden className="h-40 sm:h-56" />
+    <div className="relative [&>footer]:border-t-0">
+      <div aria-hidden className="h-8 sm:h-12" />
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 -z-10 overflow-hidden"
@@ -215,7 +216,7 @@ function ClosingMesh() {
   return (
     <svg
       aria-hidden
-      className="text-foreground absolute bottom-0 left-3 overflow-visible opacity-[0.5] sm:left-4 dark:opacity-[0.38]"
+      className="text-foreground absolute bottom-0 left-3 overflow-visible opacity-[0.4] sm:left-4 dark:opacity-[0.3]"
       width={1}
       height={H}
       fill="none"
