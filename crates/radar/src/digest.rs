@@ -3,10 +3,11 @@
 //! is split on them. The service has no JSON mode, so the headings are the
 //! contract, and an answer missing one is refused rather than stored half.
 
-use std::time::Duration;
+use std::{sync::LazyLock, time::Duration};
 
 use base64::Engine as _;
 use chrono::{DateTime, Datelike, Utc};
+use regex::Regex;
 use tbd_proto::llm::v1::{GenerateRequest, Message, Tier, llm_service_client::LlmServiceClient};
 use tonic::{
     Status,
@@ -64,6 +65,31 @@ pub enum DigestError {
     /// among the week's items.
     #[error("the answer has no usable change")]
     NoChanges,
+    /// The answer speaks as the project ("we released") or, in Croatian,
+    /// uses a Serbian form; the prompt forbids both and this holds it.
+    #[error("the answer breaks the voice rules: {0:?}")]
+    Voice(String),
+}
+
+/// English: the Radar reports and never claims the project's work.
+static WE_DID: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)\bwe(?:'ve| have)?\s+(?:just\s+)?(?:released|shipped|accepted|fixed|merged|rolled out|added|landed|published|introduced)\b")
+        .unwrap_or_else(|e| unreachable!("we-did pattern: {e}"))
+});
+/// Croatian: the same claim ("objavili smo"), and Serbian or Bosnian forms that
+/// standard Croatian replaces (tjedan, tisuća, vijesti, izvještaj, također, uvjet,
+/// sigurnost).
+static HR_SLIP: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)\b(?:smo\s+(?:objavili|izdali|dodali|prihvatili|uveli|ispravili)|(?:objavili|izdali|dodali|prihvatili|uveli|ispravili)\s+smo|sedmic\w*|hiljad\w*|vest[iae]|izve[sš]taj\w*|takođe|uslov\w*|bezbednost\w*)\b")
+        .unwrap_or_else(|e| unreachable!("hr pattern: {e}"))
+});
+
+/// The first phrase in `text` that breaks the voice rules for reader language
+/// `lang`, if any.
+#[must_use]
+pub fn voice_slip(lang: &str, text: &str) -> Option<String> {
+    let re = if lang == "hr" { &*HR_SLIP } else { &*WE_DID };
+    re.find(text).map(|m| m.as_str().to_owned())
 }
 
 /// Puts the service subject on every call, the way Envoy would forward a
@@ -200,6 +226,14 @@ impl Writer {
         let changes = parse_changes(&sections[1], &links);
         if changes.is_empty() {
             return Err(DigestError::NoChanges);
+        }
+        let prose = changes.iter().fold(
+            format!("{}\n{}\n{}", sections[0], sections[2], sections[3]),
+            |acc, c| format!("{acc}\n{}\n{}\n{}", c.what, c.production_impact, c.try_it),
+        );
+        if let Some(slip) = voice_slip(lang, &prose) {
+            tracing::warn!(week, language, lang, slip, "digest refused");
+            return Err(DigestError::Voice(slip));
         }
         Ok(DigestRow {
             week: week.to_owned(),
@@ -501,6 +535,21 @@ mod tests {
         ## Ten\u{2011}minute drill\nDo x.\n## Avatar script (60 seconds)\nHello.\n";
 
     const LINKS: [&str; 2] = ["https://go.dev/a", "https://github.com/golang/go/issues/1"];
+
+    #[test]
+    fn voice_slips_are_caught_and_plain_reporting_is_not() {
+        assert_eq!(voice_slip("en", "This week we released Go 1.24.").as_deref(), Some("we released"));
+        assert_eq!(voice_slip("en", "We've shipped a fix.").as_deref(), Some("We've shipped"));
+        assert_eq!(voice_slip("en", "The Go team released 1.24; we cover it below."), None);
+        assert_eq!(voice_slip("hr", "Danas smo objavili tri izdanja.").as_deref(), Some("smo objavili"));
+        assert_eq!(voice_slip("hr", "Najnovije vesti iz Rusta.").as_deref(), Some("vesti"));
+        assert_eq!(voice_slip("hr", "Ove sedmice").as_deref(), Some("sedmice"));
+        assert_eq!(voice_slip("hr", "Takođe je izašao izveštaj.").as_deref(), Some("Takođe"));
+        assert_eq!(
+            voice_slip("hr", "Ovaj tjedan: vijesti, izvještaj i također sigurnost. Tim je objavio Rust 1.94."),
+            None
+        );
+    }
 
     #[test]
     fn the_prompt_reports_on_the_project_and_asks_for_standard_croatian() {

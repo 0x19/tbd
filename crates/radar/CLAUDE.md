@@ -57,7 +57,8 @@ Invariants:
   a thin week says so rather than padding.
 - The Radar reports on Go and Rust and never speaks as them (no "we released"), and
   Croatian is standard Croatian (tjedan, not sedmica) in every prose field; the prompt
-  says both and a unit test holds it.
+  says both, and the writer refuses an answer that breaks either (`voice_slip`, a short
+  list of phrases), so the retry writes it again.
 - `TCP_NODELAY` is set on `TcpIncoming`, not the server builder.
 - Services never address each other directly; the llm service is reached through
   Envoy's internal listener (`http://envoy:50051`, matched by service name).
