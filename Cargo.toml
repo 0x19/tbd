@@ -126,6 +126,7 @@ owo-colors      = "4"
 
 # clients (chaos, tests)
 reqwest           = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
+rmcp              = { version = "3.4", default-features = false, features = ["server", "macros", "transport-streamable-http-server"] }
 tokio-tungstenite = "0.29"
 
 # storage (ledger). rustls only: cargo-deny bans openssl.

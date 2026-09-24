@@ -51,6 +51,9 @@ pub(crate) fn reserved_paths() -> &'static [(&'static str, &'static str)] {
         ("GET", "/openapi.json"),
         ("GET", "/ws"),
         ("GET", crate::mux::PATH),
+        ("POST", crate::mcp::PATH),
+        ("GET", crate::mcp::PATH),
+        ("DELETE", crate::mcp::PATH),
         ("GET", "/graphql"),
         ("POST", "/graphql"),
     ]

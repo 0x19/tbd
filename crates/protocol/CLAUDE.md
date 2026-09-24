@@ -83,6 +83,22 @@ the logic belongs in the service. The contract is `docs/protocol/README.md`.
   the loop, which is the backpressure. Limits come from `[socket]`
   (`max_calls`, `max_frame_bytes`). Each call is a `RequestTimer` with transport `ws`
   and the RPC name as its route; the connection is a `StreamGuard` of kind `mux`.
+- `invoke.rs`: one RPC by name with a JSON body, as the caller (`request` builds the
+  message strictly, `invoke` calls unary or streaming over `backend.transport()` with
+  the forwarded `x-jwt-payload`). `mux.rs` and `mcp.rs` both call it; the REST path
+  binds path and query first and stays in `transcode/call.rs`.
+- `mcp.rs`: `/mcp`, every RPC in `transcoder.rpcs()` as an MCP tool (rmcp, streamable
+  HTTP, stateless, `NeverSessionManager`, JSON responses, `Host` check off: the API host
+  takes bearer tokens only). Tool name `<backend>_<method_snake>`, description from the
+  proto comment (`transcode/schema.rs::method_comment`; the descriptor set carries
+  source info for this), input schema from `transcode/schema.rs`. The caller is the
+  `Principal` in the request extensions (rmcp hands the HTTP parts to the handler); no
+  principal is a protocol error. Streams are collected under `[mcp]` caps and
+  summarised (`text` joined, `reasoning` apart, `last` kept). Each call is a
+  `RequestTimer` with transport `mcp`. `[mcp] enabled = false` removes the route.
+- `transcode/schema.rs`: inline JSON Schema per message with the `OpenAPI` spellings,
+  well-known types in their JSON forms, recursion cut at the second visit; tests hold it
+  to every request message's fields.
 - `grpc.rs`: the protocol's own gRPC (`ProtocolService/Ping`), health and reflection,
   mounted into the axum router via `Routes::into_axum_router`. Health also reports
   every registered backend under its `service` name (`ENGINE_SERVICE` is the engine's),

@@ -148,6 +148,7 @@ Every check lives in `devops/envoy/envoy.yaml`; nothing behind Envoy checks anyt
 | `api.<domain>`, `localhost:18080`, `chaos.api.*` | `jwt_authn`, requirement `api` | `Authorization: Bearer <JWT>` signed by Hydra with audience `tbd-api` | 401 with `Jwt is missing` / `Jwt verification fails` |
 | same hosts, `/healthz`, `/readyz`, `/api/chaos/v1/healthz` | none | anything | probes and uptime checks stay unauthenticated |
 | `grafana.`, `logs.`, `profiles.`, `metrics.`, `chaosadmin.`, `finance.`, `cv.` | `oauth2` then `jwt_authn`, requirement `ui` | the ID-token cookie the OAuth2 filter set (audience `tbd-ui`), or a bearer token | redirect to `auth.<domain>` to sign in |
+| `api.<domain>` `/mcp` | `jwt_authn`, requirement `api` (the API host's own gate) | `Authorization: Bearer <JWT>` | 401; an agent (Claude Code, say) is a caller like any other: its subject, rights, budget and record |
 | `www.` `/lab/` only | `oauth2` then `jwt_authn`, requirement `ui`, then `rbac` role `admin` | the same cookie or bearer token, and the `admin` role | redirect to sign in; 403 for a signed-in visitor without the role. The rest of the site is open; `/account/` is gated by sign-in alone (the header's "Sign in" starts there); `/v1/me` on `www.` verifies the cookie without redirecting (401), so the page can show the lab entry only to admins |
 | `auth.<domain>`, `chaos.localhost` | none | anything | the sign-in itself, and the open local UI |
 

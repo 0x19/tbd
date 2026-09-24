@@ -44,6 +44,9 @@ pub struct Config {
     /// `[socket]`
     #[serde(default)]
     pub socket: Socket,
+    /// `[mcp]`
+    #[serde(default)]
+    pub mcp: Mcp,
 }
 
 /// `[server]`
@@ -117,6 +120,35 @@ impl Default for Socket {
         Self {
             max_calls: 64,
             max_frame_bytes: 256 * 1024,
+        }
+    }
+}
+
+/// `[mcp]`: every public RPC as an MCP tool at `/mcp` (streamable HTTP,
+/// stateless). The same registry as REST and the socket; the caller is
+/// whoever Envoy verified, as everywhere else.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct Mcp {
+    /// Serve `/mcp` at all.
+    pub enabled: bool,
+    /// Messages a streaming tool collects before it answers with what it has
+    /// and says it stopped.
+    pub max_stream_items: usize,
+    /// How long a streaming tool may run before it answers with what it has.
+    #[serde(with = "humantime_serde")]
+    pub stream_timeout: Duration,
+    /// Largest request body.
+    pub max_body_bytes: usize,
+}
+
+impl Default for Mcp {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            max_stream_items: 512,
+            stream_timeout: Duration::from_secs(300),
+            max_body_bytes: 2 * 1024 * 1024,
         }
     }
 }
@@ -211,6 +243,7 @@ impl Config {
             health: Health::default(),
             principals: Principals::default(),
             socket: Socket::default(),
+            mcp: Mcp::default(),
         }
     }
 

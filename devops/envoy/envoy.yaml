@@ -14,7 +14,8 @@
 #
 # Authentication happens here and nowhere else (docs/auth/README.md):
 #   - API hosts (`api.<domain>`, the catch-all): every route except health needs a
-#     bearer JWT from Hydra (audience tbd-api), verified against Hydra's JWKS.
+#     bearer JWT from Hydra (audience tbd-api), verified against Hydra's JWKS. `/mcp`
+#     (the platform as MCP tools for agents) is one of those routes, gated the same way.
 #   - UI hosts (`grafana.`, `logs.`, `profiles.`, `metrics.`, `chaosadmin.`,
 #     `finance.`, `cv.`): the
 #     oauth2 filter logs the browser in through Hydra and stores an ID token cookie,
@@ -922,6 +923,17 @@ static_resources:
                           route:
                             cluster: protocol
                             timeout: 0s
+                        # MCP: every public RPC as a tool. A tool that runs a generation
+                        # takes as long as the generation, so no clock here: the
+                        # protocol bounds it ([mcp] stream_timeout). Retried only when
+                        # the request never reached the protocol.
+                        - match: { path: "/mcp" }
+                          route:
+                            cluster: protocol
+                            timeout: 0s
+                            retry_policy:
+                              retry_on: "connect-failure,refused-stream"
+                              num_retries: 2
                         # Everything else: REST, GraphQL, health.
                         - match: { prefix: "/" }
                           route:

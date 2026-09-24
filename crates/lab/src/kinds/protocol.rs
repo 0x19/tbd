@@ -98,6 +98,12 @@ pub static KIND: Kind = Kind {
             run: |e| Box::pin(ws_mux(e)),
         },
         Check {
+            name: "http_mcp_tools",
+            surface: "http",
+            doc: "`POST /mcp` `tools/list` offers the public RPCs as tools, each with an object input schema",
+            run: |e| Box::pin(http_mcp_tools(e)),
+        },
+        Check {
             name: "grpc_protocol_health",
             surface: "grpc",
             doc: "the overall health check answers",
@@ -267,6 +273,41 @@ async fn http_healthz(e: Ep) -> Result<String, String> {
 
 async fn http_readyz(e: Ep) -> Result<String, String> {
     get_2xx(&e, "/readyz").await
+}
+
+/// The MCP transport lists tools the way an agent asks for them: JSON-RPC
+/// over POST, JSON or one server-sent event back.
+async fn http_mcp_tools(e: Ep) -> Result<String, String> {
+    let text = e
+        .http()
+        .post(format!("{}/mcp", e.url))
+        .header("accept", "application/json, text/event-stream")
+        .header("mcp-protocol-version", "2025-11-25")
+        .json(&json!({"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .error_for_status()
+        .map_err(|e| e.to_string())?
+        .text()
+        .await
+        .map_err(|e| e.to_string())?;
+    let body = text
+        .lines()
+        .filter_map(|l| l.strip_prefix("data:"))
+        .next_back()
+        .map_or(text.as_str(), str::trim);
+    let v: Value = serde_json::from_str(body).map_err(|e| format!("{e}: {text}"))?;
+    let tools = v["result"]["tools"]
+        .as_array()
+        .ok_or_else(|| format!("no tools in {v}"))?;
+    if tools.is_empty() {
+        return Err("no tools listed".into());
+    }
+    if let Some(bad) = tools.iter().find(|t| t["inputSchema"]["type"] != "object") {
+        return Err(format!("a tool without an object schema: {bad}"));
+    }
+    Ok(format!("tools={}", tools.len()))
 }
 
 async fn rest_evaluate(e: Ep) -> Result<String, String> {

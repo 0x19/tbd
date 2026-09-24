@@ -3,6 +3,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+mod mcp;
 mod mux;
 mod support;
 mod transcode;

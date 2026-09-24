@@ -35,7 +35,7 @@ It is served over streamable HTTP on the API host, stateless, so either of the g
 replicas can answer any request.
 
 **The gate is the platform's.** The API host already requires a verified bearer token
-with the platform's API scope on every route; MCP adds no path around it
+issued for the platform's API on every route; MCP adds no path around it
 ([REDACTED: how the token is minted and checked]). An agent is a caller like any other:
 it has a subject, a budget and rights, and the record says what it did.
 
@@ -70,3 +70,7 @@ does not, and the tests say which.
 ## Status log
 
 - 2026-09-24: opened.
+- 2026-09-24: live on the API host. Every public RPC is a tool; the arguments' schemas
+  and the tools' descriptions come from the contract and its comments; a streaming tool
+  answers once with what it collected. Resources are not offered yet: the tool list is
+  itself the catalogue.

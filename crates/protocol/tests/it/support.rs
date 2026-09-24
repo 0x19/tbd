@@ -94,6 +94,9 @@ pub async fn start() -> Stack {
     }
     // A subject the tests can present as one of our own services.
     protocol_config.principals.services = vec!["svc-ledger".to_owned()];
+    // The engine's subscribe stream never ends on its own: a small cap lets the
+    // MCP tests see a stream collected and cut.
+    protocol_config.mcp.max_stream_items = 3;
     let (stop_protocol, protocol_stopped) = oneshot::channel();
     tokio::spawn(async move {
         tbd_protocol::serve_on(protocol_listener, protocol_config, async {

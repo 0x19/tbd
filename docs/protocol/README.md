@@ -256,13 +256,54 @@ every other stream.
 own frame shape, which chaos reads. New clients use `/v1/ws`. Neither socket is in the
 `OpenAPI` document.
 
+## Over MCP
+
+`/mcp` offers every public RPC as a tool over the Model Context Protocol (streamable
+HTTP, stateless: JSON-RPC over `POST`, either replica answers any request, no session).
+It is a fourth rendering of the same registry as REST, SSE and the socket, so a new
+annotated RPC is a new tool with nothing written by hand.
+
+- **Names.** `<backend>_<method>` in snake case: `llm_generate`, `llm_list_models`,
+  `ledger_ping`, `finance_list_transactions`.
+- **Descriptions and arguments.** The RPC's comment in the `.proto` is the tool's
+  description; the arguments are the request message, described as an inline JSON
+  Schema by the same spellings the `OpenAPI` document uses (64-bit integers as strings,
+  enums by name, timestamps as RFC 3339), fields described by their comments. Unknown
+  fields are refused as `bad_request`, as on the socket.
+- **The caller.** Every call is the RPC made as whoever the gateway verified: the same
+  forwarded identity, the same rights, the same budget, the same record. A call with no
+  verified caller is a protocol error. `tools/list` needs none.
+- **Answers.** One text block holding the response message as JSON. A failure is a
+  tool result marked as an error whose JSON is the envelope (`code`, `error`,
+  `details`), so an agent reads why. A streaming RPC is collected into one answer: at
+  most `[mcp] max_stream_items` messages within `[mcp] stream_timeout`, and `cut` says
+  so when it stopped early; when the messages carry `text` (a generation's chunks), the
+  text is joined into `text`, reasoning into `reasoning`, and the last message is kept
+  whole under `last` for its usage.
+- **The gate.** On the API host, like every route there: a verified bearer token for
+  the API audience ([auth/README.md](../auth/README.md)). Envoy gives `/mcp` no timeout;
+  the protocol's own cap bounds a call. `Host` checking is off on purpose: it guards a
+  local server against a page borrowing a browser's credentials, and this one takes
+  only a bearer token.
+
+Connecting Claude Code:
+
+```sh
+claude mcp add --transport http tbd https://api.<domain>/mcp \
+  --header "Authorization: Bearer $(mise run auth:token | jq -r .access_token)"
+```
+
+A machine token expires; when calls start failing with 401, mint a new one and add the
+server again.
+
 ## Metrics
 
 Client-side, per backend: `tbd_engine_client_requests_total{backend,route,status}` and
 `tbd_engine_client_duration_seconds{backend,route}` (the names predate the registry;
 `backend` is the `[services]` name). Per request: the shared `tbd_requests_*` with
 `transport` and `route`; a call on the multiplexed socket is one of those, with
-transport `ws` and the RPC name as its route. Streams: `tbd_streams_active{kind}` and
+transport `ws` and the RPC name as its route, and a tool call over MCP likewise with
+transport `mcp`. Streams: `tbd_streams_active{kind}` and
 `tbd_stream_items_total`, where a multiplexed connection is kind `mux`. See [observability/metrics.md](../observability/metrics.md).
 
 ## What comes next

@@ -163,6 +163,7 @@ pub struct AppState {
     probe_interval: Duration,
     service_subs: Arc<[String]>,
     socket: crate::config::Socket,
+    mcp: crate::config::Mcp,
 }
 
 impl AppState {
@@ -209,6 +210,7 @@ impl AppState {
             probe_interval: config.health.probe_interval,
             service_subs: config.principals.services.clone().into(),
             socket: config.socket,
+            mcp: config.mcp.clone(),
         })
     }
 
@@ -251,6 +253,12 @@ impl AppState {
     #[must_use]
     pub fn socket(&self) -> crate::config::Socket {
         self.socket
+    }
+
+    /// The MCP transport's settings from `[mcp]`.
+    #[must_use]
+    pub fn mcp(&self) -> &crate::config::Mcp {
+        &self.mcp
     }
 
     /// Token subjects that are our own services (`[principals] services`).

@@ -10,6 +10,7 @@
 //! | `/ws`       | WebSocket bridged to an engine session   |
 //! | `/graphql`  | GraphQL (POST) and `GraphiQL` (GET)      |
 //! | `/openapi.json` | the `OpenAPI` document for the REST surface |
+//! | `/mcp`      | every public RPC as an MCP tool (streamable HTTP, stateless) |
 //! | gRPC        | `tbd.protocol.v1.Protocol` + health, h2c  |
 //!
 //! The protocol holds no business logic. Every request is translated and
@@ -25,6 +26,7 @@ mod grpc;
 mod http;
 mod invoke;
 pub mod json;
+pub mod mcp;
 pub mod mux;
 mod observe;
 pub mod principal;
@@ -199,6 +201,11 @@ async fn method_not_allowed(request: axum::extract::Request) -> axum::response::
 /// request traced and measured.
 pub fn router(state: &AppState, transcoder: &Transcoder) -> Router {
     let doc = std::sync::Arc::new(document(transcoder));
+    let mcp = if state.mcp().enabled {
+        Router::new().nest_service(mcp::PATH, mcp::service(state, transcoder))
+    } else {
+        Router::new()
+    };
     Router::new()
         .merge(http::routes())
         .merge(transcoder.router())
@@ -213,6 +220,7 @@ pub fn router(state: &AppState, transcoder: &Transcoder) -> Router {
         .merge(ws::routes())
         .merge(graphql::routes(state))
         .with_state(state.clone())
+        .merge(mcp)
         .merge(grpc::routes(state))
         .fallback(fallback)
         .method_not_allowed_fallback(method_not_allowed)
