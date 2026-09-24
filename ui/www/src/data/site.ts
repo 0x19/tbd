@@ -32,7 +32,7 @@ export const company = {
   /** Short, for the browser tab and the footer. */
   tagline: "Backend and blockchain systems.",
   /** The hero. Long enough to say something only I could say. */
-  headline: "Systems that stay up when it matters, and experiments that do not have to.",
+  headline: "Systems built to stay up.",
   summary:
     "Twenty years in the unglamorous half of the stack: voice servers and SMS gateways first, then anycast networks carrying real-time traffic at sixty gigabits, then rollups, bridges and indexers, and most recently the RPC infrastructure in front of a hundred-odd blockchain networks. Ten of those years in Go, and the last one in Rust. Whatever I build for the fun of it ends up here too.",
   email: "nevio@inorbit.hr",

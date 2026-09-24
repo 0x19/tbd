@@ -8,7 +8,7 @@
 export const hr = {
   company: {
     tagline: "Backend i blockchain sustavi.",
-    headline: "Sustavi koji ostaju gore kad je važno, i eksperimenti koji ne moraju.",
+    headline: "Sustavi građeni da ne padnu.",
     summary:
       "Dvadeset godina u neglamuroznoj polovici sustava: najprije glasovni poslužitelji i SMS pristupnici, zatim anycast mreže koje nose promet u stvarnom vremenu pri šezdeset gigabita, pa rollupi, mostovi i indekseri, a najnovije RPC infrastruktura ispred stotinjak blockchain mreža. Deset od tih godina u Gou, a posljednju u Rustu. Što god gradim iz zabave, završi i ovdje.",
     availability:
