@@ -65,6 +65,12 @@ export const en: Dict = {
     "One question, one answer, streamed as the engine sends it. The numbers are measured here, in your browser, from what the engine reported.",
   "lab.demo.ask.placeholder": "Why is the ledger on two databases?",
   "lab.demo.ask.tier": "tier",
+  "lab.demo.ask.reasoning": "let it reason",
+  "lab.demo.ask.reasoning_help":
+    "The model thinks before it answers. Off, it answers at once; on, the thinking streams into its own fold above the answer and spends the same token budget first.",
+  "lab.demo.reasoning.fold": "reasoning",
+  "lab.demo.no_answer":
+    "No answer: the model spent its budget reasoning. Ask again with reasoning off, or a shorter question.",
   "lab.demo.ask.button": "Ask",
   "lab.demo.ask.running": "Answering…",
   "lab.demo.ask.stop": "Stop",
@@ -74,7 +80,7 @@ export const en: Dict = {
   "lab.demo.rate": "rate",
   "lab.demo.sends.label": "What this page sends",
   "lab.demo.sends.text":
-    "What you type in the box is sent to the model service on this domain, with your account, when you press Ask, and nowhere else. The service records who asked, which tier and engine answered, how many tokens it took and how it ended, for your daily budget; it does not store the question or the answer.",
+    "What you type in the box is sent to the model service on this domain, with your account, the tier and the reasoning switch, when you press Ask, and nowhere else. The service records who asked, which tier, engine build and model revision answered, how many tokens it took and how it ended, for your daily budget; it does not store the question, the reasoning or the answer.",
 };
 
 export const hr: Dict = {
@@ -140,6 +146,12 @@ export const hr: Dict = {
     "Jedno pitanje, jedan odgovor, prenesen kako ga motor šalje. Brojke se mjere ovdje, u tvom pregledniku, iz onoga što je motor prijavio.",
   "lab.demo.ask.placeholder": "Zašto je ledger na dvije baze?",
   "lab.demo.ask.tier": "razina",
+  "lab.demo.ask.reasoning": "neka razmišlja",
+  "lab.demo.ask.reasoning_help":
+    "Model razmišlja prije nego što odgovori. Isključeno, odgovara odmah; uključeno, razmišljanje se prenosi u vlastiti odjeljak iznad odgovora i prvo troši isti proračun tokena.",
+  "lab.demo.reasoning.fold": "razmišljanje",
+  "lab.demo.no_answer":
+    "Nema odgovora: model je potrošio proračun na razmišljanje. Pitaj ponovno s isključenim razmišljanjem, ili kraće.",
   "lab.demo.ask.button": "Pitaj",
   "lab.demo.ask.running": "Odgovara…",
   "lab.demo.ask.stop": "Stani",
@@ -149,5 +161,5 @@ export const hr: Dict = {
   "lab.demo.rate": "brzina",
   "lab.demo.sends.label": "Što ova stranica šalje",
   "lab.demo.sends.text":
-    "Ono što upišeš u polje šalje se servisu modela na ovoj domeni, s tvojim računom, kad pritisneš Pitaj, i nikamo drugamo. Servis bilježi tko je pitao, koja je razina i motor odgovorili, koliko je tokena trebalo i kako je završilo, radi tvog dnevnog proračuna; ne pohranjuje ni pitanje ni odgovor.",
+    "Ono što upišeš u polje šalje se servisu modela na ovoj domeni, s tvojim računom, razinom i prekidačem razmišljanja, kad pritisneš Pitaj, i nikamo drugamo. Servis bilježi tko je pitao, koja su razina, verzija motora i revizija modela odgovorili, koliko je tokena trebalo i kako je završilo, radi tvog dnevnog proračuna; ne pohranjuje ni pitanje, ni razmišljanje, ni odgovor.",
 };

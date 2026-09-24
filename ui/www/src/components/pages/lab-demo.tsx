@@ -30,10 +30,14 @@ type Chunk = {
   model: string;
   tier: string;
   stub: boolean;
+  /** The chunk is the model's reasoning, not its answer. */
+  reasoning?: boolean;
 };
 
 type Run = {
   text: string;
+  /** What the model thought before it answered, when it was allowed to. */
+  thinking: string;
   chunks: number;
   firstMs: number | null;
   totalMs: number | null;
@@ -72,6 +76,10 @@ export function LabDemoContent() {
   const [models, setModels] = useState<Models | null>(null);
   const [budget, setBudget] = useState<Budget | null>(null);
   const [tier, setTier] = useState("TIER_FAST");
+  // Off by default: reasoning spends the token budget before any answer shows,
+  // and a short budget can end with nothing to show (study 0001). On, the
+  // thinking streams into its own fold above the answer.
+  const [reasoning, setReasoning] = useState(false);
   const [prompt, setPrompt] = useState("");
   const [run, setRun] = useState<Run | null>(null);
   const abort = useRef<AbortController | null>(null);
@@ -93,7 +101,15 @@ export function LabDemoContent() {
     const controller = new AbortController();
     abort.current = controller;
     const started = performance.now();
-    const state: Run = { text: "", chunks: 0, firstMs: null, totalMs: null, usage: null, running: true };
+    const state: Run = {
+      text: "",
+      thinking: "",
+      chunks: 0,
+      firstMs: null,
+      totalMs: null,
+      usage: null,
+      running: true,
+    };
     setRun({ ...state });
     try {
       const res = await fetch("/v1/llm/generate/events", {
@@ -101,7 +117,12 @@ export function LabDemoContent() {
         credentials: "include",
         signal: controller.signal,
         headers: { "content-type": "application/json", accept: "text/event-stream" },
-        body: JSON.stringify({ messages: [{ role: "user", content: question }], tier, max_tokens: 512 }),
+        body: JSON.stringify({
+          messages: [{ role: "user", content: question }],
+          tier,
+          max_tokens: 512,
+          reasoning,
+        }),
       });
       if (!res.ok || !res.body) {
         const body = await res.text().catch(() => "");
@@ -132,7 +153,8 @@ export function LabDemoContent() {
           }
           const chunk = JSON.parse(data) as Chunk;
           state.chunks += 1;
-          state.text += chunk.text;
+          if (chunk.reasoning) state.thinking += chunk.text;
+          else state.text += chunk.text;
           state.engine = chunk.engine;
           state.model = chunk.model;
           state.stub = chunk.stub;
@@ -250,6 +272,18 @@ export function LabDemoContent() {
                     <option value="TIER_DEEP">deep</option>
                   </select>
                 </label>
+                <label
+                  className="text-muted-foreground flex items-center gap-2 font-mono text-[11px] tracking-[0.14em] uppercase"
+                  title={t("lab.demo.ask.reasoning_help")}
+                >
+                  <input
+                    type="checkbox"
+                    checked={reasoning}
+                    onChange={(e) => setReasoning(e.target.checked)}
+                    className="accent-foreground"
+                  />
+                  {t("lab.demo.ask.reasoning")}
+                </label>
                 <Button
                   size="sm"
                   onClick={() => void ask()}
@@ -289,7 +323,25 @@ export function LabDemoContent() {
                   {run.error ? (
                     <p className="mt-4 font-mono text-sm text-red-600 dark:text-red-400">{run.error}</p>
                   ) : (
-                    <p className="mt-4 text-sm whitespace-pre-wrap">{run.text || (run.running ? "…" : "")}</p>
+                    <>
+                      {run.thinking ? (
+                        <details className="mt-4 text-sm">
+                          <summary className="text-muted-foreground cursor-pointer font-mono text-[11px] tracking-[0.14em] uppercase">
+                            {t("lab.demo.reasoning.fold")}
+                          </summary>
+                          <p className="text-muted-foreground mt-2 whitespace-pre-wrap">{run.thinking}</p>
+                        </details>
+                      ) : null}
+                      <p className="mt-4 text-sm whitespace-pre-wrap">
+                        {run.text ||
+                          (run.running ? "…" : "") ||
+                          (run.usage ? (
+                            <span className="text-muted-foreground">{t("lab.demo.no_answer")}</span>
+                          ) : (
+                            ""
+                          ))}
+                      </p>
+                    </>
                   )}
                 </div>
               ) : null}
