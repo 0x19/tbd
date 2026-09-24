@@ -67,3 +67,8 @@ is a false claim.
 | # | Document | Status |
 |---|---|---|
 | 0001 | [The llm service, an L2 over two engines](0001-the-llm-service.md) | decided |
+| 0002 | [Memory and tools](0002-memory-and-tools.md) | open |
+| 0003 | [The shield](0003-the-shield.md) | open |
+| 0004 | [The workbench and the arena](0004-the-workbench-and-the-arena.md) | open |
+| 0005 | [The platform over MCP](0005-the-platform-over-mcp.md) | open |
+| 0006 | [Publication](0006-publication.md) | open |

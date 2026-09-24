@@ -1,5 +1,8 @@
 # A personal LLM stack, built low-level
 
+> The plan of record is now the lab's RFCs (`docs/rfcs/`, 0001 to 0006): a general-purpose
+> AI development platform on this workstation. This page is kept as the idea it grew from.
+
 > Status: idea, 2026-09-23. Not built. The lab behind [claim-confidence.md](claim-confidence.md),
 > and a set of engineering case studies for the site once there are numbers.
 

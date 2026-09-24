@@ -32,24 +32,27 @@ differently, Glossary (the terms that were new that week, in one line each).
 ## The series as planned
 
 Subject to the measurements, and the order may change; nothing here is a commitment.
-Each one is baseline, implementation, measurement, what failed, result.
+Each one is baseline, implementation, measurement, what failed, result, and each
+follows the RFC it measures.
 
-1. What a 16 GB card really does: both tiers, both candidate models, measured by the
-   chaos tool.
-2. How fast can a 120 billion parameter mixture-of-experts run from DDR4: the
-   hypothesis in RFC 0001 against the stack.
-3. Replacing the model server: loading the weights ourselves.
-4. The tokenizer.
-5. The KV cache.
-6. Batching.
-7. Sampling.
-8. Retrieval over my own source.
-9. Can the model interview its author.
-10. Fine-tuning against retrieval, measured.
+1. What a 16 GB card really does: both tiers, both candidate models (RFC 0001).
+2. As fast as this card goes: admission, one engine for both tiers, continuous batching
+   and speculative decoding, each step against the numbers of study 1 (RFC 0001).
+3. A storm at the edge, and what eBPF costs: the shield under a storm raised inside the
+   machine, and the hook's own price on legitimate traffic (RFC 0003).
+4. What the platform remembers: recall that finds the right entry, recall that finds a
+   wrong one, and what it costs per turn (RFC 0002).
+5. Watching it live: the arena's own load on the platform, and the latency from an
+   event to the pixel (RFC 0004).
+6. How fast can a 120 billion parameter mixture-of-experts run from DDR4: the deep
+   tier's hypothesis against the stack.
+7. Replacing the model server: loading the weights ourselves, then the tokenizer, the
+   KV cache, batching and sampling, one layer per study.
+8. Fine-tuning against recall, measured.
 
-The engine of our own (3 to 7) is a parallel track against the baselines, never the
-critical path of the service: each layer has to say what the baseline does, what ours
-does, where the bottleneck was and what it did after the fix, or it is not a study.
+The engine of our own (7) is a parallel track against the baselines, never the critical
+path of the service: each layer has to say what the baseline does, what ours does, where
+the bottleneck was and what it did after the fix, or it is not a study.
 
 ## Index
 

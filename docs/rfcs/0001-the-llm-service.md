@@ -3,15 +3,20 @@ title: The llm service, an L2 over two engines
 status: decided
 date: 2026-09-23
 public: true
-summary: A service of this platform that serves open-weight models from one workstation, split into the engines that run the weights and the layer that owns the contract, the budget and the record; two models from day one, one that fits the graphics card and one that runs from memory.
+summary: The model-serving core of a general-purpose AI development platform on one workstation, split into the engines that run the weights and the layer that owns the contract, the admission, the budget and the record; two models from day one, one that fits the graphics card and one that runs from memory.
 ---
 
 ## Problem
 
-I want a model of my own on this site: one that answers questions about this platform,
-later about my own history, and eventually interviews me about it, served from the
-machine under my desk rather than rented by the token. Two things make that harder than
-"run a model server and put a chat box on a page".
+I want an AI development platform of my own: models served from the machine under my
+desk rather than rented by the token, as fast and as stable as that machine can make
+them, with the memory, the tools and the measurement that let it do real work, and
+reachable by other agents as well as by people. This document decides its core, the
+service that serves the models. The pillars around it each have a document of their
+own: memory and tools (0002), a shield at the edge (0003), the workbench where it is
+used and watched (0004), the platform over MCP (0005), and when it all goes public
+(0006). Two things make the core harder than "run a model server and put a chat box on
+a page".
 
 The first is honesty. A page that says "my own LLM" over a hosted API is a lie, and a
 page that says it over an unmodified download is a stretch. What I can truthfully own on
@@ -23,8 +28,9 @@ The second is the hardware. The machine has a 16 GB graphics card, 247 GiB of sy
 memory and a 24-core processor. A model that fits the card answers a visitor at a
 speed that feels like typing; a model that does not fit the card runs from system memory
 at a fraction of that, but with far more capacity. Neither alone is what I want: the
-first is the demo, the second is the judge. The service has to hold both without the
-contract knowing which one answered.
+first is the one that answers, the second is the one that thinks harder. The service
+has to hold both without the contract knowing which one answered, and it has to stay
+standing when more people ask than the card can serve.
 
 ## Proposal
 
@@ -51,8 +57,10 @@ owns:
   over it is refused with the count and the reset time;
 - routing: a request names a **tier**, `fast` or `deep`, and the service picks the
   engine; a request that names none goes to the default;
-- bounds and deadlines: how many messages, how long, how many tokens; the tier's timeout
-  is one clock from admission that covers the dial and the stream;
+- admission, bounds and deadlines: how many generations each tier runs at once, how many
+  may wait and for how long, and a fast, named refusal beyond that; how many messages,
+  how long, how many tokens; the tier's timeout is one clock from admission that covers
+  the dial and the stream;
 - the record: a session a caller may continue, and one row per generation with the
   tier, the engine, the model, the outcome, the engine's own token counts and the time
   to the first token; no prompt and no completion text is stored;
@@ -72,8 +80,8 @@ L1 seat exactly. Rejected for now: every prompt would leave the machine, and the
 in "my own model" would start as a plan rather than a fact. The seat stays open; a
 hosted engine can be added later without touching the contract.
 
-**One model, not two.** Simpler to operate. Rejected: a model that fits 16 GB is a
-demo, not a judge; a model that needs 60 GB is a judge, not a demo. Routing by tier is
+**One model, not two.** Simpler to operate. Rejected: a model that fits 16 GB answers
+fast but thinks shallow; a model that needs 60 GB thinks harder but answers slowly. Routing by tier is
 cheap and it is the only way both stories run on one machine.
 
 **Serving directly from a model server with a thin page in front.** No Rust, no
@@ -82,10 +90,16 @@ page: budgets, records, deadlines, fault injection and measurement are what the 
 will be about, and a thin page has none of them. It is also what every other product in
 this space is.
 
-**Fine-tuning first.** The eventual goal is a model that knows my work. Rejected as a
-starting point: retrieval over the repositories is cheaper, inspectable (every answer
-names its sources) and stays current with the code. Fine-tuning comes when a measured
-evaluation shows a gap retrieval cannot close, and the comparison itself is a study.
+**Fine-tuning first.** Rejected as a starting point: memory and recall (RFC 0002) are
+cheaper, inspectable (every answer names its sources) and stay current with what they
+remember. Fine-tuning comes when a measured evaluation shows a gap recall cannot close,
+and the comparison itself is a study.
+
+**Letting the queue grow.** An engine that is busy can simply be asked to wait, and the
+engines do queue. Rejected: study 0001 measured what that means, a first token after
+forty seconds for everyone once the offered rate passes what the card can serve. A
+caller is better served by a fast, named refusal it can retry than by a wait it cannot
+see the end of.
 
 ## Decision
 
@@ -110,6 +124,19 @@ the processor's arithmetic, the transfers to the card, expert dispatch, cache be
 and the engine's own overhead all sit between the ceiling and the number. The study
 measures how close the stack gets. A faster memory kit is the single cheapest upgrade
 this machine has, and it is noted, not planned.
+
+**Admission.** Each tier runs a bounded number of generations at once and lets a
+bounded number wait for a bounded time; beyond either, the request is refused at once,
+saying which tier was busy and how long it waited. The numbers are configuration, set
+from the studies (the card holds one fast context beside the deep tier's cache, so the
+fast tier starts at one or two in flight), and the service exports how many are in
+flight, how long they waited and how many were refused.
+
+**One engine for both tiers, once measured.** Both tiers stay behind the same contract,
+so the fast tier's engine can move to the one the deep tier uses, with continuous
+batching and a small draft model for speculative decoding where one exists for the
+model. It moves when a study shows it at least as fast and at least as stable on this
+card; until then the fast tier stays where it is.
 
 **The record** lives in the platform's Postgres, in the service's own schema, keyed by
 the verified subject. Without the database the service still runs: it records nothing
@@ -137,11 +164,11 @@ trusts a claim in a request.
 
 ## Publication
 
-This RFC is public once its author has read it on the page. The lab it appears in is
-itself admins-only until then; the flip is one deliberate change in two places, listed
-in the site's own notes. The first study follows: what a 16 GB card really does, with
-the baselines of both tiers on both candidate models, measured by the chaos tool. When
-the demo goes live, its page names what it sends and where, before it sends anything.
+This RFC is public in the lab, and the lab is behind a sign-in until RFC 0006 says
+otherwise. Study 0001 measured the first decision (what a 16 GB card really does);
+study 0002 measures the second (admission and one engine for both tiers). The workbench
+(RFC 0004) is where the service is used and watched, and its page names what it sends
+and where, before it sends anything.
 
 ## Status log
 
@@ -158,3 +185,9 @@ the demo goes live, its page names what it sends and where, before it sends anyt
   117B model with its experts in memory and attention on the card, generates at about
   19 tokens a second, above the ten this document predicted. Both models fill the
   card to within a gigabyte when loaded together; the first study measures the split.
+- 2026-09-24: the charter widens. This service is now the core of a general-purpose AI
+  development platform rather than a single demo, with a document per pillar (0002 to
+  0006). Admission control joins the decision: bounded generations in flight and in
+  waiting per tier, and a fast, named refusal beyond them, after study 0001 measured
+  what an unbounded queue costs. The fast tier's move to the deep tier's engine is
+  decided on a condition: when a study shows it at least as fast and as stable.

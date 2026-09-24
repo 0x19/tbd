@@ -1,0 +1,84 @@
+---
+title: The workbench and the arena
+status: open
+date: 2026-09-24
+public: true
+summary: The page where the platform is used and watched - a keyboard-first workbench for conversations with the models, tools and memory, beside a live view of what happens behind it, and a small set of runs a visitor may start to see the platform under load and fault.
+---
+
+## Problem
+
+The demo page shows that the model answers. It does not show what makes the platform
+worth building: the tiers deciding who answers, the queue filling and refusing, the
+budget counting, memory being recalled, a tool being called, the chaos tool breaking
+something on purpose and the platform holding. A visitor sees a text box and a reply,
+and everything interesting happens where they cannot see it.
+
+A page that is going to be linked from the front of the site also has to be good in its
+own right: something a developer would want to keep open, not a form.
+
+## Proposal
+
+**The workbench** is a full-height, keyboard-first page in the manner of the terminal
+coding agents: a transcript that streams, a prompt at the bottom, and around them only
+what earns its place.
+
+- The transcript: each turn streams as it is generated; the model's reasoning folds
+  away above its answer; a tool call is a card with its arguments, its result and its
+  time; recalled memory is listed under the answer that used it, each entry with its
+  source.
+- The prompt: multi-line, enter to send, a slash menu for the things a keyboard user
+  wants without leaving it (tier, reasoning, clear, a new session, the runs below), and
+  a status line under it: tier, model, tokens in and out, time to the first token,
+  tokens a second, budget left today.
+- Sessions: a list to the side, kept in the browser; nothing about them leaves it unless
+  the visitor turns memory on for them (RFC 0002).
+
+**The arena** is the "behind the scenes" panel beside the workbench, live:
+
+- the tiers: in flight, waiting, refused, tokens a second, first-token latency, each as
+  a small moving series;
+- the current chaos run, if any: its phase, its offered and achieved rate, its errors,
+  and its own tokens and latency, as the chaos tool reports them each second;
+- the shield (RFC 0003): packets passed and dropped per second, top sources by count.
+
+It is fed over the platform's multiplexed socket by an `arena` service that subscribes
+to the chaos tool's run feed, the model service's meters and the shield's counters, and
+republishes one compact stream. A visitor never talks to the chaos tool directly.
+
+**Preset runs.** A signed-in visitor may start one of a short, fixed list of runs from
+the workbench: a burst at the fast tier, a slow deep-tier question under load, the model
+engine killed mid-stream, the storm at the shield. One run at a time for the whole site,
+a cool-down per visitor, each preset bounded in rate and length so no visitor can do
+more than watch the platform work hard for a minute. The arena shows the run as it
+happens and what the platform did about it.
+
+## Alternatives considered
+
+**Grafana on the page.** The dashboards exist and are good. Rejected for the public
+page: they expose the whole platform's internals and need an account of their own; the
+arena shows a chosen few series, from a stream built for it.
+
+**Polling the services from the page.** Simpler. Rejected: several requests a second per
+visitor against the services the page is trying to show under load would be the load.
+
+**Letting visitors write their own load.** More fun. Rejected: a preset is something the
+platform is designed to survive; an arbitrary run is something it might not, on a
+machine that also serves everything else.
+
+## Decision
+
+Open. Fixed so far: the page layout (transcript, prompt with slash menu and status line,
+sessions kept in the browser), the arena as its own service republishing one stream over
+the multiplexed socket, preset runs only, one at a time, bounded and cooled down. Still
+to decide: the preset list and each one's bounds, the arena's stream shape, and when the
+page leaves the lab for the front of the site (RFC 0006).
+
+## Publication
+
+The workbench replaces the demo page in the lab. Study 0005 measures what watching
+costs: the arena's own load on the platform, and the latency from an event to the pixel.
+
+## Status log
+
+- 2026-09-24: opened.
