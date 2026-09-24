@@ -738,7 +738,7 @@ dir = "ui/www"
 run = "pnpm gen"
 
 [tasks."ui:www:check"]
-description = "ui/www: the lab render and its redaction check, prettier, eslint, tsc (same bar as ui/chaos), and the CV data in crates/cv/assets is current"
+description = "ui/www: the lab render and its redaction check, prettier, eslint, tsc (same bar as ui/chaos), and the generated files it owns are current (the CV data in crates/cv/assets, the site guide's knowledge in configs/llm/agents)"
 depends = ["ui:www:install"]
 dir = "ui/www"
 run = """
@@ -748,7 +748,15 @@ pnpm lint
 pnpm typecheck
 node --no-warnings tool/cv-data.ts >/dev/null
 git diff --exit-code -- ../../crates/cv/assets/cv.json || { echo "crates/cv/assets/cv.json is stale: run mise run www:cv and commit it"; exit 1; }
+node --no-warnings tool/agent-knowledge.ts >/dev/null
+git diff --exit-code -- ../../configs/llm/agents/site.knowledge.json || { echo "configs/llm/agents/site.knowledge.json is stale: run mise run www:agent and commit it"; exit 1; }
 """
+
+[tasks."www:agent"]
+description = "Write the site guide's knowledge (configs/llm/agents/site.knowledge.json, RFC 0011) from src/data/site.ts and the public lab documents: a brief for every turn and each page's text. Committed; ui:www:check fails when it is stale"
+depends = ["ui:www:install"]
+dir = "ui/www"
+run = "node --no-warnings tool/agent-knowledge.ts"
 
 # The site is published at the base domain of the public edge; a build for any
 # other host asks robots to stay away, so the canonical URL is a build argument.
