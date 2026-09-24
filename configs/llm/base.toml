@@ -81,7 +81,9 @@ tokens_per_day = 200000
 # a person. The chaos tool's load operations call as chaos-load and would
 # spend a day's budget in a few minutes of measurement (they did, on the
 # first day). Their generations are still recorded.
-unlimited_subjects = ["chaos-load"]
+# svc:radar writes the Radar's public digests; its archive backfill is a few
+# hundred generations at once, still bounded by each tier's admission.
+unlimited_subjects = ["chaos-load", "svc:radar"]
 
 [store]
 # The Postgres schema `llm`: sessions and generations, the budget's source.

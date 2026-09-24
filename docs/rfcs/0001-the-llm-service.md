@@ -202,3 +202,7 @@ and where, before it sends anything.
 - 2026-09-24: the fast tier moved to the deep tier's engine (study 0002): four slots over
   one shared cache, admission raised to four running, no draft model. The previous
   engine is off, because an idle one would load a model and take the card.
+- 2026-09-24: the radar service (`svc:radar`) joined the platform's instruments exempt
+  from the daily budget: it writes public digests, and its archive backfill is a few
+  hundred generations at once. Admission bounds it like any caller, and every
+  generation is still recorded.
