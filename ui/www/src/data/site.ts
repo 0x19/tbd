@@ -570,6 +570,7 @@ export const nav = [
   { href: "/lab/", label: "Lab", key: "lab", gated: true },
   { href: "/open-source/", label: "Open source", key: "oss" },
   { href: "/playgrounds/", label: "Play", key: "play" },
+  { href: "/radar/", label: "Radar", key: "radar" },
   { href: "/about/", label: "About", key: "about" },
   { href: "/contact/", label: "Contact", key: "contact" },
 ] as const satisfies readonly NavItem[];
