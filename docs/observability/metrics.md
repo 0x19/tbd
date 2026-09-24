@@ -23,6 +23,9 @@ backend is visible instead of clipped.
 | `tbd_llm_queued` | gauge | `tier` | requests waiting for a slot on the tier now |
 | `tbd_llm_queue_wait_seconds` | histogram | `tier` | an admitted request got its slot; how long it waited in line |
 | `tbd_llm_refused_total` | counter | `tier`, `reason` (`queue_full`, `queue_timeout`) | admission refused a request with `RESOURCE_EXHAUSTED` |
+| `tbd_runner_runs_total` | counter | `language`, `outcome` (the sandbox's, or `unavailable`) | a run went through the runner service to the sandbox |
+| `tbd_runner_duration_seconds` | histogram | `language` | a run through the runner ended, container start to removal included |
+| `tbd_runner_in_flight` | gauge | | runs the runner has in flight now |
 | `tbd_sandbox_runs_total` | counter | `language` (`go`, `rust`), `outcome` (`ok`, `exit`, `compile_error`, `killed`) | the sandbox daemon on the host finished a run (docs/sandbox/README.md) |
 | `tbd_sandbox_duration_seconds` | histogram | `language`, `step` (`compile`, `run`) | a sandbox step ended, by itself or stopped from outside |
 | `tbd_sandbox_in_flight` | gauge | | sandbox runs in progress on the host |

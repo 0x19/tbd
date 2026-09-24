@@ -29,6 +29,11 @@ async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     let (mut config, source) = Config::load(&cli.overrides.config_dir, &cli.overrides.env)?;
     cli.overrides.apply(&mut config);
+    // The stub runs nothing; a production file that names it is a mistake.
+    anyhow::ensure!(
+        !(source.env == "production" && config.engine.kind == tbd_runner::config::EngineKind::Stub),
+        "[engine] kind = \"stub\" is refused in production"
+    );
     if let Some(Command::Config) = cli.command {
         println!("# env: {}", source.env);
         for f in &source.files {

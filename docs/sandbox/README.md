@@ -10,7 +10,31 @@ container, and says what it printed (RFC 0010). Two layers, like the llm service
 - **The runner** (L2, a platform service): who may run, how many at once, how many a
   day, the audit line; it calls `sandboxd` as the llm service calls an engine.
 
-## One run
+## The runner
+
+`RunnerService` (`proto/tbd/runner/v1/runner.proto`, `crates/runner`): `Run` at
+`POST /v1/runner/run`, `ListLanguages` at `GET /v1/runner/languages`, over every surface
+the gateway offers. The MCP allowlist does not include it: running code for an agent is
+a later decision (RFC 0010). A run, in order:
+
+1. a verified caller, always (`UNAUTHENTICATED` without one), with `[access]
+   require_role` (`admin` while the lab is private; `PERMISSION_DENIED` otherwise);
+2. the bounds (`[limits]`; `INVALID_ARGUMENT` naming the field; nothing is spent);
+3. the caller's daily allowance (`[budget] runs_per_day`, in memory, so a restart
+   resets it; `RESOURCE_EXHAUSTED` with the reset time);
+4. a slot (`[admission]`: 4 at once, 8 waiting, 10 s; `RESOURCE_EXHAUSTED` "busy: ..."),
+   matching `sandboxd`'s own limit so the daemon's refusal is never reached;
+5. the engine: `sandboxd` over HTTP with the token (`RUNNER_SANDBOX_URL`,
+   `RUNNER_SANDBOX_TOKEN` from the `runner-sandbox` Secret), or `stub` (tests and the
+   chaos tool; runs nothing, `stub: true`; refused in production). A daemon that refuses
+   the token is `UNAVAILABLE` to the caller, never more.
+
+One `audit` line per run: subject, caller kind, language, source bytes, outcome, time;
+a test fails if the source ever reaches the log. Metrics `tbd_runner_runs_total`,
+`tbd_runner_duration_seconds`, `tbd_runner_in_flight`. On the site's host,
+`/v1/runner/` has the lab's gate (`docs/auth/README.md`).
+
+## One run in the sandbox
 
 1. `docker run --runtime runsc` with the recipe's fixed restrictions
    (`crates/sandboxd/src/recipe.rs`): no network (and the runtime is registered with
@@ -50,7 +74,7 @@ stderr says so in words, not in the runtime's own terms). `outcome` is `ok`, `ex
 The unit runs `sandboxd` with a new user each start (`DynamicUser`) in the `docker`
 group, no capabilities, a read-only system, and systemd's firewall letting in only this
 machine and the local cluster's networks (`172.16.0.0/12`); it listens on
-`0.0.0.0:7788` behind that. Pods reach it as `host.k3d.internal:7788`. The token is the
+`0.0.0.0:7788` behind that; its metrics on `127.0.0.1:9490`. Pods reach it as `host.k3d.internal:7788`. The token is the
 second check, compared in constant time; a token shorter than 32 bytes refuses to
 start.
 

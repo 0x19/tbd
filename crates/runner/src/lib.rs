@@ -5,6 +5,8 @@
 //! and from the chaos tool with fault injection and counters attached.
 
 pub mod config;
+pub mod engine;
+mod gate;
 mod service;
 
 use std::net::SocketAddr;
@@ -37,6 +39,9 @@ pub enum ServeError {
     /// The gRPC server failed while running.
     #[error("transport: {0}")]
     Transport(#[from] tonic::transport::Error),
+    /// The engine the configuration names cannot be built.
+    #[error("engine: {0}")]
+    Engine(String),
 }
 
 /// Bind `[server] listen` and serve until `shutdown` resolves.
@@ -85,7 +90,9 @@ pub async fn serve_with(
         .register_encoded_file_descriptor_set(tonic_health::pb::FILE_DESCRIPTOR_SET)
         .build_v1()?;
 
-    let service = Runner::new(config.ping.clone(), runtime);
+    let engine =
+        engine::build(&config, config.sandbox_token.clone()).map_err(ServeError::Engine)?;
+    let service = Runner::new(&config, runtime, engine);
 
     tracing::info!(%addr, version = tbd_common::VERSION, "runner listening");
 

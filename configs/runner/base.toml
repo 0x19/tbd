@@ -16,3 +16,37 @@ listen = "0.0.0.0:9464"
 # Longest message Ping echoes; longer is INVALID_ARGUMENT. The one knob that
 # proves TOML reaches an RPC.
 max_message_len = 1024
+
+[engine]
+# What runs the programs: "sandboxd", the sandbox daemon on the machine (RFC
+# 0010, docs/sandbox/README.md), or "stub" (tests and the chaos tool only; it
+# runs nothing and says so). Never set from a flag or a variable.
+kind = "sandboxd"
+# The daemon, dialled directly like the model service's engines: it runs on
+# the machine, not in the cluster (RUNNER_SANDBOX_URL). Its token comes only
+# from RUNNER_SANDBOX_TOKEN (the runner-sandbox Secret).
+url = "http://127.0.0.1:7788"
+# One run's deadline here, past the sandbox's own compile and run deadlines.
+timeout = "40s"
+
+[access]
+# The role a caller needs; "admin" while the lab is private. Empty lets any
+# verified caller run (RFC 0006); a caller is always required.
+require_role = "admin"
+
+[admission]
+# Runs at once: the sandbox daemon's own limit, so its refusal is never reached.
+max_in_flight = 4
+# A short line behind them; one more is refused at once as busy.
+max_queued = 8
+queue_timeout = "10s"
+
+[budget]
+# Runs one caller may make per UTC day; 0 is no limit. Counted in memory: a
+# restart of the service resets it.
+runs_per_day = 200
+
+[limits]
+# Refused here, before the sandbox is asked; the same as the daemon's.
+max_source_bytes = 65536
+max_stdin_bytes = 65536

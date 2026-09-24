@@ -106,6 +106,13 @@ pub mod names {
     pub const SANDBOX_DURATION: &str = "tbd_sandbox_duration_seconds";
     /// Gauge: sandbox runs in progress on the machine.
     pub const SANDBOX_IN_FLIGHT: &str = "tbd_sandbox_in_flight";
+    /// Counter: runs through the runner service, by `language` and `outcome`
+    /// (the sandbox's, or `unavailable`).
+    pub const RUNNER_RUNS_TOTAL: &str = "tbd_runner_runs_total";
+    /// Histogram: seconds a run took through the runner, by `language`.
+    pub const RUNNER_DURATION: &str = "tbd_runner_duration_seconds";
+    /// Gauge: runs the runner has in flight now.
+    pub const RUNNER_IN_FLIGHT: &str = "tbd_runner_in_flight";
     /// Counter: the radar read a source. Labels `source` (the configured name),
     /// `outcome` (`ok`, `failed`).
     pub const RADAR_FETCHES_TOTAL: &str = "tbd_radar_fetches_total";
@@ -197,6 +204,11 @@ pub fn install(addr: SocketAddr, service: &str) -> Result<(), MetricsError> {
         .map_err(|e| MetricsError::Install(e.to_string()))?
         .set_buckets_for_metric(
             Matcher::Full(names::SANDBOX_DURATION.into()),
+            DURATION_BUCKETS,
+        )
+        .map_err(|e| MetricsError::Install(e.to_string()))?
+        .set_buckets_for_metric(
+            Matcher::Full(names::RUNNER_DURATION.into()),
             DURATION_BUCKETS,
         )
         .map_err(|e| MetricsError::Install(e.to_string()))?
@@ -392,6 +404,19 @@ fn describe_llm() {
     describe_gauge!(
         names::SANDBOX_IN_FLIGHT,
         "Sandbox runs in progress on the machine."
+    );
+    describe_counter!(
+        names::RUNNER_RUNS_TOTAL,
+        "Runs through the runner service, by language and outcome."
+    );
+    describe_histogram!(
+        names::RUNNER_DURATION,
+        Unit::Seconds,
+        "Seconds a run took through the runner, by language."
+    );
+    describe_gauge!(
+        names::RUNNER_IN_FLIGHT,
+        "Runs the runner has in flight now."
     );
     describe_gauge!(
         names::ARENA_SOURCE_AGE,

@@ -5340,6 +5340,38 @@
         }
       }
     },
+    "/v1/runner/languages": {
+      "get": {
+        "tags": [
+          "runner"
+        ],
+        "summary": "tbd.runner.v1.RunnerService/ListLanguages",
+        "description": "Transcoded from `/tbd.runner.v1.RunnerService/ListLanguages` on the `runner` backend.",
+        "operationId": "RunnerService.ListLanguages",
+        "responses": {
+          "200": {
+            "description": "`tbd.runner.v1.ListLanguagesResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.runner.v1.ListLanguagesResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/runner/ping": {
       "get": {
         "tags": [
@@ -5365,6 +5397,49 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/tbd.runner.v1.PingResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/runner/run": {
+      "post": {
+        "tags": [
+          "runner"
+        ],
+        "summary": "tbd.runner.v1.RunnerService/Run",
+        "description": "Transcoded from `/tbd.runner.v1.RunnerService/Run` on the `runner` backend.",
+        "operationId": "RunnerService.Run",
+        "requestBody": {
+          "description": "`tbd.runner.v1.RunRequest`; path variables override their fields",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/tbd.runner.v1.RunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "`tbd.runner.v1.RunResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.runner.v1.RunResponse"
                 }
               }
             }
@@ -10447,6 +10522,51 @@
           }
         }
       },
+      "tbd.runner.v1.LanguageInfo": {
+        "type": "object",
+        "description": "`tbd.runner.v1.LanguageInfo`",
+        "properties": {
+          "language": {
+            "type": "string",
+            "description": "`tbd.runner.v1.Language`",
+            "enum": [
+              "LANGUAGE_UNSPECIFIED",
+              "LANGUAGE_GO",
+              "LANGUAGE_RUST"
+            ]
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.runner.v1.ListLanguagesResponse": {
+        "type": "object",
+        "description": "`tbd.runner.v1.ListLanguagesResponse`",
+        "properties": {
+          "in_flight": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "languages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/tbd.runner.v1.LanguageInfo"
+            }
+          },
+          "max_in_flight": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "runs_left_today": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "stub": {
+            "type": "boolean"
+          }
+        }
+      },
       "tbd.runner.v1.PingResponse": {
         "type": "object",
         "description": "`tbd.runner.v1.PingResponse`",
@@ -10459,6 +10579,91 @@
           },
           "version": {
             "type": "string"
+          }
+        }
+      },
+      "tbd.runner.v1.RunRequest": {
+        "type": "object",
+        "description": "`tbd.runner.v1.RunRequest`",
+        "properties": {
+          "language": {
+            "type": "string",
+            "description": "`tbd.runner.v1.Language`",
+            "enum": [
+              "LANGUAGE_UNSPECIFIED",
+              "LANGUAGE_GO",
+              "LANGUAGE_RUST"
+            ]
+          },
+          "source": {
+            "type": "string"
+          },
+          "stdin": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.runner.v1.RunResponse": {
+        "type": "object",
+        "description": "`tbd.runner.v1.RunResponse`",
+        "properties": {
+          "compile": {
+            "$ref": "#/components/schemas/tbd.runner.v1.Step"
+          },
+          "id": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string",
+            "description": "`tbd.runner.v1.Language`",
+            "enum": [
+              "LANGUAGE_UNSPECIFIED",
+              "LANGUAGE_GO",
+              "LANGUAGE_RUST"
+            ]
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "run": {
+            "$ref": "#/components/schemas/tbd.runner.v1.Step"
+          },
+          "runs_left_today": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "stub": {
+            "type": "boolean"
+          },
+          "total_ms": {
+            "type": "string",
+            "format": "int64"
+          }
+        }
+      },
+      "tbd.runner.v1.Step": {
+        "type": "object",
+        "description": "`tbd.runner.v1.Step`",
+        "properties": {
+          "exit_code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "killed": {
+            "type": "string"
+          },
+          "stderr": {
+            "type": "string"
+          },
+          "stdout": {
+            "type": "string"
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "wall_ms": {
+            "type": "string",
+            "format": "int64"
           }
         }
       }

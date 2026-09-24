@@ -6,4 +6,5 @@
 vault_registry_username: REPLACE_ME          # GitHub user with read:packages
 vault_registry_password: REPLACE_ME          # PAT or GITHUB_TOKEN with read:packages
 vault_ledger_postgres_password: REPLACE_ME   # the ledger's Postgres (openssl rand -hex 16)
+vault_runner_sandbox_token: REPLACE_ME       # the sandbox daemon's token on this host (docs/sandbox/README.md)
 vault_ledger_clickhouse_password: REPLACE_ME # the ledger's ClickHouse user

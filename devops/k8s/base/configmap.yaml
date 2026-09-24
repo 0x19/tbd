@@ -13,6 +13,9 @@ data:
   PROTOCOL_METRICS_ADDR: 0.0.0.0:9464
   RUNNER_LISTEN_ADDR: 0.0.0.0:50060
   RUNNER_METRICS_ADDR: 0.0.0.0:9464
+  # The sandbox daemon runs on the host (RFC 0010), dialled directly like the
+  # llm engines; its token comes from the runner-sandbox Secret.
+  RUNNER_SANDBOX_URL: http://host.k3d.internal:7788
   RADAR_LISTEN_ADDR: 0.0.0.0:50059
   RADAR_METRICS_ADDR: 0.0.0.0:9464
   # The radar writes its digests through the llm service, via Envoy's internal

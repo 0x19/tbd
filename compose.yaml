@@ -299,6 +299,8 @@ services:
       TBD_ENV: ${TBD_ENV:-local}
       RUNNER_LISTEN_ADDR: 0.0.0.0:50060
       RUNNER_METRICS_ADDR: 0.0.0.0:9464
+      RUNNER_SANDBOX_URL: http://host.docker.internal:7788
+      RUNNER_SANDBOX_TOKEN: ${RUNNER_SANDBOX_TOKEN:-}
     ports:
       - "9473:9464"
     restart: unless-stopped

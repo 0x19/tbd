@@ -3,6 +3,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+mod runs;
 mod support;
 
 use tbd_proto::runner::v1::PingRequest;

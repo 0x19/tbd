@@ -4,6 +4,7 @@
 use std::{
     net::SocketAddr,
     path::{Path, PathBuf},
+    time::Duration,
 };
 
 use clap::Args;
@@ -25,6 +26,85 @@ pub struct Config {
     /// `[ping]`
     #[serde(default)]
     pub ping: Ping,
+    /// `[engine]`
+    pub engine: Engine,
+    /// `[access]`
+    pub access: Access,
+    /// `[admission]`
+    pub admission: Admission,
+    /// `[budget]`
+    pub budget: Budget,
+    /// `[limits]`
+    pub limits: Limits,
+    /// The sandbox daemon's token, from `RUNNER_SANDBOX_TOKEN` only. Never
+    /// read from a file and never written out: `runner config` cannot print it.
+    #[serde(skip)]
+    pub sandbox_token: Option<String>,
+}
+
+/// What runs the programs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum EngineKind {
+    /// The sandbox daemon on the machine (RFC 0010).
+    Sandboxd,
+    /// In process, runs nothing, says so (`stub: true`): tests and the chaos tool.
+    Stub,
+}
+
+/// `[engine]`: never overridable from a flag, on purpose: a deployment's engine
+/// is chosen in a reviewed file, and production refuses the stub.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Engine {
+    /// What runs the programs.
+    pub kind: EngineKind,
+    /// The sandbox daemon's base URL (`RUNNER_SANDBOX_URL`), dialled directly
+    /// like the model service's engines: it runs on the machine, not in the cluster.
+    pub url: String,
+    /// One run's deadline here, past the sandbox's own compile and run deadlines.
+    #[serde(with = "humantime_serde")]
+    pub timeout: Duration,
+}
+
+/// `[access]`
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Access {
+    /// The role a caller needs; empty lets any verified caller run (RFC 0006).
+    pub require_role: String,
+}
+
+/// `[admission]`: runs at once, and a short line behind them.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Admission {
+    /// Runs at once; at most the sandbox daemon's own `max_concurrent`.
+    pub max_in_flight: usize,
+    /// Runs that may wait; one more is refused at once.
+    pub max_queued: usize,
+    /// How long one waits before it is refused.
+    #[serde(with = "humantime_serde")]
+    pub queue_timeout: Duration,
+}
+
+/// `[budget]`
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Budget {
+    /// Runs one caller may make per UTC day; 0 is no limit. Counted in memory,
+    /// so a restart of the service resets it (RFC 0010 says so).
+    pub runs_per_day: u32,
+}
+
+/// `[limits]`: refused here, before the sandbox is asked.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Limits {
+    /// Largest source, bytes.
+    pub max_source_bytes: usize,
+    /// Largest input, bytes.
+    pub max_stdin_bytes: usize,
 }
 
 /// `[server]`
@@ -96,6 +176,13 @@ pub struct Overrides {
     /// Prometheus `/metrics` listener. Default: `[metrics] listen`.
     #[arg(long, env = "RUNNER_METRICS_ADDR")]
     pub metrics_addr: Option<SocketAddr>,
+    /// The sandbox daemon's URL. Default: `[engine] url`.
+    #[arg(long, env = "RUNNER_SANDBOX_URL")]
+    pub sandbox_url: Option<String>,
+    /// The token the sandbox daemon requires; a credential, so it comes only
+    /// from the environment (the `runner-sandbox` Secret), never a file here.
+    #[arg(long, env = "RUNNER_SANDBOX_TOKEN", hide_env_values = true)]
+    pub sandbox_token: Option<String>,
 }
 
 impl Overrides {
@@ -106,6 +193,42 @@ impl Overrides {
         }
         if let Some(v) = self.metrics_addr {
             config.metrics.listen = Some(v);
+        }
+        if let Some(v) = &self.sandbox_url {
+            config.engine.url.clone_from(v);
+        }
+        config.sandbox_token.clone_from(&self.sandbox_token);
+    }
+}
+
+impl Config {
+    /// The in-process stub engine, no metrics listener, admins only: what tests
+    /// and the chaos tool run, never a deployment.
+    #[must_use]
+    pub fn stub(listen: SocketAddr) -> Self {
+        Self {
+            server: Server { listen },
+            metrics: Metrics { listen: None },
+            ping: Ping::default(),
+            engine: Engine {
+                kind: EngineKind::Stub,
+                url: String::new(),
+                timeout: Duration::from_secs(10),
+            },
+            access: Access {
+                require_role: "admin".to_owned(),
+            },
+            admission: Admission {
+                max_in_flight: 4,
+                max_queued: 8,
+                queue_timeout: Duration::from_secs(10),
+            },
+            budget: Budget { runs_per_day: 200 },
+            limits: Limits {
+                max_source_bytes: 65536,
+                max_stdin_bytes: 65536,
+            },
+            sandbox_token: None,
         }
     }
 }

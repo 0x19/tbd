@@ -7,7 +7,7 @@
 # public address. SANDBOXD_LISTEN_ADDR overrides it.
 listen = "127.0.0.1:7788"
 # Prometheus /metrics for the host's scrape.
-metrics = "127.0.0.1:9473"
+metrics = "127.0.0.1:9490"
 
 [limits]
 # Bounds of one run, every one enforced from outside the sandbox.

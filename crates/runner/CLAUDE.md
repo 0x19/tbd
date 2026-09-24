@@ -1,35 +1,23 @@
-<!-- tbd new service runner --kind grpc --port 50060 --metrics-port 9473 --bacon-key u (tbd-cli 0.1.0) -->
 # crates/runner
 
-The runner service. gRPC only. Scaffolded by `tbd new service` (docs/tbd/README.md);
-`Ping` is a labelled stub until the service's real RPCs land beside it.
+The runner service: the sandbox's L2 (RFC 0010; `docs/sandbox/README.md` is the
+contract, including the order of the checks a run passes). gRPC only; the gateway
+renders `Run` and `ListLanguages` as REST and on the socket. `Ping` stays the scaffold's
+labelled stub.
 
-- `lib.rs`: `serve` (binds `[server] listen`), `serve_on` (caller-supplied listener,
-  default `Runtime`), `serve_with` (listener plus a `Runtime`). Tests and the chaos
-  tool use the last two on port 0.
-- `service.rs`: the `RunnerService` trait impl on `Runner`. Every RPC starts with
-  `admit()`: count the request, start the `RequestTimer`, apply the fault handle, map
-  a `Fault` to a gRPC status.
-- `config.rs`: layered TOML, `configs/runner/base.toml` < `<env>.toml` < flags and
-  `RUNNER_*` environment variables (`Overrides`). Every key lives in `base.toml`;
-  `deny_unknown_fields` makes a mistyped key fail at start. `runner config` prints
-  the effective result.
-- `main.rs`: the only file that prints (the `config` subcommand).
+- `service.rs`: `Run` is fault handle, caller and role, bounds, allowance, slot, engine,
+  in that order, so a refused request spends nothing and never reaches the sandbox. The
+  `audit` line carries sizes and outcomes, never the source or the output
+  (`tests/it/runs.rs` fails if it does).
+- `engine.rs`: `Engine` with `Sandboxd` (HTTP, bearer token, its `Debug` never prints
+  the token) and `Stub` (markers `<<compile_error>>`, `<<timeout>>`, `<<busy>>`,
+  `<<down>>`, `<<hang>>`; always `stub: true` upstream). `build` refuses `sandboxd`
+  without a token; `main` refuses the stub in production.
+- `gate.rs`: `Gate` (slots and a bounded line) and `Allowance` (runs per caller per UTC
+  day, in memory).
+- `config.rs`: `[engine]` (never from a flag), `[access]`, `[admission]`, `[budget]`,
+  `[limits]`; `sandbox_token` is `#[serde(skip)]`, so `runner config` cannot print it.
+  `Config::stub` is what tests and the chaos kind run.
 
-- Observability: `tbd_common::telemetry::grpc_request_span` is the `trace_fn`, so every
-  call gets a `grpc.request` span with the caller's `traceparent` adopted and
-  `trace_id` recorded; `admit()` starts the `RequestTimer`. Metrics listen on
-  `[metrics] listen` (`RUNNER_METRICS_ADDR`), `None` for embedders.
-
-Invariants:
-- A stub says so on the wire: `PingResponse.stub` is `true` until a real implementation
-  replaces it, and the tests assert it. Do not let a placeholder look like a
-  measurement.
-- `TCP_NODELAY` is set on `TcpIncoming`, not the server builder. With a caller-supplied
-  listener the builder setting does nothing, and small responses stall 40 ms.
-- Services never address each other directly; a caller reaches this one through
-  Envoy's internal listener (`http://envoy:50051`, matched by service name).
-
-Tests: `tests/it/main.rs` boots the server on port 0 through `support.rs` with the
-shipped `configs/runner` and env `local`, and exposes the `Runtime` so tests can
-inject faults and read counters.
+Tests: `tests/it/runs.rs` on the stub (caller, role, bounds, allowance, busy, the audit
+line) and against a wiremock playing `sandboxd` (the token, the answer, 429/401/503).

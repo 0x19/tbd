@@ -105,3 +105,6 @@ takes cold, and what a run costs the machine.
   throwaway sandbox in one to two seconds cold, and the escape suite contains every
   hostile program it has (study 0003). A sandbox that reaches its memory or process
   limit is ended whole, and the daemon says so in words.
+- 2026-09-24: the runner is the platform's way in: a verified caller with the role, the
+  bounds, a daily allowance, a bounded queue, then the sandbox; one audit line per run
+  without its code, and a test that fails if the code ever reaches the log.

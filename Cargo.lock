@@ -6663,9 +6663,15 @@ name = "tbd-runner"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
+ "base64 0.22.1",
+ "chrono",
  "clap",
+ "humantime-serde",
  "metrics",
+ "reqwest 0.12.28",
  "serde",
+ "serde_json",
  "tbd-common",
  "tbd-proto",
  "thiserror 2.0.20",
@@ -6675,6 +6681,8 @@ dependencies = [
  "tonic-health",
  "tonic-reflection",
  "tracing",
+ "tracing-subscriber",
+ "wiremock",
 ]
 
 [[package]]

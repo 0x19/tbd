@@ -217,6 +217,9 @@ static_resources:
                           # The workbench's MCP calls.
                           - name: ":path"
                             string_match: { exact: "/mcp" }
+                          # The workbench's code runs.
+                          - name: ":path"
+                            string_match: { prefix: "/v1/runner/" }
                         # Scripts with their own bearer token skip the browser login.
                         pass_through_matcher:
                           - name: authorization
@@ -594,6 +597,29 @@ static_resources:
                           route:
                             cluster: protocol
                             timeout: 0s
+                        # The workbench runs code through the runner (RFC 0010): the
+                        # lab's gate, and 60s, past the sandbox's own deadlines.
+                        - match: { prefix: "/v1/runner/" }
+                          typed_per_filter_config:
+                            envoy.filters.http.jwt_authn:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.PerRouteConfig
+                              requirement_name: ui
+                            envoy.filters.http.rbac:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.rbac.v3.RBACPerRoute
+                              rbac:
+                                rules:
+                                  action: ALLOW
+                                  policies:
+                                    admins:
+                                      permissions: [{ any: true }]
+                                      principals:
+                                        - metadata:
+                                            filter: envoy.filters.http.jwt_authn
+                                            path: [{ key: jwt }, { key: role }]
+                                            value: { string_match: { exact: admin } }
+                          route:
+                            cluster: protocol
+                            timeout: 60s
                         # The workbench calls the platform over MCP as its signed-in
                         # admin, the same tools an agent gets on the API host. The
                         # cookie rides along on a cross-site request too, so the

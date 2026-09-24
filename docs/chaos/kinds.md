@@ -50,3 +50,4 @@ declared and what derives from it: [extending.md](extending.md#add-a-service-kin
 | `grpc_arena_snapshot_unauthenticated` | grpc | `arena` | `GetSnapshot` without a verified caller is UNAUTHENTICATED while the arena requires a role: the live view is not open until the lab is |
 | `grpc_radar_ping` | grpc | `radar` | `Ping` echoes the message and is labelled a stub |
 | `grpc_runner_ping` | grpc | `runner` | `Ping` echoes the message and is labelled a stub |
+| `grpc_runner_unauthenticated` | grpc | `runner` | `Run` without a verified caller is UNAUTHENTICATED before anything runs: code runs only for someone the gateway verified |
