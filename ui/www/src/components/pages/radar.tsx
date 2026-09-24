@@ -11,8 +11,9 @@ import { cn } from "@/lib/utils";
 /**
  * The Radar (Quiet Pager): the week's digest per language, in the reader's
  * language when there is one, from the radar service on the same origin
- * (`GET /v1/radar/digests`, open and rate-limited at Envoy, carrying a
- * signed-in visitor's identity when there is one). A digest is a draft until
+ * (`GET /v1/radar/digests`, open and rate-limited at Envoy; with
+ * `include_drafts=true`, which the page sends only for an admin, through the
+ * lab's gate instead). A digest is a draft until
  * the owner publishes it: an admin sees drafts, stamped, with Publish and
  * Unpublish; everyone else sees published issues only (the service decides).
  * A digest the llm's stub engine wrote is never shown. The model's text is
@@ -108,9 +109,11 @@ export function RadarContent() {
   const [impact, setImpact] = useState<ImpactKey | "all">("all");
   const [busy, setBusy] = useState(false);
 
-  const load = useCallback(async () => {
+  // Drafts only for an admin: that read goes through the lab's gate at Envoy,
+  // which a visitor's request must never hit.
+  const load = useCallback(async (drafts: boolean) => {
     try {
-      const res = await fetch("/v1/radar/digests?limit=80&include_drafts=true", {
+      const res = await fetch(`/v1/radar/digests?limit=80${drafts ? "&include_drafts=true" : ""}`, {
         cache: "no-store",
         headers: { accept: "application/json" },
       });
@@ -126,12 +129,12 @@ export function RadarContent() {
     const l = readParam("language");
     if (l === "go" || l === "rust") setLanguage(l);
     setWeek(readParam("week"));
-    void load();
+    void load(false);
   }, [load]);
 
   // Reload once the visitor is known to be an admin, so drafts appear.
   useEffect(() => {
-    if (admin) void load();
+    if (admin) void load(true);
   }, [admin, load]);
 
   const remember = (next: { language?: string; week?: string | null }) => {
@@ -170,7 +173,7 @@ export function RadarContent() {
         headers: { "content-type": "application/json", accept: "application/json" },
         body: JSON.stringify({ publish: value }),
       });
-      await load();
+      await load(true);
     } finally {
       setBusy(false);
     }

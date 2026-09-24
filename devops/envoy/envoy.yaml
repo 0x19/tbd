@@ -456,11 +456,38 @@ static_resources:
                           route:
                             cluster: protocol
                             timeout: 0s
-                        # The radar's reads (digests, items): public, like the
-                        # playground's calls, with a per-address rate limit. A
-                        # signed-in visitor's cookie travels as x-jwt-payload
-                        # (`ui-optional`), so an admin's page also sees drafts; a
-                        # visitor passes with none and sees published issues only.
+                        # The radar's drafts: a read that asks for them goes through
+                        # the lab's gate (the sign-in filter, which also refreshes the
+                        # session, then the admin role), so the service sees the admin.
+                        # The page asks only once /v1/me says the visitor is one.
+                        - match:
+                            prefix: "/v1/radar/"
+                            query_parameters:
+                              - name: include_drafts
+                                string_match: { exact: "true" }
+                          typed_per_filter_config:
+                            envoy.filters.http.jwt_authn:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.PerRouteConfig
+                              requirement_name: ui
+                            envoy.filters.http.rbac:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.rbac.v3.RBACPerRoute
+                              rbac:
+                                rules:
+                                  action: ALLOW
+                                  policies:
+                                    admins:
+                                      permissions: [{ any: true }]
+                                      principals:
+                                        - metadata:
+                                            filter: envoy.filters.http.jwt_authn
+                                            path: [{ key: jwt }, { key: role }]
+                                            value: { string_match: { exact: admin } }
+                          route:
+                            cluster: protocol
+                            timeout: 15s
+                        # The radar's reads (digests, items): public and anonymous,
+                        # like the playground's calls, with a per-address rate limit;
+                        # the service shows published issues only.
                         - match: { prefix: "/v1/radar/" }
                           typed_per_filter_config:
                             envoy.filters.http.oauth2:
@@ -468,7 +495,7 @@ static_resources:
                               disabled: true
                             envoy.filters.http.jwt_authn:
                               "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.PerRouteConfig
-                              requirement_name: ui-optional
+                              disabled: true
                             envoy.filters.http.rbac:
                               "@type": type.googleapis.com/envoy.config.route.v3.FilterConfig
                               disabled: true

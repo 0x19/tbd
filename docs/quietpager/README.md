@@ -21,9 +21,9 @@ the open-source grader lives in `github.com/quietpager/qp` and the katas in
 | `RunDigest` | `POST /v1/radar/digests/run`: starts the week's run in the background and returns (`started`, or `already_running`); `force` rewrites the week's, `wait` waits for it (direct callers only; the edge's timeouts cut a wait) | admin role |
 
 On the site's host (`www.`), Envoy serves the reads open with a per-address rate
-limit, carrying a signed-in visitor's identity when there is one (`ui-optional`, so an
-admin's page sees drafts), and gates the writes to the admin role; the service checks
-the role again.
+limit and no identity, sends a read with `include_drafts=true` through the lab's gate
+(sign-in, then the admin role; the page asks only for an admin), and gates the writes
+the same way; the service checks the role again.
 
 **Review.** Every digest the worker writes is a draft; the page calls issues
 human-reviewed, and `PublishDigest` is that review. A rewrite (`RunDigest` with `force`)
