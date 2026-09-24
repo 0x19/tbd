@@ -17,7 +17,7 @@ use super::{
     Chunk, ChunkStream, Engine, EngineError, GenerateSpec, Identity, LineParser, UNKNOWN, Usage,
     http_client, join, lines, parse_stream, send,
 };
-use crate::config::{EngineConfig, EngineKind};
+use crate::config::{EngineConfig, EngineKind, TemplateArgs};
 
 /// The llama.cpp engine.
 #[derive(Debug, Clone)]
@@ -27,6 +27,8 @@ pub struct Llamacpp {
     model: String,
     embed_model: String,
     embeds: bool,
+    reasoning_on: TemplateArgs,
+    reasoning_off: TemplateArgs,
 }
 
 impl Llamacpp {
@@ -42,6 +44,8 @@ impl Llamacpp {
             model: cfg.model.clone(),
             embed_model: cfg.embed_model().to_owned(),
             embeds: !cfg.embed_model.is_empty(),
+            reasoning_on: cfg.reasoning_on.clone(),
+            reasoning_off: cfg.reasoning_off.clone(),
         })
     }
 }
@@ -292,8 +296,16 @@ impl Engine for Llamacpp {
             body["temperature"] = t.into();
         }
         if let Some(think) = spec.reasoning {
-            // llama-server's chat templates take this switch for models that reason.
-            body["chat_template_kwargs"] = serde_json::json!({ "enable_thinking": think });
+            // The switch is the model's template's, so it is the tier's
+            // configuration (`reasoning_on` / `reasoning_off`), not a guess here.
+            let args = if think {
+                &self.reasoning_on
+            } else {
+                &self.reasoning_off
+            };
+            if !args.is_empty() {
+                body["chat_template_kwargs"] = serde_json::json!(args);
+            }
         }
         let resp = send(
             self.http
@@ -319,6 +331,81 @@ impl Engine for Llamacpp {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::Engines;
+    use crate::engine::Message;
+
+    /// The chat-template arguments the engine sends for each reasoning switch.
+    async fn sent_kwargs(reasoning: Option<bool>) -> Option<serde_json::Value> {
+        use wiremock::{Mock, MockServer, ResponseTemplate, matchers::method};
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_raw("data: [DONE]\n\n", "text/event-stream"),
+            )
+            .mount(&server)
+            .await;
+        // The shipped default for the gpt-oss tiers.
+        let mut cfg = Engines::default().fast;
+        cfg.url = server.uri();
+        let engine = Llamacpp::new(&cfg).unwrap();
+        let spec = GenerateSpec {
+            messages: vec![Message {
+                role: "user".into(),
+                content: "hi".into(),
+            }],
+            max_tokens: None,
+            temperature: None,
+            reasoning,
+        };
+        drop(engine.generate(spec).await.unwrap());
+        let req = &server.received_requests().await.unwrap()[0];
+        let body: serde_json::Value = serde_json::from_slice(&req.body).unwrap();
+        body.get("chat_template_kwargs").cloned()
+    }
+
+    #[tokio::test]
+    async fn gpt_oss_is_told_its_effort_never_enable_thinking() {
+        // gpt-oss ignores `enable_thinking` and, told false, reasons longer
+        // (measured 2026-09-24); its template's switch is `reasoning_effort`.
+        assert_eq!(
+            sent_kwargs(Some(false)).await,
+            Some(serde_json::json!({ "reasoning_effort": "low" }))
+        );
+        assert_eq!(
+            sent_kwargs(Some(true)).await,
+            Some(serde_json::json!({ "reasoning_effort": "medium" }))
+        );
+        assert_eq!(
+            sent_kwargs(None).await,
+            None,
+            "unsaid is the template's default"
+        );
+    }
+
+    #[test]
+    fn a_tier_that_does_not_say_gets_enable_thinking() {
+        let cfg: EngineConfig = toml::from_str(
+            r#"
+            kind = "llamacpp"
+            url = "http://127.0.0.1:1"
+            model = "m"
+            timeout_secs = 1
+            embed_model = ""
+            max_in_flight = 1
+            max_queued = 0
+            queue_timeout = "1s"
+            "#,
+        )
+        .unwrap();
+        assert_eq!(
+            serde_json::json!(cfg.reasoning_off),
+            serde_json::json!({ "enable_thinking": false })
+        );
+        assert_eq!(
+            serde_json::json!(cfg.reasoning_on),
+            serde_json::json!({ "enable_thinking": true })
+        );
+    }
 
     fn texts(items: &[Result<Chunk, EngineError>]) -> Vec<String> {
         items

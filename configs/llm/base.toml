@@ -51,6 +51,15 @@ max_in_flight = 4
 max_queued = 8
 # How long one waits in line before it is refused.
 queue_timeout = "30s"
+# The chat template's arguments when a request asks the model to reason, and
+# when it asks it not to (sent as llama.cpp's `chat_template_kwargs`). The
+# switch is the template's: gpt-oss takes `reasoning_effort` (low, medium,
+# high) and ignores `enable_thinking`, which told false made it reason longer
+# and answer nothing (measured 2026-09-24: effort low answered in 58 tokens
+# where enable_thinking=false took 209). Qwen-style templates take
+# `{ enable_thinking = true | false }`, the default when a tier leaves these out.
+reasoning_on = { reasoning_effort = "medium" }
+reasoning_off = { reasoning_effort = "low" }
 
 [engines.deep]
 # The large model that runs from memory for quality: llama-server on the host
@@ -64,6 +73,9 @@ embed_model = ""
 max_in_flight = 1
 max_queued = 2
 queue_timeout = "120s"
+# gpt-oss as well: the same switch.
+reasoning_on = { reasoning_effort = "medium" }
+reasoning_off = { reasoning_effort = "low" }
 
 [generate]
 # Bounds on one request. Anything over is INVALID_ARGUMENT; max_tokens is

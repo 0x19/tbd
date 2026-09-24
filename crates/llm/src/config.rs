@@ -8,6 +8,7 @@
 //! addresses and model ids vary by environment.
 
 use std::{
+    collections::BTreeMap,
     fmt,
     net::SocketAddr,
     path::{Path, PathBuf},
@@ -188,6 +189,8 @@ impl Default for Engines {
                 max_in_flight: 4,
                 max_queued: 8,
                 queue_timeout: Duration::from_secs(30),
+                reasoning_on: effort("medium"),
+                reasoning_off: effort("low"),
             },
             deep: EngineConfig {
                 kind: EngineKind::Llamacpp,
@@ -198,6 +201,8 @@ impl Default for Engines {
                 max_in_flight: 1,
                 max_queued: 2,
                 queue_timeout: Duration::from_secs(120),
+                reasoning_on: effort("medium"),
+                reasoning_off: effort("low"),
             },
         }
     }
@@ -245,6 +250,38 @@ pub struct EngineConfig {
     /// How long a request waits in line before it is refused.
     #[serde(with = "humantime_serde")]
     pub queue_timeout: Duration,
+    /// The chat template's arguments when a request asks the model to reason
+    /// (llama.cpp's `chat_template_kwargs`). A model's switch is its template's:
+    /// Qwen-style templates take `enable_thinking`, gpt-oss takes
+    /// `reasoning_effort` and ignores `enable_thinking` (and, told `false`,
+    /// reasons longer). Data, never a match on the model's name.
+    #[serde(default = "thinking_on")]
+    pub reasoning_on: TemplateArgs,
+    /// The same when a request asks it not to reason.
+    #[serde(default = "thinking_off")]
+    pub reasoning_off: TemplateArgs,
+}
+
+/// A chat template's arguments, as the engine is sent them.
+pub type TemplateArgs = BTreeMap<String, serde_json::Value>;
+
+fn thinking(on: bool) -> TemplateArgs {
+    BTreeMap::from([("enable_thinking".to_owned(), serde_json::Value::Bool(on))])
+}
+
+fn thinking_on() -> TemplateArgs {
+    thinking(true)
+}
+
+fn thinking_off() -> TemplateArgs {
+    thinking(false)
+}
+
+fn effort(level: &str) -> TemplateArgs {
+    BTreeMap::from([(
+        "reasoning_effort".to_owned(),
+        serde_json::Value::String(level.to_owned()),
+    )])
 }
 
 impl EngineConfig {
