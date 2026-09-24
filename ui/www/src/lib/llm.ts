@@ -21,11 +21,18 @@ export const TRANSPORTS: Transport[] = ["sse", "websocket", "mcp"];
 export type Message = { role: "system" | "user" | "assistant"; content: string };
 export type Usage = { prompt_tokens: number; completion_tokens: number };
 
+/**
+ * One turn's request. With `agent` (RFC 0011) the service speaks as that agent:
+ * the messages are the visitor's turns only (a `system` one is refused), `page`
+ * is the path the visitor is reading, and a bound left out is the agent's.
+ */
 export type Request = {
   messages: Message[];
-  tier: "TIER_FAST" | "TIER_DEEP";
-  max_tokens: number;
-  reasoning: boolean;
+  tier?: "TIER_FAST" | "TIER_DEEP";
+  max_tokens?: number;
+  reasoning?: boolean;
+  agent?: string;
+  page?: string;
 };
 
 /** What a turn yields, in order: chunks, then exactly one of done or problem. */

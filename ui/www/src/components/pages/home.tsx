@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { Opening } from "@/components/closing-mesh";
 import { Eyebrow, Frame, Reveal, SectionHead } from "@/components/kit";
+import { HomeLabLive, useLabLive } from "@/components/pages/home-lab-live";
 import { Pipeline } from "@/components/pipeline";
 import { PlaygroundTabs } from "@/components/playground-tabs";
 import { Button } from "@/components/ui/button";
@@ -17,7 +18,7 @@ import { cn } from "@/lib/utils";
  * The front door: every section shows something no other page shows and
  * links out instead of restating it. Who and whether I can be hired, three
  * facts about now, the one drawing of how I build, the playgrounds to click,
- * the lab once it is public, and the email, all hung on one line down the
+ * the lab once it is public, the live lab for an admin, and the email, all hung on one line down the
  * page as boxes on the request's path. The story is `/about/`, the
  * libraries `/projects/`. `app/page.tsx` carries the metadata.
  */
@@ -27,6 +28,7 @@ export function HomeContent() {
   const open = playgrounds.filter((p) => p.href && !p.paused);
   const spineRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
+  const live = useLabLive();
 
   const now = [
     { k: t("home.now.now"), v: company.now },
@@ -197,6 +199,19 @@ export function HomeContent() {
             <Button variant="ghost" className="mt-6 -ml-4" asChild>
               <Link href={lab.href}>{t("home.lab.cta")}</Link>
             </Button>
+          </Box>
+        ) : null}
+
+        {/* ------------------------------------------------------- lab, live */}
+        {/* For an admin: the platform running, the site guide and the workbench. */}
+        {live ? (
+          <Box
+            n={String(3 + (clients.length > 0 ? 1 : 0) + (lab.public ? 1 : 0)).padStart(2, "0")}
+            label={t("home.live.label")}
+            title={t("home.live.title")}
+            lead={t("home.live.lead")}
+          >
+            <HomeLabLive />
           </Box>
         ) : null}
 

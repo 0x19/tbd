@@ -43,8 +43,25 @@ what it sends. A model's answer is untrusted text rendered by `src/lib/markdown.
 description and is never fetched, only `http(s)` links survive (new tab, `nofollow`),
 and code blocks carry their language and a copy button, and a run button for Go and
 Rust (`data-run`), which sends the block to the runner (`src/lib/runner.ts`, RFC 0010)
-and shows the result as a card; keep it that way, or the
-`/legal/` promise and the page's safety go with it; publishing the lab means `/legal/` gains that sentence. The lab is
+and shows the result as a card; a link to a path on this site (one leading slash,
+plain path characters, never `//host`) is kept too, in the same tab, because that is how
+an agent points at a page; keep it that way, or the
+`/legal/` promise and the page's safety go with it; publishing the lab means `/legal/` gains that sentence. The workbench and the chat dock
+share their turns (`src/components/chat/turn.tsx`: `ChatView`, `CodeRun`, `Answer`,
+`streamTurn`); a workbench session talks to the bare model or to one agent (RFC 0011,
+`src/lib/agents.ts`, `GET /v1/llm/agents`), and with an agent the request names only
+the agent (its tier and bounds are the service's), never a `system` message.
+`src/components/chat/dock.tsx` is the chat at the bottom of every page, mounted once in
+the root layout: the site guide, for whoever may use it (an admin while the lab is
+private; it does not even ask the service otherwise), never on the workbench. It sends
+the page's path as `page`, keeps its conversation in `localStorage`
+(`inorbit.dock.turns`) and whether it is open in `sessionStorage`, opens with `/` or
+ctrl+k (or the `DOCK_OPEN` event, which the home page's card sends), closes with esc,
+says what it sends under a fold, and "continue in the workbench" puts the conversation
+first in the workbench's sessions (`src/components/chat/sessions.ts`). The home page's
+"Lab, live" box (`src/components/pages/home-lab-live.tsx`) is for an admin: the tiers
+running, the guide, the workbench, the newest lab lines. Opening either to visitors is
+RFC 0011's conditions, and `/legal/` then gains the sentence. The lab is
 admins-only until its first page is published: Envoy gates the prefix on the `www`
 host (sign-in, then the `admin` role), and `/v1/me` on the same host tells the page
 who is signed in with a 401 instead of a redirect, so the header and footer show the
@@ -201,7 +218,7 @@ practice log is `localStorage`, per browser, and its page says so.
   shows something no other page shows and links out instead of restating it. Who and
   the availability line, three facts about now (no ticker of tags: a keyword wall is
   the thing the site is not), the pipeline drawing with the principles as one line
-  each, four playground tiles, the lab once `lab.public` is true, the email. The
+  each, four playground tiles, the lab once `lab.public` is true, the live lab for an admin, the email. The
   summary paragraph, the project rows and the contact hero belong to `/about/`,
   `/projects/` and `/contact/`; putting them back here is the repetition that was
   removed. Behind the hero and behind the footer is one drawing,

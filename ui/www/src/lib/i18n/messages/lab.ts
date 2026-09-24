@@ -92,7 +92,7 @@ export const en: Dict = {
   "wb.placeholder": "Ask the models, or type / for commands",
   "wb.behind": "Behind the scenes",
   "wb.sends":
-    "What you send goes to the model service on this domain as your account, over the transport you chose, with the tier and the reasoning switch, and the earlier turns of this session so it is a conversation. The service records who asked, which tier and model answered, the tokens and how it ended, for your daily budget; it does not store the question or the answer. Code you run is sent to the platform's sandbox to be compiled and run once, with no network, and is not kept: the record names the run, never the code.",
+    "What you send goes to the model service on this domain as your account, over the transport you chose, with the tier and the reasoning switch, and the earlier turns of this session so it is a conversation. The service records who asked, which tier and model answered, the tokens, how it ended and the agent it spoke as, for your daily budget; it does not store the question or the answer. Code you run is sent to the platform's sandbox to be compiled and run once, with no network, and is not kept: the record names the run, never the code.",
   "wb.intro":
     "Two open-weight models on one workstation, reached through the same gateway as the rest of the platform. Ask anything; the answer streams, the model's reasoning shows while it thinks, and every turn ends with what it cost. The column on the right is the platform itself, live.",
   "wb.intro.keys": "enter send · shift+enter new line · ↑ last prompt · esc stop · / commands",
@@ -159,6 +159,15 @@ export const en: Dict = {
   "wb.chaos.absent": "not here",
   "wb.cmd.run_go": "run a Go program in the sandbox (the code on the lines below)",
   "wb.cmd.run_rust": "run a Rust program in the sandbox (the code on the lines below)",
+  "wb.cmd.agent": "talk to this agent in this session: its persona, its knowledge, its tier",
+  "wb.cmd.agent_none": "talk to the bare model again",
+  "wb.agent": "agent",
+  "wb.agent.none": "none: the model",
+  "wb.agent.its": "the agent's",
+  "wb.agent.example.1": "What is this site, and what is being built in the lab?",
+  "wb.agent.example.2": "Which RFCs are open, and what does each decide?",
+  "wb.agent.note":
+    "The service puts the agent's instructions and knowledge in front of your turns; you send only your own. Its tier and bounds apply.",
   "wb.run.title": "run",
   "wb.run.running": "compiling and running in the sandbox…",
   "wb.run.failed": "did not run",
@@ -268,7 +277,7 @@ export const hr: Dict = {
   "wb.placeholder": "Pitaj modele ili upiši / za naredbe",
   "wb.behind": "Iza kulisa",
   "wb.sends":
-    "Ono što pošalješ ide servisu modela na ovoj domeni kao tvoj račun, preko prijenosa koji si odabrao, s razinom i prekidačem razmišljanja, i s ranijim potezima ove sesije da bi bio razgovor. Servis bilježi tko je pitao, koja su razina i model odgovorili, tokene i kako je završilo, radi tvog dnevnog proračuna; ne pohranjuje ni pitanje ni odgovor. Kod koji pokreneš šalje se sandboxu platforme da se jednom prevede i izvede, bez mreže, i ne čuva se: zapis imenuje pokretanje, nikad kod.",
+    "Ono što pošalješ ide servisu modela na ovoj domeni kao tvoj račun, preko prijenosa koji si odabrao, s razinom i prekidačem razmišljanja, i s ranijim potezima ove sesije da bi bio razgovor. Servis bilježi tko je pitao, koja su razina i model odgovorili, tokene, kako je završilo i kao koji je agent govorio, radi tvog dnevnog proračuna; ne pohranjuje ni pitanje ni odgovor. Kod koji pokreneš šalje se sandboxu platforme da se jednom prevede i izvede, bez mreže, i ne čuva se: zapis imenuje pokretanje, nikad kod.",
   "wb.intro":
     "Dva modela otvorenih težina na jednoj radnoj stanici, dostupna kroz isti gateway kao ostatak platforme. Pitaj bilo što; odgovor stiže u dijelovima, razmišljanje modela vidi se dok razmišlja, a svaki potez završava onim što je koštao. Stupac desno je sama platforma, uživo.",
   "wb.intro.keys": "enter pošalji · shift+enter novi red · ↑ zadnje pitanje · esc stani · / naredbe",
@@ -335,6 +344,15 @@ export const hr: Dict = {
   "wb.chaos.absent": "nije tu",
   "wb.cmd.run_go": "pokreni Go program u sandboxu (kod u redcima ispod)",
   "wb.cmd.run_rust": "pokreni Rust program u sandboxu (kod u redcima ispod)",
+  "wb.cmd.agent": "razgovaraj s ovim agentom u ovoj sesiji: njegova persona, znanje i razina",
+  "wb.cmd.agent_none": "ponovno razgovaraj s modelom bez agenta",
+  "wb.agent": "agent",
+  "wb.agent.none": "bez agenta: model",
+  "wb.agent.its": "agentovo",
+  "wb.agent.example.1": "Što je ova stranica i što se gradi u laboratoriju?",
+  "wb.agent.example.2": "Koji su RFC-ovi otvoreni i što svaki odlučuje?",
+  "wb.agent.note":
+    "Servis stavlja agentove upute i znanje ispred tvojih poruka; ti šalješ samo svoje. Vrijede njegova razina i granice.",
   "wb.run.title": "pokretanje",
   "wb.run.running": "prevodi se i pokreće u sandboxu…",
   "wb.run.failed": "nije pokrenuto",

@@ -92,3 +92,8 @@ until publication; the workbench's agent picker.
   whether the caller may use it; a request that names one sends only its turns; the
   service composes the rest and refuses instructions from the caller; the record names
   the agent. The site guide's knowledge is generated and checked on every build.
+- 2026-09-24: the site guide is on the site, for admins. A chat at the bottom of every
+  page but the workbench sends the page's path with the question, shows the workbench's
+  figures under every answer, keeps the conversation in the browser and hands it to the
+  workbench whole; the home page shows the lab running, the guide and the workbench. A
+  link in an answer is kept when it is a page of this site, and opens in the same tab.

@@ -4,6 +4,7 @@ import "./site.css";
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 
+import { ChatDock } from "@/components/chat/dock";
 import { Closing } from "@/components/closing-mesh";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
@@ -66,6 +67,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             <Closing>
               <SiteFooter />
             </Closing>
+            <ChatDock />
           </div>
         </Providers>
       </body>

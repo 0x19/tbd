@@ -11,8 +11,10 @@ import { runnable } from "@/lib/runner";
  *   nothing from elsewhere (`/legal/`), and an image URL is a way to report
  *   who read the answer;
  * - a link is kept only for `http(s)`, opens in a new tab, and carries
- *   `noopener noreferrer nofollow`; any other scheme (`javascript:`, `data:`)
- *   is its text alone;
+ *   `noopener noreferrer nofollow`; a path on this site (`/lab/`, one leading
+ *   slash, plain path characters, never `//host`) is kept as a link in the
+ *   same tab, which is how an agent points at a page (RFC 0011); any other
+ *   scheme (`javascript:`, `data:`) is its text alone;
  * - a code block is escaped text in a `<pre>`, with its language named and a
  *   copy button the page wires up (`data-copy`); a Go or Rust block also gets a
  *   run button (`data-run`, the language only), which the page sends to the
@@ -30,6 +32,9 @@ const esc = (s: string) =>
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 
+/** A path on this site: one leading slash and plain path characters, so never `//host` or a scheme. */
+const SITE_PATH = /^\/(?![/\\])[A-Za-z0-9\-._~/%#?=&]*$/;
+
 const md = new Marked({
   gfm: true,
   breaks: false,
@@ -42,8 +47,9 @@ const md = new Marked({
     },
     link({ href, title, tokens }) {
       const inner = this.parser.parseInline(tokens);
-      if (!/^https?:\/\//i.test(href)) return inner;
       const t = title ? ` title="${esc(title)}"` : "";
+      if (SITE_PATH.test(href)) return `<a href="${esc(href)}"${t}>${inner}</a>`;
+      if (!/^https?:\/\//i.test(href)) return inner;
       return `<a href="${esc(href)}"${t} target="_blank" rel="noopener noreferrer nofollow">${inner}</a>`;
     },
     code({ text, lang }) {

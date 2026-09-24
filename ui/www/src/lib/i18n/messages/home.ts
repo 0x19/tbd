@@ -26,6 +26,17 @@ export const en: Dict = {
   "home.lab.lead":
     "The working-out behind the platform and the playgrounds, published when a piece is ready to be read.",
   "home.lab.cta": "Into the lab →",
+  "home.live.label": "Lab, live",
+  "home.live.title": "The platform, running now.",
+  "home.live.lead":
+    "The model tiers as they serve, a guide to the site you can talk to, and the workbench with every control. Shown to admins while the lab is private.",
+  "home.live.tiers": "Model tiers",
+  "home.live.guide": "Site guide",
+  "home.live.guide_off": "The site guide is not answering right now.",
+  "home.live.ask": "Ask it about the site",
+  "home.live.workbench":
+    "Both models and the agents, over server-sent events, the WebSocket or MCP; the platform's tools as cards; Go and Rust run in the sandbox.",
+  "home.live.open_workbench": "Open the workbench →",
   "home.hi.label": "Write",
   "home.hi.how": "Hours",
   "home.hi.text": "European working hours, remote.",
@@ -55,6 +66,17 @@ export const hr: Dict = {
   "home.lab.title": "Bilješke, RFC-ovi i studije, kako nastaju.",
   "home.lab.lead": "Razrada iza platforme i igrališta, objavljena kad je komad spreman za čitanje.",
   "home.lab.cta": "U laboratorij →",
+  "home.live.label": "Laboratorij, uživo",
+  "home.live.title": "Platforma, upravo sada.",
+  "home.live.lead":
+    "Razine modela dok poslužuju, vodič kroz web s kojim možeš razgovarati i radni stol sa svim kontrolama. Vidljivo administratorima dok je laboratorij privatan.",
+  "home.live.tiers": "Razine modela",
+  "home.live.guide": "Vodič kroz web",
+  "home.live.guide_off": "Vodič kroz web trenutno ne odgovara.",
+  "home.live.ask": "Pitaj ga o webu",
+  "home.live.workbench":
+    "Oba modela i agenti, preko server-sent eventa, WebSocketa ili MCP-a; alati platforme kao kartice; Go i Rust se izvode u sandboxu.",
+  "home.live.open_workbench": "Otvori radni stol →",
   "home.hi.label": "Piši",
   "home.hi.how": "Radno vrijeme",
   "home.hi.text": "Europsko radno vrijeme, na daljinu.",

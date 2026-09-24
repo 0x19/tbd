@@ -3,6 +3,7 @@
 // projects, the playgrounds) are not here: they live in `src/data/site.ts`
 // with their Croatian in `src/data/site.hr.ts`, and `useSite()` picks.
 import * as about from "./about";
+import * as chat from "./chat";
 import * as common from "./common";
 import * as contact from "./contact";
 import * as drafts from "./drafts";
@@ -22,7 +23,7 @@ export const LANGS: { value: Lang; label: string }[] = [
 
 export type Dict = Record<string, string>;
 
-const all = [common, home, lab, drafts, about, playgrounds, projects, radar, contact, legal, terms];
+const all = [common, chat, home, lab, drafts, about, playgrounds, projects, radar, contact, legal, terms];
 
 export const messages: Record<Lang, Dict> = {
   en: Object.assign({}, ...all.map((m) => m.en)) as Dict,

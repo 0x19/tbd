@@ -105,3 +105,8 @@ costs: the arena's own load on the platform, and the latency from an event to th
   and `/run go` or `/run rust` runs code typed into the prompt; the program is compiled
   and run once in the sandbox of RFC 0010 and its output comes back as a card, with why
   it was stopped when it was.
+- 2026-09-24: the workbench talks to agents (RFC 0011). A session talks to the bare model
+  or to one agent, picked in its header or with `/agent`; with an agent the service's
+  tier and bounds apply and the status line says so. The same conversation, with the same
+  figures under every answer, is a chat at the bottom of every page for an admin, and it
+  hands over to the workbench whole.
