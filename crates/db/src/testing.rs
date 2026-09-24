@@ -35,6 +35,8 @@ pub const IMAGE: (&str, &str) = ("pgvector/pgvector", "0.8.6-pg17-trixie");
 pub const CONTAINER: &str = "tbd-test-postgres";
 /// The variable that names a Postgres to use instead of the container.
 pub const ENV: &str = "TBD_TEST_DATABASE_URL";
+/// The container's /dev/shm, bytes.
+const SHM_BYTES: u64 = 1 << 30;
 /// A test database older than this is somebody's leftover.
 const STALE_AFTER: Duration = Duration::from_hours(1);
 
@@ -71,6 +73,12 @@ pub async fn admin_url(env: &str) -> String {
                 "-c",
                 "full_page_writes=off",
             ])
+            // Docker's default /dev/shm is 64 MiB, and Postgres asks for 32 MiB
+            // segments of it for parallel work: a whole run's migrations at
+            // once ran out ("could not resize shared memory segment", 47
+            // finance tests on 2026-09-24). The container is reused, so a size
+            // change reaches it only after `mise run test:db:reset`.
+            .with_shm_size(SHM_BYTES)
             .with_container_name(CONTAINER)
             .with_reuse(ReuseDirective::Always)
             .start()
