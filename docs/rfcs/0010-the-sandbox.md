@@ -101,3 +101,7 @@ takes cold, and what a run costs the machine.
 
 - 2026-09-24: opened. The kernel is installed on the machine: a sandbox sees gVisor, not
   the machine's kernel, and has no network even when one is asked for.
+- 2026-09-24: the engine runs. The daemon compiles and runs a Go or Rust program in one
+  throwaway sandbox in one to two seconds cold, and the escape suite contains every
+  hostile program it has (study 0003). A sandbox that reaches its memory or process
+  limit is ended whole, and the daemon says so in words.
