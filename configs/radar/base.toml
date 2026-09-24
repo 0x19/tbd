@@ -30,7 +30,9 @@ max_connections = 3
 url = ""
 # "deep" writes better prose; a digest is weekly, so its minutes do not matter.
 tier = "deep"
-max_tokens = 2048
+# The fast tier reasons before it answers and the reasoning counts here; a
+# long week in Croatian can run past 2048. 4096 is the llm cap.
+max_tokens = 4096
 temperature = 0.3
 timeout_secs = 900
 

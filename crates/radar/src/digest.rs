@@ -163,11 +163,12 @@ impl Writer {
         };
         let deadline = Duration::from_secs(self.config.timeout_secs);
         let mut client = self.client.clone();
-        let (text, model, stub) = tokio::time::timeout(deadline, async move {
+        let (text, model, stub, used) = tokio::time::timeout(deadline, async move {
             let mut stream = client.generate(request).await?.into_inner();
             let mut text = String::new();
             let mut model = String::new();
             let mut stub = false;
+            let mut used = 0;
             while let Some(chunk) = stream.message().await? {
                 if !chunk.model.is_empty() {
                     model = chunk.model;
@@ -177,14 +178,24 @@ impl Writer {
                     text.push_str(&chunk.text);
                 }
                 if chunk.done {
+                    used = chunk.usage.map_or(0, |u| u.completion_tokens);
                     break;
                 }
             }
-            Ok::<_, Status>((text, model, stub))
+            Ok::<_, Status>((text, model, stub, used))
         })
         .await
         .map_err(|_| DigestError::Timeout(self.config.timeout_secs))??;
-        let sections = parse_sections(&text)?;
+        let sections = parse_sections(&text).inspect_err(|e| {
+            // What the answer had instead, so a refusal can be told apart from
+            // a cut: the headings found, its length and the tokens it used.
+            let found: Vec<&str> = text
+                .lines()
+                .map(str::trim_start)
+                .filter(|l| l.starts_with('#') && !l.starts_with("###"))
+                .collect();
+            tracing::warn!(week, language, lang, error = %e, ?found, chars = text.len(), completion_tokens = used, max_tokens = self.config.max_tokens, "digest refused");
+        })?;
         let links: Vec<&str> = items.iter().map(|r| r.item.url.as_str()).collect();
         let changes = parse_changes(&sections[1], &links);
         if changes.is_empty() {
