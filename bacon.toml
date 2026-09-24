@@ -67,9 +67,16 @@ need_stdout = true
 background = false
 on_change_strategy = "kill_then_restart"
 
+[jobs.radar]
+command = ["cargo", "run", "-p", "tbd-radar", "--color", "always"]
+need_stdout = true
+background = false
+on_change_strategy = "kill_then_restart"
+
 [keybindings]
 e = "job:engine"
 p = "job:protocol"
+r = "job:radar"
 a = "job:arena"
 m = "job:llm"
 c = "job:cv"

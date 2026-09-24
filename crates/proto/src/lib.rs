@@ -92,3 +92,12 @@ pub mod arena {
             include_bytes!(concat!(env!("OUT_DIR"), "/arena_descriptor.bin"));
     }
 }
+
+pub mod radar {
+    pub mod v1 {
+        tonic::include_proto!("tbd.radar.v1");
+        /// Encoded `FileDescriptorSet` for this package, for gRPC reflection.
+        pub const DESCRIPTOR_SET: &[u8] =
+            include_bytes!(concat!(env!("OUT_DIR"), "/radar_descriptor.bin"));
+    }
+}

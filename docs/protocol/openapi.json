@@ -4974,6 +4974,48 @@
           }
         }
       }
+    },
+    "/v1/radar/ping": {
+      "get": {
+        "tags": [
+          "radar"
+        ],
+        "summary": "tbd.radar.v1.RadarService/Ping",
+        "description": "Transcoded from `/tbd.radar.v1.RadarService/Ping` on the `radar` backend.",
+        "operationId": "RadarService.Ping",
+        "parameters": [
+          {
+            "name": "message",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "`tbd.radar.v1.PingResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.radar.v1.PingResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -9558,6 +9600,21 @@
           },
           "traffic": {
             "$ref": "#/components/schemas/tbd.playground.v1.Traffic"
+          }
+        }
+      },
+      "tbd.radar.v1.PingResponse": {
+        "type": "object",
+        "description": "`tbd.radar.v1.PingResponse`",
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "stub": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "string"
           }
         }
       }

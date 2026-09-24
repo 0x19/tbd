@@ -6191,6 +6191,7 @@ dependencies = [
  "tbd-playground",
  "tbd-proto",
  "tbd-protocol",
+ "tbd-radar",
  "tbd-stress",
  "thiserror 2.0.20",
  "tokio",
@@ -6567,6 +6568,25 @@ dependencies = [
  "utoipa",
  "utoipa-axum",
  "uuid",
+]
+
+[[package]]
+name = "tbd-radar"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "metrics",
+ "serde",
+ "tbd-common",
+ "tbd-proto",
+ "thiserror 2.0.20",
+ "tokio",
+ "toml 1.1.5+spec-1.1.0",
+ "tonic",
+ "tonic-health",
+ "tonic-reflection",
+ "tracing",
 ]
 
 [[package]]

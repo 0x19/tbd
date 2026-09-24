@@ -17,6 +17,7 @@ declared and what derives from it: [extending.md](extending.md#add-a-service-kin
 | `cv` | `[stack.cvs.<name>]` | grpc | yes | no | yes | no | yes | `http://127.0.0.1:50056`, `CHAOS_CV_URL` | none |
 | `llm` | `[stack.llms.<name>]` | grpc | yes | no | yes | yes | yes | `http://127.0.0.1:50057`, `CHAOS_LLM_URL` | none |
 | `arena` | `[stack.arenas.<name>]` | grpc | yes | no | yes | no | yes | `http://127.0.0.1:50058`, `CHAOS_ARENA_URL` | none |
+| `radar` | `[stack.radars.<name>]` | grpc | yes | no | yes | no | yes | `http://127.0.0.1:50059`, `CHAOS_RADAR_URL` | none |
 
 | Check | Surface | Kind | Passes when |
 |---|---|---|---|
@@ -45,3 +46,4 @@ declared and what derives from it: [extending.md](extending.md#add-a-service-kin
 | `grpc_llm_models_lists_both_tiers` | grpc | `llm` | `ListModels` names the fast and the deep tier, each with its engine and model, and says whether the engine is up (a down engine is reported, not failed) |
 | `grpc_llm_generate_unauthenticated` | grpc | `llm` | `Generate` without a verified caller is UNAUTHENTICATED: a caller is whoever Envoy verified, never a claim in the request |
 | `grpc_arena_ping` | grpc | `arena` | `Ping` echoes the message and is labelled a stub |
+| `grpc_radar_ping` | grpc | `radar` | `Ping` echoes the message and is labelled a stub |

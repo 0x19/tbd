@@ -6,6 +6,7 @@ resources:
   - configmap.yaml
   - engine
   - protocol
+  - radar
   - arena
   - llm
   - cv

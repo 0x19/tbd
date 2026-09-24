@@ -4,6 +4,7 @@
 [targets]
 protocol = "http://envoy:8080"
 engine = "http://envoy:50051"
+radar = "http://envoy:50051"
 arena = "http://envoy:50051"
 llm = "http://envoy:50051"
 cv = "http://envoy:50051"

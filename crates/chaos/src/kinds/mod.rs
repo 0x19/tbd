@@ -15,6 +15,7 @@ pub mod arena;
 pub mod cv;
 pub mod llm;
 pub mod playground;
+pub mod radar;
 
 pub use tbd_lab::kind::{Dependency, Field, FieldInfo, FieldKind, Kind, KindInfo, Target, parse};
 pub use tbd_lab::kinds::{engine, finance, humans, ledger, protocol};
@@ -32,6 +33,7 @@ pub static ALL: &[&Kind] = &[
     &cv::KIND,
     &llm::KIND,
     &arena::KIND,
+    &radar::KIND,
     // tbd:kinds-end (tbd new service inserts above this line; do not edit)
 ];
 

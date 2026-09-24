@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: radar
+  labels:
+    app.kubernetes.io/name: radar
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: radar
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9464"
+        prometheus.io/path: /metrics
+      labels:
+        app.kubernetes.io/name: radar
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: radar
+          # Overlays pin the tag.
+          image: ghcr.io/0x19/tbd-radar:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: grpc
+              containerPort: 50059
+            - name: metrics
+              containerPort: 9464
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: tbd-env
+          livenessProbe:
+            grpc:
+              port: 50059
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          readinessProbe:
+            grpc:
+              port: 50059
+            initialDelaySeconds: 1
+            periodSeconds: 5
+          # A release binary keeps its symbols and the in-process profiler maps
+          # them: every service idles at 170 to 290 MB resident. 256Mi was the
+          # first thing a load run hit (OOMKilled at 2000 req/s on the ledger).
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            # The in-process profiler (pprof-rs) needs a writable temp dir for
+            # its sample buffers; the root filesystem stays read-only.
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi

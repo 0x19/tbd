@@ -54,6 +54,7 @@
       loop:
         - { bin: engine, port: 50051 }
         - { bin: protocol, port: 8080 }
+        - { bin: radar, port: 50059 }
         - { bin: arena, port: 50058 }
         - { bin: llm, port: 50057 }
         - { bin: cv, port: 50056 }
@@ -64,7 +65,7 @@
       when: rebuild | bool
 
     - name: Import images into the cluster
-      command: k3d image import -m direct -c {{ cluster }} {{ registry }}/tbd-engine:{{ tag }} {{ registry }}/tbd-protocol:{{ tag }} {{ registry }}/tbd-ledger:{{ tag }} {{ registry }}/tbd-humans:{{ tag }} {{ registry }}/tbd-finance:{{ tag }} {{ registry }}/tbd-playground:{{ tag }} {{ registry }}/tbd-cv:{{ tag }} {{ registry }}/tbd-llm:{{ tag }} {{ registry }}/tbd-arena:{{ tag }}
+      command: k3d image import -m direct -c {{ cluster }} {{ registry }}/tbd-engine:{{ tag }} {{ registry }}/tbd-protocol:{{ tag }} {{ registry }}/tbd-ledger:{{ tag }} {{ registry }}/tbd-humans:{{ tag }} {{ registry }}/tbd-finance:{{ tag }} {{ registry }}/tbd-playground:{{ tag }} {{ registry }}/tbd-cv:{{ tag }} {{ registry }}/tbd-llm:{{ tag }} {{ registry }}/tbd-arena:{{ tag }} {{ registry }}/tbd-radar:{{ tag }}
       when: rebuild | bool
 
     - name: Apply observability
@@ -89,7 +90,7 @@
       changed_when: "'configured' in app.stdout or 'created' in app.stdout"
 
     - name: Roll the app onto rebuilt images
-      command: kubectl -n tbd rollout restart deployment/engine deployment/protocol deployment/ledger deployment/humans deployment/finance deployment/playground deployment/cv deployment/llm deployment/arena
+      command: kubectl -n tbd rollout restart deployment/engine deployment/protocol deployment/ledger deployment/humans deployment/finance deployment/playground deployment/cv deployment/llm deployment/arena deployment/radar
       when: rebuild | bool
 
     - name: Wait for observability
@@ -108,6 +109,7 @@
       loop:
         - deployment/engine
         - deployment/protocol
+        - deployment/radar
         - deployment/arena
         - deployment/llm
         - deployment/cv
