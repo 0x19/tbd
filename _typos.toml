@@ -12,6 +12,9 @@ extend-exclude = [
   "ui/cv/src/lib/i18n/messages/",
   "ui/www/src/lib/i18n/messages/",
   "ui/www/src/data/site.hr.ts",
+  # The labs' names and descriptions carry both languages side by side, because the
+  # lab generator reads the file and has no language of its own.
+  "ui/www/src/data/labs.ts",
   # The lab's redaction denylist: resource names, not words.
   "docs/lab/redaction.json",
   # The accountant's NDA: the Croatian version, which the checker reads as English.
