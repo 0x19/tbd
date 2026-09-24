@@ -10,6 +10,7 @@ project as-is.
 | Piece | What it is |
 |---|---|
 | **engine** | gRPC streaming compute service: unary `Evaluate`, server-streaming `Subscribe`, bidirectional `Session`. Health and reflection built in. Port 50051. |
+| **arena** | gRPC service scaffolded by `tbd new service`: health, reflection, metrics, one labelled-stub `Ping` until its real RPCs land. Port 50058. |
 | **llm** | gRPC service scaffolded by `tbd new service`: health, reflection, metrics, one labelled-stub `Ping` until its real RPCs land. Port 50057. |
 | **cv** | gRPC service scaffolded by `tbd new service`: health, reflection, metrics, one labelled-stub `Ping` until its real RPCs land. Port 50056. |
 | **playground** | The public sandbox: one shared stack under constant load that anyone may try to break, over REST, SSE and the socket. Four clamped RPCs, no identity, no caller-supplied address. Port 50055. [docs/playground/README.md](docs/playground/README.md). |
@@ -183,6 +184,7 @@ crates/
   common/     telemetry, shutdown, shared CLI flags, fault injection. Transport-free.
   proto/      generated gRPC code from proto/. No hand-written logic.
   engine/     the engine service (lib + bin + tests/it)
+  arena/      the arena service (lib + bin + tests/it)
   llm/        the llm service (lib + bin + tests/it)
   cv/         the cv service (lib + bin + tests/it)
   playground/ the playground service (lib + bin + tests/it)

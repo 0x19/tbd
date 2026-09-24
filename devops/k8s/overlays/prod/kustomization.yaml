@@ -23,6 +23,8 @@ images:
     newTag: v0.0.0-REPLACE
   - name: ghcr.io/0x19/tbd-llm
     newTag: v0.0.0-REPLACE
+  - name: ghcr.io/0x19/tbd-arena
+    newTag: v0.0.0-REPLACE
 patches:
   - target:
       kind: Deployment
@@ -111,6 +113,18 @@ patches:
   - target:
       kind: Deployment
       name: llm
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 2
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests: { cpu: 250m, memory: 128Mi }
+          limits: { cpu: "2", memory: 512Mi }
+  - target:
+      kind: Deployment
+      name: arena
     patch: |-
       - op: replace
         path: /spec/replicas

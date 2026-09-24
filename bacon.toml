@@ -61,9 +61,16 @@ need_stdout = true
 background = false
 on_change_strategy = "kill_then_restart"
 
+[jobs.arena]
+command = ["cargo", "run", "-p", "tbd-arena", "--color", "always"]
+need_stdout = true
+background = false
+on_change_strategy = "kill_then_restart"
+
 [keybindings]
 e = "job:engine"
 p = "job:protocol"
+a = "job:arena"
 m = "job:llm"
 c = "job:cv"
 g = "job:playground"

@@ -30,6 +30,7 @@
   loop:
     - "{{ engine_image }}"
     - "{{ protocol_image }}"
+    - "{{ arena_image }}"
     - "{{ llm_image }}"
     - "{{ cv_image }}"
     - "{{ playground_image }}"

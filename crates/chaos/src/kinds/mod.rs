@@ -11,6 +11,7 @@
 //! UI's forms all derive from [`ALL`]. `tbd new service` writes a module and a
 //! line.
 
+pub mod arena;
 pub mod cv;
 pub mod llm;
 pub mod playground;
@@ -30,6 +31,7 @@ pub static ALL: &[&Kind] = &[
     &playground::KIND,
     &cv::KIND,
     &llm::KIND,
+    &arena::KIND,
     // tbd:kinds-end (tbd new service inserts above this line; do not edit)
 ];
 

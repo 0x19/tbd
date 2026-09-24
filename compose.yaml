@@ -54,6 +54,7 @@ services:
       PROTOCOL_ENGINE_URL: http://envoy:50051
       PROTOCOL_HUMANS_URL: http://envoy:50051
       PROTOCOL_LEDGER_URL: http://envoy:50051
+      PROTOCOL_ARENA_URL: http://envoy:50051
       PROTOCOL_LLM_URL: http://envoy:50051
       PROTOCOL_CV_URL: http://envoy:50051
       PROTOCOL_PLAYGROUND_URL: http://envoy:50051
@@ -81,6 +82,7 @@ services:
       CHAOS_LISTEN_ADDR: 0.0.0.0:7700
       CHAOS_PROTOCOL_URL: http://envoy:8080
       CHAOS_ENGINE_URL: http://envoy:50051
+      CHAOS_ARENA_URL: http://envoy:50051
       CHAOS_LLM_URL: http://envoy:50051
       CHAOS_CV_URL: http://envoy:50051
       CHAOS_PLAYGROUND_URL: http://envoy:50051
@@ -240,6 +242,23 @@ services:
       - "9471:9464"
     restart: unless-stopped
 
+  arena:
+    image: ${IMAGE_REGISTRY:-ghcr.io/0x19}/tbd-arena:${IMAGE_TAG:-dev}
+    build:
+      context: .
+      dockerfile: devops/docker/Dockerfile
+      args:
+        BIN: arena
+        PORT: "50058"
+    environment:
+      <<: *common-env
+      TBD_ENV: ${TBD_ENV:-local}
+      ARENA_LISTEN_ADDR: 0.0.0.0:50058
+      ARENA_METRICS_ADDR: 0.0.0.0:9464
+    ports:
+      - "9471:9464"
+    restart: unless-stopped
+
   envoy:
     image: envoyproxy/envoy:v1.39.1
     # Renders the one environment-specific value (the browser-facing auth URL) and
@@ -269,6 +288,7 @@ services:
       - engine
       - protocol
       - chaos
+      - arena
       - llm
       - cv
       - playground

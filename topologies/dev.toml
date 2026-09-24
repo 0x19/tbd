@@ -25,3 +25,6 @@ listen = "127.0.0.1:50056"
 
 [stack.llms.llm-1]
 listen = "127.0.0.1:50057"
+
+[stack.arenas.arena-1]
+listen = "127.0.0.1:50058"

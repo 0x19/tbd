@@ -20,6 +20,7 @@ tbd-playground.workspace = true
 tbd-proto.workspace = true
 prost-types.workspace = true
 tbd-protocol.workspace = true
+tbd-arena.workspace = true
 tbd-llm.workspace = true
 tbd-cv.workspace = true
 tbd-finance.workspace = true

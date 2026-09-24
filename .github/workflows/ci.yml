@@ -122,6 +122,8 @@ jobs:
             port: "8080"
           - bin: chaos
             port: "7700"
+          - bin: arena
+            port: "50058"
           - bin: llm
             port: "50057"
           - bin: cv

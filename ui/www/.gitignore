@@ -42,3 +42,5 @@ next-env.d.ts
 
 # rendered by tool/lab-data.ts from docs/rfcs and docs/studies (pnpm gen)
 /src/generated/
+# the lab's drafts (public: false), rendered by the same tool for admins only
+/public/lab-private/

@@ -22,6 +22,9 @@ import { scan } from "./lab-redaction.ts";
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, "../../..");
 const out = resolve(here, "../src/generated/lab");
+// Served at /lab-private/, behind Envoy's admin-only gate (never public, even
+// after the lab is published) and never cached (devops/docker/www.Caddyfile).
+const draftsDir = resolve(here, "../public/lab-private");
 
 const SOURCES: { kind: LabKind; dir: string; base: string; statuses: LabStatus[] }[] = [
   { kind: "rfc", dir: "docs/rfcs", base: "/lab/rfc/", statuses: ["open", "decided", "superseded"] },
@@ -164,6 +167,11 @@ const denylist = (() => {
 
 const entries: LabEntry[] = [];
 const docs: Record<string, LabDoc> = {};
+// Drafts (`public: false`): rendered too, but written only to `draftsOut`, a
+// gitignored file under `public/` that Envoy serves to admins alone. Nothing
+// private goes into `src/generated/`, which is compiled into the page's scripts.
+const draftEntries: LabEntry[] = [];
+const draftDocs: Record<string, LabDoc> = {};
 const publicSlugs = new Set<string>();
 const privateSlugs = new Set<string>();
 
@@ -199,21 +207,19 @@ for (const source of SOURCES) {
     if (typeof front.lab !== "string" || !labIds.includes(front.lab)) {
       fail(path, null, `\`lab\` must be one of ${labIds.join(", ")} (ui/www/src/data/labs.ts)`);
     }
-    if (front.public !== true) {
-      privateSlugs.add(slug);
-      console.log(`skipped (private): ${path}`);
-      continue;
-    }
-    publicSlugs.add(slug);
+    const draft = front.public !== true;
+    if (draft) privateSlugs.add(slug);
+    else publicSlugs.add(slug);
 
-    // The check: front matter values and the body, line by line.
+    // The check, for public pages only (a draft is read by admins alone):
+    // front matter values and the body, line by line.
     const frontLines = text.split("\n").slice(0, bodyStart - 1);
     const bodyLines = body.split("\n");
     const hits = [
       ...scan(frontLines, denylist),
       ...scan(bodyLines, denylist).map((h) => ({ ...h, line: h.line + bodyStart - 1 })),
     ];
-    for (const h of hits) fail(path, h.line, `[${h.rule}] "${h.text}" (${h.why})`);
+    if (!draft) for (const h of hits) fail(path, h.line, `[${h.rule}] "${h.text}" (${h.why})`);
 
     current = { toc: [], seen: new Map() };
     const html = marked.parse(body, { async: false });
@@ -221,7 +227,7 @@ for (const source of SOURCES) {
       kind: source.kind,
       number,
       slug,
-      href: `${source.base}${slug}/`,
+      href: draft ? `/lab/draft/?doc=${source.kind}/${slug}` : `${source.base}${slug}/`,
       title: String(front.title),
       status: front.status as LabStatus,
       date: String(front.date),
@@ -233,6 +239,12 @@ for (const source of SOURCES) {
     if (typeof front.rfc === "string") entry.rfc = front.rfc;
     if (typeof front.headline === "string") entry.headline = front.headline;
     if (typeof front.headline_note === "string") entry.headlineNote = front.headline_note;
+    if (draft) {
+      draftEntries.push(entry);
+      draftDocs[`${source.kind}/${slug}`] = { ...entry, html, toc: current.toc };
+      console.log(`draft (admins only): ${path} -> ${entry.href}`);
+      continue;
+    }
     entries.push(entry);
     docs[`${source.kind}/${slug}`] = { ...entry, html, toc: current.toc };
     console.log(`rendered: ${path} -> ${entry.href}`);
@@ -292,6 +304,16 @@ writeFileSync(
 export const docs: Record<string, LabDoc> = ${JSON.stringify(docs, null, 2)};
 `,
 );
+// The drafts, for admins: one file, rewritten every run so a document made
+// public (or deleted) leaves no stale copy behind.
+mkdirSync(draftsDir, { recursive: true });
+writeFileSync(
+  join(draftsDir, "drafts.json"),
+  JSON.stringify({
+    entries: draftEntries.sort((a, b) => b.number.localeCompare(a.number)),
+    docs: draftDocs,
+  }),
+);
 console.log(
-  `lab: ${rfcs.length} RFC${rfcs.length === 1 ? "" : "s"}, ${studies.length} stud${studies.length === 1 ? "y" : "ies"} -> ${relative(root, out)}`,
+  `lab: ${rfcs.length} RFC${rfcs.length === 1 ? "" : "s"}, ${studies.length} stud${studies.length === 1 ? "y" : "ies"} -> ${relative(root, out)}; ${draftEntries.length} draft${draftEntries.length === 1 ? "" : "s"} -> ${relative(root, draftsDir)}`,
 );

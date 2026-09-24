@@ -24,6 +24,8 @@ jobs:
             port: "50051"
           - bin: protocol
             port: "8080"
+          - bin: arena
+            port: "50058"
           - bin: llm
             port: "50057"
           - bin: cv

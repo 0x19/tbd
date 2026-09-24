@@ -4,6 +4,7 @@ registry: ghcr.io
 image_org: 0x19                    # GitHub org that owns the images
 engine_image: "{{ registry }}/{{ image_org }}/tbd-engine"
 protocol_image: "{{ registry }}/{{ image_org }}/tbd-protocol"
+arena_image: "{{ registry }}/{{ image_org }}/tbd-arena"
 llm_image: "{{ registry }}/{{ image_org }}/tbd-llm"
 cv_image: "{{ registry }}/{{ image_org }}/tbd-cv"
 playground_image: "{{ registry }}/{{ image_org }}/tbd-playground"
@@ -20,6 +21,7 @@ app_dir: /opt/tbd
 
 engine_port: 50051
 protocol_port: 8080
+arena_port: 50058
 llm_port: 50057
 cv_port: 50056
 playground_port: 50055
