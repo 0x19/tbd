@@ -224,19 +224,25 @@ pub fn user_prompt(week: &str, language: &str, items: &[ItemRow]) -> String {
 /// # Errors
 /// A heading is missing or its section is empty.
 pub fn parse_sections(text: &str) -> Result<[String; 4], DigestError> {
+    // Heading lines only (`#`, `##`, `###`), each with where it starts.
+    let headings: Vec<(usize, String)> = text
+        .lines()
+        .scan(0usize, |pos, line| {
+            let here = *pos;
+            *pos += line.len() + 1;
+            Some((here, line))
+        })
+        .filter(|(_, line)| line.trim_start().starts_with('#'))
+        .map(|(at, line)| (at, normalise(line)))
+        .collect();
     let mut starts = Vec::with_capacity(4);
-    for h in HEADINGS {
-        let at = text
-            .lines()
-            .scan(0usize, |pos, line| {
-                let here = *pos;
-                *pos += line.len() + 1;
-                Some((here, line))
-            })
-            .find(|(_, line)| line.trim().to_lowercase().starts_with(&h.to_lowercase()))
-            .map(|(at, _)| at)
+    for (h, key) in HEADINGS.iter().zip(HEADING_KEYS) {
+        let at = headings
+            .iter()
+            .find(|(_, line)| line.contains(key))
+            .map(|(at, _)| *at)
             .ok_or(DigestError::Missing(h))?;
-        starts.push((at, h));
+        starts.push((at, *h));
     }
     let mut out: [String; 4] = Default::default();
     for (n, (at, h)) in starts.iter().enumerate() {
@@ -254,6 +260,26 @@ pub fn parse_sections(text: &str) -> Result<[String; 4], DigestError> {
         body.clone_into(&mut out[n]);
     }
     Ok(out)
+}
+
+/// What identifies each heading once normalised: models write "Ten‑minute" with
+/// a non-breaking hyphen, "10-minute", bold, or add "(60 seconds)", so the match
+/// is on these words, not on the exact line.
+const HEADING_KEYS: [&str; 4] = ["what changed", "why it matters", "drill", "avatar script"];
+
+/// A heading line lowercased, without `#`, `*` or `_`, with every Unicode dash
+/// as `-` and whitespace collapsed.
+fn normalise(line: &str) -> String {
+    let lowered: String = line
+        .chars()
+        .map(|c| match c {
+            '\u{2010}'..='\u{2015}' | '\u{2212}' => '-',
+            '#' | '*' | '_' => ' ',
+            c => c.to_ascii_lowercase(),
+        })
+        .collect::<String>()
+        .to_lowercase();
+    lowered.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 /// The ISO week label of a moment, e.g. `"2026-W39"`.
@@ -278,6 +304,25 @@ mod tests {
         assert_eq!(s[1], "Because.");
         assert_eq!(s[2], "Do x.");
         assert_eq!(s[3], "Hello.");
+    }
+
+    #[test]
+    fn headings_match_despite_dashes_bold_and_numbers() {
+        let text = "## **What changed**\n- a\n### Why it matters:\nb\n\
+                    ## Ten\u{2011}minute drill\nc\n## Avatar script (60 seconds)\nd\n";
+        let s = parse_sections(text).unwrap();
+        assert_eq!(
+            s,
+            [
+                "- a".to_owned(),
+                "b".to_owned(),
+                "c".to_owned(),
+                "d".to_owned()
+            ]
+        );
+        let numbered =
+            "## What changed\na\n## Why it matters\nb\n## 10-minute drill\nc\n## Avatar script\nd";
+        assert_eq!(parse_sections(numbered).unwrap()[2], "c");
     }
 
     #[test]

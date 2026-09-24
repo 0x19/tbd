@@ -211,12 +211,13 @@ function Prose({ text }: { text: string }) {
 
 function Inline({ text }: { text: string }) {
   const parts: React.ReactNode[] = [];
-  const link = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s)]+)/g;
+  // [text](url), <url>, or a bare url; http(s) only.
+  const link = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|<(https?:\/\/[^\s>]+)>|(https?:\/\/[^\s)>]+)/g;
   let last = 0;
   for (const m of text.matchAll(link)) {
     const at = m.index ?? 0;
     parts.push(text.slice(last, at).replace(/\*\*/g, ""));
-    const href = m[2] ?? m[3] ?? "";
+    const href = m[2] ?? m[3] ?? m[4] ?? "";
     parts.push(
       <a
         key={at}
