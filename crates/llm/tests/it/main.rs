@@ -4,6 +4,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+mod agents;
 mod budget;
 mod conformance;
 mod support;

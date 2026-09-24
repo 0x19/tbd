@@ -7,6 +7,7 @@
 //! and handed to the service; nothing above [`engine`] names one.
 
 pub mod admission;
+pub mod agents;
 pub mod config;
 pub mod engine;
 pub mod probe;
@@ -29,6 +30,9 @@ pub use tbd_common::{
 /// Errors from starting or running the server.
 #[derive(Debug, thiserror::Error)]
 pub enum ServeError {
+    /// An agent file is bad (RFC 0011).
+    #[error("agents: {0}")]
+    Agents(String),
     /// Could not bind the listen address.
     #[error("bind {addr}: {source}")]
     Bind {
@@ -132,7 +136,10 @@ pub async fn serve_with(
         config.engines.probe_timeout,
     ));
 
-    let mut service = Llm::new(&config, runtime, engines, status);
+    let agents =
+        agents::Agents::load(&config.agents.dir).map_err(|e| ServeError::Agents(e.to_string()))?;
+    tracing::info!(agents = agents.all().count(), dir = %config.agents.dir.display(), "agents");
+    let mut service = Llm::new(&config, runtime, engines, status).with_agents(agents);
     if let Some(pool) = pool {
         service = service.with_pool(pool);
     }

@@ -29,6 +29,8 @@ pub struct GenerationRow {
     pub engine_version: String,
     /// The weights' revision when the generation started; empty before the first probe.
     pub model_revision: String,
+    /// The agent it spoke as, or empty.
+    pub agent: String,
     /// `running`, `ok`, `failed` or `cancelled`.
     pub status: String,
     /// Why it failed, or empty.
@@ -109,6 +111,8 @@ pub struct Start<'a> {
     pub engine_version: &'a str,
     /// The weights' revision, as the probe last read it (empty until it did).
     pub model_revision: &'a str,
+    /// The agent it spoke as, or empty (RFC 0011).
+    pub agent: &'a str,
 }
 
 /// Record that the engine was asked.
@@ -118,8 +122,8 @@ pub struct Start<'a> {
 pub async fn start_generation(pool: &PgPool, start: Start<'_>) -> Result<(), StoreError> {
     sqlx::query(
         "insert into llm.generations (id, session_id, subject, tier, engine, model, stub, status,
-                                      engine_version, model_revision)
-         values ($1, $2, $3, $4, $5, $6, $7, 'running', $8, $9)",
+                                      engine_version, model_revision, agent)
+         values ($1, $2, $3, $4, $5, $6, $7, 'running', $8, $9, $10)",
     )
     .bind(start.id)
     .bind(start.session_id)
@@ -130,6 +134,7 @@ pub async fn start_generation(pool: &PgPool, start: Start<'_>) -> Result<(), Sto
     .bind(start.stub)
     .bind(start.engine_version)
     .bind(start.model_revision)
+    .bind(start.agent)
     .execute(pool)
     .await?;
     Ok(())
@@ -214,7 +219,7 @@ pub async fn used_since(
 /// The database.
 pub async fn generation(pool: &PgPool, id: Uuid) -> Result<Option<GenerationRow>, StoreError> {
     let row = sqlx::query_as::<_, GenerationRow>(
-        "select id, session_id, subject, tier, engine, model, stub, engine_version, model_revision,
+        "select id, session_id, subject, tier, engine, model, stub, engine_version, model_revision, agent,
                 status, error, prompt_tokens, completion_tokens, first_token_ms, started_at, finished_at
          from llm.generations where id = $1",
     )
@@ -233,7 +238,7 @@ pub async fn generations_of(
     session_id: Uuid,
 ) -> Result<Vec<GenerationRow>, StoreError> {
     let rows = sqlx::query_as::<_, GenerationRow>(
-        "select id, session_id, subject, tier, engine, model, stub, engine_version, model_revision,
+        "select id, session_id, subject, tier, engine, model, stub, engine_version, model_revision, agent,
                 status, error, prompt_tokens, completion_tokens, first_token_ms, started_at, finished_at
          from llm.generations where session_id = $1 order by started_at desc",
     )

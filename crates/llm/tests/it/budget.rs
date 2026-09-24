@@ -22,6 +22,8 @@ fn ask(text: &str, session_id: &str) -> GenerateRequest {
         temperature: None,
         session_id: session_id.to_owned(),
         reasoning: None,
+        agent: String::new(),
+        page: String::new(),
     }
 }
 
@@ -58,6 +60,10 @@ async fn generations_are_recorded_and_the_budget_counts_them() {
     assert_eq!(row.subject, VISITOR.subject);
     assert_eq!(row.engine, "stub");
     assert!(row.stub);
+    assert_eq!(
+        row.agent, "",
+        "a conversation with the bare model names no agent"
+    );
     assert_eq!(row.tier, "fast");
     assert_eq!(
         (row.engine_version.as_str(), row.model_revision.as_str()),

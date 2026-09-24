@@ -163,6 +163,7 @@ pub const DEFAULT_MCP_TOOLS: &[&str] = &[
     "llm_get_budget",
     "llm_embed",
     "llm_ping",
+    "llm_list_agents",
     "humans_ping",
     "ledger_ping",
     "playground_ping",

@@ -45,6 +45,26 @@ pub struct Config {
     /// `[store]`
     #[serde(default)]
     pub store: Store,
+    /// `[agents]`
+    #[serde(default)]
+    pub agents: AgentsConfig,
+}
+
+/// `[agents]` (RFC 0011): where the agent files are. An empty or absent
+/// directory is no agents.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct AgentsConfig {
+    /// One `<id>.toml` per agent, and the knowledge files they name.
+    pub dir: PathBuf,
+}
+
+impl Default for AgentsConfig {
+    fn default() -> Self {
+        Self {
+            dir: PathBuf::from("configs/llm/agents"),
+        }
+    }
 }
 
 /// `[server]`
@@ -389,6 +409,10 @@ impl Config {
             generate: Generate::default(),
             budget: Budget::default(),
             store: Store::default(),
+            // No agents unless a test points here at some.
+            agents: AgentsConfig {
+                dir: PathBuf::new(),
+            },
         }
     }
 
@@ -580,6 +604,7 @@ mod tests {
                 generate: Generate::default(),
                 budget: Budget::default(),
                 store: Store::default(),
+                agents: AgentsConfig::default(),
             }
         }
     }

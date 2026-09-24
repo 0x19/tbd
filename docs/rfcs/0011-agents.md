@@ -46,7 +46,7 @@ the redaction's reason, not the fact. The build fails if the committed file is s
 
 **The first agent, the site guide.** It talks about the site: who it is about, the work,
 the lab and its documents, the playgrounds. It speaks about the site's owner in the
-third person and never as him, answers only from its knowledge and says when that does
+third person and never as its owner, answers only from its knowledge and says when that does
 not cover a question, links the pages it draws on, answers in the visitor's language,
 and sends anything personal to the contact page. It has no tools: it can only talk
 (tools and memory are RFC 0002's).
@@ -88,3 +88,7 @@ until publication; the workbench's agent picker.
 ## Status log
 
 - 2026-09-24: opened.
+- 2026-09-24: the model service speaks as agents. `ListAgents` shows who each is and
+  whether the caller may use it; a request that names one sends only its turns; the
+  service composes the rest and refuses instructions from the caller; the record names
+  the agent. The site guide's knowledge is generated and checked on every build.

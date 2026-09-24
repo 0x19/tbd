@@ -90,3 +90,9 @@ unlimited_subjects = ["chaos-load", "svc:radar"]
 # The URL is a credential and comes only from LLM_DATABASE_URL; empty means no
 # store: nothing is recorded and the budget is unlimited, said at start.
 max_connections = 5
+
+[agents]
+# The agents the service speaks as (RFC 0011): one <id>.toml per agent and the
+# knowledge files they name. Relative to the working directory (/app in the
+# image). An empty or absent directory is no agents.
+dir = "configs/llm/agents"

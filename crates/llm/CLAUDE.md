@@ -35,7 +35,15 @@ operations in `docs/llm/README.md`; this file is the non-obvious.
   row (`engine_version`, `model_revision`, migration 0030) so a benchmark can be rerun.
   It never touches the gRPC health reporter: an engine restart must not read as an
   outage.
-- `store.rs`: `llm.sessions`, `llm.generations`; `used_since` is the budget.
+- `store.rs`: `llm.sessions`, `llm.generations`; `used_since` is the budget; each row
+  names the agent it spoke as (`agent`, migration 0034; empty for the bare model).
+- `agents.rs` (RFC 0011): one `<id>.toml` per agent in `[agents] dir`, loaded at start
+  (a bad file stops the service). `compose` is the only place an agent's instructions,
+  brief and page text are put in front of the caller's turns, and it refuses a caller
+  `system` message. `Generate` calls it through `speak_as` right after the caller is
+  known, before the tier is chosen, so the agent's tier and bounds are defaults and
+  the caller's explicit values win; `ListAgents` never carries instructions. The site
+  guide's knowledge is generated (`mise run www:agent`); never edit it by hand.
 
 Invariants:
 - No L1 detail above the engine table: the proto, the service and the config above

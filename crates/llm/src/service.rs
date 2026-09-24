@@ -30,8 +30,9 @@ use tbd_common::{
     principal::Principal,
 };
 use tbd_proto::llm::v1::{
-    EmbedRequest, EmbedResponse, Embedding, GenerateRequest, GenerateResponse, GetBudgetRequest,
-    GetBudgetResponse, ListModelsRequest, ListModelsResponse, ModelInfo, PingRequest, PingResponse,
+    AgentInfo, EmbedRequest, EmbedResponse, Embedding, GenerateRequest, GenerateResponse,
+    GetBudgetRequest, GetBudgetResponse, ListAgentsRequest, ListAgentsResponse, ListModelsRequest,
+    ListModelsResponse, Message as ProtoMessage, ModelInfo, PingRequest, PingResponse,
     Tier as ProtoTier, Usage as ProtoUsage, llm_service_server::LlmService,
 };
 use tonic::{Code, Request, Response, Status};
@@ -41,6 +42,7 @@ use uuid::Uuid;
 use crate::{
     Runtime,
     admission::{Admission, Slot},
+    agents::{self, Agents},
     config::{Budget, Config, Generate, Ping, Tier},
     engine::{ChunkStream, Engine, EngineError, GenerateSpec, Message, Usage},
     probe,
@@ -66,6 +68,8 @@ struct Inner {
     probe: probe::Status,
     /// The record; `None` runs without one (nothing recorded, no limit).
     pool: Option<PgPool>,
+    /// The agents it speaks as (RFC 0011).
+    agents: Agents,
 }
 
 impl Llm {
@@ -97,6 +101,7 @@ impl Llm {
                 budget: config.budget.clone(),
                 probe,
                 pool: None,
+                agents: Agents::default(),
             }),
         }
     }
@@ -107,6 +112,63 @@ impl Llm {
     pub fn with_pool(mut self, pool: PgPool) -> Self {
         if let Some(inner) = Arc::get_mut(&mut self.inner) {
             inner.pool = Some(pool);
+        }
+        self
+    }
+
+    /// With `agent` named: check the caller may talk to it, put its
+    /// instructions, brief and page in front of the caller's turns, and apply
+    /// its tier and bounds where the request is silent (RFC 0011).
+    fn speak_as(
+        &self,
+        principal: &Principal,
+        req: &mut GenerateRequest,
+    ) -> Result<Option<Arc<agents::Agent>>, Status> {
+        let id = req.agent.trim();
+        if id.is_empty() {
+            return Ok(None);
+        }
+        let agent = self
+            .inner
+            .agents
+            .get(id)
+            .ok_or_else(|| Status::invalid_argument(format!("agent {id:?}: no such agent")))?;
+        if !agent.allows(principal.role.as_deref()) {
+            return Err(Status::permission_denied(format!(
+                "agent {id:?} is for another role"
+            )));
+        }
+        let caller: Vec<Message> = req
+            .messages
+            .iter()
+            .map(|m| Message {
+                role: m.role.clone(),
+                content: m.content.clone(),
+            })
+            .collect();
+        let composed =
+            agents::compose(&agent, &req.page, &caller).map_err(Status::invalid_argument)?;
+        req.messages = composed
+            .into_iter()
+            .map(|m| ProtoMessage {
+                role: m.role,
+                content: m.content,
+            })
+            .collect();
+        if ProtoTier::try_from(req.tier) == Ok(ProtoTier::Unspecified) {
+            req.tier = wire_tier(agent.tier);
+        }
+        req.max_tokens = req.max_tokens.or(agent.max_tokens);
+        req.temperature = req.temperature.or(agent.temperature);
+        req.reasoning = req.reasoning.or(agent.reasoning);
+        Ok(Some(agent))
+    }
+
+    /// Speak as these agents. Call before the service is shared.
+    #[must_use]
+    pub fn with_agents(mut self, agents: Agents) -> Self {
+        if let Some(inner) = Arc::get_mut(&mut self.inner) {
+            inner.agents = agents;
         }
         self
     }
@@ -169,6 +231,7 @@ impl Llm {
         wanted: &str,
         tier: Tier,
         engine: &Arc<dyn Engine>,
+        agent: &str,
     ) -> Result<Option<Recording>, Status> {
         let Some(pool) = &self.inner.pool else {
             return Ok(None);
@@ -198,6 +261,7 @@ impl Llm {
                 stub: engine.stub(),
                 engine_version: &identity.engine_version,
                 model_revision: &identity.model_revision,
+                agent,
             },
         )
         .await
@@ -368,6 +432,7 @@ struct Meta {
     stub: bool,
     session_id: String,
     generation_id: String,
+    agent: String,
 }
 
 /// The row of one generation while it runs. Closed with its outcome by the
@@ -445,6 +510,7 @@ impl Live {
             stub: self.meta.stub,
             session_id: self.meta.session_id.clone(),
             generation_id: self.meta.generation_id.clone(),
+            agent: self.meta.agent.clone(),
         }
     }
 
@@ -555,7 +621,11 @@ impl LlmService for Llm {
     ) -> Result<Response<Self::GenerateStream>, Status> {
         let mut timer = self.admit("LlmService/Generate").await?;
         let principal = Self::principal(&request).map_err(|s| self.reject(&mut timer, s))?;
-        let req = request.into_inner();
+        let mut req = request.into_inner();
+        let agent = self
+            .speak_as(&principal, &mut req)
+            .map_err(|st| self.reject(&mut timer, st))?;
+        let agent_id = agent.as_ref().map(|a| a.id.clone()).unwrap_or_default();
         let chosen = self
             .tier(req.tier)
             .map_err(|s| self.reject(&mut timer, s))?;
@@ -572,7 +642,7 @@ impl LlmService for Llm {
             .map_err(|s| self.reject(&mut timer, s))?;
         let started = Instant::now();
         let recording = self
-            .record_start(&principal.sub, &req.session_id, chosen, engine)
+            .record_start(&principal.sub, &req.session_id, chosen, engine, &agent_id)
             .await
             .map_err(|s| self.reject(&mut timer, s))?;
         let meta = Meta {
@@ -588,6 +658,7 @@ impl LlmService for Llm {
                 .as_ref()
                 .map(|r| r.id.to_string())
                 .unwrap_or_default(),
+            agent: agent_id,
         };
         let span = tracing::info_span!(
             "llm.generate",
@@ -742,6 +813,27 @@ impl LlmService for Llm {
             models,
             default_tier: wire_tier(self.inner.default_tier),
         }))
+    }
+
+    async fn list_agents(
+        &self,
+        request: Request<ListAgentsRequest>,
+    ) -> Result<Response<ListAgentsResponse>, Status> {
+        let _timer = self.admit("LlmService/ListAgents").await?;
+        let role = Self::principal(&request).ok().and_then(|p| p.role);
+        let agents = self
+            .inner
+            .agents
+            .all()
+            .map(|a| AgentInfo {
+                id: a.id.clone(),
+                name: a.name.clone(),
+                persona: a.persona.clone(),
+                tier: wire_tier(a.tier),
+                available: a.allows(role.as_deref()),
+            })
+            .collect();
+        Ok(Response::new(ListAgentsResponse { agents }))
     }
 
     async fn get_budget(

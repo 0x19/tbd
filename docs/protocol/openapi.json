@@ -4593,6 +4593,38 @@
         }
       }
     },
+    "/v1/llm/agents": {
+      "get": {
+        "tags": [
+          "llm"
+        ],
+        "summary": "tbd.llm.v1.LlmService/ListAgents",
+        "description": "Transcoded from `/tbd.llm.v1.LlmService/ListAgents` on the `llm` backend.",
+        "operationId": "LlmService.ListAgents",
+        "responses": {
+          "200": {
+            "description": "`tbd.llm.v1.ListAgentsResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.llm.v1.ListAgentsResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/llm/budget": {
       "get": {
         "tags": [
@@ -9786,6 +9818,33 @@
           }
         }
       },
+      "tbd.llm.v1.AgentInfo": {
+        "type": "object",
+        "description": "`tbd.llm.v1.AgentInfo`",
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "persona": {
+            "type": "string"
+          },
+          "tier": {
+            "type": "string",
+            "description": "`tbd.llm.v1.Tier`",
+            "enum": [
+              "TIER_UNSPECIFIED",
+              "TIER_FAST",
+              "TIER_DEEP"
+            ]
+          }
+        }
+      },
       "tbd.llm.v1.EmbedRequest": {
         "type": "object",
         "description": "`tbd.llm.v1.EmbedRequest`",
@@ -9854,6 +9913,9 @@
         "type": "object",
         "description": "`tbd.llm.v1.GenerateRequest`",
         "properties": {
+          "agent": {
+            "type": "string"
+          },
           "max_tokens": {
             "type": "integer",
             "format": "int32"
@@ -9863,6 +9925,9 @@
             "items": {
               "$ref": "#/components/schemas/tbd.llm.v1.Message"
             }
+          },
+          "page": {
+            "type": "string"
           },
           "reasoning": {
             "type": "boolean"
@@ -9889,6 +9954,9 @@
         "type": "object",
         "description": "`tbd.llm.v1.GenerateResponse`",
         "properties": {
+          "agent": {
+            "type": "string"
+          },
           "done": {
             "type": "boolean"
           },
@@ -9955,6 +10023,18 @@
           "used_today": {
             "type": "string",
             "format": "int64"
+          }
+        }
+      },
+      "tbd.llm.v1.ListAgentsResponse": {
+        "type": "object",
+        "description": "`tbd.llm.v1.ListAgentsResponse`",
+        "properties": {
+          "agents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/tbd.llm.v1.AgentInfo"
+            }
           }
         }
       },

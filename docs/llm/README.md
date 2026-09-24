@@ -81,6 +81,22 @@ recorded).
 | The probe | `[engines] probe_interval` / `probe_timeout`; `tbd_llm_engine_up` and `ListModels.up` |
 | The checks | `grpc_llm_ping`, `grpc_llm_models_lists_both_tiers`, `grpc_llm_generate_unauthenticated` (`docs/chaos/kinds.md`) |
 
+## Agents
+
+An agent (RFC 0011) is a persona the service speaks as: one file per agent in
+`[agents] dir` (`configs/llm/agents/<id>.toml`: `id`, `name`, `persona`, `instructions`,
+`tier`, `temperature`, `max_tokens`, `reasoning`, `roles`, `knowledge`), loaded at start.
+`ListAgents` (`GET /v1/llm/agents`) answers who each is and whether the caller may use
+it, never its instructions. A `Generate` that names `agent` sends only the visitor's
+turns: the service puts the agent's instructions, its knowledge's brief and, when
+`page` names a page the knowledge has, that page's text in front of them, and refuses a
+caller `system` message (`INVALID_ARGUMENT`). An unknown agent is `INVALID_ARGUMENT`, a
+caller without one of its `roles` is `PERMISSION_DENIED`. The agent's tier, temperature,
+`max_tokens` and reasoning apply where the request is silent; the caller's budget,
+admission and record apply as always, and each row names its agent. The first agent is
+`site`, the site guide, whose knowledge (`site.knowledge.json`) is generated from the
+public site by `mise run www:agent` and checked fresh by `ui:www:check`.
+
 ## Reproducibility
 
 Every generation's row names which build answered and which weights: the engine's

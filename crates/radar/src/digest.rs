@@ -158,6 +158,8 @@ impl Writer {
             temperature: Some(self.config.temperature),
             session_id: String::new(),
             reasoning: None,
+            agent: String::new(),
+            page: String::new(),
         };
         let deadline = Duration::from_secs(self.config.timeout_secs);
         let mut client = self.client.clone();
@@ -213,13 +215,25 @@ fn language_name(language: &str) -> &'static str {
 #[must_use]
 pub fn system_prompt(language: &str, lang: &str) -> String {
     let name = language_name(language);
-    let reader = if lang == "hr" { "Croatian" } else { "English" };
+    let (reader, style) = if lang == "hr" {
+        (
+            "Croatian",
+            " Write standard Croatian (hrvatski standardni jezik), not Serbian or Bosnian: \
+             tjedan, never sedmica; tisuća, never hiljada; the ije/je forms. Every value after a \
+             label, the summary, the drill and the script are Croatian; only the four headings, \
+             the label names and the Impact and Area values stay English.",
+        )
+    } else {
+        ("English", "")
+    };
     format!(
         "You write the weekly Radar for working {name} engineers: what changed in {name} this week \
          and what it means for someone who runs {name} in production. Use only the items given; \
          never invent a release, a version number, a date, a benchmark or a feature, and cite each \
          change with the exact link of the item it comes from. If the week is thin, say so \
-         instead of padding. Write in {reader}. Answer in Markdown with exactly these four \
+         instead of padding. The Radar reports on the {name} project; it is not the project, \
+         so never write as if we released, shipped, accepted or fixed anything: name who did \
+         (the {name} team, the release, the proposal). Write in {reader}.{style} Answer in Markdown with exactly these four \
          headings, in this order, written exactly as shown in English even when the text is \
          {reader}:\n\n\
          ## This week\n\
@@ -240,7 +254,8 @@ pub fn system_prompt(language: &str, lang: &str) -> String {
          One small exercise a reader can do in ten minutes that uses something from this week.\n\n\
          ## Avatar script\n\
          About 150 words of plain spoken text for a presenter to read aloud in sixty seconds: \
-         no Markdown, no links, no lists, first person plural, calm."
+         no Markdown, no links, no lists, calm, addressed to the listener as you; the {name} \
+         team did the work, the presenter only reports it."
     )
 }
 
@@ -472,6 +487,17 @@ mod tests {
         ## Ten\u{2011}minute drill\nDo x.\n## Avatar script (60 seconds)\nHello.\n";
 
     const LINKS: [&str; 2] = ["https://go.dev/a", "https://github.com/golang/go/issues/1"];
+
+    #[test]
+    fn the_prompt_reports_on_the_project_and_asks_for_standard_croatian() {
+        let en = system_prompt("go", "en");
+        assert!(!en.contains("first person plural"));
+        assert!(en.contains("never write as if we released"));
+        assert!(!en.contains("sedmica"));
+        let hr = system_prompt("rust", "hr");
+        assert!(hr.contains("standard Croatian"));
+        assert!(hr.contains("tjedan, never sedmica"));
+    }
 
     #[test]
     fn sections_split_on_level_two_headings_only() {

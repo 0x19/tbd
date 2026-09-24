@@ -23,6 +23,8 @@ fn ask(text: &str) -> GenerateRequest {
         temperature: None,
         session_id: String::new(),
         reasoning: None,
+        agent: String::new(),
+        page: String::new(),
     }
 }
 

@@ -44,6 +44,11 @@ service LlmService {
   rpc GetBudget(GetBudgetRequest) returns (GetBudgetResponse) {
     option (google.api.http) = {get: "/v1/llm/budget"};
   }
+  // The agents the service speaks as (RFC 0011): who each is and whether the
+  // caller may talk to it. Never an agent's instructions.
+  rpc ListAgents(ListAgentsRequest) returns (ListAgentsResponse) {
+    option (google.api.http) = {get: "/v1/llm/agents"};
+  }
 }
 
 message PingRequest {
@@ -87,6 +92,14 @@ message GenerateRequest {
   // before any answer appears; a short `max_tokens` with reasoning on can end
   // with no answer at all.
   optional bool reasoning = 6;
+  // Talk to this agent (an id from ListAgents): the service puts its
+  // instructions and knowledge in front of `messages`, which may then carry no
+  // system message of their own. Its tier and bounds apply where this request
+  // is silent. Empty: the bare model.
+  string agent = 7;
+  // The page the visitor is reading (a path such as "/about/"): with an agent,
+  // that page's text is added when the agent's knowledge has it.
+  string page = 8;
 }
 
 message Usage {
@@ -116,6 +129,8 @@ message GenerateResponse {
   // The chunk is the model's reasoning, not its answer. A client shows or
   // hides it; the answer is the chunks without it.
   bool reasoning = 11;
+  // The agent that answered, when the request named one.
+  string agent = 12;
 }
 
 message EmbedRequest {
@@ -179,4 +194,21 @@ message GetBudgetResponse {
   bool recorded = 5;
   // The UTC date the count is for, YYYY-MM-DD.
   string day = 6;
+}
+
+message ListAgentsRequest {}
+
+// An agent as a caller sees it (RFC 0011): never its instructions.
+message AgentInfo {
+  string id = 1;
+  string name = 2;
+  // One line on what it is.
+  string persona = 3;
+  Tier tier = 4;
+  // The caller may talk to it.
+  bool available = 5;
+}
+
+message ListAgentsResponse {
+  repeated AgentInfo agents = 1;
 }
