@@ -32,6 +32,9 @@ export const en: Dict = {
   "radar.publish": "Publish",
   "radar.unpublish": "Unpublish",
   "radar.working": "Saving…",
+  "radar.generated": "Generated with {model}",
+  "radar.reviewed": "human-reviewed",
+  "radar.unreviewed": "not yet reviewed",
 };
 
 export const hr: Dict = {
@@ -65,4 +68,7 @@ export const hr: Dict = {
   "radar.publish": "Objavi",
   "radar.unpublish": "Povuci objavu",
   "radar.working": "Spremanje…",
+  "radar.generated": "Napisao {model}",
+  "radar.reviewed": "pregledao čovjek",
+  "radar.unreviewed": "još nije pregledano",
 };

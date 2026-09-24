@@ -302,7 +302,10 @@ export function RadarContent({ fixedWeek }: { fixedWeek?: string } = {}) {
                       {current.script}
                     </p>
                   </details>
-                  <p className="text-muted-foreground/70 mt-8 font-mono text-[11px]">{current.model}</p>
+                  <p className="text-muted-foreground/70 mt-8 font-mono text-[11px]">
+                    {t("radar.generated", { model: current.model })} ·{" "}
+                    {current.status === "draft" ? t("radar.unreviewed") : t("radar.reviewed")}
+                  </p>
                 </div>
 
                 {weeks.length > 0 ? (
