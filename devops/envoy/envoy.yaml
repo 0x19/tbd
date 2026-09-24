@@ -1315,11 +1315,17 @@ static_resources:
                             timeout: 0s
                             retry_policy: *grpc_retry
                         # runner, matched by service name; the engine stays the catch-all.
+                        # Its own policy, like the llm's: a run takes up to the sandbox's
+                        # compile and run deadlines, far past the shared 5 s per try, and a
+                        # run is not idempotent (retrying one runs the code twice), so it
+                        # is retried only when the request never reached the runner.
                         - match: { prefix: "/tbd.runner.v1.RunnerService/", grpc: {} }
                           route:
                             cluster: runner
                             timeout: 0s
-                            retry_policy: *grpc_retry
+                            retry_policy:
+                              retry_on: "connect-failure,refused-stream"
+                              num_retries: 2
                         # runner health: the grpc.health.v1 path is shared, so the protocol
                         # names the backend it is asking about in x-tbd-backend.
                         - match: { prefix: "/grpc.health.v1.Health/", grpc: {}, headers: [{ name: x-tbd-backend, string_match: { exact: runner } }] }

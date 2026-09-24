@@ -1,3 +1,4 @@
+<!-- tbd new service runner --kind grpc --port 50060 --metrics-port 9473 --bacon-key u (tbd-cli 0.1.0) -->
 # crates/runner
 
 The runner service: the sandbox's L2 (RFC 0010; `docs/sandbox/README.md` is the
