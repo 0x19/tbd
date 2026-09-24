@@ -9,6 +9,7 @@ import { useLang, useT } from "@/lib/i18n";
 import { useMe } from "@/lib/me";
 import {
   type ImpactKey,
+  isArchive,
   issueLabel,
   type RadarChange as Change,
   type RadarDigest as Digest,
@@ -68,6 +69,7 @@ function weekLabel(
   const fmt = new Intl.DateTimeFormat(lang === "hr" ? "hr-HR" : "en-US", {
     day: "numeric",
     month: "short",
+    year: "numeric",
     timeZone: "UTC",
   });
   return `${t("radar.week", { n })} · ${fmt.formatRange(range[0], range[1])}`;
@@ -142,6 +144,8 @@ export function RadarContent({ fixedWeek }: { fixedWeek?: string } = {}) {
   const digests = state.kind === "ready" ? state.digests : [];
   const ofLanguage = digests.filter((d) => d.language === language);
   const weeks = [...new Set(ofLanguage.map((d) => d.week))];
+  // The archive list, by year, newest first.
+  const years = [...new Set(weeks.map((w) => w.slice(0, 4)))];
   const shownWeek = week && weeks.includes(week) ? week : weeks[0];
   const current =
     ofLanguage.find((d) => d.week === shownWeek && d.lang === lang) ??
@@ -214,7 +218,11 @@ export function RadarContent({ fixedWeek }: { fixedWeek?: string } = {}) {
                 <div>
                   <p className="text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-[11px] tracking-[0.18em] uppercase">
                     <span className="text-foreground">
-                      {numberOf(current.week) ? `Radar ${issueLabel(numberOf(current.week) ?? 0)} · ` : ""}
+                      {isArchive(current)
+                        ? `${t("radar.archive_label")} · `
+                        : numberOf(current.week)
+                          ? `Radar ${issueLabel(numberOf(current.week) ?? 0)} · `
+                          : ""}
                       {weekLabel(current.week, lang, t)}
                     </span>
                     <span>{t("radar.from", { n: current.item_count })}</span>
@@ -304,7 +312,11 @@ export function RadarContent({ fixedWeek }: { fixedWeek?: string } = {}) {
                   </details>
                   <p className="text-muted-foreground/70 mt-8 font-mono text-[11px]">
                     {t("radar.generated", { model: current.model })} ·{" "}
-                    {current.status === "draft" ? t("radar.unreviewed") : t("radar.reviewed")}
+                    {isArchive(current)
+                      ? t("radar.archive_note")
+                      : current.status === "draft"
+                        ? t("radar.unreviewed")
+                        : t("radar.reviewed")}
                   </p>
                 </div>
 
@@ -313,53 +325,70 @@ export function RadarContent({ fixedWeek }: { fixedWeek?: string } = {}) {
                     <p className="text-muted-foreground font-mono text-[11px] tracking-[0.18em] uppercase">
                       {t("radar.archive")}
                     </p>
-                    <ul className="mt-3 divide-y border-y">
-                      {weeks.map((w) => {
-                        const d =
-                          ofLanguage.find((x) => x.week === w && x.lang === lang) ??
-                          ofLanguage.find((x) => x.week === w);
-                        const breaking = (d?.changes ?? []).filter(
-                          (c) => c.impact === "IMPACT_BREAKING",
-                        ).length;
-                        const draft = ofLanguage.some((x) => x.week === w && x.status === "draft");
-                        return (
-                          <li key={w}>
-                            <a
-                              href={`/radar/${w.toLowerCase()}/`}
-                              onClick={(e) => {
-                                // Stay on the page when the week is loaded here; the link
-                                // is the week's own page for crawlers and new tabs.
-                                if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
-                                e.preventDefault();
-                                setWeek(w);
-                                setImpact("all");
-                                remember({ week: w });
-                              }}
-                              aria-current={w === shownWeek ? "true" : undefined}
-                              className={cn(
-                                "flex w-full flex-col gap-0.5 py-2.5 text-left transition-colors",
-                                w === shownWeek
-                                  ? "text-foreground"
-                                  : "text-muted-foreground hover:text-foreground",
-                              )}
-                            >
-                              <span className="text-sm">
-                                {numberOf(w) ? `${issueLabel(numberOf(w) ?? 0)} · ` : ""}
-                                {weekLabel(w, lang, t)}
-                              </span>
-                              <span className="flex gap-3 font-mono text-[11px]">
-                                {breaking ? (
-                                  <span className="text-destructive">
-                                    {t("radar.breaking_n", { n: breaking })}
-                                  </span>
-                                ) : null}
-                                {draft ? <span>{t("radar.draft")}</span> : null}
-                              </span>
-                            </a>
-                          </li>
-                        );
-                      })}
-                    </ul>
+                    {years.map((year, yi) => {
+                      const ofYear = weeks.filter((w) => w.startsWith(year));
+                      return (
+                        <details key={year} open={yi === 0} className="mt-3 border-t pt-2">
+                          <summary className="text-foreground cursor-pointer py-1 text-sm font-medium">
+                            {year}{" "}
+                            <span className="text-muted-foreground font-mono text-[11px]">
+                              {ofYear.length}
+                            </span>
+                          </summary>
+                          <ul className="mt-1 divide-y border-y">
+                            {ofYear.map((w) => {
+                              const d =
+                                ofLanguage.find((x) => x.week === w && x.lang === lang) ??
+                                ofLanguage.find((x) => x.week === w);
+                              const breaking = (d?.changes ?? []).filter(
+                                (c) => c.impact === "IMPACT_BREAKING",
+                              ).length;
+                              const draft = ofLanguage.some((x) => x.week === w && x.status === "draft");
+                              return (
+                                <li key={w}>
+                                  <a
+                                    href={`/radar/${w.toLowerCase()}/`}
+                                    onClick={(e) => {
+                                      // Stay on the page when the week is loaded here; the link
+                                      // is the week's own page for crawlers and new tabs.
+                                      if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+                                      e.preventDefault();
+                                      setWeek(w);
+                                      setImpact("all");
+                                      remember({ week: w });
+                                    }}
+                                    aria-current={w === shownWeek ? "true" : undefined}
+                                    className={cn(
+                                      "flex w-full flex-col gap-0.5 py-2.5 text-left transition-colors",
+                                      w === shownWeek
+                                        ? "text-foreground"
+                                        : "text-muted-foreground hover:text-foreground",
+                                    )}
+                                  >
+                                    <span className="text-sm">
+                                      {numberOf(w)
+                                        ? `${issueLabel(numberOf(w) ?? 0)} · `
+                                        : d && isArchive(d)
+                                          ? `${t("radar.archive_label")} · `
+                                          : ""}
+                                      {weekLabel(w, lang, t)}
+                                    </span>
+                                    <span className="flex gap-3 font-mono text-[11px]">
+                                      {breaking ? (
+                                        <span className="text-destructive">
+                                          {t("radar.breaking_n", { n: breaking })}
+                                        </span>
+                                      ) : null}
+                                      {draft ? <span>{t("radar.draft")}</span> : null}
+                                    </span>
+                                  </a>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </details>
+                      );
+                    })}
                   </nav>
                 ) : null}
               </article>

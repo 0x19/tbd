@@ -34,18 +34,23 @@ export type RadarDigest = {
   created_at?: string;
   /** Always true: a digest is written by a language model. */
   ai_written?: boolean;
+  /** "live" (the weekly run, reviewed) or "archive" (the backfill, not individually reviewed). */
+  origin?: string;
 };
 
 /** One published week: its number in the series, its slug and its digests. */
 export type RadarIssue = {
-  /** 1 for the first published week. */
-  number: number;
+  /** 1 for the first reviewed live week; null for an archive week. */
+  number: number | null;
   /** "2026-W39" */
   week: string;
   /** "2026-w39", the URL segment. */
   slug: string;
   digests: RadarDigest[];
 };
+
+/** Whether a digest came from the archive backfill. */
+export const isArchive = (d: { origin?: string }) => d.origin === "archive";
 
 /** "#001" */
 export const issueLabel = (n: number) => `#${String(n).padStart(3, "0")}`;

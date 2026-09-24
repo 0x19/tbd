@@ -37,15 +37,16 @@ async function published(): Promise<RadarDigest[]> {
 }
 
 const digests = await published();
-// Issues are weeks, numbered in the order they were first published.
+// Issues are weeks. Only reviewed live weeks are numbered, in order; archive
+// weeks (the backfill, not individually reviewed) have pages but no number.
 const weeks = [...new Set(digests.map((d) => d.week))].sort();
+let n = 0;
 const issues: RadarIssue[] = weeks
-  .map((week, i) => ({
-    number: i + 1,
-    week,
-    slug: week.toLowerCase(),
-    digests: digests.filter((d) => d.week === week),
-  }))
+  .map((week) => {
+    const ofWeek = digests.filter((d) => d.week === week);
+    const live = ofWeek.some((d) => d.origin !== "archive");
+    return { number: live ? ++n : null, week, slug: week.toLowerCase(), digests: ofWeek };
+  })
   .reverse();
 
 mkdirSync(out, { recursive: true });

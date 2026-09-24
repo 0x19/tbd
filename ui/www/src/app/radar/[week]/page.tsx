@@ -27,7 +27,10 @@ export async function generateMetadata({ params }: { params: Promise<{ week: str
   if (!issue) return {};
   const n = Number(issue.week.split("-W")[1] ?? 0);
   const lead = issue.digests.find((d) => d.language === "go" && d.lang === "en") ?? issue.digests[0];
-  const title = `Radar ${issueLabel(issue.number)} · Week ${n} · Go and Rust`;
+  const year = issue.week.slice(0, 4);
+  const title = issue.number
+    ? `Radar ${issueLabel(issue.number)} · Week ${n} · Go and Rust`
+    : `Radar archive · Week ${n}, ${year} · Go and Rust`;
   const description = lead?.summary || "What changed in Go and Rust this week, from the official sources.";
   return {
     title,

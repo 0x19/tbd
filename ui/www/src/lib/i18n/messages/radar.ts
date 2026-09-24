@@ -35,6 +35,8 @@ export const en: Dict = {
   "radar.generated": "Generated with {model}",
   "radar.reviewed": "human-reviewed",
   "radar.unreviewed": "not yet reviewed",
+  "radar.archive_label": "Archive",
+  "radar.archive_note": "archive, not individually reviewed",
 };
 
 export const hr: Dict = {
@@ -71,4 +73,6 @@ export const hr: Dict = {
   "radar.generated": "Napisao {model}",
   "radar.reviewed": "pregledao čovjek",
   "radar.unreviewed": "još nije pregledano",
+  "radar.archive_label": "Arhiva",
+  "radar.archive_note": "arhiva, nije pojedinačno pregledano",
 };
