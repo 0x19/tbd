@@ -55,6 +55,9 @@ Invariants:
 - `PingResponse.stub` is `true`, as in every service; the chaos check asserts it.
 - Only official sources, and the prompt forbids inventing a release, version or date;
   a thin week says so rather than padding.
+- The Radar reports on Go and Rust and never speaks as them (no "we released"), and
+  Croatian is standard Croatian (tjedan, not sedmica) in every prose field; the prompt
+  says both and a unit test holds it.
 - `TCP_NODELAY` is set on `TcpIncoming`, not the server builder.
 - Services never address each other directly; the llm service is reached through
   Envoy's internal listener (`http://envoy:50051`, matched by service name).
