@@ -4,7 +4,7 @@ import type { Dict } from "./index";
 export const en: Dict = {
   "common.home": "Home",
   "common.lab": "Lab",
-  "common.work": "Work",
+  "common.oss": "Open source",
   "common.play": "Play",
   "common.about": "About",
   "common.contact": "Contact",
@@ -35,7 +35,7 @@ export const en: Dict = {
 export const hr: Dict = {
   "common.home": "Početna",
   "common.lab": "Laboratorij",
-  "common.work": "Rad",
+  "common.oss": "Otvoreni kod",
   "common.play": "Igra",
   "common.about": "O meni",
   "common.contact": "Kontakt",

@@ -565,7 +565,7 @@ export const nav = [
   { href: "/", label: "Home", key: "home" },
   // Present, past, play: what is being built (with numbers), what shipped, what to try.
   { href: "/lab/", label: "Lab", key: "lab", gated: true },
-  { href: "/work/", label: "Work", key: "work" },
+  { href: "/open-source/", label: "Open source", key: "oss" },
   { href: "/playgrounds/", label: "Play", key: "play" },
   { href: "/about/", label: "About", key: "about" },
   { href: "/contact/", label: "Contact", key: "contact" },

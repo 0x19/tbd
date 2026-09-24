@@ -14,11 +14,11 @@ type Project = Site["projects"][number];
 type Domain = "all" | Project["domain"];
 
 /**
- * The work page in the reader's language (`app/work/page.tsx` carries the
+ * The open source page in the reader's language (`app/open-source/page.tsx` carries the
  * metadata): the open-source libraries, newest first, as tabs by domain over
  * a grid of cards, the same language as the playgrounds. A card is the
  * number, the domain, the year, the name, what it does, and its language
- * with a link to the source. No star or fork counts: they are about me, not
+ * with a link to the source (the page already says it is open source). No star or fork counts: they are about me, not
  * about the reader, and they go stale in a static build.
  */
 export function ProjectsContent() {
@@ -104,11 +104,7 @@ function Card({ p, n }: { p: Project; n: number }) {
       <h2 className="mt-7 font-mono text-lg font-medium tracking-tight">{p.name}</h2>
       <p className="text-muted-foreground mt-2 text-sm text-pretty">{p.what}</p>
       <div className="mt-auto flex items-end gap-4 pt-7">
-        <p className="text-muted-foreground/70 flex-1 border-t pt-4 font-mono text-[11px]">
-          {p.language}
-          {"  ·  "}
-          {t("projects.oss")}
-        </p>
+        <p className="text-muted-foreground/70 flex-1 border-t pt-4 font-mono text-[11px]">{p.language}</p>
         <span className="text-muted-foreground group-hover:text-foreground flex items-center gap-1 font-mono text-[11px] tracking-[0.12em] uppercase transition-colors">
           {t("projects.source")}
           <span

@@ -2,8 +2,8 @@
 import type { Dict } from "./index";
 
 export const en: Dict = {
-  "projects.eyebrow": "Work",
-  "projects.title": "Open source, built to be used.",
+  "projects.eyebrow": "Open source",
+  "projects.title": "Libraries, built to be used.",
   "projects.lead":
     "Mostly Go, mostly infrastructure, written because the tool did not exist yet. A few have outlived the reason they were written.",
   "projects.oss": "Open source",
@@ -17,8 +17,8 @@ export const en: Dict = {
 };
 
 export const hr: Dict = {
-  "projects.eyebrow": "Rad",
-  "projects.title": "Otvoreni kod, građen za upotrebu.",
+  "projects.eyebrow": "Otvoreni kod",
+  "projects.title": "Biblioteke, građene za upotrebu.",
   "projects.lead":
     "Uglavnom Go, uglavnom infrastruktura, napisano jer alat još nije postojao. Nekoliko ih je nadživjelo razlog zbog kojeg su napisani.",
   "projects.oss": "Otvoreni kod",

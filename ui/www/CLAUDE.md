@@ -67,10 +67,10 @@ practice log is `localStorage`, per browser, and its page says so.
   A static export refuses a dynamic route with no pages, so an empty list yields one
   placeholder slug that answers with the 404 (`app/lab/rfc/[slug]/page.tsx`).
 - **Three sections for what was made, one rule each.** `/lab/` is what is being built
-  now, with numbers and a status stamp; `/work/` (the `projects` data) is what
+  now, with numbers and a status stamp; `/open-source/` (the `projects` data) is what
   shipped, finished, with a date and a link; `/playgrounds/` ("Play") is what to try
-  for fun. A lab subject that finishes graduates to `/work/` with one line pointing
-  back. `/projects/` and `/playgrounds/break-it/` only send the browser on, kept for
+  for fun. A lab subject that finishes graduates to `/open-source/` with one line pointing
+  back. `/work/`, `/projects/` and `/playgrounds/break-it/` only send the browser on, kept for
   old links; neither is in the sitemap.
 - **Content lives in `src/data/site.ts`.** A copy change edits that file, and its
   Croatian twin in `src/data/site.hr.ts`. Do not inline facts into a page.
