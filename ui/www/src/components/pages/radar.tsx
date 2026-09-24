@@ -4,8 +4,15 @@ import { useCallback, useEffect, useId, useState } from "react";
 
 import { Eyebrow, Frame, Reveal } from "@/components/kit";
 import { TabList } from "@/components/tabs";
+import { issues } from "@/generated/radar/index";
 import { useLang, useT } from "@/lib/i18n";
 import { useMe } from "@/lib/me";
+import {
+  type ImpactKey,
+  issueLabel,
+  type RadarChange as Change,
+  type RadarDigest as Digest,
+} from "@/lib/radar";
 import { cn } from "@/lib/utils";
 
 /**
@@ -18,38 +25,12 @@ import { cn } from "@/lib/utils";
  * Unpublish; everyone else sees published issues only (the service decides).
  * A digest the llm's stub engine wrote is never shown. The model's text is
  * rendered as React elements (`Prose`: paragraphs, bullets, http(s) links),
- * never as HTML. `?week=` and `?language=` keep a week linkable. Field names are
- * the proto's (the gateway keeps them). `app/radar/page.tsx` has the metadata.
+ * never as HTML. The published issues are rendered at build time
+ * (`tool/radar-data.ts`) so the HTML carries them for search engines and link
+ * previews; each week also has its own page, `/radar/2026-w39/`. Field names
+ * are the proto's (the gateway keeps them). `app/radar/page.tsx` and
+ * `app/radar/[week]/page.tsx` have the metadata.
  */
-
-type ImpactKey = "IMPACT_BREAKING" | "IMPACT_WORTH_KNOWING" | "IMPACT_NICE_TO_KNOW";
-
-type Change = {
-  title: string;
-  impact: ImpactKey | "IMPACT_UNSPECIFIED";
-  area: string;
-  url: string;
-  what: string;
-  production_impact: string;
-  try_it: string;
-};
-
-type Digest = {
-  id: string;
-  week: string;
-  language: "go" | "rust";
-  lang: "en" | "hr";
-  summary?: string;
-  changes?: Change[];
-  changed: string;
-  why: string;
-  drill: string;
-  script: string;
-  item_count: number;
-  model: string;
-  stub: boolean;
-  status?: string;
-};
 
 type State = { kind: "loading" } | { kind: "failed" } | { kind: "ready"; digests: Digest[] };
 
@@ -97,15 +78,25 @@ function readParam(name: string): string | null {
   return new URLSearchParams(window.location.search).get(name);
 }
 
-export function RadarContent() {
+/** Every published digest the build rendered, newest week first. */
+const built: Digest[] = issues.flatMap((i) => i.digests);
+
+/** The issue number of a week, when it is published. */
+const numberOf = (week: string) => issues.find((i) => i.week === week)?.number;
+
+export function RadarContent({ fixedWeek }: { fixedWeek?: string } = {}) {
   const t = useT();
   const { lang } = useLang();
   const id = useId();
   const me = useMe();
   const admin = me?.role === "admin";
-  const [state, setState] = useState<State>({ kind: "loading" });
+  // The build's issues first, so the HTML carries them; the browser then asks
+  // the service for anything newer (and an admin for drafts).
+  const [state, setState] = useState<State>(
+    built.length ? { kind: "ready", digests: built } : { kind: "loading" },
+  );
   const [language, setLanguage] = useState<"go" | "rust">("go");
-  const [week, setWeek] = useState<string | null>(null);
+  const [week, setWeek] = useState<string | null>(fixedWeek ?? null);
   const [impact, setImpact] = useState<ImpactKey | "all">("all");
   const [busy, setBusy] = useState(false);
 
@@ -128,9 +119,9 @@ export function RadarContent() {
   useEffect(() => {
     const l = readParam("language");
     if (l === "go" || l === "rust") setLanguage(l);
-    setWeek(readParam("week"));
+    if (!fixedWeek) setWeek(readParam("week"));
     void load(false);
-  }, [load]);
+  }, [load, fixedWeek]);
 
   // Reload once the visitor is known to be an admin, so drafts appear.
   useEffect(() => {
@@ -222,7 +213,10 @@ export function RadarContent() {
               <article className="grid gap-10 py-10 lg:grid-cols-[minmax(0,1fr)_17rem]">
                 <div>
                   <p className="text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-[11px] tracking-[0.18em] uppercase">
-                    <span className="text-foreground">{weekLabel(current.week, lang, t)}</span>
+                    <span className="text-foreground">
+                      {numberOf(current.week) ? `Radar ${issueLabel(numberOf(current.week) ?? 0)} · ` : ""}
+                      {weekLabel(current.week, lang, t)}
+                    </span>
                     <span>{t("radar.from", { n: current.item_count })}</span>
                   </p>
 
@@ -327,9 +321,13 @@ export function RadarContent() {
                         const draft = ofLanguage.some((x) => x.week === w && x.status === "draft");
                         return (
                           <li key={w}>
-                            <button
-                              type="button"
-                              onClick={() => {
+                            <a
+                              href={`/radar/${w.toLowerCase()}/`}
+                              onClick={(e) => {
+                                // Stay on the page when the week is loaded here; the link
+                                // is the week's own page for crawlers and new tabs.
+                                if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+                                e.preventDefault();
                                 setWeek(w);
                                 setImpact("all");
                                 remember({ week: w });
@@ -342,7 +340,10 @@ export function RadarContent() {
                                   : "text-muted-foreground hover:text-foreground",
                               )}
                             >
-                              <span className="text-sm">{weekLabel(w, lang, t)}</span>
+                              <span className="text-sm">
+                                {numberOf(w) ? `${issueLabel(numberOf(w) ?? 0)} · ` : ""}
+                                {weekLabel(w, lang, t)}
+                              </span>
                               <span className="flex gap-3 font-mono text-[11px]">
                                 {breaking ? (
                                   <span className="text-destructive">
@@ -351,7 +352,7 @@ export function RadarContent() {
                                 ) : null}
                                 {draft ? <span>{t("radar.draft")}</span> : null}
                               </span>
-                            </button>
+                            </a>
                           </li>
                         );
                       })}

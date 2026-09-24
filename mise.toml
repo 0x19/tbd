@@ -1200,6 +1200,21 @@ fi
 echo "roll the radar deployment to pick them up: kubectl -n tbd rollout restart deployment/radar"
 """
 
+[tasks."radar:site"]
+description = "Put the Radar's published issues into the site's HTML: rebuild the www image from a git archive of HEAD (its build reads the published digests from the live radar API, tool/radar-data.ts) and roll it. Run after publishing an issue on the page."
+run = """
+set -e
+sha=$(git rev-parse --short HEAD)
+dir=$(mktemp -d)
+trap 'rm -rf "$dir"' EXIT
+git archive HEAD | tar -x -C "$dir"
+args=$(mise run -q www:build-args)
+docker build -f "$dir/devops/docker/Dockerfile.www" $args -t "$IMAGE_REGISTRY/tbd-www:dev" -t "$IMAGE_REGISTRY/tbd-www:$sha" "$dir"
+k3d image import -m direct -c "$K3D_CLUSTER" "$IMAGE_REGISTRY/tbd-www:dev"
+kubectl -n tbd rollout restart deployment/www
+kubectl -n tbd rollout status deployment/www --timeout=240s
+"""
+
 [tasks."cv:grant"]
 description = "Let the cv service send mail as the owner: grant its subject (svc:cv) read access to the owner's own parties, where the linked mailbox lives (the cv binary's grant one-shot over a port-forward, the URL from the cv-db Secret). One-time."
 usage = '''

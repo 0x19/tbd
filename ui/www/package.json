@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "gen": "node --no-warnings tool/lab-data.ts",
+    "gen": "node --no-warnings tool/lab-data.ts && node --no-warnings tool/radar-data.ts",
     "dev": "pnpm gen && next dev -p 3003",
     "build": "pnpm gen && next build",
     "start": "next start",

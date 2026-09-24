@@ -95,6 +95,17 @@ practice log is `localStorage`, per browser, and its page says so.
   www image copies the three docs folders in so the same generator runs in the build.
   A static export refuses a dynamic route with no pages, so an empty list yields one
   placeholder slug that answers with the 404 (`app/lab/rfc/[slug]/page.tsx`).
+- **The Radar's published issues are rendered at build time** so search engines,
+  link previews and crawlers read them: `tool/radar-data.ts` (in `pnpm gen`, after
+  the lab) reads the published digests from the live radar API
+  (`RADAR_SOURCE_URL`, default `https://inorbit.hr`; drafts are never read) into the
+  gitignored `src/generated/radar/`, `/radar/` renders the latest from it first, and
+  each week has its own page, `/radar/2026-w39/`, with its title and preview card,
+  listed in the sitemap. Unreachable (an offline build) writes an empty list and the
+  page fetches in the browser; the build never fails for it. The browser still asks
+  the service after load, for anything newer and, for an admin, the drafts (that read
+  goes through the lab's gate at Envoy). A newly published issue reaches the HTML
+  with the next site build: `mise run radar:site`.
 - **Three sections for what was made, one rule each.** `/lab/` is what is being built
   now, with numbers and a status stamp; `/open-source/` (the `projects` data) is what
   shipped, finished, with a date and a link; `/playgrounds/` ("Play") is what to try

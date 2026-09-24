@@ -3,6 +3,7 @@ import type { MetadataRoute } from "next";
 import { labs } from "@/data/labs";
 import { lab, nav, navVisible, playgrounds, url } from "@/data/site";
 import { rfcs, studies } from "@/generated/lab/index";
+import { issues } from "@/generated/radar/index";
 
 // A static export has no request to vary on: build it once, at build time.
 export const dynamic = "force-static";
@@ -10,7 +11,8 @@ export const dynamic = "force-static";
 /** Generated at build time into `out/sitemap.xml`: every page the nav names
  *  (the lab only once it is public), the legal pages, every playground that is
  *  open (not a paused one), and, once the lab is public, every lab, its
- *  workbench and every public RFC and study. Redirect pages are never listed. */
+ *  workbench and every public RFC and study, and every published Radar issue.
+ *  Redirect pages are never listed. */
 export default function sitemap(): MetadataRoute.Sitemap {
   const open = playgrounds.flatMap((p) => (p.href && !p.paused ? [p.href] : []));
   const labPages = lab.public
@@ -26,6 +28,8 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "/terms/",
     ...open,
     ...labPages,
+    // Every published Radar issue has its own page.
+    ...issues.map((i) => `/radar/${i.slug}/`),
   ];
   return paths.map((path) => ({
     url: `${url}${path}`,
