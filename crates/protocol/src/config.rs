@@ -146,6 +146,13 @@ pub struct Mcp {
     /// writes, deletes, sends, moves money, reads personal data or injects a
     /// fault belongs here.
     pub tools: Vec<String>,
+    /// Pages allowed to call `/mcp` from a browser, by origin
+    /// (`https://example.org`). A request that carries an `Origin` not listed
+    /// is refused 403 before any tool is touched: the site calls MCP with its
+    /// signed-in visitor's cookie, and a cookie travels with a cross-site
+    /// request too. Agents send no `Origin` and are never affected. Empty: no
+    /// browser may call it.
+    pub allowed_origins: Vec<String>,
 }
 
 /// The tools offered when `[mcp] tools` is not set: the models, read and used
@@ -169,6 +176,7 @@ impl Default for Mcp {
             stream_timeout: Duration::from_secs(300),
             max_body_bytes: 2 * 1024 * 1024,
             tools: DEFAULT_MCP_TOOLS.iter().map(|&t| t.to_owned()).collect(),
+            allowed_origins: Vec::new(),
         }
     }
 }

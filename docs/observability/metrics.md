@@ -23,6 +23,9 @@ backend is visible instead of clipped.
 | `tbd_llm_queued` | gauge | `tier` | requests waiting for a slot on the tier now |
 | `tbd_llm_queue_wait_seconds` | histogram | `tier` | an admitted request got its slot; how long it waited in line |
 | `tbd_llm_refused_total` | counter | `tier`, `reason` (`queue_full`, `queue_timeout`) | admission refused a request with `RESOURCE_EXHAUSTED` |
+| `tbd_arena_viewers` | gauge | | streams of the arena's snapshot (`ArenaService/Watch`) open now |
+| `tbd_arena_source_ok` | gauge | `source` (`llm`, `metrics`, `chaos`) | the arena's last read of that source: 1 when it succeeded, else 0 |
+| `tbd_arena_source_age_seconds` | gauge | `source` | seconds since the arena last read that source successfully; absent until the first success |
 | `tbd_llm_engine_up` | gauge | `tier`, `engine` | the llm service's probe of a tier's engine (every `[engines] probe_interval`): 1 while it answers, else 0; never drives the service's own health |
 | `tbd_stream_items_total` | counter | `kind`, `direction` (`in`, `out`) | an item crosses a stream |
 | `tbd_engine_client_requests_total` | counter | `backend` (`engine`, `ledger`, …: the protocol's `[services]` name), `route`, `status` | the protocol finishes a call to a backend, measured on the client side |

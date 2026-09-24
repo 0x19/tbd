@@ -202,7 +202,12 @@ async fn method_not_allowed(request: axum::extract::Request) -> axum::response::
 pub fn router(state: &AppState, transcoder: &Transcoder) -> Router {
     let doc = std::sync::Arc::new(document(transcoder));
     let mcp = if state.mcp().enabled {
-        Router::new().nest_service(mcp::PATH, mcp::service(state, transcoder))
+        Router::new()
+            .nest_service(mcp::PATH, mcp::service(state, transcoder))
+            .layer(axum::middleware::from_fn_with_state(
+                std::sync::Arc::new(state.mcp().allowed_origins.clone()),
+                mcp::origin_guard,
+            ))
     } else {
         Router::new()
     };

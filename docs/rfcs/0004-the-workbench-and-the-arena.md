@@ -71,9 +71,19 @@ machine that also serves everything else.
 
 Open. Fixed so far: the page layout (transcript, prompt with slash menu and status line,
 sessions kept in the browser), the arena as its own service republishing one stream over
-the multiplexed socket, preset runs only, one at a time, bounded and cooled down. Still
-to decide: the preset list and each one's bounds, the arena's stream shape, and when the
-page leaves the lab for the front of the site (RFC 0006).
+the multiplexed socket, preset runs only, one at a time, bounded and cooled down.
+
+The stream's shape is fixed too: one whole snapshot a second, the current one first, so
+a viewer that falls behind skips ahead instead of replaying. It carries each model tier
+(running, slots, waiting, up, tokens a second, time to the first token at the median and
+the 99th percentile, refusals a minute), each way in (REST, server-sent events, the
+socket, MCP, gRPC) as the chaos tool last checked it end to end, with the time of that
+check and the number of tools an agent is offered, and the chaos tool's current run with
+its rates. A figure no source could give is absent, never zero, and the snapshot says
+which source is behind and why. Watching needs the lab's role while the lab is private.
+
+Still to decide: the preset list and each one's bounds, and when the page leaves the lab
+for the front of the site (RFC 0006).
 
 ## Publication
 
@@ -83,3 +93,6 @@ costs: the arena's own load on the platform, and the latency from an event to th
 ## Status log
 
 - 2026-09-24: opened.
+- 2026-09-24: the arena runs. One snapshot a second from the model service, the metrics
+  store and the chaos tool, over the same gateway as everything else; the ways in are the
+  chaos tool's own end-to-end checks, run on a schedule, never inferred.

@@ -16,6 +16,17 @@ fn claims(sub: &str) -> String {
 /// One JSON-RPC request; the response body's JSON, whether the server
 /// answered as JSON or as one server-sent event.
 async fn rpc(stack: &support::Stack, method: &str, params: Value, caller: Option<&str>) -> Value {
+    rpc_from(stack, method, params, caller, None).await
+}
+
+/// The same, sent from a page at `origin` (as a browser does).
+async fn rpc_from(
+    stack: &support::Stack,
+    method: &str,
+    params: Value,
+    caller: Option<&str>,
+    origin: Option<&str>,
+) -> Value {
     let mut request = stack
         .client()
         .post(stack.url("/mcp"))
@@ -25,6 +36,9 @@ async fn rpc(stack: &support::Stack, method: &str, params: Value, caller: Option
         .json(&json!({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}));
     if let Some(sub) = caller {
         request = request.header("x-jwt-payload", claims(sub));
+    }
+    if let Some(origin) = origin {
+        request = request.header("origin", origin);
     }
     let response = request.send().await.unwrap();
     let status = response.status();
@@ -209,4 +223,43 @@ async fn a_stream_is_collected_and_cut_at_the_cap() {
         "{value}"
     );
     assert_eq!(value["items"].as_array().map(Vec::len), Some(3), "{value}");
+}
+
+/// The site calls MCP with its visitor's cookie, so a page elsewhere must not:
+/// a foreign `Origin` is 403 before any tool runs; the site's own origin and
+/// an agent (no `Origin`) pass.
+#[tokio::test]
+async fn a_foreign_origin_is_refused_and_the_site_and_agents_pass() {
+    let stack = support::start().await;
+    let response = stack
+        .client()
+        .post(stack.url("/mcp"))
+        .header("content-type", "application/json")
+        .header("accept", "application/json, text/event-stream")
+        .header("mcp-protocol-version", PROTOCOL_VERSION)
+        .header("origin", "https://evil.test")
+        .header("x-jwt-payload", claims("agent-1"))
+        .json(&json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": {"name": "ledger_ping", "arguments": {"message": "hi"}}}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 403);
+    let body: Value = response.json().await.unwrap();
+    assert_eq!(body["code"], "forbidden", "{body}");
+
+    let site = rpc_from(
+        &stack,
+        "tools/call",
+        json!({"name": "ledger_ping", "arguments": {"message": "hi"}}),
+        Some("agent-1"),
+        Some("https://site.test"),
+    )
+    .await;
+    let (value, error) = answer(&site);
+    assert!(!error, "{site}");
+    assert_eq!(value["message"], "hi");
+
+    let agent = rpc(&stack, "tools/list", json!({}), Some("agent-1")).await;
+    assert!(agent["result"]["tools"].is_array(), "{agent}");
 }

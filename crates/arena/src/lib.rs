@@ -4,8 +4,10 @@
 //! server can be run from `main`, from integration tests on an ephemeral port,
 //! and from the chaos tool with fault injection and counters attached.
 
+pub mod collect;
 pub mod config;
 mod service;
+pub mod world;
 
 use std::net::SocketAddr;
 
@@ -37,6 +39,9 @@ pub enum ServeError {
     /// The gRPC server failed while running.
     #[error("transport: {0}")]
     Transport(#[from] tonic::transport::Error),
+    /// A source's URL does not parse.
+    #[error("source: {0}")]
+    Source(tonic::transport::Error),
 }
 
 /// Bind `[server] listen` and serve until `shutdown` resolves.
@@ -53,21 +58,35 @@ pub async fn serve(
     serve_on(listener, config, shutdown).await
 }
 
-/// Serve on an already-bound listener. Tests bind port 0 and read the address
-/// back before calling this.
+/// Serve on an already-bound listener, with every configured collector
+/// running. Tests bind port 0 and read the address back before calling this.
 pub async fn serve_on(
     listener: TcpListener,
     config: Config,
     shutdown: impl Future<Output = ()> + Send + 'static,
 ) -> Result<(), ServeError> {
-    serve_with(listener, config, Runtime::default(), shutdown).await
+    serve_inner(listener, config, Runtime::default(), true, shutdown).await
 }
 
-/// Serve on an already-bound listener with the embedder's [`Runtime`] attached.
+/// Serve on an already-bound listener with the embedder's [`Runtime`]
+/// attached and no collector running: the chaos tool embeds the arena to
+/// test its surface, and an arena inside the chaos tool reading the chaos
+/// tool would be the tool watching itself. Its snapshot says every source is
+/// not read.
 pub async fn serve_with(
     listener: TcpListener,
     config: Config,
     runtime: Runtime,
+    shutdown: impl Future<Output = ()> + Send + 'static,
+) -> Result<(), ServeError> {
+    serve_inner(listener, config, runtime, false, shutdown).await
+}
+
+async fn serve_inner(
+    listener: TcpListener,
+    config: Config,
+    runtime: Runtime,
+    collect: bool,
     shutdown: impl Future<Output = ()> + Send + 'static,
 ) -> Result<(), ServeError> {
     let addr = listener.local_addr().map_err(|source| ServeError::Bind {
@@ -85,7 +104,18 @@ pub async fn serve_with(
         .register_encoded_file_descriptor_set(tonic_health::pb::FILE_DESCRIPTOR_SET)
         .build_v1()?;
 
-    let service = Arena::new(config.ping.clone(), runtime);
+    let world = if collect {
+        world::World::new(&collect::configured(&config))
+    } else {
+        world::World::new(&[])
+    };
+    let tasks = if collect {
+        collect::start(&config, &world).map_err(ServeError::Source)?
+    } else {
+        // Still a snapshot a tick, so a watcher of the embedded arena sees frames.
+        vec![tokio::spawn(world.clone().tick(config.watch.tick))]
+    };
+    let service = Arena::new(config.ping.clone(), config.watch.clone(), runtime, world);
 
     tracing::info!(%addr, version = tbd_common::VERSION, "arena listening");
 
@@ -102,6 +132,9 @@ pub async fn serve_with(
         .serve_with_incoming_shutdown(incoming, shutdown)
         .await?;
 
+    for task in tasks {
+        task.abort();
+    }
     tracing::info!("arena stopped");
     Ok(())
 }

@@ -13,10 +13,13 @@
 //! its answer text, with the model's reasoning kept apart.
 //!
 //! Streamable HTTP, stateless: either of the gateway's replicas answers any
-//! request, and no session outlives it. The `Host` check rmcp offers against
-//! DNS rebinding is off on purpose: it protects a local server reached with a
-//! browser's ambient credentials, and this one is reached only with a bearer
-//! token the gateway has verified, which a rebinding page does not have.
+//! request, and no session outlives it. Two callers reach it: an agent with a
+//! bearer token on the API host, and the lab's workbench on the site's host
+//! with its signed-in admin's cookie. A cookie travels with a cross-site
+//! request too, so [`origin_guard`] refuses any request whose `Origin` is not
+//! in `[mcp] allowed_origins` before a tool is touched; agents send no
+//! `Origin`. rmcp's own `Host` check is off: behind the gateway the `Host` is
+//! whatever Envoy routed on, and the origin check is the one that matters.
 
 use std::{borrow::Cow, collections::HashMap, sync::Arc, time::Duration};
 
@@ -356,6 +359,26 @@ impl ServerHandler for Server {
         };
         Ok(result.into())
     }
+}
+
+/// Refuse a browser request from a page not in `[mcp] allowed_origins`: 403
+/// with the envelope, before rmcp reads the body. A request without an
+/// `Origin` (an agent, a script) passes; the gateway's gate still applies.
+pub async fn origin_guard(
+    axum::extract::State(allowed): axum::extract::State<Arc<Vec<String>>>,
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    use axum::response::IntoResponse as _;
+    if let Some(origin) = request.headers().get(http::header::ORIGIN) {
+        let origin = origin.to_str().unwrap_or_default();
+        if !allowed.iter().any(|a| a == origin) {
+            tracing::info!(target: "audit", surface = TRANSPORT, origin, "mcp refused a foreign origin");
+            return Problem::new(Code::Forbidden, format!("origin {origin} may not call MCP"))
+                .into_response();
+        }
+    }
+    next.run(request).await
 }
 
 /// The `/mcp` service: streamable HTTP, stateless, one [`Server`] shared by

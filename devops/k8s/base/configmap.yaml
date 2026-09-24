@@ -15,6 +15,12 @@ data:
   RADAR_METRICS_ADDR: 0.0.0.0:9464
   ARENA_LISTEN_ADDR: 0.0.0.0:50058
   ARENA_METRICS_ADDR: 0.0.0.0:9464
+  # The arena's sources: the model service through Envoy, the metrics store
+  # directly (observability, like a database). The chaos tool is set only by
+  # the overlays that deploy it.
+  ARENA_LLM_URL: http://envoy:50051
+  ARENA_METRICS_URL: http://victoria-metrics.observability.svc.cluster.local:8428
+  ARENA_CHAOS_URL: ""
   LLM_LISTEN_ADDR: 0.0.0.0:50057
   LLM_METRICS_ADDR: 0.0.0.0:9464
   # The llm service's engines run on the host (k3d's name for it), dialled

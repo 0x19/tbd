@@ -2,3 +2,8 @@
 # compose. Nothing differs from base.toml: on the host every backend is on its
 # loopback port, and containers override the urls with PROTOCOL_<NAME>_URL
 # (http://envoy:50051, Envoy's internal listener).
+
+[mcp]
+# The local cluster serves the public site, so its origin is here beside the
+# local host names the site answers on (the edge, and `mise run ui:www:dev`).
+allowed_origins = ["https://inorbit.hr", "http://www.localhost:18080", "http://localhost:3003"]

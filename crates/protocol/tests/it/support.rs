@@ -99,6 +99,7 @@ pub async fn start() -> Stack {
     // The engine's subscribe stream never ends on its own: a small cap lets the
     // MCP tests see a stream collected and cut.
     protocol_config.mcp.max_stream_items = 3;
+    protocol_config.mcp.allowed_origins = vec!["https://site.test".to_owned()];
     // The tests call these; production's allowlist is narrower (base.toml).
     protocol_config.mcp.tools = [
         "ledger_ping",

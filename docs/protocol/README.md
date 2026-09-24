@@ -290,6 +290,11 @@ allowlist.
 - **The audit trail.** Every call is one log line, target `audit`: the tool, the RPC,
   the caller's subject and kind, the outcome code and the time taken. Never the
   arguments or the answer.
+- **From the site.** The lab's workbench calls `/mcp` on the site's own host with its
+  signed-in admin's cookie, gated like the lab. A cookie rides along on a cross-site
+  request too, so a request whose `Origin` is not in `[mcp] allowed_origins` is refused
+  403 (`forbidden`) before any tool runs, and logged on the `audit` target; agents send
+  no `Origin` and are never affected. Each environment lists its site's origin.
 - **The gate.** On the API host, like every route there: a verified bearer token for
   the API audience ([auth/README.md](../auth/README.md)). Envoy gives `/mcp` no timeout;
   the protocol's own cap bounds a call. `Host` checking is off on purpose: it guards a

@@ -10,7 +10,9 @@ use tbd_arena::{
     config::{Metrics, Ping, Server},
 };
 use tbd_common::fault::Behavior;
-use tbd_proto::arena::v1::{PingRequest, arena_service_client::ArenaServiceClient};
+use tbd_proto::arena::v1::{
+    GetSnapshotRequest, PingRequest, arena_service_client::ArenaServiceClient,
+};
 use tonic::transport::Endpoint;
 use tonic_health::pb::{HealthCheckRequest, health_client::HealthClient};
 
@@ -37,12 +39,20 @@ pub static KIND: Kind = Kind {
     load_target: false,
     addable: true,
     parse: super::parse::<Arena>,
-    checks: &[Check {
-        name: "grpc_arena_ping",
-        surface: "grpc",
-        doc: "`Ping` echoes the message and is labelled a stub",
-        run: |e| Box::pin(grpc_arena_ping(e)),
-    }],
+    checks: &[
+        Check {
+            name: "grpc_arena_ping",
+            surface: "grpc",
+            doc: "`Ping` echoes the message and is labelled a stub",
+            run: |e| Box::pin(grpc_arena_ping(e)),
+        },
+        Check {
+            name: "grpc_arena_snapshot_unauthenticated",
+            surface: "grpc",
+            doc: "`GetSnapshot` without a verified caller is UNAUTHENTICATED while the arena requires a role: the live view is not open until the lab is",
+            run: |e| Box::pin(grpc_arena_snapshot_unauthenticated(e)),
+        },
+    ],
 };
 
 /// `[stack.arenas.<name>]` minus `listen`: a arena with an initial behaviour.
@@ -110,6 +120,11 @@ impl Service for Arena {
             server: Server { listen: addr },
             metrics: Metrics { listen: None },
             ping: Ping::default(),
+            // Embedded, the arena reads nothing (`serve_with`): the chaos tool
+            // would otherwise watch itself.
+            sources: tbd_arena::config::Sources::default(),
+            collect: tbd_arena::config::Collect::default(),
+            watch: tbd_arena::config::Watch::default(),
         };
         let runtime = Runtime {
             fault: tbd_common::fault::FaultHandle::new(self.behavior.clone()),
@@ -156,5 +171,16 @@ async fn grpc_arena_ping(e: Ep) -> Result<String, String> {
         Ok(format!("version={} stub={}", r.version, r.stub))
     } else {
         Err(format!("wrong echo {r:?}"))
+    }
+}
+
+/// `ArenaService/GetSnapshot` with no `x-jwt-payload` is refused as
+/// unauthenticated while `[watch] require_role` is set.
+async fn grpc_arena_snapshot_unauthenticated(e: Ep) -> Result<String, String> {
+    let mut c = ArenaServiceClient::new(e.grpc()?);
+    match c.get_snapshot(GetSnapshotRequest {}).await {
+        Err(s) if s.code() == tonic::Code::Unauthenticated => Ok("unauthenticated".into()),
+        Err(s) => Err(format!("wrong code {:?}: {}", s.code(), s.message())),
+        Ok(_) => Err("answered without a verified caller".into()),
     }
 }

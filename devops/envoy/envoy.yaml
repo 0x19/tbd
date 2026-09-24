@@ -24,7 +24,10 @@
 #   - `www.<domain>` is open, except `/lab/` (the site's lab, admins only until it is
 #     published), `/account/` (any signed-in person: where the site's sign-in starts)
 #     and `/v1/me` (the signed-in visitor, 401 rather than a redirect, so the page
-#     can decide what to show). The gate is the same oauth2 + JWT pair.
+#     can decide what to show). The gate is the same oauth2 + JWT pair. The lab's
+#     calls to the platform (`/v1/llm/`, `/v1/arena/`, `/mcp`) carry the lab's gate; the
+#     socket `/v1/ws` is open but carries a signed-in visitor's identity when there
+#     is one, and the services behind decide.
 #   Signing out (`/oauth2/signout` on any UI host) ends the session at Hydra as well,
 #   through the auth UI's /logout, and returns to that host's root.
 #   - `auth.<domain>` and the local `chaos.*` host are open.
@@ -205,6 +208,12 @@ static_resources:
                           # The lab's demo calls the model service from the page.
                           - name: ":path"
                             string_match: { prefix: "/v1/llm/" }
+                          # The lab's live view, over server-sent events or a poll.
+                          - name: ":path"
+                            string_match: { prefix: "/v1/arena/" }
+                          # The workbench's MCP calls.
+                          - name: ":path"
+                            string_match: { exact: "/mcp" }
                         # Scripts with their own bearer token skip the browser login.
                         pass_through_matcher:
                           - name: authorization
@@ -271,6 +280,16 @@ static_resources:
                             requirements:
                               - provider_name: ui-cookie
                               - provider_name: ui-bearer
+                        # Identity when there is one, anonymous otherwise: the site's
+                        # socket serves the open playground and, for a signed-in
+                        # admin, the lab's live view. A valid cookie becomes
+                        # x-jwt-payload; a missing or stale one passes with none,
+                        # and the service behind decides (the arena refuses it).
+                        ui-optional:
+                          requires_any:
+                            requirements:
+                              - provider_name: ui-cookie
+                              - allow_missing_or_failed: {}
                   # Authorization on the verified claims. Disabled by default; routes
                   # that need a scope or a role carry their own policy below.
                   - name: envoy.filters.http.rbac
@@ -461,6 +480,55 @@ static_resources:
                           route:
                             cluster: protocol
                             timeout: 0s
+                        # The lab's live view (the arena): the same gate as the model
+                        # service above. 0s: /v1/arena/events streams a snapshot a
+                        # second for as long as the page is open.
+                        - match: { prefix: "/v1/arena/" }
+                          typed_per_filter_config:
+                            envoy.filters.http.jwt_authn:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.PerRouteConfig
+                              requirement_name: ui
+                            envoy.filters.http.rbac:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.rbac.v3.RBACPerRoute
+                              rbac:
+                                rules:
+                                  action: ALLOW
+                                  policies:
+                                    admins:
+                                      permissions: [{ any: true }]
+                                      principals:
+                                        - metadata:
+                                            filter: envoy.filters.http.jwt_authn
+                                            path: [{ key: jwt }, { key: role }]
+                                            value: { string_match: { exact: admin } }
+                          route:
+                            cluster: protocol
+                            timeout: 0s
+                        # The workbench calls the platform over MCP as its signed-in
+                        # admin, the same tools an agent gets on the API host. The
+                        # cookie rides along on a cross-site request too, so the
+                        # protocol refuses any Origin not in [mcp] allowed_origins.
+                        - match: { path: "/mcp" }
+                          typed_per_filter_config:
+                            envoy.filters.http.jwt_authn:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.PerRouteConfig
+                              requirement_name: ui
+                            envoy.filters.http.rbac:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.rbac.v3.RBACPerRoute
+                              rbac:
+                                rules:
+                                  action: ALLOW
+                                  policies:
+                                    admins:
+                                      permissions: [{ any: true }]
+                                      principals:
+                                        - metadata:
+                                            filter: envoy.filters.http.jwt_authn
+                                            path: [{ key: jwt }, { key: role }]
+                                            value: { string_match: { exact: admin } }
+                          route:
+                            cluster: protocol
+                            timeout: 0s
                         # Who is signed in, for the page's own decisions (which nav
                         # items to show). The oauth2 filter stays on so the same
                         # session check and token refresh apply as on the gated
@@ -525,7 +593,12 @@ static_resources:
                               - actions:
                                   - remote_address: {}
                         # The multiplexed socket carries the same RPCs, so the page
-                        # can switch transport without a second origin.
+                        # can switch transport without a second origin. Open (the
+                        # playground's calls need no one), but a signed-in visitor's
+                        # cookie travels as x-jwt-payload (`ui-optional`), so a service
+                        # that needs a caller (the model service, the arena) sees one;
+                        # without it they refuse. The identity is fixed at the upgrade,
+                        # so the page refreshes its session (GET /v1/me) first.
                         - match: { path: "/v1/ws" }
                           typed_per_filter_config:
                             envoy.filters.http.oauth2:
@@ -533,7 +606,7 @@ static_resources:
                               disabled: true
                             envoy.filters.http.jwt_authn:
                               "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.PerRouteConfig
-                              disabled: true
+                              requirement_name: ui-optional
                             envoy.filters.http.rbac:
                               "@type": type.googleapis.com/envoy.config.route.v3.FilterConfig
                               disabled: true

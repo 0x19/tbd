@@ -98,6 +98,11 @@ tools = [
   "ledger_ping",
   "playground_ping",
 ]
+# Pages that may call /mcp from a browser, by origin. The site's workbench does,
+# with its signed-in admin's cookie; a cookie rides along on a cross-site
+# request too, so any other Origin is refused 403 before a tool is touched.
+# Agents send no Origin. Empty: no browser. Each environment lists its site.
+allowed_origins = []
 
 [principals]
 # Token subjects that are our own services (callers of kind `service`). Empty

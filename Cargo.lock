@@ -6142,18 +6142,27 @@ name = "tbd-arena"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "base64 0.22.1",
+ "chrono",
  "clap",
+ "futures",
+ "humantime-serde",
  "metrics",
+ "reqwest 0.12.28",
  "serde",
+ "serde_json",
  "tbd-common",
+ "tbd-llm",
  "tbd-proto",
  "thiserror 2.0.20",
  "tokio",
+ "tokio-stream",
  "toml 1.1.5+spec-1.1.0",
  "tonic",
  "tonic-health",
  "tonic-reflection",
  "tracing",
+ "wiremock",
 ]
 
 [[package]]

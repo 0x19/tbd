@@ -67,6 +67,38 @@
         }
       }
     },
+    "/v1/arena/events": {
+      "get": {
+        "tags": [
+          "arena"
+        ],
+        "summary": "tbd.arena.v1.ArenaService/Watch",
+        "description": "Transcoded from `/tbd.arena.v1.ArenaService/Watch` on the `arena` backend.",
+        "operationId": "ArenaService.Watch",
+        "responses": {
+          "200": {
+            "description": "A stream of `tbd.arena.v1.WatchResponse` events, one JSON object per `data:`; a failure is an `error` event carrying `Problem`",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.arena.v1.WatchResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/arena/ping": {
       "get": {
         "tags": [
@@ -92,6 +124,38 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/tbd.arena.v1.PingResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/arena/snapshot": {
+      "get": {
+        "tags": [
+          "arena"
+        ],
+        "summary": "tbd.arena.v1.ArenaService/GetSnapshot",
+        "description": "Transcoded from `/tbd.arena.v1.ArenaService/GetSnapshot` on the `arena` backend.",
+        "operationId": "ArenaService.GetSnapshot",
+        "responses": {
+          "200": {
+            "description": "`tbd.arena.v1.GetSnapshotResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.arena.v1.GetSnapshotResponse"
                 }
               }
             }
@@ -5393,6 +5457,56 @@
           "unknown"
         ]
       },
+      "tbd.arena.v1.ChaosRun": {
+        "type": "object",
+        "description": "`tbd.arena.v1.ChaosRun`",
+        "properties": {
+          "elapsed_s": {
+            "type": "number",
+            "format": "double"
+          },
+          "error_rate": {
+            "type": "number",
+            "format": "double"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "p99_ms": {
+            "type": "number",
+            "format": "double"
+          },
+          "phase": {
+            "type": "string"
+          },
+          "rps": {
+            "type": "number",
+            "format": "double"
+          },
+          "state": {
+            "type": "string"
+          },
+          "tokens_per_second": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "tbd.arena.v1.GetSnapshotResponse": {
+        "type": "object",
+        "description": "`tbd.arena.v1.GetSnapshotResponse`",
+        "properties": {
+          "snapshot": {
+            "$ref": "#/components/schemas/tbd.arena.v1.Snapshot"
+          }
+        }
+      },
       "tbd.arena.v1.PingResponse": {
         "type": "object",
         "description": "`tbd.arena.v1.PingResponse`",
@@ -5405,6 +5519,144 @@
           },
           "version": {
             "type": "string"
+          }
+        }
+      },
+      "tbd.arena.v1.Snapshot": {
+        "type": "object",
+        "description": "`tbd.arena.v1.Snapshot`",
+        "properties": {
+          "chaos": {
+            "$ref": "#/components/schemas/tbd.arena.v1.ChaosRun"
+          },
+          "mcp_tools": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "now": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/tbd.arena.v1.SourceState"
+            }
+          },
+          "surfaces": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/tbd.arena.v1.SurfaceState"
+            }
+          },
+          "surfaces_checked_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "tiers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/tbd.arena.v1.TierState"
+            }
+          }
+        }
+      },
+      "tbd.arena.v1.SourceState": {
+        "type": "object",
+        "description": "`tbd.arena.v1.SourceState`",
+        "properties": {
+          "age_s": {
+            "type": "number",
+            "format": "double"
+          },
+          "error": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          }
+        }
+      },
+      "tbd.arena.v1.SurfaceState": {
+        "type": "object",
+        "description": "`tbd.arena.v1.SurfaceState`",
+        "properties": {
+          "check": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "latency_ms": {
+            "type": "number",
+            "format": "double"
+          },
+          "name": {
+            "type": "string"
+          },
+          "up": {
+            "type": "boolean"
+          }
+        }
+      },
+      "tbd.arena.v1.TierState": {
+        "type": "object",
+        "description": "`tbd.arena.v1.TierState`",
+        "properties": {
+          "engine": {
+            "type": "string"
+          },
+          "in_flight": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "max_in_flight": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "model": {
+            "type": "string"
+          },
+          "refused_per_minute": {
+            "type": "number",
+            "format": "double"
+          },
+          "stub": {
+            "type": "boolean"
+          },
+          "tier": {
+            "type": "string"
+          },
+          "tokens_per_second": {
+            "type": "number",
+            "format": "double"
+          },
+          "ttft_p50_ms": {
+            "type": "number",
+            "format": "double"
+          },
+          "ttft_p99_ms": {
+            "type": "number",
+            "format": "double"
+          },
+          "up": {
+            "type": "boolean"
+          },
+          "waiting": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "tbd.arena.v1.WatchResponse": {
+        "type": "object",
+        "description": "`tbd.arena.v1.WatchResponse`",
+        "properties": {
+          "snapshot": {
+            "$ref": "#/components/schemas/tbd.arena.v1.Snapshot"
           }
         }
       },

@@ -46,4 +46,5 @@ declared and what derives from it: [extending.md](extending.md#add-a-service-kin
 | `grpc_llm_models_lists_both_tiers` | grpc | `llm` | `ListModels` names the fast and the deep tier, each with its engine and model, and says whether the engine is up (a down engine is reported, not failed) |
 | `grpc_llm_generate_unauthenticated` | grpc | `llm` | `Generate` without a verified caller is UNAUTHENTICATED: a caller is whoever Envoy verified, never a claim in the request |
 | `grpc_arena_ping` | grpc | `arena` | `Ping` echoes the message and is labelled a stub |
+| `grpc_arena_snapshot_unauthenticated` | grpc | `arena` | `GetSnapshot` without a verified caller is UNAUTHENTICATED while the arena requires a role: the live view is not open until the lab is |
 | `grpc_radar_ping` | grpc | `radar` | `Ping` echoes the message and is labelled a stub |

@@ -3,6 +3,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+mod snapshot;
 mod support;
 
 use tbd_arena::{Behavior, FaultHandle, Runtime};

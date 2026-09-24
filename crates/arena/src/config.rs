@@ -4,6 +4,7 @@
 use std::{
     net::SocketAddr,
     path::{Path, PathBuf},
+    time::Duration,
 };
 
 use clap::Args;
@@ -25,6 +26,98 @@ pub struct Config {
     /// `[ping]`
     #[serde(default)]
     pub ping: Ping,
+    /// `[sources]`
+    #[serde(default)]
+    pub sources: Sources,
+    /// `[collect]`
+    #[serde(default)]
+    pub collect: Collect,
+    /// `[watch]`
+    #[serde(default)]
+    pub watch: Watch,
+}
+
+/// `[sources]`: where the snapshot's figures come from. An empty URL turns
+/// that source off, and the figures it would give are absent and say so.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Sources {
+    /// The model service (gRPC), through Envoy's internal listener when deployed.
+    pub llm_url: String,
+    /// The metrics store's Prometheus query API (`/api/v1/query`), for rates
+    /// and percentiles. Observability, dialled directly like a database.
+    pub metrics_url: String,
+    /// The chaos tool's HTTP API root (`.../api/chaos/v1`), for its runs and
+    /// its last end-to-end check. The operator's tool, dialled directly.
+    pub chaos_url: String,
+    /// A chaos schedule, created once if missing, that checks every way in
+    /// end to end without posting to Slack (six-field cron, UTC). Empty: the
+    /// arena only reads whatever check ran last.
+    pub validate_cron: String,
+}
+
+impl Default for Sources {
+    fn default() -> Self {
+        Self {
+            llm_url: "http://127.0.0.1:50057".to_owned(),
+            metrics_url: String::new(),
+            chaos_url: String::new(),
+            validate_cron: "0 */2 * * * *".to_owned(),
+        }
+    }
+}
+
+/// `[collect]`: how often each source is read.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Collect {
+    /// The model service's tiers.
+    #[serde(with = "humantime_serde")]
+    pub llm_every: Duration,
+    /// The metrics store's rates.
+    #[serde(with = "humantime_serde")]
+    pub metrics_every: Duration,
+    /// The chaos tool's overview (a running run is then followed live).
+    #[serde(with = "humantime_serde")]
+    pub chaos_every: Duration,
+    /// One read's deadline, for every source.
+    #[serde(with = "humantime_serde")]
+    pub timeout: Duration,
+}
+
+impl Default for Collect {
+    fn default() -> Self {
+        Self {
+            llm_every: Duration::from_secs(1),
+            metrics_every: Duration::from_secs(5),
+            chaos_every: Duration::from_secs(5),
+            timeout: Duration::from_secs(3),
+        }
+    }
+}
+
+/// `[watch]`: who may watch, and how many at once.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Watch {
+    /// A snapshot a second.
+    #[serde(with = "humantime_serde")]
+    pub tick: Duration,
+    /// Streams open at once; one more is `RESOURCE_EXHAUSTED`.
+    pub max_viewers: usize,
+    /// The role a caller needs to read the arena. `admin` while the lab is
+    /// private; empty opens it to any caller at publication (RFC 0006).
+    pub require_role: String,
+}
+
+impl Default for Watch {
+    fn default() -> Self {
+        Self {
+            tick: Duration::from_secs(1),
+            max_viewers: 64,
+            require_role: "admin".to_owned(),
+        }
+    }
 }
 
 /// `[server]`
@@ -96,6 +189,15 @@ pub struct Overrides {
     /// Prometheus `/metrics` listener. Default: `[metrics] listen`.
     #[arg(long, env = "ARENA_METRICS_ADDR")]
     pub metrics_addr: Option<SocketAddr>,
+    /// The model service. Default: `[sources] llm_url`.
+    #[arg(long, env = "ARENA_LLM_URL")]
+    pub llm_url: Option<String>,
+    /// The metrics store's query API. Default: `[sources] metrics_url`.
+    #[arg(long, env = "ARENA_METRICS_URL")]
+    pub metrics_url: Option<String>,
+    /// The chaos tool's API root. Default: `[sources] chaos_url`.
+    #[arg(long, env = "ARENA_CHAOS_URL")]
+    pub chaos_url: Option<String>,
 }
 
 impl Overrides {
@@ -106,6 +208,15 @@ impl Overrides {
         }
         if let Some(v) = self.metrics_addr {
             config.metrics.listen = Some(v);
+        }
+        if let Some(v) = &self.llm_url {
+            config.sources.llm_url.clone_from(v);
+        }
+        if let Some(v) = &self.metrics_url {
+            config.sources.metrics_url.clone_from(v);
+        }
+        if let Some(v) = &self.chaos_url {
+            config.sources.chaos_url.clone_from(v);
         }
     }
 }

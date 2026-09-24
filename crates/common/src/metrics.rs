@@ -91,6 +91,13 @@ pub mod names {
     /// Counter: requests refused by admission. Labels `tier`, `reason`
     /// (`queue_full`, `queue_timeout`).
     pub const LLM_REFUSED_TOTAL: &str = "tbd_llm_refused_total";
+    /// Gauge: streams of the arena's snapshot open now.
+    pub const ARENA_VIEWERS: &str = "tbd_arena_viewers";
+    /// Gauge: 1 while the arena's last read of a source succeeded. Label `source`
+    /// (`llm`, `metrics`, `chaos`).
+    pub const ARENA_SOURCE_OK: &str = "tbd_arena_source_ok";
+    /// Gauge: seconds since the arena last read a source successfully. Label `source`.
+    pub const ARENA_SOURCE_AGE: &str = "tbd_arena_source_age_seconds";
     /// Counter of idempotency rows purged after their TTL.
     pub const LEDGER_IDEMPOTENCY_PURGED_TOTAL: &str = "tbd_ledger_idempotency_purged_total";
     /// Gauge of outbox events not yet published.
@@ -343,6 +350,19 @@ fn describe_llm() {
     describe_counter!(
         names::LLM_REFUSED_TOTAL,
         "Requests refused by admission, by tier and reason (queue_full, queue_timeout)."
+    );
+    describe_gauge!(
+        names::ARENA_VIEWERS,
+        "Streams of the arena's snapshot open now."
+    );
+    describe_gauge!(
+        names::ARENA_SOURCE_OK,
+        "1 while the arena's last read of a source succeeded, else 0."
+    );
+    describe_gauge!(
+        names::ARENA_SOURCE_AGE,
+        Unit::Seconds,
+        "Seconds since the arena last read a source successfully."
     );
 }
 

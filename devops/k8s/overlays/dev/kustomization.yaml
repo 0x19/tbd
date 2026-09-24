@@ -134,3 +134,4 @@ configMapGenerator:
     literals:
       - RUST_LOG=debug
       - TBD_ENV=dev
+      - ARENA_CHAOS_URL=http://chaos:7700/api/chaos/v1

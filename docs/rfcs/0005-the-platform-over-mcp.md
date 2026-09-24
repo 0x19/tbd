@@ -82,3 +82,6 @@ does not, and the tests say which.
   bookkeeping and mail included; now only the models and the health checks are tools,
   a check fails any deployment that offers more of the harmful kind, and every call is
   audited.
+- 2026-09-24: the lab's workbench is an MCP client too: it calls the same tools from the
+  browser as its signed-in admin, and a page on any other origin is refused before a tool
+  runs, because a signed-in browser's credentials travel with a request from anywhere.

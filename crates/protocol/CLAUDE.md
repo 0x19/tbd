@@ -100,6 +100,9 @@ the logic belongs in the service. The contract is `docs/protocol/README.md`.
   principal is a protocol error. Streams are collected under `[mcp]` caps and
   summarised (`text` joined, `reasoning` apart, `last` kept). Each call is a
   `RequestTimer` with transport `mcp`. `[mcp] enabled = false` removes the route.
+  `origin_guard` (a layer on the `/mcp` router) refuses 403 any request whose `Origin`
+  is not in `[mcp] allowed_origins`: the site's workbench calls it with a cookie, and
+  cookies ride along cross-site; agents send no `Origin`.
 - `transcode/schema.rs`: inline JSON Schema per message with the `OpenAPI` spellings,
   well-known types in their JSON forms, recursion cut at the second visit; tests hold it
   to every request message's fields.
