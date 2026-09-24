@@ -24,6 +24,7 @@ import { rfcs, studies } from "@/generated/lab/index";
 import { type Agent, useAgents, useBudget } from "@/lib/agents";
 import { useArena } from "@/lib/arena";
 import { useT } from "@/lib/i18n";
+import { messages } from "@/lib/i18n/messages";
 import { listTools, mcp, type Tool, toolAnswer, type Transport, TRANSPORTS } from "@/lib/llm";
 import { useMeState } from "@/lib/me";
 import { runCode, type RunLanguage } from "@/lib/runner";
@@ -839,7 +840,11 @@ function Persona({
   onPick: (q: string) => void;
 }) {
   const t = useT();
-  const examples = [t("wb.agent.example.1"), t("wb.agent.example.2")];
+  // An agent's own examples when the dictionary has them, else the site guide's.
+  const own = messages.en[`wb.agent.${agent.id}.example.1`];
+  const examples = own
+    ? [t(`wb.agent.${agent.id}.example.1`), t(`wb.agent.${agent.id}.example.2`)]
+    : [t("wb.agent.example.1"), t("wb.agent.example.2")];
   return (
     <div className="mb-8 max-w-xl rounded-md border p-4 text-sm">
       <p className="font-mono text-[11px] tracking-[0.12em] uppercase">

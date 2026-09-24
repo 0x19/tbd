@@ -99,7 +99,10 @@ caller without one of its `roles` is `PERMISSION_DENIED`. The agent's tier, temp
 `max_tokens` and reasoning apply where the request is silent; the caller's budget,
 admission and record apply as always, and each row names its agent. The first agent is
 `site`, the site guide, whose knowledge (`site.knowledge.json`) is generated from the
-public site by `mise run www:agent` and checked fresh by `ui:www:check`.
+public site by `mise run www:agent` and checked fresh by `ui:www:check`. The second is
+`reviewer`, the code reviewer: no knowledge, reasoning on, and instructions that make
+its Go and Rust programs fit the sandbox (RFC 0010: one file, the standard library, no
+network, no input), so an answer's claim can be run rather than believed.
 
 ## Reproducibility
 

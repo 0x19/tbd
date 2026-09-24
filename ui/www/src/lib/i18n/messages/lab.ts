@@ -166,6 +166,10 @@ export const en: Dict = {
   "wb.cmd.export": "save this session as a markdown file (made in this browser)",
   "wb.agent.model": "the model",
   "wb.agent.example.page": "What does this page say, in three sentences?",
+  "wb.agent.reviewer.example.1":
+    "Review this Go: a map written by two goroutines with no lock. What goes wrong, and show it in a program I can run.",
+  "wb.agent.reviewer.example.2":
+    "In Rust, when is Rc<RefCell<T>> the wrong choice? Show a short program where it panics.",
   "wb.new.model": "no agent: tiers, reasoning and bounds are yours",
   "wb.sessions.find": "find a session",
   "wb.rename": "rename",
@@ -369,6 +373,10 @@ export const hr: Dict = {
   "wb.cmd.export": "spremi ovu sesiju kao markdown datoteku (nastaje u ovom pregledniku)",
   "wb.agent.model": "model",
   "wb.agent.example.page": "Što kaže ova stranica, u tri rečenice?",
+  "wb.agent.reviewer.example.1":
+    "Pregledaj ovaj Go: mapu pišu dvije gorutine bez zaključavanja. Što pođe po zlu? Pokaži programom koji mogu pokrenuti.",
+  "wb.agent.reviewer.example.2":
+    "Kada je u Rustu Rc<RefCell<T>> pogrešan izbor? Pokaži kratak program u kojem panicira.",
   "wb.new.model": "bez agenta: razine, razmišljanje i granice su tvoje",
   "wb.sessions.find": "nađi sesiju",
   "wb.rename": "preimenuj",

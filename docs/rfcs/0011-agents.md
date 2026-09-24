@@ -97,3 +97,8 @@ until publication; the workbench's agent picker.
   figures under every answer, keeps the conversation in the browser and hands it to the
   workbench whole; the home page shows the lab running, the guide and the workbench. A
   link in an answer is kept when it is a page of this site, and opens in the same tab.
+- 2026-09-24: the second agent, the code reviewer. It reads Go and Rust, says what code
+  does and what is wrong with it, and writes whole programs that fit the sandbox, so the
+  workbench's run button proves or disproves the answer; a fragment gets no run button.
+  It answers from the code in front of it, with no knowledge of the site, and refuses
+  code meant to cause harm. The workbench lists both agents with their own examples.

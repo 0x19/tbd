@@ -371,5 +371,9 @@ mod tests {
         );
         assert!(site.knowledge.pages.contains_key("/about/"));
         assert!(site.roles.iter().any(|r| r == "admin"));
+        let reviewer = agents.get("reviewer").expect("the code reviewer ships");
+        assert_eq!(reviewer.reasoning, Some(true), "reviewing is thinking");
+        assert!(reviewer.knowledge.brief.is_empty(), "it answers from the code in front of it");
+        assert!(reviewer.roles.iter().any(|r| r == "admin"));
     }
 }

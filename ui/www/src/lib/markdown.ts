@@ -16,9 +16,10 @@ import { runnable } from "@/lib/runner";
  *   same tab, which is how an agent points at a page (RFC 0011); any other
  *   scheme (`javascript:`, `data:`) is its text alone;
  * - a code block is escaped text in a `<pre>`, with its language named and a
- *   copy button the page wires up (`data-copy`); a Go or Rust block also gets a
- *   run button (`data-run`, the language only), which the page sends to the
- *   runner (RFC 0010).
+ *   copy button the page wires up (`data-copy`); a Go or Rust block that is a
+ *   whole program (Go's `package main` and `func main()`, Rust's `fn main()`)
+ *   also gets a run button (`data-run`, the language only), which the page
+ *   sends to the runner (RFC 0010); a fragment gets none.
  *
  * Everything else is marked's own escaping of text. Re-rendered on every chunk
  * while an answer streams, so an unclosed fence reads as code until it closes.
@@ -31,6 +32,13 @@ const esc = (s: string) =>
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+
+/** Whether a block is a program the sandbox can build as it is: Go's `package main` with its `main`, Rust's `fn main`. */
+function wholeProgram(lang: "go" | "rust", code: string): boolean {
+  return lang === "go"
+    ? /^\s*package\s+main\b/m.test(code) && /\bfunc\s+main\s*\(\s*\)/.test(code)
+    : /\bfn\s+main\s*\(\s*\)/.test(code);
+}
 
 /** A path on this site: one leading slash and plain path characters, so never `//host` or a scheme. */
 const SITE_PATH = /^\/(?![/\\])[A-Za-z0-9\-._~/%#?=&]*$/;
@@ -54,7 +62,10 @@ const md = new Marked({
     },
     code({ text, lang }) {
       const name = (lang ?? "").trim().split(/\s+/)[0] || "text";
-      const run = runnable(name);
+      // A run button only on a whole program: a model tags fragments `go` or
+      // `rust` too, and half a program only fails to compile.
+      const runAs = runnable(name);
+      const run = runAs && wholeProgram(runAs, text) ? runAs : null;
       const runButton = run ? `<button type="button" data-run="${run}">run</button>` : "";
       return `<div class="md-code"><div class="md-code-head"><span>${esc(name)}</span><span class="md-code-actions">${runButton}<button type="button" data-copy>copy</button></span></div><pre><code>${esc(text)}</code></pre></div>`;
     },

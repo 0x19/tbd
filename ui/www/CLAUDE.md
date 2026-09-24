@@ -41,8 +41,9 @@ three), lists and runs the platform's MCP tools as cards, and says in its side c
 what it sends. A model's answer is untrusted text rendered by `src/lib/markdown.ts`
 (`marked`, a runtime dependency since): raw HTML shows as text, an image is its
 description and is never fetched, only `http(s)` links survive (new tab, `nofollow`),
-and code blocks carry their language and a copy button, and a run button for Go and
-Rust (`data-run`), which sends the block to the runner (`src/lib/runner.ts`, RFC 0010)
+and code blocks carry their language and a copy button, and a run button for a whole Go
+or Rust program (`data-run`; Go's `package main` with `func main()`, Rust's `fn main()`,
+never a fragment, which a model tags `go` too and which would only fail to compile), which sends the block to the runner (`src/lib/runner.ts`, RFC 0010)
 and shows the result as a card; a link to a path on this site (one leading slash,
 plain path characters, never `//host`) is kept too, in the same tab, because that is how
 an agent points at a page; keep it that way, or the
