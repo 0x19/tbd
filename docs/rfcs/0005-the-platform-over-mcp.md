@@ -3,6 +3,7 @@ title: The platform over MCP
 status: open
 date: 2026-09-24
 public: true
+lab: llm
 summary: Every public RPC of the platform offered as a tool over the Model Context Protocol, as one more transport of the gateway beside REST, server-sent events, GraphQL and the multiplexed socket, so an agent can use the platform the way a page does.
 ---
 

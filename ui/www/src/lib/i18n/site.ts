@@ -50,6 +50,7 @@ export type Site = {
     category: "systems" | "music";
     summary: string;
     specs: string[];
+    paused?: boolean;
   }[];
   principles: { title: string; body: string }[];
   pipeline: { stage: string; name: string; rows: { k: string; v: string }[] }[];

@@ -68,7 +68,7 @@ async function getJson<T>(path: string): Promise<T | null> {
  * answer as the service sends it, with the time to the first chunk and the
  * tokens per second computed here from what the engine reported. What the
  * page sends is said below, before it sends anything.
- * `app/lab/demo/page.tsx` carries the metadata.
+ * `app/lab/llm/workbench/page.tsx` carries the metadata.
  */
 export function LabDemoContent() {
   const t = useT();
@@ -191,7 +191,7 @@ export function LabDemoContent() {
       <Frame className="pt-20 pb-10 sm:pt-28">
         <p className="mb-6">
           <Link
-            href="/lab/"
+            href="/lab/llm/"
             className="text-muted-foreground hover:text-foreground font-mono text-[11px] tracking-[0.14em] uppercase"
           >
             ← {t("lab.back")}
@@ -355,7 +355,7 @@ export function LabDemoContent() {
         <p className="text-muted-foreground mt-6 max-w-xl text-pretty">{t("lab.demo.sends.text")}</p>
         <p className="mt-10">
           <Link
-            href="/lab/"
+            href="/lab/llm/"
             className="text-muted-foreground hover:text-foreground font-mono text-[11px] tracking-[0.14em] uppercase"
           >
             ← {t("lab.back")}

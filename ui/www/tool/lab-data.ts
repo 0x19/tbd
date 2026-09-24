@@ -15,7 +15,8 @@ import { fileURLToPath } from "node:url";
 
 import { Marked } from "marked";
 
-import type { LabDoc, LabEntry, LabKind, LabStatus } from "../src/lib/lab.ts";
+import { labIds } from "../src/data/labs.ts";
+import type { LabDoc, LabEntry, LabKind, LabLogLine, LabStatus } from "../src/lib/lab.ts";
 import { scan } from "./lab-redaction.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -32,7 +33,7 @@ const SOURCES: { kind: LabKind; dir: string; base: string; statuses: LabStatus[]
   },
 ];
 
-const REQUIRED = ["title", "status", "date", "public", "summary"] as const;
+const REQUIRED = ["title", "status", "date", "public", "summary", "lab"] as const;
 const OPTIONAL = ["supersedes", "rfc", "headline", "headline_note"] as const;
 
 type Front = Record<string, string | boolean>;
@@ -130,6 +131,28 @@ const marked = new Marked({
   ],
 });
 
+/**
+ * The `## Status log` section's bullets, `- YYYY-MM-DD: text` with the text
+ * running on over indented lines, as the lab's timeline. Rendered inline, so
+ * a bullet keeps its code spans and links; nothing else is read from it.
+ */
+function statusLog(path: string, body: string, bodyStart: number): LabLogLine[] {
+  const lines = body.split("\n");
+  const start = lines.findIndex((l) => /^##\s+Status log\s*$/.test(l));
+  if (start < 0) return [];
+  const out: { date: string; text: string }[] = [];
+  for (let i = start + 1; i < lines.length; i++) {
+    const line = lines[i];
+    if (/^#{1,2}\s/.test(line)) break;
+    const m = /^- (\d{4}-\d{2}-\d{2}):\s*(.*)$/.exec(line);
+    if (m) out.push({ date: m[1], text: m[2] });
+    else if (/^\s+\S/.test(line) && out.length) out[out.length - 1].text += ` ${line.trim()}`;
+    else if (line.startsWith("- "))
+      fail(path, bodyStart + i, "a status log bullet must start with `- YYYY-MM-DD:`");
+  }
+  return out.map(({ date, text }) => ({ date, html: marked.parseInline(text, { async: false }) }));
+}
+
 const denylist = (() => {
   const file = join(root, "docs/lab/redaction.json");
   const parsed = JSON.parse(readFileSync(file, "utf8")) as { words?: unknown };
@@ -173,6 +196,9 @@ for (const source of SOURCES) {
     if (typeof front.date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(front.date)) {
       fail(path, null, "`date` must be YYYY-MM-DD");
     }
+    if (typeof front.lab !== "string" || !labIds.includes(front.lab)) {
+      fail(path, null, `\`lab\` must be one of ${labIds.join(", ")} (ui/www/src/data/labs.ts)`);
+    }
     if (front.public !== true) {
       privateSlugs.add(slug);
       console.log(`skipped (private): ${path}`);
@@ -200,6 +226,8 @@ for (const source of SOURCES) {
       status: front.status as LabStatus,
       date: String(front.date),
       summary: String(front.summary),
+      lab: String(front.lab),
+      log: statusLog(path, body, bodyStart),
     };
     if (typeof front.supersedes === "string") entry.supersedes = front.supersedes;
     if (typeof front.rfc === "string") entry.rfc = front.rfc;

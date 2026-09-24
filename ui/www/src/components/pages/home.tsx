@@ -24,7 +24,7 @@ import { cn } from "@/lib/utils";
 export function HomeContent() {
   const t = useT();
   const { company, playgrounds, principles } = useSite();
-  const open = playgrounds.filter((p) => p.href);
+  const open = playgrounds.filter((p) => p.href && !p.paused);
   const spineRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
 

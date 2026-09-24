@@ -3,6 +3,7 @@ title: What a 16 GB card really does
 status: measured
 date: 2026-09-24
 public: true
+lab: llm
 summary: Both tiers of the llm service measured with the chaos tool, on the processor while the card was dark and then on the card; what the numbers say about the model, the engine, the request, and the platform in front of them.
 rfc: 0001-the-llm-service
 headline: 117 tok/s

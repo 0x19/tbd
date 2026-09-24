@@ -1,22 +1,46 @@
 "use client";
 
 import Link from "next/link";
+import { useId, useState } from "react";
 
-import { Frame, IndexRow, Reveal, SectionHead, Tag } from "@/components/kit";
+import { Frame, IndexRow, Reveal, SectionHead } from "@/components/kit";
 import { StatusStamp } from "@/components/lab/status-stamp";
+import { TabList } from "@/components/tabs";
+import { labs } from "@/data/labs";
 import { rfcs, studies } from "@/generated/lab/index";
-import { useT } from "@/lib/i18n";
-import { useSite } from "@/lib/i18n/site";
+import { useLang, useT } from "@/lib/i18n";
+import type { LabEntry } from "@/lib/lab";
+
+/** Every status-log line of every public document, newest first, with where it came from. */
+export function latest(entries: LabEntry[], limit?: number) {
+  const lines = entries.flatMap((e) =>
+    e.log.map((l, i) => ({ ...l, entry: e, key: `${e.kind}-${e.slug}-${i}` })),
+  );
+  // Newest date first; within a day, the later line of a document first.
+  lines.sort((a, b) => b.date.localeCompare(a.date) || b.key.localeCompare(a.key));
+  return limit ? lines.slice(0, limit) : lines;
+}
 
 /**
- * The lab index: what is live, the RFCs, the studies. The prose of every page
- * is English in both languages; the chrome translates. `app/lab/page.tsx`
+ * The lab index: one card per lab (what it is, how many documents, where to
+ * go), the latest lines of every status log as a feed of what changed, and
+ * every RFC and study with a tab per lab. The prose of every document is
+ * English in both languages; the chrome translates. `app/lab/page.tsx`
  * carries the metadata.
  */
 export function LabContent() {
   const t = useT();
-  const { playgrounds } = useSite();
-  const live = playgrounds.filter((p) => p.href?.startsWith("/lab/"));
+  const { lang } = useLang();
+  const id = useId();
+  const [tab, setTab] = useState<string>("all");
+  const all = [...rfcs, ...studies];
+  const tabs = [
+    { key: "all", label: t("lab.index.all"), n: all.length },
+    ...labs.map((l) => ({ key: l.id, label: l.id, n: all.filter((e) => e.lab === l.id).length })),
+  ];
+  const inTab = (e: LabEntry) => tab === "all" || e.lab === tab;
+  const shownRfcs = rfcs.filter(inTab);
+  const shownStudies = studies.filter(inTab);
   return (
     <>
       <Frame className="pt-20 pb-10 sm:pt-28">
@@ -31,87 +55,130 @@ export function LabContent() {
       </Frame>
 
       <Frame className="pb-16">
-        <SectionHead n="01" label={t("lab.live.label")} lead={t("lab.live.lead")} />
+        <SectionHead n="01" label={t("lab.labs.label")} lead={t("lab.labs.lead")} />
         <Reveal className="mt-10">
-          <div className="grid gap-4 sm:grid-cols-2">
-            {live.map((p) => (
-              <Link
-                key={p.href}
-                href={p.href!}
-                className="group hover:bg-muted/40 flex flex-col gap-3 rounded-lg border p-6 transition-colors"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="font-mono text-base font-medium tracking-tight">{p.name}</span>
-                  <Tag>{p.tag}</Tag>
-                </div>
-                <p className="text-muted-foreground group-hover:text-foreground text-sm text-pretty transition-colors">
-                  {p.what}
-                </p>
-              </Link>
-            ))}
-            <Link
-              href="/lab/demo/"
-              className="group hover:bg-muted/40 flex flex-col gap-3 rounded-lg border border-dashed p-6 transition-colors"
-            >
-              <div className="flex items-center justify-between">
-                <span className="font-mono text-base font-medium tracking-tight">{t("lab.demo.title")}</span>
-                <Tag>{t("lab.demo.tag")}</Tag>
-              </div>
-              <p className="text-muted-foreground group-hover:text-foreground text-sm text-pretty transition-colors">
-                {t("lab.demo.card")}
-              </p>
-            </Link>
+          <div className="grid gap-4 lg:grid-cols-2">
+            {labs.map((l) => {
+              const docs = all.filter((e) => e.lab === l.id);
+              const last = latest(docs, 1)[0];
+              return (
+                <article key={l.id} className="flex flex-col rounded-lg border">
+                  <Link
+                    href={l.href}
+                    className="group hover:bg-muted/30 flex flex-1 flex-col gap-4 p-6 transition-colors sm:p-8"
+                  >
+                    <p className="text-muted-foreground flex items-center gap-3 font-mono text-[11px] tracking-[0.18em] uppercase">
+                      <span>{l.id}</span>
+                      <span className="tabular-nums">
+                        {t("lab.counts", {
+                          rfcs: docs.filter((e) => e.kind === "rfc").length,
+                          studies: docs.filter((e) => e.kind === "study").length,
+                        })}
+                      </span>
+                      <span aria-hidden className="ml-auto transition-transform group-hover:translate-x-1">
+                        →
+                      </span>
+                    </p>
+                    <h2 className="text-2xl font-medium tracking-tight text-balance">{l.name[lang]}</h2>
+                    <p className="text-muted-foreground text-sm text-pretty">{l.what[lang]}</p>
+                    {last ? (
+                      <p className="text-muted-foreground/80 mt-auto border-t pt-4 text-sm text-pretty">
+                        <span className="text-foreground font-mono text-xs tabular-nums">{last.date}</span>{" "}
+                        <span className="lab-inline" dangerouslySetInnerHTML={{ __html: last.html }} />
+                      </p>
+                    ) : null}
+                  </Link>
+                  <div className="flex flex-wrap gap-x-6 gap-y-2 border-t px-6 py-4 font-mono text-[11px] tracking-[0.14em] uppercase sm:px-8">
+                    <Link href={l.href} className="hover:text-foreground text-muted-foreground">
+                      {t("lab.open")}
+                    </Link>
+                    {l.workbench ? (
+                      <Link href={l.workbench} className="hover:text-foreground text-muted-foreground">
+                        {t("lab.workbench")}
+                      </Link>
+                    ) : null}
+                  </div>
+                </article>
+              );
+            })}
           </div>
         </Reveal>
       </Frame>
 
       <Frame className="pb-16">
-        <SectionHead n="02" label={t("lab.rfcs.label")} lead={t("lab.rfcs.lead")} />
+        <SectionHead n="02" label={t("lab.latest.label")} lead={t("lab.latest.lead")} />
         <Reveal className="mt-10">
-          {rfcs.length === 0 ? (
-            <p className="text-muted-foreground text-sm">{t("lab.empty.rfcs")}</p>
-          ) : (
-            <div>
-              {rfcs.map((r) => (
-                <IndexRow key={r.slug} n={r.number} name={r.title} year={r.date} href={r.href}>
-                  <span className="flex flex-col gap-2 sm:flex-row sm:items-baseline sm:gap-3">
-                    <StatusStamp status={r.status} className="shrink-0" />
-                    <span>{r.summary}</span>
-                  </span>
-                </IndexRow>
-              ))}
-            </div>
-          )}
+          <Timeline lines={latest(all, 10)} />
         </Reveal>
       </Frame>
 
       <Frame className="pb-24 sm:pb-32">
-        <SectionHead n="03" label={t("lab.studies.label")} lead={t("lab.studies.lead")} />
+        <SectionHead n="03" label={t("lab.index.label")} lead={t("lab.index.lead")} />
         <Reveal className="mt-10">
-          {studies.length === 0 ? (
-            <p className="text-muted-foreground text-sm">{t("lab.empty.studies")}</p>
-          ) : (
-            <div>
-              {studies.map((s) => (
-                <IndexRow key={s.slug} n={s.number} name={s.title} year={s.date} href={s.href}>
-                  <span className="flex flex-col gap-2 sm:flex-row sm:items-baseline sm:gap-3">
-                    <StatusStamp status={s.status} className="shrink-0" />
-                    {s.headline ? (
-                      <span
-                        className="text-foreground shrink-0 font-mono text-sm tabular-nums"
-                        title={s.headlineNote}
-                      >
-                        {s.headline}
-                      </span>
-                    ) : null}
-                    <span>{s.summary}</span>
-                  </span>
-                </IndexRow>
-              ))}
-            </div>
-          )}
+          <TabList id={id} label={t("lab.index.label")} tabs={tabs} value={tab} onChange={setTab} />
+          <div role="tabpanel" id={`${id}-panel`} aria-labelledby={`${id}-tab-${tab}`}>
+            <DocList label={t("lab.rfcs.label")} entries={shownRfcs} empty={t("lab.empty.rfcs")} />
+            <DocList label={t("lab.studies.label")} entries={shownStudies} empty={t("lab.empty.studies")} />
+          </div>
         </Reveal>
       </Frame>
     </>
+  );
+}
+
+/** Status-log lines as a dated list, each linking to its document. */
+export function Timeline({ lines }: { lines: ReturnType<typeof latest> }) {
+  const t = useT();
+  if (!lines.length) return <p className="text-muted-foreground text-sm">{t("lab.latest.empty")}</p>;
+  return (
+    <ol className="divide-y border-y">
+      {lines.map((l) => (
+        <li key={l.key} className="grid gap-2 py-4 sm:grid-cols-[7rem_9rem_minmax(0,1fr)] sm:gap-6">
+          <span className="font-mono text-xs tabular-nums">{l.date}</span>
+          <Link
+            href={l.entry.href}
+            className="text-muted-foreground hover:text-foreground font-mono text-[11px] tracking-[0.14em] uppercase"
+            title={l.entry.title}
+          >
+            {l.entry.kind === "rfc" ? t("lab.rfc") : t("lab.study")} {l.entry.number}
+          </Link>
+          <span
+            className="lab-inline text-muted-foreground text-sm text-pretty"
+            dangerouslySetInnerHTML={{ __html: l.html }}
+          />
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+/** RFCs or studies as index rows with their stamp (and a study's headline). */
+export function DocList({ label, entries, empty }: { label: string; entries: LabEntry[]; empty: string }) {
+  return (
+    <div className="mt-10">
+      <p className="text-muted-foreground mb-2 font-mono text-[11px] tracking-[0.18em] uppercase">{label}</p>
+      {entries.length === 0 ? (
+        <p className="text-muted-foreground text-sm">{empty}</p>
+      ) : (
+        <div>
+          {entries.map((e) => (
+            <IndexRow key={e.slug} n={e.number} name={e.title} year={e.date} href={e.href}>
+              <span className="flex flex-col gap-2 sm:flex-row sm:items-baseline sm:gap-3">
+                <StatusStamp status={e.status} className="shrink-0" />
+                {e.headline ? (
+                  <span
+                    className="text-foreground shrink-0 font-mono text-sm tabular-nums"
+                    title={e.headlineNote}
+                  >
+                    {e.headline}
+                  </span>
+                ) : null}
+                <span>{e.summary}</span>
+              </span>
+            </IndexRow>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

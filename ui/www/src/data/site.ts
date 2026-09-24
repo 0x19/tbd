@@ -476,11 +476,14 @@ export const playgrounds: {
   summary: string;
   /** Two or three facts for the card's foot. */
   specs: string[];
+  /** Listed, but not playable for now: the card says so and links nowhere. */
+  paused?: boolean;
 }[] = [
   {
     name: "Break it",
     what: "Four real services under live traffic with an objective to hold, and a shared budget of faults to spend trying to break it. Everyone pokes the same sandbox; it heals itself. Watch it over a WebSocket, server-sent events or plain polling — the same call, three ways.",
-    href: "/lab/break-it/",
+    href: "/playgrounds/break-it/",
+    paused: true,
     tag: "Chaos",
     category: "systems",
     summary: "Four live services, one objective, and a shared budget of faults to break them with.",

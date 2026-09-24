@@ -1,15 +1,28 @@
-import type { Metadata } from "next";
+"use client";
 
-import { LabDemoContent } from "@/components/pages/lab-demo";
-import { lab } from "@/data/site";
+import Link from "next/link";
+import { useEffect } from "react";
 
-export const metadata: Metadata = {
-  title: "Lab demo",
-  description: "The live demo of the lab's model service, behind a sign-in.",
-  alternates: { canonical: "/lab/demo/" },
-  ...(lab.public ? {} : { robots: { index: false, follow: false } }),
-};
+import { Frame } from "@/components/kit";
 
-export default function LabDemoPage() {
-  return <LabDemoContent />;
+/**
+ * The demo became the model lab's workbench (`/lab/llm/workbench/`). This route
+ * stays for links that still point here, sends the browser on at once, and is
+ * not in the sitemap.
+ */
+export default function LabDemoMovedPage() {
+  useEffect(() => {
+    window.location.replace("/lab/llm/workbench/");
+  }, []);
+  return (
+    <Frame className="py-20">
+      <p className="text-muted-foreground">
+        The demo is now the{" "}
+        <Link href="/lab/llm/workbench/" className="text-foreground underline underline-offset-4">
+          workbench
+        </Link>
+        .
+      </p>
+    </Frame>
+  );
 }

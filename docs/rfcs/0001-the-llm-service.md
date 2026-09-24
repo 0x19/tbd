@@ -3,6 +3,7 @@ title: The llm service, an L2 over two engines
 status: decided
 date: 2026-09-23
 public: true
+lab: llm
 summary: The model-serving core of a general-purpose AI development platform on one workstation, split into the engines that run the weights and the layer that owns the contract, the admission, the budget and the record; two models from day one, one that fits the graphics card and one that runs from memory.
 ---
 

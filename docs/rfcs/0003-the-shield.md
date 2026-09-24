@@ -3,6 +3,7 @@ title: The shield
 status: open
 date: 2026-09-24
 public: true
+lab: llm
 summary: An eBPF program in front of the edge that counts and limits traffic per source before the kernel builds a socket for it, written in Rust, measured under a storm the chaos tool raises inside the machine, and honest about what a hook on every packet costs.
 ---
 

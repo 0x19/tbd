@@ -11,6 +11,7 @@ title: What a 16 GB card really does
 status: running
 date: 2026-09-30
 public: false
+lab: llm
 summary: One sentence.
 rfc: 0001-the-llm-service
 headline: 72 tok/s

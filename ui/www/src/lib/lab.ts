@@ -6,6 +6,9 @@ export type LabKind = "rfc" | "study";
 
 export type LabStatus = "open" | "decided" | "superseded" | "running" | "measured" | "published";
 
+/** One line of a document's `## Status log`: its date and its text, rendered inline. */
+export type LabLogLine = { date: string; html: string };
+
 /** One entry of the index: everything but the prose. */
 export type LabEntry = {
   kind: LabKind;
@@ -20,6 +23,10 @@ export type LabEntry = {
   /** "2026-09-23" */
   date: string;
   summary: string;
+  /** The lab it belongs to: an id in `src/data/labs.ts`. */
+  lab: string;
+  /** The status log, oldest first: the lab's timeline. */
+  log: LabLogLine[];
   /** RFC: the slug this one replaces. */
   supersedes?: string;
   /** RFC: the slug that replaced this one (derived). */

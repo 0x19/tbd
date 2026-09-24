@@ -139,6 +139,19 @@
   border-radius: 0.3rem;
   background: var(--muted);
 }
+/* A status-log line outside the prose (the lab index, a lab's timeline): the
+   same code and link marks, sized to the line. */
+.lab-inline code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  padding: 0.05em 0.3em;
+  border-radius: 0.25rem;
+  background: var(--muted);
+}
+.lab-inline a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
 .lab-prose pre {
   overflow-x: auto;
   padding: 1rem 1.25rem;

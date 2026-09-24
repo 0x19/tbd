@@ -11,14 +11,26 @@ sentence is a promise. The one cookie the site sets is the language a visitor
 picked (`inorbit.lang`, two letters, on the parent domain so `cv.` reads the same),
 and `/legal/` names it.
 
-The one exception is a playground. `/lab/break-it/` (Break it, the lab's first demo) calls the gateway on
-the same origin (`/v1/playground/*` and `/v1/ws`), which is why those paths are
-routed on the public `www` virtual host rather than the API host: same origin,
-no CORS, no cookie of its own. `/legal/` promises that a playground which processes
+The one exception is a playground that calls the platform. Break it (four live
+services and a shared budget of faults) did, on the same origin (`/v1/playground/*`
+and `/v1/ws`), which is why those paths are routed on the public `www` virtual host
+rather than the API host: same origin, no CORS, no cookie of its own. It is paused
+(2026-09-24) while it is rebuilt: `paused: true` on its `playgrounds` entry lists it
+under Play as a dimmed card that links nowhere, `/playgrounds/break-it/` says it is
+paused and connects to nothing, the home page and the sitemap skip it, and its code
+waits whole in `src/components/playgrounds/break-it/` for the next version. `/legal/` promises that a playground which processes
 what a visitor types says so on its own page — so it does, in a "what this page
 sends" section. A new playground owes the reader the same paragraph.
 
-The other exception is the lab. `/lab/` (RFCs, studies and demos in progress) is
+The other exception is the lab. `/lab/` is an index of labs: each lab is one subject
+built in the open (`src/data/labs.ts`: its id, page, name and what in both languages,
+its workbench, whether it has a live view, its ways in), and every RFC and study names
+its lab in front matter (`lab: <id>`; the build refuses an unknown one). `/lab/` shows a
+card per lab, the newest status-log lines of every document ("Latest": the generator
+parses each `## Status log` into `log`), and every document with a tab per lab. A lab's
+own page is a static folder, `app/lab/<id>/page.tsx`, rendering
+`src/components/pages/lab-home.tsx` (what it is, its live view, its ways in, its
+documents, its timeline); the model lab's workbench is `/lab/llm/workbench/`. The lab is
 admins-only until its first page is published: Envoy gates the prefix on the `www`
 host (sign-in, then the `admin` role), and `/v1/me` on the same host tells the page
 who is signed in with a 401 instead of a redirect, so the header and footer show the
@@ -70,8 +82,8 @@ practice log is `localStorage`, per browser, and its page says so.
   now, with numbers and a status stamp; `/open-source/` (the `projects` data) is what
   shipped, finished, with a date and a link; `/playgrounds/` ("Play") is what to try
   for fun. A lab subject that finishes graduates to `/open-source/` with one line pointing
-  back. `/work/`, `/projects/` and `/playgrounds/break-it/` only send the browser on, kept for
-  old links; neither is in the sitemap.
+  back. `/work/`, `/projects/`, `/lab/break-it/` and `/lab/demo/` only send the browser on,
+  kept for old links; none is in the sitemap.
 - **Content lives in `src/data/site.ts`.** A copy change edits that file, and its
   Croatian twin in `src/data/site.hr.ts`. Do not inline facts into a page.
 - **A `TODO` field renders as `—`** (`orDash`). Never invent a registration

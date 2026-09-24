@@ -58,7 +58,7 @@ export function PlaygroundTabs({
   };
 
   const shown = items.filter((p) => tab === "all" || p.category === tab);
-  const featured = feature ? shown.find((p) => p.category === "systems") : undefined;
+  const featured = feature ? shown.find((p) => p.category === "systems" && !p.paused) : undefined;
   const rest = (featured ? shown.filter((p) => p !== featured) : shown).slice(0, limit);
 
   return (
@@ -90,7 +90,9 @@ function Card({ p, n, big }: { p: Playground; n: number; big?: boolean }) {
           {big ? `${t("playgrounds.featured")} · ${p.tag}` : p.tag}
         </span>
         <span className="text-muted-foreground ml-auto flex items-center gap-1.5">
-          {p.href ? (
+          {p.paused ? (
+            t("playgrounds.paused")
+          ) : p.href ? (
             <>
               <span aria-hidden className="relative flex size-1.5">
                 <span className="live-ping bg-foreground/40 absolute inline-flex size-full rounded-full" />
@@ -109,12 +111,15 @@ function Card({ p, n, big }: { p: Playground; n: number; big?: boolean }) {
       <p className={cn("text-muted-foreground mt-2 text-pretty", big ? "max-w-2xl text-base" : "text-sm")}>
         {p.summary}
       </p>
+      {p.paused ? (
+        <p className="text-muted-foreground/80 mt-2 text-sm italic">{t("playgrounds.paused_note")}</p>
+      ) : null}
       {big ? <p className="text-muted-foreground/80 mt-3 max-w-2xl text-sm text-pretty">{p.what}</p> : null}
       <div className="mt-auto flex items-end gap-4 pt-7">
         <p className="text-muted-foreground/70 flex-1 border-t pt-4 font-mono text-[11px] text-pretty">
           {p.specs.join("  ·  ")}
         </p>
-        {p.href ? (
+        {p.href && !p.paused ? (
           <span aria-hidden className="text-muted-foreground transition-transform group-hover:translate-x-1">
             →
           </span>
@@ -123,6 +128,8 @@ function Card({ p, n, big }: { p: Playground; n: number; big?: boolean }) {
     </>
   );
   const cls = cn("bg-background flex flex-col", big ? "p-6 sm:col-span-full sm:p-10" : "p-6 sm:p-7");
+  // A paused card is listed but links nowhere, dimmed, so it never reads as playable.
+  if (p.paused) return <div className={cn(cls, "opacity-70")}>{body}</div>;
   return p.href ? (
     <a href={p.href} className={cn("group hover:bg-muted/30 transition-colors", cls)}>
       {body}

@@ -6,10 +6,40 @@ export const en: Dict = {
   "lab.eyebrow": "Lab",
   "lab.title": "What is being built, with the numbers.",
   "lab.lead":
-    "RFCs before the code, studies after the measurements, and the demos in between. Everything here is in progress and says so; a stamp on every page tells you how settled it is.",
+    "Each lab is one subject built in the open: its RFCs before the code, its studies after the measurements, and, where it runs, a live view of it. Everything here is in progress and says so; a stamp on every document tells you how settled it is.",
   "lab.english_only": "The RFCs and studies are written in English in both languages.",
-  "lab.live.label": "Live",
-  "lab.live.lead": "Things you can poke at now, running on the same platform the pages describe.",
+  "lab.labs.label": "Labs",
+  "lab.labs.lead":
+    "One card per subject: what it is, how much is written down, and the last thing that changed.",
+  "lab.counts": "{rfcs} RFCs · {studies} studies",
+  "lab.open": "Open the lab",
+  "lab.workbench": "Workbench",
+  "lab.latest.label": "Latest",
+  "lab.latest.lead":
+    "The newest lines of every document's status log: what was decided, built or measured, and when.",
+  "lab.latest.empty": "Nothing has been logged yet.",
+  "lab.index.label": "Every document",
+  "lab.index.lead": "Every public RFC and study, with a tab per lab.",
+  "lab.index.all": "all",
+  "lab.home.workbench": "Open the workbench",
+  "lab.home.documents": "RFCs and studies",
+  "lab.home.documents.lead": "What was decided before it was built, and what was measured after.",
+  "lab.home.live.label": "Live",
+  "lab.home.live.lead":
+    "What the platform is doing right now: each tier's queue and speed, the state of every way in, and the chaos tool's run when one is going.",
+  "lab.home.live.none": "The live view appears here once the platform's feed is running.",
+  "lab.home.surfaces.label": "Ways in",
+  "lab.home.surfaces.lead": "The same service, reached every way the platform's gateway offers.",
+  "lab.home.timeline.label": "Timeline",
+  "lab.home.timeline.lead": "Every status log line of this lab's documents, newest first.",
+  "lab.surface.rest": "Plain JSON over HTTP: list the models, read your budget, ask for an embedding.",
+  "lab.surface.sse":
+    "A generation streamed chunk by chunk as the engine produces it, reasoning marked apart from the answer.",
+  "lab.surface.websocket":
+    "The same calls on one socket, many at once, each with its own id; how the live view arrives.",
+  "lab.surface.mcp":
+    "The platform's allowed tools for an AI agent, over the Model Context Protocol; a coding assistant connects with one command.",
+  "lab.surface.grpc": "The services' own contract, which every other way in is generated from.",
   "lab.rfcs.label": "RFCs",
   "lab.rfcs.lead":
     "What was decided before it was built, and why. Argued in the open; superseded, never rewritten.",
@@ -29,16 +59,13 @@ export const en: Dict = {
   "lab.superseded_by": "Superseded by",
   "lab.measures": "Measures",
   "lab.back": "Back to the lab",
-  "lab.demo.eyebrow": "Lab · demo",
-  "lab.demo.title": "Ask the platform",
-  "lab.demo.tag": "Live",
-  "lab.demo.card":
-    "A model served from one workstation, answering questions about this platform, while the chaos tool hammers it and the numbers stay on screen. Behind a sign-in.",
+  "lab.demo.eyebrow": "Lab · llm · workbench",
+  "lab.demo.title": "Workbench",
   "lab.demo.lead":
-    "A model served from one workstation, answering questions about this platform, while the chaos tool hammers it and the numbers stay on screen.",
+    "Talk to the two local models of this platform through its own gateway, and see what each answer cost as it streams: time to the first token, tokens a second, tokens in and out.",
   "lab.demo.gated.label": "Behind a sign-in",
   "lab.demo.gated":
-    "Anonymous model endpoints get farmed within a day, so asking needs an account, and every account has a daily token budget. Signed out, you will see the last session's transcript and the live figures; signed in, you can ask and start a run yourself.",
+    "Anonymous model endpoints get farmed within a day, so asking needs an account, and every account has a daily token budget.",
   "lab.demo.signin": "Sign in on this site",
   "account.eyebrow": "Account",
   "account.title": "Signed in as {name}.",
@@ -87,10 +114,39 @@ export const hr: Dict = {
   "lab.eyebrow": "Laboratorij",
   "lab.title": "Što se gradi, s brojkama.",
   "lab.lead":
-    "RFC-ovi prije koda, studije nakon mjerenja, a demo između. Sve ovdje je u nastajanju i tako i piše; pečat na svakoj stranici kaže koliko je odluka zrela.",
+    "Svaki laboratorij je jedna tema građena javno: njezini RFC-ovi prije koda, studije nakon mjerenja i, gdje radi, pogled uživo. Sve ovdje je u nastajanju i tako i piše; pečat na svakom dokumentu kaže koliko je odluka zrela.",
   "lab.english_only": "RFC-ovi i studije pisani su na engleskom u oba jezika.",
-  "lab.live.label": "Uživo",
-  "lab.live.lead": "Stvari koje možeš bockati sada, na istoj platformi koju stranice opisuju.",
+  "lab.labs.label": "Laboratoriji",
+  "lab.labs.lead": "Jedna kartica po temi: što je, koliko je zapisano i zadnje što se promijenilo.",
+  "lab.counts": "{rfcs} RFC · {studies} studija",
+  "lab.open": "Otvori laboratorij",
+  "lab.workbench": "Radni stol",
+  "lab.latest.label": "Najnovije",
+  "lab.latest.lead":
+    "Najnoviji redci dnevnika statusa svakog dokumenta: što je odlučeno, izgrađeno ili izmjereno, i kada.",
+  "lab.latest.empty": "Još ništa nije zabilježeno.",
+  "lab.index.label": "Svi dokumenti",
+  "lab.index.lead": "Svaki javni RFC i studija, s karticom po laboratoriju.",
+  "lab.index.all": "sve",
+  "lab.home.workbench": "Otvori radni stol",
+  "lab.home.documents": "RFC-ovi i studije",
+  "lab.home.documents.lead": "Što je odlučeno prije gradnje i što je izmjereno poslije.",
+  "lab.home.live.label": "Uživo",
+  "lab.home.live.lead":
+    "Što platforma radi upravo sada: red i brzina svake razine, stanje svakog ulaza i test alata za kaos kad je u tijeku.",
+  "lab.home.live.none": "Pogled uživo pojavljuje se ovdje kad se pokrene tok platforme.",
+  "lab.home.surfaces.label": "Ulazi",
+  "lab.home.surfaces.lead": "Isti servis, dostupan na svaki način koji nudi gateway platforme.",
+  "lab.home.timeline.label": "Vremenska crta",
+  "lab.home.timeline.lead": "Svaki redak dnevnika statusa dokumenata ovog laboratorija, najnoviji prvi.",
+  "lab.surface.rest": "Običan JSON preko HTTP-a: popis modela, tvoj proračun, zahtjev za embedding.",
+  "lab.surface.sse":
+    "Generacija prenesena dio po dio kako je motor proizvodi, razmišljanje odvojeno od odgovora.",
+  "lab.surface.websocket":
+    "Isti pozivi na jednoj utičnici, mnogo odjednom, svaki sa svojim id-jem; tako stiže pogled uživo.",
+  "lab.surface.mcp":
+    "Dopušteni alati platforme za AI agenta, preko Model Context Protocola; asistent za kodiranje spaja se jednom naredbom.",
+  "lab.surface.grpc": "Vlastiti ugovor servisa, iz kojeg su generirani svi ostali ulazi.",
   "lab.rfcs.label": "RFC-ovi",
   "lab.rfcs.lead":
     "Što je odlučeno prije gradnje i zašto. Raspravljano javno; zamijenjeno novim, nikad prepisano.",
@@ -110,16 +166,13 @@ export const hr: Dict = {
   "lab.superseded_by": "Zamijenjen s",
   "lab.measures": "Mjeri",
   "lab.back": "Natrag u laboratorij",
-  "lab.demo.eyebrow": "Laboratorij · demo",
-  "lab.demo.title": "Pitaj platformu",
-  "lab.demo.tag": "Uživo",
-  "lab.demo.card":
-    "Model posluživan s jedne radne stanice odgovara na pitanja o ovoj platformi dok ga alat za kaos opterećuje, a brojke ostaju na ekranu. Iza prijave.",
+  "lab.demo.eyebrow": "Laboratorij · llm · radni stol",
+  "lab.demo.title": "Radni stol",
   "lab.demo.lead":
-    "Model posluživan s jedne radne stanice odgovara na pitanja o ovoj platformi dok ga alat za kaos opterećuje, a brojke ostaju na ekranu.",
+    "Razgovaraj s dva lokalna modela ove platforme kroz njezin vlastiti gateway i vidi koliko je svaki odgovor koštao dok stiže: vrijeme do prvog tokena, tokeni u sekundi, tokeni ulaz i izlaz.",
   "lab.demo.gated.label": "Iza prijave",
   "lab.demo.gated":
-    "Anonimne krajnje točke modela netko iscrpi u danu, pa je za pitanje potreban račun, a svaki račun ima dnevni proračun tokena. Bez prijave vidiš zapis zadnje sesije i brojke uživo; s prijavom možeš pitati i sam pokrenuti test.",
+    "Anonimne krajnje točke modela netko iscrpi u danu, pa je za pitanje potreban račun, a svaki račun ima dnevni proračun tokena.",
   "lab.demo.signin": "Prijavi se na ovoj stranici",
   "account.eyebrow": "Račun",
   "account.title": "Prijavljeni kao {name}.",

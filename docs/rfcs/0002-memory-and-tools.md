@@ -3,6 +3,7 @@ title: Memory and tools
 status: open
 date: 2026-09-24
 public: true
+lab: llm
 summary: What turns a model that answers into a platform that works - a memory it recalls from with its sources named, tools it may call under the caller's budget, and an agent loop that is traced step by step.
 ---
 

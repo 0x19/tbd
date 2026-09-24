@@ -3,6 +3,7 @@ title: The workbench and the arena
 status: open
 date: 2026-09-24
 public: true
+lab: llm
 summary: The page where the platform is used and watched - a keyboard-first workbench for conversations with the models, tools and memory, beside a live view of what happens behind it, and a small set of runs a visitor may start to see the platform under load and fault.
 ---
 

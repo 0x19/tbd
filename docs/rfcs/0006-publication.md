@@ -3,6 +3,7 @@ title: Publication
 status: open
 date: 2026-09-24
 public: true
+lab: llm
 summary: When the lab stops being behind a sign-in, what changes on the site and in the platform when it does, and what has to be true first.
 ---
 

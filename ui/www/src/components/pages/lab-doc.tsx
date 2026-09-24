@@ -28,7 +28,7 @@ export function LabDocContent({ doc }: { doc: LabDoc }) {
       <Frame className="pt-20 pb-8 sm:pt-28">
         <p className="mb-6">
           <Link
-            href="/lab/"
+            href={`/lab/${doc.lab}/`}
             className="text-muted-foreground hover:text-foreground font-mono text-[11px] tracking-[0.14em] uppercase"
           >
             ← {t("lab.back")}
@@ -73,7 +73,7 @@ export function LabDocContent({ doc }: { doc: LabDoc }) {
         />
         <p className="mt-16">
           <Link
-            href="/lab/"
+            href={`/lab/${doc.lab}/`}
             className="text-muted-foreground hover:text-foreground font-mono text-[11px] tracking-[0.14em] uppercase"
           >
             ← {t("lab.back")}

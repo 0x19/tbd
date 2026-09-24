@@ -17,6 +17,7 @@ title: The llm service, an L2 over two engines
 status: open
 date: 2026-09-23
 public: false
+lab: llm
 summary: One sentence for the index and the search engines.
 supersedes: 0000-an-older-slug
 ---
@@ -28,6 +29,11 @@ supersedes: 0000-an-older-slug
   A public page may not reference a private one.
 - `date`: the day it was first written; the status log at the end carries every later
   change.
+- `lab`: the lab it belongs to, an id in `ui/www/src/data/labs.ts`; the lab's page lists
+  it, and the build refuses an id that is not there.
+
+The status log's bullets are `- YYYY-MM-DD: text` (continued on indented lines); the
+lab pages read them as the timeline, so a bullet in any other shape fails the build.
 
 The body is Markdown with these sections, in this order: Problem, Proposal,
 Alternatives considered, Decision, Publication (what changes on the site or in the
