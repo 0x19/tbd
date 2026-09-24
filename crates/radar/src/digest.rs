@@ -538,15 +538,36 @@ mod tests {
 
     #[test]
     fn voice_slips_are_caught_and_plain_reporting_is_not() {
-        assert_eq!(voice_slip("en", "This week we released Go 1.24.").as_deref(), Some("we released"));
-        assert_eq!(voice_slip("en", "We've shipped a fix.").as_deref(), Some("We've shipped"));
-        assert_eq!(voice_slip("en", "The Go team released 1.24; we cover it below."), None);
-        assert_eq!(voice_slip("hr", "Danas smo objavili tri izdanja.").as_deref(), Some("smo objavili"));
-        assert_eq!(voice_slip("hr", "Najnovije vesti iz Rusta.").as_deref(), Some("vesti"));
-        assert_eq!(voice_slip("hr", "Ove sedmice").as_deref(), Some("sedmice"));
-        assert_eq!(voice_slip("hr", "Takođe je izašao izveštaj.").as_deref(), Some("Takođe"));
         assert_eq!(
-            voice_slip("hr", "Ovaj tjedan: vijesti, izvještaj i također sigurnost. Tim je objavio Rust 1.94."),
+            voice_slip("en", "This week we released Go 1.24.").as_deref(),
+            Some("we released")
+        );
+        assert_eq!(
+            voice_slip("en", "We've shipped a fix.").as_deref(),
+            Some("We've shipped")
+        );
+        assert_eq!(
+            voice_slip("en", "The Go team released 1.24; we cover it below."),
+            None
+        );
+        assert_eq!(
+            voice_slip("hr", "Danas smo objavili tri izdanja.").as_deref(),
+            Some("smo objavili")
+        );
+        assert_eq!(
+            voice_slip("hr", "Najnovije vesti iz Rusta.").as_deref(),
+            Some("vesti")
+        );
+        assert_eq!(voice_slip("hr", "Ove sedmice").as_deref(), Some("sedmice"));
+        assert_eq!(
+            voice_slip("hr", "Takođe je izašao izveštaj.").as_deref(),
+            Some("Takođe")
+        );
+        assert_eq!(
+            voice_slip(
+                "hr",
+                "Ovaj tjedan: vijesti, izvještaj i također sigurnost. Tim je objavio Rust 1.94."
+            ),
             None
         );
     }
