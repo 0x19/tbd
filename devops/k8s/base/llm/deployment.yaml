@@ -5,6 +5,9 @@ metadata:
   labels:
     app.kubernetes.io/name: llm
 spec:
+  # One on purpose: admission (`[engines.<tier>] max_in_flight`) is counted per
+  # process, so a second replica would double what the engines are asked to run
+  # at once and bring back the engine's own invisible queue.
   replicas: 1
   selector:
     matchLabels:
