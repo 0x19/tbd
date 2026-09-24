@@ -17,7 +17,7 @@ export const hr: Dict = {
   "contact.eyebrow": "Kontakt",
   "contact.title": "Javi se.",
   "contact.lead":
-    "Pitanje o nečemu odavde, greška u nekoj od biblioteka, ideja vrijedna prototipa ili posao koji treba obaviti -- sve je u redu. Bez obrasca, bez lijevka.",
+    "Pitanje o nečemu odavde, greška u nekoj od biblioteka, ideja vrijedna prototipa ili posao koji treba obaviti -- sve je u redu. Bez obrasca i bez prodajne priče.",
   "contact.email": "E-pošta",
   "contact.elsewhere": "Drugdje",
   "contact.where": "Gdje",

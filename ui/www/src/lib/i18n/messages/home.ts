@@ -57,5 +57,5 @@ export const hr: Dict = {
   "home.lab.cta": "U laboratorij →",
   "home.hi.label": "Javi se",
   "home.hi.how": "Što slijedi",
-  "home.hi.text": "Bez obrasca, bez lijevka. Poštu čita jedna osoba.",
+  "home.hi.text": "Bez obrasca i bez prodajne priče. Poštu čita jedna osoba.",
 };
