@@ -6,6 +6,7 @@
 [targets]
 protocol = "http://localhost:18080"
 engine = "http://localhost:15051"
+runner = "http://localhost:15051"
 radar = "http://localhost:15051"
 arena = "http://localhost:15051"
 llm = "http://localhost:15051"

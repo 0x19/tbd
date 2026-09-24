@@ -101,3 +101,12 @@ pub mod radar {
             include_bytes!(concat!(env!("OUT_DIR"), "/radar_descriptor.bin"));
     }
 }
+
+pub mod runner {
+    pub mod v1 {
+        tonic::include_proto!("tbd.runner.v1");
+        /// Encoded `FileDescriptorSet` for this package, for gRPC reflection.
+        pub const DESCRIPTOR_SET: &[u8] =
+            include_bytes!(concat!(env!("OUT_DIR"), "/runner_descriptor.bin"));
+    }
+}

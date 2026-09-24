@@ -27,6 +27,8 @@ images:
     newTag: v0.0.0-REPLACE
   - name: ghcr.io/0x19/tbd-radar
     newTag: v0.0.0-REPLACE
+  - name: ghcr.io/0x19/tbd-runner
+    newTag: v0.0.0-REPLACE
 patches:
   - target:
       kind: Deployment
@@ -139,6 +141,18 @@ patches:
   - target:
       kind: Deployment
       name: radar
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 2
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests: { cpu: 250m, memory: 128Mi }
+          limits: { cpu: "2", memory: 512Mi }
+  - target:
+      kind: Deployment
+      name: runner
     patch: |-
       - op: replace
         path: /spec/replicas

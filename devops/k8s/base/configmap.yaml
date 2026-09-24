@@ -11,6 +11,8 @@ data:
   ENGINE_METRICS_ADDR: 0.0.0.0:9464
   PROTOCOL_LISTEN_ADDR: 0.0.0.0:8080
   PROTOCOL_METRICS_ADDR: 0.0.0.0:9464
+  RUNNER_LISTEN_ADDR: 0.0.0.0:50060
+  RUNNER_METRICS_ADDR: 0.0.0.0:9464
   RADAR_LISTEN_ADDR: 0.0.0.0:50059
   RADAR_METRICS_ADDR: 0.0.0.0:9464
   # The radar writes its digests through the llm service, via Envoy's internal
@@ -50,6 +52,7 @@ data:
   PROTOCOL_ENGINE_URL: http://envoy:50051
   PROTOCOL_HUMANS_URL: http://envoy:50051
   PROTOCOL_LEDGER_URL: http://envoy:50051
+  PROTOCOL_RUNNER_URL: http://envoy:50051
   PROTOCOL_RADAR_URL: http://envoy:50051
   PROTOCOL_ARENA_URL: http://envoy:50051
   PROTOCOL_LLM_URL: http://envoy:50051

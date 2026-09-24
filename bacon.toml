@@ -73,9 +73,16 @@ need_stdout = true
 background = false
 on_change_strategy = "kill_then_restart"
 
+[jobs.runner]
+command = ["cargo", "run", "-p", "tbd-runner", "--color", "always"]
+need_stdout = true
+background = false
+on_change_strategy = "kill_then_restart"
+
 [keybindings]
 e = "job:engine"
 p = "job:protocol"
+u = "job:runner"
 r = "job:radar"
 a = "job:arena"
 m = "job:llm"

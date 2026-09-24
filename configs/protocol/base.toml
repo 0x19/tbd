@@ -58,6 +58,10 @@ required = false
 url = "http://127.0.0.1:50059"
 service = "tbd.radar.v1.RadarService"
 required = false
+[services.runner]
+url = "http://127.0.0.1:50060"
+service = "tbd.runner.v1.RunnerService"
+required = false
 # tbd:services-end (tbd new service inserts above this line; do not edit)
 
 [health]

@@ -24,6 +24,8 @@ jobs:
             port: "50051"
           - bin: protocol
             port: "8080"
+          - bin: runner
+            port: "50060"
           - bin: radar
             port: "50059"
           - bin: arena

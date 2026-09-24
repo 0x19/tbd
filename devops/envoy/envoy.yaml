@@ -8,7 +8,7 @@
 #                     x-tbd-backend header, so service replicas are a pure scale-out.
 #   :9901  admin      /ready, /stats/prometheus, /clusters, /config_dump.
 #
-# Clusters resolve by DNS name: `engine`, `protocol`, `radar`, `arena`, `llm`, `cv`, `playground`, `finance`, `humans`, `ledger`, `chaos`, `otel-collector`,
+# Clusters resolve by DNS name: `engine`, `protocol`, `runner`, `radar`, `arena`, `llm`, `cv`, `playground`, `finance`, `humans`, `ledger`, `chaos`, `otel-collector`,
 # `hydra`, `kratos`, `auth-ui`, `grafana`, `victoria-logs`, `pyroscope`,
 # `victoria-metrics`.
 #
@@ -1288,6 +1288,19 @@ static_resources:
                             cluster: radar
                             timeout: 0s
                             retry_policy: *grpc_retry
+                        # runner, matched by service name; the engine stays the catch-all.
+                        - match: { prefix: "/tbd.runner.v1.RunnerService/", grpc: {} }
+                          route:
+                            cluster: runner
+                            timeout: 0s
+                            retry_policy: *grpc_retry
+                        # runner health: the grpc.health.v1 path is shared, so the protocol
+                        # names the backend it is asking about in x-tbd-backend.
+                        - match: { prefix: "/grpc.health.v1.Health/", grpc: {}, headers: [{ name: x-tbd-backend, string_match: { exact: runner } }] }
+                          route:
+                            cluster: runner
+                            timeout: 0s
+                            retry_policy: *grpc_retry
                         - match: { prefix: "/" }
                           route:
                             cluster: engine
@@ -1602,6 +1615,37 @@ static_resources:
           healthy_threshold: 1
           grpc_health_check:
             service_name: tbd.radar.v1.RadarService
+      outlier_detection:
+        consecutive_gateway_failure: 5
+        interval: 5s
+        base_ejection_time: 30s
+        max_ejection_percent: 50
+
+    - name: runner
+      type: STRICT_DNS
+      dns_lookup_family: V4_ONLY
+      dns_refresh_rate: 5s
+      lb_policy: LEAST_REQUEST
+      connect_timeout: 1s
+      typed_extension_protocol_options:
+        envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+          "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+          explicit_http_config:
+            http2_protocol_options: {}
+      load_assignment:
+        cluster_name: runner
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address: { address: runner, port_value: 50060 }
+      health_checks:
+        - timeout: 1s
+          interval: 5s
+          unhealthy_threshold: 2
+          healthy_threshold: 1
+          grpc_health_check:
+            service_name: tbd.runner.v1.RunnerService
       outlier_detection:
         consecutive_gateway_failure: 5
         interval: 5s

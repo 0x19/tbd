@@ -5340,6 +5340,48 @@
         }
       }
     },
+    "/v1/runner/ping": {
+      "get": {
+        "tags": [
+          "runner"
+        ],
+        "summary": "tbd.runner.v1.RunnerService/Ping",
+        "description": "Transcoded from `/tbd.runner.v1.RunnerService/Ping` on the `runner` backend.",
+        "operationId": "RunnerService.Ping",
+        "parameters": [
+          {
+            "name": "message",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "`tbd.runner.v1.PingResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.runner.v1.PingResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/subjects/{subject_id}/events": {
       "get": {
         "tags": [
@@ -10401,6 +10443,21 @@
             "type": "boolean"
           },
           "week": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.runner.v1.PingResponse": {
+        "type": "object",
+        "description": "`tbd.runner.v1.PingResponse`",
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "stub": {
+            "type": "boolean"
+          },
+          "version": {
             "type": "string"
           }
         }

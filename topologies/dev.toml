@@ -31,3 +31,6 @@ listen = "127.0.0.1:50058"
 
 [stack.radars.radar-1]
 listen = "127.0.0.1:50059"
+
+[stack.runners.runner-1]
+listen = "127.0.0.1:50060"

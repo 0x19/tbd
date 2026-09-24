@@ -34,6 +34,7 @@
 | You are working on the `llm` service | [../crates/llm/CLAUDE.md](../crates/llm/CLAUDE.md) |
 | You are working on the `arena` service | [../crates/arena/CLAUDE.md](../crates/arena/CLAUDE.md) |
 | You are working on the `radar` service | [../crates/radar/CLAUDE.md](../crates/radar/CLAUDE.md) |
+| You are working on the `runner` service | [../crates/runner/CLAUDE.md](../crates/runner/CLAUDE.md) |
 | A check failed in CI, or you are changing CI | [ci.md](ci.md) |
 | You want metrics, traces, logs, dashboards, or to run the local cluster | [observability.md](observability/README.md) |
 | You want to know how sign-in, tokens and API access work | [auth/README.md](auth/README.md) |
