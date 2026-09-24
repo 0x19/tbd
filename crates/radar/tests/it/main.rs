@@ -3,6 +3,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+mod radar;
 mod support;
 
 use tbd_proto::radar::v1::PingRequest;

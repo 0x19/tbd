@@ -4,13 +4,48 @@ package tbd.radar.v1;
 
 import "google/api/annotations.proto";
 
-// The radar service. Ping is the liveness RPC every service carries; real
-// RPCs are added beside it.
+// The radar service: what changed in Go and Rust this week. It reads the
+// official sources on a timer, keeps every item it has seen, and once a week
+// asks the llm service for a digest per language and reader language. Reads
+// are public; Refresh and RunDigest are for the admin role. Every digest is
+// written by a model and says so (`ai_written`), on every surface.
 service RadarService {
   // Echo a message. Proves configuration, telemetry and fault injection reach
   // an RPC.
   rpc Ping(PingRequest) returns (PingResponse) {
     option (google.api.http) = {get: "/v1/radar/ping"};
+  }
+
+  // Published digests, newest week first.
+  rpc ListDigests(ListDigestsRequest) returns (ListDigestsResponse) {
+    option (google.api.http) = {get: "/v1/radar/digests"};
+  }
+
+  // One digest by id.
+  rpc GetDigest(GetDigestRequest) returns (GetDigestResponse) {
+    option (google.api.http) = {get: "/v1/radar/digests/{id}"};
+  }
+
+  // The items the service has read, newest first: the raw material of a digest.
+  rpc ListItems(ListItemsRequest) returns (ListItemsResponse) {
+    option (google.api.http) = {get: "/v1/radar/items"};
+  }
+
+  // Read every source now instead of waiting for the timer. Admin only.
+  rpc Refresh(RefreshRequest) returns (RefreshResponse) {
+    option (google.api.http) = {
+      post: "/v1/radar/refresh"
+      body: "*"
+    };
+  }
+
+  // Write this week's digests now instead of waiting for the schedule, or
+  // rewrite them. Admin only.
+  rpc RunDigest(RunDigestRequest) returns (RunDigestResponse) {
+    option (google.api.http) = {
+      post: "/v1/radar/digests/run"
+      body: "*"
+    };
   }
 }
 
@@ -24,4 +59,100 @@ message PingResponse {
   string version = 2;
   // True while the service is a placeholder with nothing real behind it.
   bool stub = 3;
+}
+
+// One thing a source published: a blog post, a release, an accepted proposal,
+// a merged RFC.
+message Item {
+  int64 id = 1;
+  // The source's name from configuration, e.g. "go-blog".
+  string source = 2;
+  // "go" or "rust".
+  string language = 3;
+  string title = 4;
+  string url = 5;
+  // RFC 3339; empty when the source gives no date (then the time it was read).
+  string published_at = 6;
+  // The source's own summary, trimmed; may be empty.
+  string summary = 7;
+}
+
+// One week's digest for one language, in one reader language.
+message Digest {
+  int64 id = 1;
+  // ISO week the digest covers, e.g. "2026-W39".
+  string week = 2;
+  // "go" or "rust".
+  string language = 3;
+  // The reader language: "en" or "hr".
+  string lang = 4;
+  // RFC 3339.
+  string created_at = 5;
+  // Markdown, one per section.
+  string changed = 6;
+  string why = 7;
+  string drill = 8;
+  // The 60-second script the avatar reads, plain text.
+  string script = 9;
+  // How many items the digest was written from.
+  int32 item_count = 10;
+  // The model that wrote it, as the llm service named it.
+  string model = 11;
+  // Always true: a digest is written by a language model.
+  bool ai_written = 12;
+  // True when the model was the llm service's stub engine (tests, local).
+  bool stub = 13;
+}
+
+message ListDigestsRequest {
+  // "go" or "rust"; empty for both.
+  string language = 1;
+  // "en" or "hr"; empty for both.
+  string lang = 2;
+  // At most this many; 0 means the service's default.
+  int32 limit = 3;
+}
+
+message ListDigestsResponse {
+  repeated Digest digests = 1;
+}
+
+message GetDigestRequest {
+  int64 id = 1;
+}
+
+message GetDigestResponse {
+  Digest digest = 1;
+}
+
+message ListItemsRequest {
+  // "go" or "rust"; empty for both.
+  string language = 1;
+  // At most this many; 0 means the service's default.
+  int32 limit = 2;
+}
+
+message ListItemsResponse {
+  repeated Item items = 1;
+}
+
+message RefreshRequest {}
+
+message RefreshResponse {
+  // Sources read, and how many of them failed.
+  int32 sources = 1;
+  int32 failed = 2;
+  // Items seen for the first time.
+  int32 new_items = 3;
+}
+
+message RunDigestRequest {
+  // Rewrite digests that already exist for the week.
+  bool force = 1;
+}
+
+message RunDigestResponse {
+  // The week written, and the digests it produced.
+  string week = 1;
+  repeated Digest digests = 2;
 }

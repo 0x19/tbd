@@ -39,6 +39,21 @@ spec:
           envFrom:
             - configMapRef:
                 name: tbd-env
+          env:
+            # mise run radar:secrets. Without the database the service answers
+            # Ping and nothing else; without the token GitHub is read unauthenticated.
+            - name: RADAR_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: radar-db
+                  key: database-url
+                  optional: true
+            - name: RADAR_GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: radar-github
+                  key: token
+                  optional: true
           livenessProbe:
             grpc:
               port: 50059

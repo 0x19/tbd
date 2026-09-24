@@ -16,3 +16,91 @@ listen = "0.0.0.0:9464"
 # Longest message Ping echoes; longer is INVALID_ARGUMENT. The one knob that
 # proves TOML reaches an RPC.
 max_message_len = 1024
+
+[store]
+# The connection URL comes from the environment only (RADAR_DATABASE_URL, the
+# radar-db Secret); empty means no store: Ping answers, every other RPC is
+# UNAVAILABLE and the timers do nothing.
+max_connections = 3
+
+[llm]
+# The model service that writes the digests, as the subject svc:radar. Through
+# Envoy's internal listener in a deployment (the env files set it; RADAR_LLM_URL
+# overrides); empty means no digests are written.
+url = ""
+# "deep" writes better prose; a digest is weekly, so its minutes do not matter.
+tier = "deep"
+max_tokens = 2048
+temperature = 0.3
+timeout_secs = 900
+
+[fetch]
+# Every source is read this often; 0 turns the timer off (Refresh still works).
+interval_secs = 21600
+initial_delay_secs = 60
+timeout_secs = 30
+# Items kept from one source per read, newest first, and the longest summary kept.
+max_items_per_source = 30
+max_summary_chars = 600
+# The GitHub token for the search sources comes from RADAR_GITHUB_TOKEN only
+# (the optional radar-github Secret); without it the search runs unauthenticated.
+
+[digest]
+# Written on this ISO weekday (1 is Monday) at or after this hour, UTC, once a
+# week; the check runs every check_secs (0 turns the schedule off; RunDigest
+# still works). One digest per language per reader language.
+weekday = 1
+hour = 6
+check_secs = 900
+langs = ["en", "hr"]
+# Most items given to the model for one digest, and the list RPCs' page size.
+max_items = 40
+page_size = 20
+
+# The sources: official only. `kind` is atom, rss or github (the issue search,
+# where {since} in `query` becomes the date lookback_days ago).
+[[sources]]
+name = "go-blog"
+kind = "atom"
+language = "go"
+url = "https://go.dev/blog/feed.atom"
+
+[[sources]]
+name = "go-proposals-accepted"
+kind = "github"
+language = "go"
+url = "https://api.github.com/search/issues"
+query = "repo:golang/go is:issue label:Proposal-Accepted updated:>={since}"
+lookback_days = 14
+
+[[sources]]
+name = "go-releases"
+kind = "atom"
+language = "go"
+url = "https://github.com/golang/go/releases.atom"
+
+[[sources]]
+name = "rust-blog"
+kind = "atom"
+language = "rust"
+url = "https://blog.rust-lang.org/feed.xml"
+
+[[sources]]
+name = "inside-rust"
+kind = "atom"
+language = "rust"
+url = "https://blog.rust-lang.org/inside-rust/feed.xml"
+
+[[sources]]
+name = "this-week-in-rust"
+kind = "rss"
+language = "rust"
+url = "https://this-week-in-rust.org/rss.xml"
+
+[[sources]]
+name = "rust-rfcs-merged"
+kind = "github"
+language = "rust"
+url = "https://api.github.com/search/issues"
+query = "repo:rust-lang/rfcs is:pr is:merged merged:>={since}"
+lookback_days = 14

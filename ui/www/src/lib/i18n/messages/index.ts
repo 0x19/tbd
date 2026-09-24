@@ -11,6 +11,7 @@ import * as lab from "./lab";
 import * as legal from "./legal";
 import * as playgrounds from "./playgrounds";
 import * as projects from "./projects";
+import * as radar from "./radar";
 import * as terms from "./terms";
 
 export type Lang = "en" | "hr";
@@ -21,7 +22,7 @@ export const LANGS: { value: Lang; label: string }[] = [
 
 export type Dict = Record<string, string>;
 
-const all = [common, home, lab, drafts, about, playgrounds, projects, contact, legal, terms];
+const all = [common, home, lab, drafts, about, playgrounds, projects, radar, contact, legal, terms];
 
 export const messages: Record<Lang, Dict> = {
   en: Object.assign({}, ...all.map((m) => m.en)) as Dict,

@@ -98,6 +98,14 @@ pub mod names {
     pub const ARENA_SOURCE_OK: &str = "tbd_arena_source_ok";
     /// Gauge: seconds since the arena last read a source successfully. Label `source`.
     pub const ARENA_SOURCE_AGE: &str = "tbd_arena_source_age_seconds";
+    /// Counter: the radar read a source. Labels `source` (the configured name),
+    /// `outcome` (`ok`, `failed`).
+    pub const RADAR_FETCHES_TOTAL: &str = "tbd_radar_fetches_total";
+    /// Counter: items the radar saw for the first time. Label `source`.
+    pub const RADAR_ITEMS_NEW_TOTAL: &str = "tbd_radar_items_new_total";
+    /// Counter: the radar tried to write a digest. Labels `language` (`go`,
+    /// `rust`), `lang` (`en`, `hr`), `outcome` (`written`, `no_items`, `failed`).
+    pub const RADAR_DIGESTS_TOTAL: &str = "tbd_radar_digests_total";
     /// Counter of idempotency rows purged after their TTL.
     pub const LEDGER_IDEMPOTENCY_PURGED_TOTAL: &str = "tbd_ledger_idempotency_purged_total";
     /// Gauge of outbox events not yet published.

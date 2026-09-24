@@ -277,6 +277,9 @@ services:
       TBD_ENV: ${TBD_ENV:-local}
       RADAR_LISTEN_ADDR: 0.0.0.0:50059
       RADAR_METRICS_ADDR: 0.0.0.0:9464
+      RADAR_DATABASE_URL: postgres://ledger:${LEDGER_POSTGRES_PASSWORD:-local-ledger}@ledger-postgres:5432/tbd?sslmode=disable
+      RADAR_LLM_URL: http://envoy:50051
+      RADAR_GITHUB_TOKEN: ${RADAR_GITHUB_TOKEN:-}
     ports:
       - "9472:9464"
     restart: unless-stopped

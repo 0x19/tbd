@@ -128,6 +128,8 @@ owo-colors      = "4"
 
 # clients (chaos, tests)
 reqwest           = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
+# Atom and RSS for the radar's sources.
+feed-rs           = "2.4"
 rmcp              = { version = "3.4", default-features = false, features = ["server", "macros", "transport-streamable-http-server"] }
 tokio-tungstenite = "0.29"
 

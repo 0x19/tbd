@@ -29,6 +29,7 @@ async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     let (mut config, source) = Config::load(&cli.overrides.config_dir, &cli.overrides.env)?;
     cli.overrides.apply(&mut config);
+    config.validate().map_err(anyhow::Error::msg)?;
     if let Some(Command::Config) = cli.command {
         println!("# env: {}", source.env);
         for f in &source.files {

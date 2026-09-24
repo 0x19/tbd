@@ -1,11 +1,17 @@
-//! The radar service: a gRPC server.
+//! The radar service: what changed in Go and Rust this week. It reads the
+//! official sources on a timer, keeps every item, and once a week asks the
+//! llm service for a digest per language and reader language (RFC 0007).
 //!
 //! The library exposes [`serve`], [`serve_on`] and [`serve_with`] so the same
 //! server can be run from `main`, from integration tests on an ephemeral port,
 //! and from the chaos tool with fault injection and counters attached.
 
 pub mod config;
+pub mod digest;
+pub mod fetch;
 mod service;
+pub mod store;
+pub mod worker;
 
 use std::net::SocketAddr;
 
@@ -14,7 +20,7 @@ use tokio::net::TcpListener;
 use tonic::transport::{Server, server::TcpIncoming};
 
 pub use config::{Config, Overrides, Source};
-pub use service::Radar;
+pub use service::{ADMIN_ROLE, Radar};
 pub use tbd_common::{
     fault::{Behavior, FaultHandle},
     runtime::{Runtime, Stats, StatsHandle, StatsSnapshot},
@@ -37,6 +43,15 @@ pub enum ServeError {
     /// The gRPC server failed while running.
     #[error("transport: {0}")]
     Transport(#[from] tonic::transport::Error),
+    /// The store's pool could not be built.
+    #[error("store: {0}")]
+    Store(String),
+    /// The HTTP client for the sources could not be built.
+    #[error("fetch: {0}")]
+    Fetch(#[from] fetch::FetchError),
+    /// The llm URL is not usable.
+    #[error("llm: {0}")]
+    Llm(#[from] digest::DigestError),
 }
 
 /// Bind `[server] listen` and serve until `shutdown` resolves.
@@ -85,7 +100,43 @@ pub async fn serve_with(
         .register_encoded_file_descriptor_set(tonic_health::pb::FILE_DESCRIPTOR_SET)
         .build_v1()?;
 
-    let service = Radar::new(config.ping.clone(), runtime);
+    let mut service = Radar::new(config.ping.clone(), runtime);
+    let cancel = tokio_util::sync::CancellationToken::new();
+    let mut worker_task = None;
+    if config.store.url.is_empty() {
+        tracing::info!("no store configured; every RPC but Ping answers unavailable, no timers");
+    } else {
+        // Lazy: the first query connects, so an unreachable database still
+        // lets the service listen and say so through readiness.
+        let pool = tbd_db::connect_lazy(&tbd_db::PgOptions {
+            url: config.store.url.clone(),
+            max_connections: config.store.max_connections,
+            ..tbd_db::PgOptions::default()
+        })
+        .map_err(|e| ServeError::Store(e.to_string()))?;
+        let store = store::Store::new(pool);
+        let writer = digest::Writer::new(&config.llm)?;
+        if writer.is_none() {
+            tracing::info!("no llm url; items are read, digests are not written");
+        }
+        let worker = worker::Worker::new(
+            store.clone(),
+            fetch::Fetcher::new(config.fetch.clone())?,
+            writer,
+            config.sources.clone(),
+            config.fetch.clone(),
+            config.digest.clone(),
+        );
+        service = service.with_store(store, worker.clone(), config.digest.page_size);
+        tracing::info!(
+            sources = config.sources.len(),
+            fetch_every_secs = config.fetch.interval_secs,
+            digest_weekday = config.digest.weekday,
+            digest_hour = config.digest.hour,
+            "radar worker started"
+        );
+        worker_task = Some(tokio::spawn(worker.run(cancel.clone())));
+    }
 
     tracing::info!(%addr, version = tbd_common::VERSION, "radar listening");
 
@@ -94,13 +145,18 @@ pub async fn serve_with(
     // small responses stall ~40 ms on Nagle + delayed ACK.
     let incoming = TcpIncoming::from(listener).with_nodelay(Some(true));
 
-    Server::builder()
+    let result = Server::builder()
         .trace_fn(tbd_common::telemetry::grpc_request_span)
         .add_service(health_service)
         .add_service(reflection)
         .add_service(RadarServiceServer::new(service))
         .serve_with_incoming_shutdown(incoming, shutdown)
-        .await?;
+        .await;
+    cancel.cancel();
+    if let Some(task) = worker_task {
+        let _ = task.await;
+    }
+    result?;
 
     tracing::info!("radar stopped");
     Ok(())

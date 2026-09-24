@@ -4997,6 +4997,202 @@
         }
       }
     },
+    "/v1/radar/digests": {
+      "get": {
+        "tags": [
+          "radar"
+        ],
+        "summary": "tbd.radar.v1.RadarService/ListDigests",
+        "description": "Transcoded from `/tbd.radar.v1.RadarService/ListDigests` on the `radar` backend.",
+        "operationId": "RadarService.ListDigests",
+        "parameters": [
+          {
+            "name": "language",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lang",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "`tbd.radar.v1.ListDigestsResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.radar.v1.ListDigestsResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/radar/digests/run": {
+      "post": {
+        "tags": [
+          "radar"
+        ],
+        "summary": "tbd.radar.v1.RadarService/RunDigest",
+        "description": "Transcoded from `/tbd.radar.v1.RadarService/RunDigest` on the `radar` backend.",
+        "operationId": "RadarService.RunDigest",
+        "requestBody": {
+          "description": "`tbd.radar.v1.RunDigestRequest`; path variables override their fields",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/tbd.radar.v1.RunDigestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "`tbd.radar.v1.RunDigestResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.radar.v1.RunDigestResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/radar/digests/{id}": {
+      "get": {
+        "tags": [
+          "radar"
+        ],
+        "summary": "tbd.radar.v1.RadarService/GetDigest",
+        "description": "Transcoded from `/tbd.radar.v1.RadarService/GetDigest` on the `radar` backend.",
+        "operationId": "RadarService.GetDigest",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "`tbd.radar.v1.GetDigestResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.radar.v1.GetDigestResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/radar/items": {
+      "get": {
+        "tags": [
+          "radar"
+        ],
+        "summary": "tbd.radar.v1.RadarService/ListItems",
+        "description": "Transcoded from `/tbd.radar.v1.RadarService/ListItems` on the `radar` backend.",
+        "operationId": "RadarService.ListItems",
+        "parameters": [
+          {
+            "name": "language",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "`tbd.radar.v1.ListItemsResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.radar.v1.ListItemsResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/radar/ping": {
       "get": {
         "tags": [
@@ -5022,6 +5218,49 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/tbd.radar.v1.PingResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/radar/refresh": {
+      "post": {
+        "tags": [
+          "radar"
+        ],
+        "summary": "tbd.radar.v1.RadarService/Refresh",
+        "description": "Transcoded from `/tbd.radar.v1.RadarService/Refresh` on the `radar` backend.",
+        "operationId": "RadarService.Refresh",
+        "requestBody": {
+          "description": "`tbd.radar.v1.RefreshRequest`; path variables override their fields",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/tbd.radar.v1.RefreshRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "`tbd.radar.v1.RefreshResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.radar.v1.RefreshResponse"
                 }
               }
             }
@@ -9855,6 +10094,114 @@
           }
         }
       },
+      "tbd.radar.v1.Digest": {
+        "type": "object",
+        "description": "`tbd.radar.v1.Digest`",
+        "properties": {
+          "ai_written": {
+            "type": "boolean"
+          },
+          "changed": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "drill": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "int64"
+          },
+          "item_count": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "lang": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "script": {
+            "type": "string"
+          },
+          "stub": {
+            "type": "boolean"
+          },
+          "week": {
+            "type": "string"
+          },
+          "why": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.radar.v1.GetDigestResponse": {
+        "type": "object",
+        "description": "`tbd.radar.v1.GetDigestResponse`",
+        "properties": {
+          "digest": {
+            "$ref": "#/components/schemas/tbd.radar.v1.Digest"
+          }
+        }
+      },
+      "tbd.radar.v1.Item": {
+        "type": "object",
+        "description": "`tbd.radar.v1.Item`",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "int64"
+          },
+          "language": {
+            "type": "string"
+          },
+          "published_at": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.radar.v1.ListDigestsResponse": {
+        "type": "object",
+        "description": "`tbd.radar.v1.ListDigestsResponse`",
+        "properties": {
+          "digests": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/tbd.radar.v1.Digest"
+            }
+          }
+        }
+      },
+      "tbd.radar.v1.ListItemsResponse": {
+        "type": "object",
+        "description": "`tbd.radar.v1.ListItemsResponse`",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/tbd.radar.v1.Item"
+            }
+          }
+        }
+      },
       "tbd.radar.v1.PingResponse": {
         "type": "object",
         "description": "`tbd.radar.v1.PingResponse`",
@@ -9866,6 +10213,52 @@
             "type": "boolean"
           },
           "version": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.radar.v1.RefreshRequest": {
+        "type": "object",
+        "description": "`tbd.radar.v1.RefreshRequest`"
+      },
+      "tbd.radar.v1.RefreshResponse": {
+        "type": "object",
+        "description": "`tbd.radar.v1.RefreshResponse`",
+        "properties": {
+          "failed": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "new_items": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "sources": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "tbd.radar.v1.RunDigestRequest": {
+        "type": "object",
+        "description": "`tbd.radar.v1.RunDigestRequest`",
+        "properties": {
+          "force": {
+            "type": "boolean"
+          }
+        }
+      },
+      "tbd.radar.v1.RunDigestResponse": {
+        "type": "object",
+        "description": "`tbd.radar.v1.RunDigestResponse`",
+        "properties": {
+          "digests": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/tbd.radar.v1.Digest"
+            }
+          },
+          "week": {
             "type": "string"
           }
         }

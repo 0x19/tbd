@@ -13,6 +13,9 @@ data:
   PROTOCOL_METRICS_ADDR: 0.0.0.0:9464
   RADAR_LISTEN_ADDR: 0.0.0.0:50059
   RADAR_METRICS_ADDR: 0.0.0.0:9464
+  # The radar writes its digests through the llm service, via Envoy's internal
+  # listener; its database URL and GitHub token are Secrets (radar-db, radar-github).
+  RADAR_LLM_URL: http://envoy:50051
   ARENA_LISTEN_ADDR: 0.0.0.0:50058
   ARENA_METRICS_ADDR: 0.0.0.0:9464
   # The arena's sources: the model service through Envoy, the metrics store

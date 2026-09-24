@@ -1108,6 +1108,35 @@ else
 fi
 """
 
+[tasks."radar:secrets"]
+description = "Create the radar Secrets in tbd: radar-db (the app database URL, derived from ledger-db like llm-db) and, given a token, radar-github (read-only, for GitHub's search API; without it the search runs unauthenticated). Run again with a token to replace it."
+usage = '''
+arg "[github_token]" help="a GitHub token with no scopes (public data only); optional"
+arg "[postgres_url]" help="external app database URL; default derives from the ledger-db Secret's password on the in-cluster Postgres, database tbd"
+'''
+run = """
+kubectl apply -f devops/k8s/base/namespace.yaml >/dev/null
+if kubectl -n tbd get secret radar-db >/dev/null 2>&1; then
+  echo "radar-db exists; leaving it"
+else
+  if [ -n "${usage_postgres_url:-}" ]; then
+    url="$usage_postgres_url"
+  else
+    pw=$(kubectl -n tbd get secret ledger-db -o jsonpath='{.data.postgres-password}' | base64 -d)
+    [ -n "$pw" ] || { echo "ledger-db Secret missing; run mise run ledger:secrets first" >&2; exit 1; }
+    url="postgres://ledger:$pw@ledger-postgres.tbd.svc:5432/tbd?sslmode=disable"
+  fi
+  kubectl -n tbd create secret generic radar-db --from-literal=database-url="$url"
+  echo "radar-db created"
+fi
+if [ -n "${usage_github_token:-}" ]; then
+  kubectl -n tbd delete secret radar-github --ignore-not-found >/dev/null
+  kubectl -n tbd create secret generic radar-github --from-literal=token="$usage_github_token"
+  echo "radar-github set"
+fi
+echo "roll the radar deployment to pick them up: kubectl -n tbd rollout restart deployment/radar"
+"""
+
 [tasks."cv:grant"]
 description = "Let the cv service send mail as the owner: grant its subject (svc:cv) read access to the owner's own parties, where the linked mailbox lives (the cv binary's grant one-shot over a port-forward, the URL from the cv-db Secret). One-time."
 usage = '''

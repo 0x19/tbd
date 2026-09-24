@@ -110,6 +110,13 @@ impl Service for Radar {
             server: Server { listen: addr },
             metrics: Metrics { listen: None },
             ping: Ping::default(),
+            // No store under chaos: Ping answers, the rest is UNAVAILABLE, and
+            // no timer reads a source or calls the model.
+            store: tbd_radar::config::Store::default(),
+            llm: tbd_radar::config::Llm::default(),
+            fetch: tbd_radar::config::Fetch::default(),
+            digest: tbd_radar::config::Digest::default(),
+            sources: Vec::new(),
         };
         let runtime = Runtime {
             fault: tbd_common::fault::FaultHandle::new(self.behavior.clone()),
