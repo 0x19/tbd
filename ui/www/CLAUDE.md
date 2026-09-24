@@ -33,7 +33,8 @@ own page is a static folder, `app/lab/<id>/page.tsx`, rendering
 documents, its timeline); the model lab's workbench is `/lab/llm/workbench/`.
 The live parts read the arena (`src/lib/arena.ts`, `useArena`: the socket `/v1/ws`
 after a `/v1/me` refresh, then `/v1/arena/events`, then a poll) and draw it with
-`src/components/workbench/live-panel.tsx` (hand-drawn SVG series, no chart library);
+`src/components/workbench/live-panel.tsx` (hand-drawn SVG series, no chart library;
+the model tiers, then the sandbox runner's card from `Snapshot.runner`);
 a figure the arena leaves out shows as a dash, never a zero. The workbench
 (`src/components/workbench/workbench.tsx`) keeps its sessions in `localStorage` only,
 sends a turn over SSE, the socket or MCP (`src/lib/llm.ts`, one event shape for all

@@ -76,7 +76,9 @@ the multiplexed socket, preset runs only, one at a time, bounded and cooled down
 The stream's shape is fixed too: one whole snapshot a second, the current one first, so
 a viewer that falls behind skips ahead instead of replaying. It carries each model tier
 (running, slots, waiting, up, tokens a second, time to the first token at the median and
-the 99th percentile, refusals a minute), each way in (REST, server-sent events, the
+the 99th percentile, refusals a minute), the sandbox runner (whether it answers, its
+slots, runs a minute, runs the sandbox missed, a whole run's median and 99th
+percentile), each way in (REST, server-sent events, the
 socket, MCP, gRPC) as the chaos tool last checked it end to end, with the time of that
 check and the number of tools an agent is offered, and the chaos tool's current run with
 its rates. A figure no source could give is absent, never zero, and the snapshot says
@@ -114,3 +116,6 @@ costs: the arena's own load on the platform, and the latency from an event to th
   is started for the bare model or for an agent, keeps its name once given one, shows
   whom it talks to, and saves as markdown; the side column lists the agents, and an
   agent can be told which page is being read, to test its grounding.
+- 2026-09-24: the arena shows the sandbox runner beside the model tiers: whether it
+  answers, its slots, and over five minutes its runs, the runs the sandbox missed, and
+  how long a whole run takes; the workbench's side column and the lab's cards draw it.

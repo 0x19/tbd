@@ -35,6 +35,18 @@ export type ChaosRun = {
   tokens_per_second?: number | null;
 };
 export type SourceState = { name: string; ok: boolean; age_s?: number | null; error: string };
+/** The sandbox runner (RFC 0010): whether it answered, how full it is, and its runs over five minutes. */
+export type RunnerState = {
+  up?: boolean;
+  stub?: boolean;
+  in_flight?: number;
+  max_in_flight?: number;
+  languages?: string[];
+  runs_per_minute?: number | null;
+  unavailable_per_minute?: number | null;
+  p50_ms?: number | null;
+  p99_ms?: number | null;
+};
 export type Snapshot = {
   now?: string | null;
   tiers: TierState[];
@@ -43,6 +55,8 @@ export type Snapshot = {
   mcp_tools?: number | null;
   chaos?: ChaosRun | null;
   sources: SourceState[];
+  /** Absent when no runner is configured. */
+  runner?: RunnerState | null;
 };
 
 /** One point of the moving series, per tier and for the chaos run. */

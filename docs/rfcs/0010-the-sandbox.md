@@ -110,3 +110,6 @@ takes cold, and what a run costs the machine.
   without its code, and a test that fails if the code ever reaches the log.
 - 2026-09-24: the workbench runs Go and Rust code blocks through it, as an admin; the
   page's "what this page sends" says the code is run once and not kept.
+- 2026-09-24: the sandbox is on the live view. The arena reads the runner as it reads the
+  model tiers, and the workbench shows its slots, runs a minute, how long a run takes and
+  how often the sandbox did not answer, beside the models.

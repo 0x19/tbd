@@ -20,7 +20,7 @@ export function LabLive() {
   return <LivePanel arena={arena} wide />;
 }
 
-/** One line of the arena for a lab's card: each tier's state, queue and speed. */
+/** One line of the arena for a lab's card: each tier's state, queue and speed, and the sandbox's. */
 export function LabLiveStrip() {
   const { me } = useMeState();
   const arena = useArena(me?.role === "admin");
@@ -39,6 +39,17 @@ export function LabLiveStrip() {
           {tier.waiting ? ` +${tier.waiting}` : ""} · {fig(tier.tokens_per_second, 1, " tok/s")}
         </span>
       ))}
+      {s.runner ? (
+        <span className="flex items-center gap-1.5">
+          <span
+            className={
+              s.runner.up ? "size-1.5 rounded-full bg-emerald-500" : "bg-destructive size-1.5 rounded-full"
+            }
+          />
+          sandbox {s.runner.in_flight ?? 0}/{s.runner.max_in_flight ?? 0} ·{" "}
+          {fig(s.runner.runs_per_minute, 1, " runs/min")}
+        </span>
+      ) : null}
     </p>
   );
 }

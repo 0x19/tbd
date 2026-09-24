@@ -1,6 +1,6 @@
 "use client";
 
-import { type Arena, fig, type Point, type TierState, useAge } from "@/lib/arena";
+import { type Arena, fig, type Point, type RunnerState, type TierState, useAge } from "@/lib/arena";
 import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -55,7 +55,7 @@ export function Spark({
 }
 
 /** Slots as cells: filled for running, outlined for free, then the line waiting. */
-function Slots({ t }: { t: TierState }) {
+function Slots({ t }: { t: Pick<TierState, "in_flight" | "max_in_flight" | "waiting"> }) {
   const cells = Math.max(t.max_in_flight, t.in_flight);
   return (
     <span
@@ -98,6 +98,40 @@ function Dot({ on, className }: { on: boolean | null; className?: string }) {
   );
 }
 
+/**
+ * The sandbox runner: whether it answered, what it runs, its slots, and over
+ * five minutes its runs, the runs the sandbox did not answer, and how long a
+ * whole run takes. A figure nothing measured is a dash.
+ */
+function RunnerCard({ r }: { r: RunnerState }) {
+  const t = useT();
+  const unavailable = r.unavailable_per_minute ?? null;
+  return (
+    <section className="bg-background flex flex-col gap-3 p-4">
+      <header className="flex items-center gap-2">
+        <Dot on={!!r.up} />
+        <span className="font-mono text-sm">{t("wb.live.sandbox")}</span>
+        <span className="text-muted-foreground truncate text-xs">
+          {(r.languages ?? []).join(" · ") || "—"}
+          {r.stub ? " · stub" : ""}
+        </span>
+      </header>
+      <Slots t={{ in_flight: r.in_flight ?? 0, max_in_flight: r.max_in_flight ?? 0, waiting: 0 }} />
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-1 font-mono text-xs tabular-nums">
+        <dt className="text-muted-foreground">{t("wb.live.runs")}</dt>
+        <dd className="text-right">{fig(r.runs_per_minute, 1)}</dd>
+        <dt className="text-muted-foreground">{t("wb.live.run_time")}</dt>
+        <dd className="text-right">
+          {fig(r.p50_ms, 0)} / {fig(r.p99_ms, 0)} ms
+        </dd>
+        <dt className="text-muted-foreground">{t("wb.live.unavailable")}</dt>
+        <dd className={cn("text-right", unavailable ? "text-destructive" : "")}>{fig(unavailable, 1)}</dd>
+      </dl>
+      {!r.up ? <p className="text-destructive text-xs">{t("wb.live.sandbox_down")}</p> : null}
+    </section>
+  );
+}
+
 const series = (history: Point[], tier: string, key: "tps" | "inFlight" | "waiting") =>
   history.map((p) => (p.tiers[tier] ? (p.tiers[tier][key] as number | null) : null));
 
@@ -112,7 +146,7 @@ const ago = (s: number | null) =>
 
 /**
  * What the platform is doing, from the arena: each tier's slots, queue and
- * speed with two minutes of history, every way in as the chaos tool last
+ * speed with two minutes of history, the sandbox runner, every way in as the chaos tool last
  * checked it, the MCP tool count, and the chaos run when one is going. `wide`
  * lays it out across a page (the lab's own page); narrow is the workbench's
  * side column.
@@ -191,6 +225,8 @@ export function LivePanel({ arena, wide = false }: { arena: Arena; wide?: boolea
           </div>
         </section>
       ))}
+
+      {s.runner ? <RunnerCard r={s.runner} /> : null}
 
       <section className="bg-background flex flex-col gap-2 p-4">
         <header className="flex items-baseline justify-between gap-2">
