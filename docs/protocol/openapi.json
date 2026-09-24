@@ -6058,6 +6058,48 @@
           }
         }
       },
+      "tbd.arena.v1.RunnerState": {
+        "type": "object",
+        "description": "`tbd.arena.v1.RunnerState`",
+        "properties": {
+          "in_flight": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "languages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "max_in_flight": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "p50_ms": {
+            "type": "number",
+            "format": "double"
+          },
+          "p99_ms": {
+            "type": "number",
+            "format": "double"
+          },
+          "runs_per_minute": {
+            "type": "number",
+            "format": "double"
+          },
+          "stub": {
+            "type": "boolean"
+          },
+          "unavailable_per_minute": {
+            "type": "number",
+            "format": "double"
+          },
+          "up": {
+            "type": "boolean"
+          }
+        }
+      },
       "tbd.arena.v1.Snapshot": {
         "type": "object",
         "description": "`tbd.arena.v1.Snapshot`",
@@ -6072,6 +6114,9 @@
           "now": {
             "type": "string",
             "format": "date-time"
+          },
+          "runner": {
+            "$ref": "#/components/schemas/tbd.arena.v1.RunnerState"
           },
           "sources": {
             "type": "array",
