@@ -18,6 +18,7 @@ import {
   TRANSPORTS,
   type Usage,
 } from "@/lib/llm";
+import { renderMarkdown } from "@/lib/markdown";
 import { useMeState } from "@/lib/me";
 import { cn } from "@/lib/utils";
 
@@ -643,6 +644,25 @@ function Intro({ onPick }: { onPick: (q: string) => void }) {
   );
 }
 
+/**
+ * The model's answer, rendered from markdown by `renderMarkdown`, which shows
+ * raw HTML as text, never loads an image, and keeps only http(s) links. Its
+ * code blocks carry a copy button, wired here by delegation.
+ */
+function Answer({ markdown }: { markdown: string }) {
+  const html = useMemo(() => renderMarkdown(markdown), [markdown]);
+  const onClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const button = (e.target as HTMLElement).closest("button[data-copy]");
+    const code = button?.closest(".md-code")?.querySelector("code")?.textContent;
+    if (!button || code === undefined || code === null) return;
+    void navigator.clipboard?.writeText(code).then(() => {
+      button.textContent = "copied";
+      window.setTimeout(() => (button.textContent = "copy"), 1200);
+    });
+  };
+  return <div className="md" onClick={onClick} dangerouslySetInnerHTML={{ __html: html }} />;
+}
+
 function Json({ value }: { value: unknown }) {
   return (
     <pre className="bg-muted/40 max-h-72 overflow-auto rounded border p-3 font-mono text-[11px] leading-relaxed">
@@ -792,8 +812,8 @@ function TurnView({
       ) : turn.status === "error" ? (
         <p className="text-destructive text-sm">{turn.error}</p>
       ) : (
-        <div className="text-sm leading-relaxed whitespace-pre-wrap">
-          {turn.text}
+        <div className="text-sm leading-relaxed">
+          {turn.text ? <Answer markdown={turn.text} /> : null}
           {turn.status === "running" ? (
             <span className="bg-foreground ml-0.5 inline-block h-4 w-1.5 animate-pulse align-text-bottom" />
           ) : null}
