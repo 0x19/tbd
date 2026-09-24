@@ -3,29 +3,28 @@ import type { Dict } from "./index";
 
 export const en: Dict = {
   "playgrounds.eyebrow": "Playgrounds",
-  "playgrounds.title": "Things you can actually try.",
+  "playgrounds.title": "Try it. It's running.",
   "playgrounds.lead":
-    "Every so often I build a small thing for the fun of it — a parser you can paste into, a simulator you can push, a piece of a bigger system pulled out and left running. When one is worth keeping up, it lands here. No sign-up, nothing to install.",
+    "Now and then I build something small for the fun of it: a parser you can paste into, a simulator you can push, a piece of a larger system left running. The ones worth keeping live here. No sign-up, nothing to install.",
   "playgrounds.since":
     "This is not a new habit: a JSON-to-Go-struct converter and a disposable-email API have been sitting in the open since 2015 and 2016 for exactly the same reason.",
   "playgrounds.building": "Building",
   "playgrounds.status": "Status",
-  "playgrounds.none.title": "Nothing is up yet. The first one appears here when it is ready, not before.",
-  "playgrounds.none.lead":
-    "If you want a shout when it does, send me a line. It is one person reading the mail.",
-  "playgrounds.none.cta": "Send me a line",
+  "playgrounds.none.title": "Nothing is live yet. The first one appears here when it is ready.",
+  "playgrounds.none.lead": "Write, and you will hear when the first one is live.",
+  "playgrounds.none.cta": "Write",
 };
 
 export const hr: Dict = {
   "playgrounds.eyebrow": "Igrališta",
-  "playgrounds.title": "Stvari koje stvarno možeš isprobati.",
+  "playgrounds.title": "Isprobaj. Radi.",
   "playgrounds.lead":
-    "Svako toliko iz zabave izgradim nešto malo -- parser u koji možeš zalijepiti, simulator koji možeš gurati, komad većeg sustava izvučen i ostavljen da radi. Kad neki vrijedi držati gore, završi ovdje. Bez prijave, bez instaliranja.",
+    "Svako toliko iz zabave izgradim nešto malo: parser u koji možeš zalijepiti, simulator koji možeš gurati, komad većeg sustava ostavljen da radi. Oni koje vrijedi zadržati žive ovdje. Bez prijave, bez instalacije.",
   "playgrounds.since":
     "Ovo nije nova navika: pretvarač JSON-a u Go strukturu i API za jednokratne adrese e-pošte stoje na otvorenom od 2015. i 2016. iz točno istog razloga.",
   "playgrounds.building": "U izradi",
   "playgrounds.status": "Stanje",
-  "playgrounds.none.title": "Još ništa nije gore. Prvo se pojavljuje ovdje kad bude spremno, ne prije.",
-  "playgrounds.none.lead": "Ako želiš glas kad se to dogodi, pošalji mi redak. Poštu čita jedna osoba.",
-  "playgrounds.none.cta": "Pošalji mi redak",
+  "playgrounds.none.title": "Još ništa nije pokrenuto. Prvo se pojavljuje ovdje kad bude spremno.",
+  "playgrounds.none.lead": "Piši, i javit ću ti kad prvo bude pokrenuto.",
+  "playgrounds.none.cta": "Piši",
 };

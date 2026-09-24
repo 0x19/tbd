@@ -3,9 +3,8 @@ import type { Dict } from "./index";
 
 export const en: Dict = {
   "contact.eyebrow": "Contact",
-  "contact.title": "Say hi.",
-  "contact.lead":
-    "A question about something here, a bug in one of the libraries, an idea worth a prototype, or work that needs doing — all fine. I answer every mail personally.",
+  "contact.title": "Write.",
+  "contact.lead": "Questions, bugs, ideas or work. All welcome, and every message gets a reply.",
   "contact.email": "Email",
   "contact.elsewhere": "Elsewhere",
   "contact.where": "Where",
@@ -15,9 +14,8 @@ export const en: Dict = {
 
 export const hr: Dict = {
   "contact.eyebrow": "Kontakt",
-  "contact.title": "Javi se.",
-  "contact.lead":
-    "Pitanje o nečemu odavde, greška u nekoj od biblioteka, ideja vrijedna prototipa ili posao koji treba obaviti -- sve je u redu. Na svaku poruku odgovaram osobno.",
+  "contact.title": "Piši.",
+  "contact.lead": "Pitanja, greške, ideje ili posao. Sve je dobrodošlo, i svaka poruka dobije odgovor.",
   "contact.email": "E-pošta",
   "contact.elsewhere": "Drugdje",
   "contact.where": "Gdje",

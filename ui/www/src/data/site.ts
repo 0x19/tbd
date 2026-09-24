@@ -30,7 +30,7 @@ export const company = {
   availability:
     "Available from October 2026 for protocol, infrastructure and distributed-systems work in Rust and Go, on a B2B contract through my own company, InOrbit d.o.o.",
   /** Short, for the browser tab and the footer. */
-  tagline: "Backend and blockchain systems.",
+  tagline: "Distributed systems and infrastructure.",
   /** The hero. Long enough to say something only I could say. */
   headline: "Systems built to stay up.",
   summary:
@@ -383,7 +383,7 @@ export const clients: readonly {
  */
 export const pipeline = [
   {
-    stage: "Wire",
+    stage: "Network",
     name: "packets, kernel",
     rows: [
       { k: "work", v: "eBPF, filtering, rewriting" },

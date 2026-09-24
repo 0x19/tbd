@@ -7,7 +7,7 @@
  */
 export const hr = {
   company: {
-    tagline: "Backend i blockchain sustavi.",
+    tagline: "Distribuirani sustavi i infrastruktura.",
     headline: "Sustavi građeni da ne padnu.",
     summary:
       "Dvadeset godina u neglamuroznoj polovici sustava: najprije glasovni poslužitelji i SMS pristupnici, zatim anycast mreže koje nose promet u stvarnom vremenu pri šezdeset gigabita, pa rollupi, mostovi i indekseri, a najnovije RPC infrastruktura ispred stotinjak blockchain mreža. Deset od tih godina u Gou, a posljednju u Rustu. Što god gradim iz zabave, završi i ovdje.",
@@ -197,11 +197,11 @@ export const hr = {
   } as Record<string, { name?: string; what?: string; tag?: string }>,
   principles: [
     {
-      title: "Prvo specifikacija, onda žica",
-      body: "RFC kaže što bi se trebalo dogoditi; snimka kaže što se događa. Kad se ne slažu, žica pobjeđuje, a zanimljive greške žive u toj pukotini.",
+      title: "Prvo specifikacija, onda stvarni promet",
+      body: "RFC kaže što bi se trebalo dogoditi; snimka prometa pokazuje što se stvarno događa. Kad se ne slažu, vrijedi snimka, a zanimljive greške žive u toj pukotini.",
     },
     {
-      title: "Promatrivo po zadanom",
+      title: "Vidljivo od prvog dana",
       body: "Svaki zahtjev nosi trace id u zapise, tragove, metrike i kontinuirane profile. Kvar se čita, a ne nagađa.",
     },
     {
@@ -209,13 +209,13 @@ export const hr = {
       body: "Isti alati koji rade u razvoju ubacuju kašnjenja, greške, izgubljene pakete i kvarove pohrane u CI-ju, pa prvi ispad nije i prvi test.",
     },
     {
-      title: "Na otvorenom",
+      title: "Otvoreni kod",
       body: "Otvoreni kod gdje god može. Dobri dijelovi vrijede više kad ih drugi čitaju nego kad stoje u ladici.",
     },
   ] as { title?: string; body?: string }[],
   pipeline: {
-    Wire: {
-      stage: "Žica",
+    Network: {
+      stage: "Mreža",
       name: "paketi, kernel",
       rows: [
         { k: "rad" },
