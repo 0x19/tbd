@@ -30,9 +30,10 @@ metrics_url = ""
 # The chaos tool's API root, ending in /api/chaos/v1 (ARENA_CHAOS_URL): its
 # current run, followed live, and its last end-to-end check of every way in.
 chaos_url = ""
-# A chaos schedule the arena creates once if it is missing: check every way in
-# end to end on this cron (six fields, UTC), never posting to Slack. Empty: the
-# arena only reads whatever check ran last.
+# A chaos schedule the arena keeps in place (it looks once a minute and creates
+# it when missing): check every way in end to end on this cron (six fields,
+# UTC), never posting to Slack. Empty: the arena only reads whatever check ran
+# last.
 validate_cron = "0 */2 * * * *"
 
 [collect]

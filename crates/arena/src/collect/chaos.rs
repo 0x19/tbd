@@ -7,7 +7,8 @@
 //! one before into per-second rates. `last_validate` names the newest check
 //! of every surface; when it changes, its report (`GET /runs/{id}`) becomes
 //! the surfaces. The check itself is the chaos tool's own, on a schedule the
-//! arena creates once if it is missing, with Slack notifications off: the
+//! arena creates whenever it finds it missing (it looks once a minute), with
+//! Slack notifications off: the
 //! arena shows how old the check is and never infers a surface's state.
 
 use std::{
@@ -21,6 +22,9 @@ use serde_json::Value;
 use tbd_proto::arena::v1::{ChaosRun, SurfaceState};
 
 use crate::world::World;
+
+/// How often the arena makes sure its schedule is still there.
+pub const RESCHEDULE: Duration = Duration::from_secs(60);
 
 /// The schedule the arena keeps in the chaos tool, by name.
 pub const SCHEDULE_NAME: &str = "arena: every way in";
@@ -98,7 +102,10 @@ pub fn start(
         .build()
         .unwrap_or_default();
     tokio::spawn(async move {
-        let mut scheduled = cron.is_empty();
+        // When the schedule was last confirmed; checked again every
+        // `RESCHEDULE`, so a chaos tool that lost it (a new volume, a
+        // hand-deleted schedule) gets it back without restarting the arena.
+        let mut confirmed: Option<std::time::Instant> = None;
         let mut seen_validate: Option<String> = None;
         let mut follower: Option<(String, tokio::task::JoinHandle<()>)> = None;
         let mut tick = tokio::time::interval(every);
@@ -117,9 +124,9 @@ pub fn start(
                 }
             };
             world.source_ok("chaos");
-            if !scheduled {
+            if !cron.is_empty() && confirmed.is_none_or(|at| at.elapsed() >= RESCHEDULE) {
                 match ensure_schedule(&http, &base, &cron).await {
-                    Ok(()) => scheduled = true,
+                    Ok(()) => confirmed = Some(std::time::Instant::now()),
                     Err(error) => {
                         tracing::warn!(%error, "arena: the chaos schedule is not there yet");
                     }

@@ -18,9 +18,10 @@ viewer over the gateway: `GET /v1/arena/snapshot` (one answer), `GET /v1/arena/e
 - **The ways in are checked, not inferred.** The surfaces (`rest`, `sse`, `websocket`,
   `mcp`, `grpc`) are the chaos tool's own end-to-end checks against the deployed
   stack (`rest_evaluate`, `sse_events`, `ws_mux`, `http_mcp_tools`, `grpc_protocol_ping`),
-  with the time they ran; the MCP tool count is what `http_mcp_tools` saw. On start the
-  arena creates one chaos schedule, `arena: every way in`, if it is missing: a validate
-  job on `[sources] validate_cron` (every two minutes) with Slack notifications off.
+  with the time they ran; the MCP tool count is what `http_mcp_tools` saw. The arena keeps
+  one chaos schedule, `arena: every way in`, in place: it looks once a minute and
+  creates it when missing, a validate job on `[sources] validate_cron` (every two
+  minutes) with Slack notifications off.
 - **Rates from a chaos run** are diffs of consecutive `load` frames, which are
   cumulative since the run began; counts that go back (a phase that reset them) keep
   the last rates.

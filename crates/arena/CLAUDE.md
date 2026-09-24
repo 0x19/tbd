@@ -14,7 +14,7 @@ The arena service: one live snapshot of what the platform is doing, for the lab'
   PromQL queries (constants, so tests match them exactly); `chaos.rs` reads `/overview`,
   follows a running run's SSE feed and diffs its `load` frames into rates, turns a new
   `last_validate` report into the surfaces through `SURFACES` (way in to check name),
-  and creates the `arena: every way in` schedule once, notifications off.
+  and keeps the `arena: every way in` schedule there (recreated within a minute if it goes missing), notifications off.
 
 - `lib.rs`: `serve` and `serve_on` start every configured collector; `serve_with`
   (the chaos kind) starts none, so the chaos tool never watches itself, and still ticks.
