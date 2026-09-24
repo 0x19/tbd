@@ -128,9 +128,12 @@ practice log is `localStorage`, per browser, and its page says so.
   gitignored `src/generated/radar/`, `/radar/` renders the latest from it first, and
   each week has its own page, `/radar/2026-w39/`, with its title and preview card,
   listed in the sitemap. Unreachable (an offline build) writes an empty list and the
-  page fetches in the browser; the build never fails for it. The browser still asks
+  page fetches in the browser; the build never fails for it. The service caps a list
+  at 100, so the generator reads one list per language and reader language and warns
+  when one comes back full (the list then needs a cursor). The browser still asks
   the service after load, for anything newer and, for an admin, the drafts (that read
-  goes through the lab's gate at Envoy). A newly published issue reaches the HTML
+  goes through the lab's gate at Envoy), and lays what it gets over the build's list
+  by id, never replacing it: the fetch is the newest few, the archive is the build. A newly published issue reaches the HTML
   with the next site build: `mise run radar:site`.
 - **Three sections for what was made, one rule each.** `/lab/` is what is being built
   now, with numbers and a status stamp; `/open-source/` (the `projects` data) is what
