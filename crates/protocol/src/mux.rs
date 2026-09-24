@@ -35,18 +35,18 @@ use axum::{
     routing::get,
 };
 use futures::{SinkExt, StreamExt};
-use prost_reflect::{DeserializeOptions, DynamicMessage};
+use prost_reflect::DynamicMessage;
 use serde::{Deserialize, Serialize};
 use tbd_common::metrics::{RequestTimer, StreamGuard};
 use tokio::{sync::mpsc, task::AbortHandle};
-use tonic::client::Grpc;
 
 use crate::{
     AppState,
     config::Socket,
     error::{Code, Detail, Problem},
+    invoke::{Invoked, invoke, request},
     principal::Caller,
-    transcode::{Rpc, Transcoder, call::Out, codec::DynamicCodec},
+    transcode::{Rpc, Transcoder, call::Out},
 };
 
 /// The path. Hand-written, so [`crate::http::reserved_paths`] carries it.
@@ -338,19 +338,6 @@ fn accept(
     }
 }
 
-/// The request message: the frame's `body`, strictly, or an empty message.
-fn request(rpc: &Rpc, body: Option<serde_json::Value>) -> Result<DynamicMessage, Problem> {
-    let input = rpc.method.input();
-    match body {
-        None | Some(serde_json::Value::Null) => Ok(DynamicMessage::new(input)),
-        Some(value) => {
-            let options = DeserializeOptions::new().deny_unknown_fields(true);
-            DynamicMessage::deserialize_with_options(input, value, &options)
-                .map_err(|error| Problem::field("body", error.to_string()))
-        }
-    }
-}
-
 /// One call, from its own task: measured like every other request path.
 async fn run(
     rpc: Arc<Rpc>,
@@ -378,43 +365,16 @@ async fn forward(
     message: DynamicMessage,
     events: &mpsc::Sender<Event>,
 ) -> Result<(), Problem> {
-    let backend = state.backend(&rpc.backend).ok_or_else(|| {
-        Problem::new(
-            Code::Unavailable,
-            format!("backend {} is not registered", rpc.backend),
-        )
-    })?;
-    let mut grpc = Grpc::new(backend.transport());
-    grpc.ready().await.map_err(|error| {
-        Problem::from(tonic::Status::unavailable(format!(
-            "backend not ready: {}",
-            Into::<tonic::codegen::StdError>::into(error)
-        )))
-    })?;
-    let codec = DynamicCodec::new(rpc.method.output());
     // The identity verified at the upgrade goes with every call, as it does
     // on the REST side (transcode/call.rs).
-    let mut outbound = tonic::Request::new(message);
-    if let Some(payload) = payload {
-        outbound
-            .metadata_mut()
-            .insert(crate::principal::PAYLOAD_HEADER, payload);
-    }
-    if rpc.streaming {
-        let mut stream = grpc
-            .server_streaming(outbound, rpc.grpc_path.clone(), codec)
-            .await?
-            .into_inner();
-        while let Some(item) = stream.next().await {
-            data(events, id, &item?).await?;
+    match invoke(rpc, state, payload, message).await? {
+        Invoked::Stream(mut stream) => {
+            while let Some(item) = stream.next().await {
+                data(events, id, &item?).await?;
+            }
+            Ok(())
         }
-        Ok(())
-    } else {
-        let response = grpc
-            .unary(outbound, rpc.grpc_path.clone(), codec)
-            .await?
-            .into_inner();
-        data(events, id, &response).await
+        Invoked::Unary(response) => data(events, id, &response).await,
     }
 }
 

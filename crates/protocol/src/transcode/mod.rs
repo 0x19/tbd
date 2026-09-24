@@ -8,6 +8,7 @@ mod bind;
 pub(crate) mod call;
 pub(crate) mod codec;
 mod openapi;
+pub mod schema;
 pub mod template;
 
 use std::{collections::BTreeMap, sync::Arc};

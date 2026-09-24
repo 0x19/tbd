@@ -23,6 +23,7 @@ mod error;
 mod graphql;
 mod grpc;
 mod http;
+mod invoke;
 pub mod json;
 pub mod mux;
 mod observe;
