@@ -10245,6 +10245,9 @@
         "properties": {
           "force": {
             "type": "boolean"
+          },
+          "wait": {
+            "type": "boolean"
           }
         }
       },
@@ -10252,11 +10255,17 @@
         "type": "object",
         "description": "`tbd.radar.v1.RunDigestResponse`",
         "properties": {
+          "already_running": {
+            "type": "boolean"
+          },
           "digests": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/tbd.radar.v1.Digest"
             }
+          },
+          "started": {
+            "type": "boolean"
           },
           "week": {
             "type": "string"

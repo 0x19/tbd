@@ -204,7 +204,10 @@ async fn refresh_and_run_digest_are_for_admins_only() {
         .run_digest(as_caller(
             "someone",
             None,
-            RunDigestRequest { force: false },
+            RunDigestRequest {
+                force: false,
+                wait: true,
+            },
         ))
         .await
         .unwrap_err();
@@ -220,7 +223,10 @@ async fn run_digest_without_an_llm_service_says_so() {
         .run_digest(as_caller(
             "owner",
             Some("admin"),
-            RunDigestRequest { force: false },
+            RunDigestRequest {
+                force: false,
+                wait: true,
+            },
         ))
         .await
         .unwrap_err();
@@ -255,7 +261,10 @@ async fn an_answer_without_the_headings_is_not_stored() {
         .run_digest(as_caller(
             "owner",
             Some("admin"),
-            RunDigestRequest { force: true },
+            RunDigestRequest {
+                force: true,
+                wait: true,
+            },
         ))
         .await
         .unwrap()
@@ -288,4 +297,34 @@ async fn filters_are_checked() {
         .await
         .unwrap_err();
     assert_eq!(err.code(), Code::InvalidArgument);
+}
+
+#[tokio::test]
+async fn run_digest_starts_in_the_background_by_default() {
+    let (llm_url, _llm) = support::llm_stub().await;
+    let (server, _pool) = support::start_with_store(|c| {
+        c.llm.url = llm_url;
+    })
+    .await;
+    let run = server
+        .client()
+        .await
+        .run_digest(as_caller(
+            "owner",
+            Some("admin"),
+            RunDigestRequest {
+                force: false,
+                wait: false,
+            },
+        ))
+        .await
+        .unwrap()
+        .into_inner();
+    assert!(run.started, "a background run was started");
+    assert!(!run.already_running);
+    assert!(
+        run.digests.is_empty(),
+        "a background run returns before it writes"
+    );
+    assert!(run.week.contains("-W"));
 }

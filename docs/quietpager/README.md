@@ -17,7 +17,7 @@ the open-source grader lives in `github.com/quietpager/qp` and the katas in
 | `GetDigest` | `GET /v1/radar/digests/{id}` | anyone |
 | `ListItems` | `GET /v1/radar/items?language=&limit=` | anyone |
 | `Refresh` | `POST /v1/radar/refresh` | admin role |
-| `RunDigest` | `POST /v1/radar/digests/run` (`force` rewrites the week's) | admin role |
+| `RunDigest` | `POST /v1/radar/digests/run`: starts the week's run in the background and returns (`started`, or `already_running`); `force` rewrites the week's, `wait` waits for it (direct callers only; the edge's timeouts cut a wait) | admin role |
 
 On the site's host (`www.`), Envoy serves the reads open with a per-address rate
 limit and gates the writes to the admin role; the service checks the role again.
@@ -27,7 +27,7 @@ Go releases, accepted Go proposals (GitHub search), the Rust blog, Inside Rust, 
 Week in Rust, merged Rust RFCs (GitHub search). Read every `[fetch] interval_secs`
 (6 h), each on its own; a failing source does not stop the rest.
 
-**Digests.** Written on `[digest] weekday` at or after `hour` (UTC, Monday 06:00),
+**Digests.** One run at a time, whoever starts it (the schedule or `RunDigest`). Written on `[digest] weekday` at or after `hour` (UTC, Monday 06:00),
 for the seven days before, one per language and reader language, by the llm service
 (`[llm] tier`, deep) as `svc:radar` within that subject's daily token budget. Each has
 four sections (what changed, why it matters, a ten-minute drill, a 60-second avatar

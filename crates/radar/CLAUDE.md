@@ -21,6 +21,9 @@ reader language (`en`, `hr`). The contract is `docs/quietpager/README.md`.
   refused and nothing is stored. Reasoning chunks are dropped.
 - `worker.rs`: `refresh` and `digest`, shared by the timers and the admin RPCs. The
   week written at `now` is the week of the day before, so a Monday run is last week.
+  One digest run at a time (`running`, released on drop); `RunDigest` starts it in
+  the background by default because a run takes minutes and the edge and gateway
+  cut long requests, and a cancelled gRPC call would abort the run with it.
 - `service.rs`: reads are public; `Refresh` and `RunDigest` need the admin role on
   the caller Envoy verified. Without a store every RPC but `Ping` is `UNAVAILABLE`.
 

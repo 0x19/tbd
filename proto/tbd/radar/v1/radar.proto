@@ -40,7 +40,9 @@ service RadarService {
   }
 
   // Write this week's digests now instead of waiting for the schedule, or
-  // rewrite them. Admin only.
+  // rewrite them. Admin only. A run takes minutes (the model writes each digest
+  // in turn), so by default it starts in the background and returns at once;
+  // the digests appear in ListDigests as each is written. One run at a time.
   rpc RunDigest(RunDigestRequest) returns (RunDigestResponse) {
     option (google.api.http) = {
       post: "/v1/radar/digests/run"
@@ -149,10 +151,19 @@ message RefreshResponse {
 message RunDigestRequest {
   // Rewrite digests that already exist for the week.
   bool force = 1;
+  // Wait for the run and return its digests, instead of starting it in the
+  // background. For callers that reach the service directly (tests, tools);
+  // through the edge a wait is cut by the routing timeouts.
+  bool wait = 2;
 }
 
 message RunDigestResponse {
-  // The week written, and the digests it produced.
+  // The week the run writes.
   string week = 1;
+  // The digests it produced; only with `wait`.
   repeated Digest digests = 2;
+  // A background run was started.
+  bool started = 3;
+  // A run was already in progress; nothing new was started.
+  bool already_running = 4;
 }

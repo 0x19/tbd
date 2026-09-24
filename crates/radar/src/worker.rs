@@ -1,7 +1,14 @@
 //! The radar's two jobs, shared by the timers and the admin RPCs: read every
 //! source (`refresh`), and write the week's digests (`digest`).
 
-use std::{collections::BTreeSet, sync::Arc, time::Duration};
+use std::{
+    collections::BTreeSet,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+    time::Duration,
+};
 
 use chrono::{DateTime, Datelike, Timelike, Utc};
 use tbd_common::metrics::names;
@@ -45,6 +52,17 @@ pub struct Worker {
     sources: Arc<Vec<SourceSpec>>,
     fetch: Fetch,
     digest: Digest,
+    /// One digest run at a time, whoever started it (the schedule, an admin).
+    running: Arc<AtomicBool>,
+}
+
+/// Clears the running flag when a run ends, however it ends.
+struct Running(Arc<AtomicBool>);
+
+impl Drop for Running {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::SeqCst);
+    }
 }
 
 impl Worker {
@@ -65,7 +83,54 @@ impl Worker {
             sources: Arc::new(sources),
             fetch,
             digest,
+            running: Arc::new(AtomicBool::new(false)),
         }
+    }
+
+    /// Whether an llm service is configured to write with.
+    #[must_use]
+    pub fn has_writer(&self) -> bool {
+        self.writer.is_some()
+    }
+
+    fn claim(&self) -> Option<Running> {
+        (!self.running.swap(true, Ordering::SeqCst)).then(|| Running(self.running.clone()))
+    }
+
+    /// Run [`Worker::digest`] now and wait for it, unless a run is already in
+    /// progress (`Ok(None)`).
+    ///
+    /// # Errors
+    /// As [`Worker::digest`].
+    pub async fn digest_now(
+        &self,
+        now: DateTime<Utc>,
+        force: bool,
+    ) -> Result<Option<(String, Vec<DigestRow>)>, RunError> {
+        let Some(_running) = self.claim() else {
+            return Ok(None);
+        };
+        self.digest(now, force).await.map(Some)
+    }
+
+    /// Start [`Worker::digest`] in the background; false when a run is
+    /// already in progress. The outcome is logged and counted.
+    #[must_use]
+    pub fn start_digest(&self, now: DateTime<Utc>, force: bool) -> bool {
+        let Some(running) = self.claim() else {
+            return false;
+        };
+        let worker = self.clone();
+        tokio::spawn(async move {
+            let _running = running;
+            match worker.digest(now, force).await {
+                Ok((week, written)) => {
+                    tracing::info!(%week, written = written.len(), "radar digest run done");
+                }
+                Err(e) => tracing::warn!(error = %e, "radar digest run failed"),
+            }
+        });
+        true
     }
 
     /// Read every source once; a failing source is counted and logged, never
@@ -200,7 +265,7 @@ impl Worker {
             }
             let now = Utc::now();
             if self.due(now)
-                && let Err(e) = self.digest(now, false).await
+                && let Err(e) = self.digest_now(now, false).await
             {
                 tracing::warn!(error = %e, "radar digest run failed");
             }

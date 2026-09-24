@@ -285,12 +285,37 @@ impl RadarService for Radar {
         let Some(worker) = &self.worker else {
             return Err(self.reject(&mut timer, Status::unavailable("no worker")));
         };
-        let force = request.into_inner().force;
-        tracing::info!(subject = %who.sub, force, "radar digest requested");
-        match worker.digest(Utc::now(), force).await {
-            Ok((week, rows)) => Ok(Response::new(RunDigestResponse {
+        let req = request.into_inner();
+        if !worker.has_writer() {
+            return Err(self.reject(
+                &mut timer,
+                Status::failed_precondition("no llm service configured"),
+            ));
+        }
+        let now = Utc::now();
+        let week = Worker::week_of(now);
+        tracing::info!(subject = %who.sub, force = req.force, wait = req.wait, "radar digest requested");
+        if !req.wait {
+            let started = worker.start_digest(now, req.force);
+            return Ok(Response::new(RunDigestResponse {
+                week,
+                digests: Vec::new(),
+                started,
+                already_running: !started,
+            }));
+        }
+        match worker.digest_now(now, req.force).await {
+            Ok(Some((week, rows))) => Ok(Response::new(RunDigestResponse {
                 week,
                 digests: rows.into_iter().map(to_digest).collect(),
+                started: true,
+                already_running: false,
+            })),
+            Ok(None) => Ok(Response::new(RunDigestResponse {
+                week,
+                digests: Vec::new(),
+                started: false,
+                already_running: true,
             })),
             Err(RunError::NoWriter) => Err(self.reject(
                 &mut timer,
