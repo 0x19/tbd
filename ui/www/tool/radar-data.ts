@@ -19,21 +19,38 @@ const here = dirname(fileURLToPath(import.meta.url));
 const out = resolve(here, "../src/generated/radar");
 const source = (process.env.RADAR_SOURCE_URL ?? "https://inorbit.hr").replace(/\/$/, "");
 
+// The service caps one list at 100 digests, so the build asks per language and
+// reader language (each well under the cap for now) and says so loudly when a
+// list comes back full, since that means weeks were left out.
+const CAP = 100;
+
 async function published(): Promise<RadarDigest[]> {
+  const all: RadarDigest[] = [];
   try {
-    const res = await fetch(`${source}/v1/radar/digests?limit=500`, {
-      headers: { accept: "application/json", "user-agent": "tbd-www-build" },
-      signal: AbortSignal.timeout(15_000),
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const body = (await res.json()) as { digests?: RadarDigest[] };
-    return (body.digests ?? []).filter((d) => d.status === "published" && !d.stub);
+    for (const language of ["go", "rust"]) {
+      for (const lang of ["en", "hr"]) {
+        const res = await fetch(`${source}/v1/radar/digests?language=${language}&lang=${lang}&limit=${CAP}`, {
+          headers: { accept: "application/json", "user-agent": "tbd-www-build" },
+          signal: AbortSignal.timeout(15_000),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const body = (await res.json()) as { digests?: RadarDigest[] };
+        const got = body.digests ?? [];
+        if (got.length >= CAP) {
+          console.warn(
+            `radar: ${language}/${lang} returned ${got.length}, the service's cap; older weeks are missing until the list pages`,
+          );
+        }
+        all.push(...got);
+      }
+    }
   } catch (e) {
     console.warn(
       `radar: ${source} not reachable (${(e as Error).message}); no issues rendered, the page fetches in the browser`,
     );
     return [];
   }
+  return all.filter((d) => d.status === "published" && !d.stub);
 }
 
 const digests = await published();

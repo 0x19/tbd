@@ -83,6 +83,15 @@ function readParam(name: string): string | null {
 /** Every published digest the build rendered, newest week first. */
 const built: Digest[] = issues.flatMap((i) => i.digests);
 
+/** The build's digests with a fetch laid over them: a fetched digest replaces
+ *  the built one with its id, and the rest of the build stays, since the fetch
+ *  asks only for the newest few and the archive is in the build. Newest first. */
+function merged(fetched: Digest[]): Digest[] {
+  const byId = new Map(built.map((d) => [d.id, d]));
+  for (const d of fetched) byId.set(d.id, d);
+  return [...byId.values()].sort((a, b) => b.week.localeCompare(a.week));
+}
+
 /** The issue number of a week, when it is published. */
 const numberOf = (week: string) => issues.find((i) => i.week === week)?.number;
 
@@ -112,9 +121,10 @@ export function RadarContent({ fixedWeek }: { fixedWeek?: string } = {}) {
       });
       if (!res.ok) throw new Error(String(res.status));
       const body = (await res.json()) as { digests?: Digest[] };
-      setState({ kind: "ready", digests: (body.digests ?? []).filter((d) => !d.stub) });
+      setState({ kind: "ready", digests: merged((body.digests ?? []).filter((d) => !d.stub)) });
     } catch {
-      setState({ kind: "failed" });
+      // The build's issues still read; only an empty build is a failure.
+      setState(built.length ? { kind: "ready", digests: built } : { kind: "failed" });
     }
   }, []);
 
