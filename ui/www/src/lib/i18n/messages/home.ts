@@ -28,7 +28,7 @@ export const en: Dict = {
   "home.lab.cta": "Into the lab →",
   "home.hi.label": "Say hi",
   "home.hi.how": "What happens",
-  "home.hi.text": "No form, no funnel. One person reading the mail.",
+  "home.hi.text": "One person reads the mail and answers.",
 };
 
 export const hr: Dict = {
@@ -57,5 +57,5 @@ export const hr: Dict = {
   "home.lab.cta": "U laboratorij →",
   "home.hi.label": "Javi se",
   "home.hi.how": "Što slijedi",
-  "home.hi.text": "Bez obrasca i bez prodajne priče. Poštu čita jedna osoba.",
+  "home.hi.text": "Poštu čita i na nju odgovara jedna osoba.",
 };
