@@ -8,6 +8,12 @@
 //! before the first chunk the RPC itself fails with a status; after it, the
 //! stream carries chunks and then one error item. The deadline is the tier's
 //! `timeout_secs`, measured from admission, and covers both.
+//!
+//! Admission ([`crate::admission`]) comes after the cheap refusals (caller,
+//! bounds, budget) and before anything is recorded or an engine is asked: a
+//! request takes one of the tier's slots, waits in a bounded line for one, or
+//! is refused `RESOURCE_EXHAUSTED` with the reason. The slot is held until the
+//! stream ends.
 
 use std::{
     collections::BTreeMap,
@@ -34,6 +40,7 @@ use uuid::Uuid;
 
 use crate::{
     Runtime,
+    admission::{Admission, Slot},
     config::{Budget, Config, Generate, Ping, Tier},
     engine::{ChunkStream, Engine, EngineError, GenerateSpec, Message, Usage},
     probe,
@@ -51,6 +58,7 @@ pub struct Llm {
 #[derive(Debug)]
 struct Inner {
     engines: BTreeMap<Tier, Arc<dyn Engine>>,
+    admission: BTreeMap<Tier, Admission>,
     timeouts: BTreeMap<Tier, Duration>,
     default_tier: Tier,
     limits: Generate,
@@ -73,11 +81,16 @@ impl Llm {
             .into_iter()
             .map(|t| (t, config.engine(t).timeout()))
             .collect();
+        let admission = Tier::ALL
+            .into_iter()
+            .map(|t| (t, Admission::new(t, config.engine(t))))
+            .collect();
         Self {
             ping: config.ping.clone(),
             runtime,
             inner: Arc::new(Inner {
                 engines,
+                admission,
                 timeouts,
                 default_tier: config.engines.default_tier,
                 limits: config.generate.clone(),
@@ -132,6 +145,21 @@ impl Llm {
             )));
         }
         Ok(())
+    }
+
+    /// A slot on the tier, after waiting in line if there is one; a full line
+    /// or a wait that runs out is `RESOURCE_EXHAUSTED`, saying which.
+    async fn enter(&self, tier: Tier) -> Result<Option<Slot>, Status> {
+        let Some(admission) = self.inner.admission.get(&tier) else {
+            return Ok(None);
+        };
+        match admission.enter().await {
+            Ok(slot) => Ok(Some(slot)),
+            Err(refusal) => {
+                tracing::info!(%tier, reason = refusal.reason(), "admission refused");
+                Err(Status::resource_exhausted(refusal.message(tier)))
+            }
+        }
     }
 
     /// The generation's session and row, when there is a record.
@@ -392,6 +420,8 @@ struct Live {
     fault: FaultHandle,
     span: tracing::Span,
     recording: Option<Recording>,
+    /// The tier's slot, given back when the stream is dropped.
+    _slot: Option<Slot>,
 }
 
 impl Live {
@@ -524,7 +554,6 @@ impl LlmService for Llm {
         request: Request<GenerateRequest>,
     ) -> Result<Response<Self::GenerateStream>, Status> {
         let mut timer = self.admit("LlmService/Generate").await?;
-        let started = Instant::now();
         let principal = Self::principal(&request).map_err(|s| self.reject(&mut timer, s))?;
         let req = request.into_inner();
         let chosen = self
@@ -537,6 +566,11 @@ impl LlmService for Llm {
         self.admit_budget(&principal.sub)
             .await
             .map_err(|s| self.reject(&mut timer, s))?;
+        let slot = self
+            .enter(chosen)
+            .await
+            .map_err(|s| self.reject(&mut timer, s))?;
+        let started = Instant::now();
         let recording = self
             .record_start(&principal.sub, &req.session_id, chosen, engine)
             .await
@@ -599,6 +633,7 @@ impl LlmService for Llm {
             fault: self.runtime.fault.clone(),
             span,
             recording,
+            _slot: slot,
         };
         Ok(Response::new(live_stream(live)))
     }
@@ -650,6 +685,10 @@ impl LlmService for Llm {
                 )),
             ));
         }
+        let _slot = self
+            .enter(chosen)
+            .await
+            .map_err(|s| self.reject(&mut timer, s))?;
         let vectors = match tokio::time::timeout(timeout, engine.embed(req.inputs)).await {
             Ok(Ok(v)) => v,
             Ok(Err(e)) => return Err(self.reject(&mut timer, status_of(&e))),
@@ -682,7 +721,12 @@ impl LlmService for Llm {
             .filter_map(|tier| {
                 let engine = self.inner.engines.get(&tier)?;
                 let identity = self.inner.probe.identity(tier);
+                let admission = self.inner.admission.get(&tier);
+                let count = |n: usize| u32::try_from(n).unwrap_or(u32::MAX);
                 Some(ModelInfo {
+                    in_flight: admission.map_or(0, |a| count(a.in_flight())),
+                    max_in_flight: admission.map_or(0, |a| count(a.max_in_flight())),
+                    waiting: admission.map_or(0, |a| count(a.waiting())),
                     tier: wire_tier(tier),
                     engine: engine.kind().as_str().to_owned(),
                     model: engine.model().to_owned(),

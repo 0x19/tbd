@@ -382,6 +382,85 @@ async fn without_a_store_the_budget_says_so(fixture: Fixture) {
     assert_eq!(resp.day.len(), 10, "YYYY-MM-DD");
 }
 
+/// Admission: with one slot and no line, a second request while the first
+/// streams is refused at once as "busy", `ListModels` shows the slot taken,
+/// and the slot comes back when the first caller goes away.
+async fn a_busy_tier_refuses_at_once_and_frees_the_slot_when_the_caller_leaves(fixture: Fixture) {
+    let server = support::start_on(fixture, |c| {
+        for tier in [&mut c.engines.fast, &mut c.engines.deep] {
+            tier.max_in_flight = 1;
+            tier.max_queued = 0;
+            tier.timeout_secs = 30;
+        }
+    })
+    .await;
+    let first = tokio::spawn({
+        let mut client = server.client().await;
+        async move {
+            let resp = client
+                .generate(support::as_caller(&VISITOR, ask("<<hang>> hold the slot")))
+                .await;
+            // Keep the stream (and so the slot) until the task is aborted.
+            if let Ok(resp) = resp {
+                let _ = support::collect(resp.into_inner()).await;
+            }
+        }
+    });
+    let mut client = server.client().await;
+    let in_flight = |client: &mut tbd_proto::llm::v1::llm_service_client::LlmServiceClient<_>| {
+        let mut client = client.clone();
+        async move {
+            let r = client
+                .list_models(Request::new(ListModelsRequest {}))
+                .await
+                .unwrap()
+                .into_inner();
+            r.models
+                .iter()
+                .find(|m| m.tier == Tier::Fast as i32)
+                .map(|m| (m.in_flight, m.max_in_flight))
+                .unwrap()
+        }
+    };
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    while in_flight(&mut client).await.0 < 1 {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the first request never took its slot"
+        );
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    assert_eq!(in_flight(&mut client).await, (1, 1));
+
+    let started = std::time::Instant::now();
+    let err = client
+        .generate(support::as_caller(&VISITOR, ask("hi")))
+        .await
+        .unwrap_err();
+    assert_eq!(err.code(), Code::ResourceExhausted, "{err:?}");
+    assert!(err.message().starts_with("busy: tier fast"), "{err:?}");
+    assert!(
+        started.elapsed() < Duration::from_millis(500),
+        "refused at once"
+    );
+
+    first.abort();
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    while in_flight(&mut client).await.0 > 0 {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the slot was not given back"
+        );
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    let resp = client
+        .generate(support::as_caller(&VISITOR, ask("hi")))
+        .await
+        .unwrap();
+    let (_, error) = support::collect(resp.into_inner()).await;
+    assert!(error.is_none(), "{error:?}");
+}
+
 macro_rules! conformance_suite {
     ($prefix:ident, $fixture:expr) => {
         mod $prefix {
@@ -408,6 +487,7 @@ macro_rules! conformance_suite {
             case!(a_request_that_breaks_the_bounds_is_invalid);
             case!(tier_deep_routes_to_the_deep_engine);
             case!(without_a_store_the_budget_says_so);
+            case!(a_busy_tier_refuses_at_once_and_frees_the_slot_when_the_caller_leaves);
         }
     };
 }

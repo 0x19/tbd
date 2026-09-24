@@ -9,7 +9,9 @@ operations in `docs/llm/README.md`; this file is the non-obvious.
   opens the pool lazily when `[store] url` is set (`LLM_DATABASE_URL`), aborts the
   probe when the server stops.
 - `service.rs`: the `LlmService` impl on `Llm`. Every RPC starts with `admit()`.
-  `Generate` is admit → caller → bounds → tier → budget → session and row → engine,
+  `Generate` is admit → caller → bounds → tier → budget → admission slot → session and
+  row → engine (the deadline starts once the slot is taken; the `Slot` rides in `Live`
+  and is given back on drop),
   then `live_stream`: an `unfold` over the engine's chunks with the deadline as a
   `select!` arm, the metrics recorded from `Chunk` (never inside an engine), and a
   `Recording` that closes the row with its outcome and, on drop without a close,
@@ -22,6 +24,11 @@ operations in `docs/llm/README.md`; this file is the non-obvious.
   `[store]`. `EngineConfig` is a plain struct with `kind: EngineKind`, not a tagged
   enum: `deny_unknown_fields` and `flatten` do not combine. `Config::stub(addr)` is
   what tests and the chaos kind run; `refuse_stub(env)` is what `main` runs.
+- `admission.rs`: per tier a fair semaphore of `max_in_flight` slots and a line of at
+  most `max_queued` counted with an atomic taken before the wait (two arrivals cannot
+  share the last place); full or timed out is a `Refusal` → `RESOURCE_EXHAUSTED`
+  "busy: ...". Gauges are set on every enter and on `Slot` drop. `Config::stub` gives
+  64/64 so only tests that set bounds meet it; the conformance case sets 1/0.
 - `probe.rs`: health per tier on an interval into a gauge and a shared flag, and the
   engine's identity (`Engine::identity`: its build and the weights' revision) kept per
   tier, read on every pass, shown by `ListModels` and written into every generation's

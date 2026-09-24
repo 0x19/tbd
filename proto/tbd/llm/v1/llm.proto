@@ -17,6 +17,9 @@ service LlmService {
   // Generate a completion for a conversation, streamed one chunk at a time.
   // The last chunk has `done` set and carries the usage. Over REST this is
   // server-sent events; on the multiplexed socket it is the same RPC by name.
+  // A tier runs a bounded number of generations at once with a bounded line
+  // behind them; beyond that, or after waiting too long in it, the answer is
+  // RESOURCE_EXHAUSTED starting "busy:", at once rather than after a minute.
   rpc Generate(GenerateRequest) returns (stream GenerateResponse) {
     option (google.api.http) = {
       post: "/v1/llm/generate/events"
@@ -150,6 +153,12 @@ message ModelInfo {
   // The tier has an embedding model configured; Embed on a tier without one
   // is refused before any engine is asked. A chat model does not embed.
   bool embeds = 8;
+  // Admission, now: requests running on the tier, the most it runs at once,
+  // and requests waiting for a slot. A full line is refused at once with
+  // RESOURCE_EXHAUSTED ("busy"), and so is a wait that runs out.
+  uint32 in_flight = 9;
+  uint32 max_in_flight = 10;
+  uint32 waiting = 11;
 }
 
 message ListModelsResponse {

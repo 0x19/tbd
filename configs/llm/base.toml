@@ -40,6 +40,15 @@ timeout_secs = 120
 # The embedding model, when this tier embeds at all. Empty: it does not, and
 # Embed on it is refused before any engine is asked; a chat model does not embed.
 embed_model = ""
+# Admission. Requests the tier runs at once: what the engine really runs in
+# parallel (Ollama's OLLAMA_NUM_PARALLEL on the host is 1), so the engine's own
+# invisible queue stays empty and the wait is here, bounded and measured.
+max_in_flight = 1
+# Requests that may wait for a slot; one more is refused at once with "busy".
+# At about three seconds a short answer, eight is a wait a person tolerates.
+max_queued = 8
+# How long one waits in line before it is refused.
+queue_timeout = "30s"
 
 [engines.deep]
 # The large model that runs from memory for quality: llama-server on the host
@@ -49,6 +58,10 @@ url = "http://127.0.0.1:8081"
 model = "gpt-oss-120b"
 timeout_secs = 900
 embed_model = ""
+# One answer at a time from memory; a short line, a long patience.
+max_in_flight = 1
+max_queued = 2
+queue_timeout = "120s"
 
 [generate]
 # Bounds on one request. Anything over is INVALID_ARGUMENT; max_tokens is

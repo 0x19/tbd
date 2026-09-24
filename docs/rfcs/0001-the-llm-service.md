@@ -191,3 +191,7 @@ and where, before it sends anything.
   waiting per tier, and a fast, named refusal beyond them, after study 0001 measured
   what an unbounded queue costs. The fast tier's move to the deep tier's engine is
   decided on a condition: when a study shows it at least as fast and as stable.
+- 2026-09-24: admission control is live. Each tier runs as many generations at once as
+  its engine really runs in parallel (one on each tier today), keeps a short line
+  behind them, and refuses beyond it at once with a reason; a wait that runs out is
+  refused too. The model listing says, per tier, how many are running and waiting.

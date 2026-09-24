@@ -82,6 +82,15 @@ pub mod names {
     /// Gauge: 1 while the tier's engine answered its last probe, else 0. Labels
     /// `tier`, `engine`.
     pub const LLM_ENGINE_UP: &str = "tbd_llm_engine_up";
+    /// Gauge: requests running on the tier now. Label `tier`.
+    pub const LLM_IN_FLIGHT: &str = "tbd_llm_in_flight";
+    /// Gauge: requests waiting for a slot on the tier now. Label `tier`.
+    pub const LLM_QUEUED: &str = "tbd_llm_queued";
+    /// Histogram: seconds an admitted request waited for its slot. Label `tier`.
+    pub const LLM_QUEUE_WAIT: &str = "tbd_llm_queue_wait_seconds";
+    /// Counter: requests refused by admission. Labels `tier`, `reason`
+    /// (`queue_full`, `queue_timeout`).
+    pub const LLM_REFUSED_TOTAL: &str = "tbd_llm_refused_total";
     /// Counter of idempotency rows purged after their TTL.
     pub const LEDGER_IDEMPOTENCY_PURGED_TOTAL: &str = "tbd_ledger_idempotency_purged_total";
     /// Gauge of outbox events not yet published.
@@ -155,6 +164,11 @@ pub fn install(addr: SocketAddr, service: &str) -> Result<(), MetricsError> {
         .map_err(|e| MetricsError::Install(e.to_string()))?
         .set_buckets_for_metric(
             Matcher::Full(names::LLM_TIME_TO_FIRST_TOKEN.into()),
+            DURATION_BUCKETS,
+        )
+        .map_err(|e| MetricsError::Install(e.to_string()))?
+        .set_buckets_for_metric(
+            Matcher::Full(names::LLM_QUEUE_WAIT.into()),
             DURATION_BUCKETS,
         )
         .map_err(|e| MetricsError::Install(e.to_string()))?
@@ -315,6 +329,20 @@ fn describe_llm() {
     describe_gauge!(
         names::LLM_ENGINE_UP,
         "1 while the tier's engine answered its last probe, else 0."
+    );
+    describe_gauge!(names::LLM_IN_FLIGHT, "Requests running on the tier now.");
+    describe_gauge!(
+        names::LLM_QUEUED,
+        "Requests waiting for a slot on the tier now."
+    );
+    describe_histogram!(
+        names::LLM_QUEUE_WAIT,
+        Unit::Seconds,
+        "Seconds an admitted request waited for its slot."
+    );
+    describe_counter!(
+        names::LLM_REFUSED_TOTAL,
+        "Requests refused by admission, by tier and reason (queue_full, queue_timeout)."
     );
 }
 

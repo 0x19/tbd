@@ -165,6 +165,9 @@ impl Default for Engines {
                 model: "gpt-oss:20b".to_owned(),
                 timeout_secs: 120,
                 embed_model: String::new(),
+                max_in_flight: 1,
+                max_queued: 8,
+                queue_timeout: Duration::from_secs(30),
             },
             deep: EngineConfig {
                 kind: EngineKind::Llamacpp,
@@ -172,6 +175,9 @@ impl Default for Engines {
                 model: "gpt-oss-120b".to_owned(),
                 timeout_secs: 900,
                 embed_model: String::new(),
+                max_in_flight: 1,
+                max_queued: 2,
+                queue_timeout: Duration::from_secs(120),
             },
         }
     }
@@ -210,6 +216,15 @@ pub struct EngineConfig {
     /// The embedding model, when the tier embeds at all. Empty: the tier does
     /// not embed, and `Embed` on it is refused before any engine is asked.
     pub embed_model: String,
+    /// Requests the tier runs at once: what the engine really runs in
+    /// parallel, so its own hidden queue stays empty. At least 1.
+    pub max_in_flight: usize,
+    /// Requests that may wait for a slot; one more is refused at once. 0: no
+    /// line, a busy tier refuses immediately.
+    pub max_queued: usize,
+    /// How long a request waits in line before it is refused.
+    #[serde(with = "humantime_serde")]
+    pub queue_timeout: Duration,
 }
 
 impl EngineConfig {
@@ -361,6 +376,10 @@ impl Config {
             "stub-model".clone_into(&mut e.model);
             "stub-embed".clone_into(&mut e.embed_model);
             e.timeout_secs = 30;
+            // The stub answers at once; tests that exercise admission set
+            // their own bounds.
+            e.max_in_flight = 64;
+            e.max_queued = 64;
         }
         Self {
             server: Server { listen },
@@ -417,6 +436,12 @@ impl Config {
                 return Err(ValidationError::Empty {
                     tier,
                     what: "timeout_secs",
+                });
+            }
+            if e.max_in_flight == 0 {
+                return Err(ValidationError::Empty {
+                    tier,
+                    what: "max_in_flight",
                 });
             }
             match e.kind {

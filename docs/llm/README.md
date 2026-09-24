@@ -20,11 +20,22 @@ is done when it passes it, not when it worked once.
    `max_tokens` clamped to the cap); over is `INVALID_ARGUMENT`.
 3. With a store, the caller's tokens spent today (UTC) are summed; over
    `[budget] tokens_per_day` is `RESOURCE_EXHAUSTED`, naming the count and the reset.
-   One generation in flight may overrun: tokens are known only when it ends. Then a
-   session row is minted or, if the request named one, touched (a session that is not
+   One generation in flight may overrun: tokens are known only when it ends.
+   Then **admission**: the request takes one of the tier's `max_in_flight` slots, or
+   waits for one in a line of at most `max_queued`, first come first served. A full
+   line is `RESOURCE_EXHAUSTED` at once ("busy: tier fast is running 1 and 8 are
+   waiting"); a wait past `queue_timeout` is `RESOURCE_EXHAUSTED` saying how long it
+   waited. The protocol answers both as 429 (`rate_limited`). The slot is held until
+   the stream ends, fails or its caller goes away. `Embed` takes a slot the same way.
+   `max_in_flight` is what the engine really runs in parallel, so the engine's own
+   invisible queue stays empty and every wait is here, bounded and measured
+   (`tbd_llm_in_flight`, `tbd_llm_queued`, `tbd_llm_queue_wait_seconds`,
+   `tbd_llm_refused_total`; `ListModels` shows `in_flight`, `max_in_flight` and
+   `waiting` per tier). Then a session row is minted or, if the request named one, touched (a session that is not
    the caller's is `NOT_FOUND`, the same answer as one that does not exist), and a
    generation row starts as `running`.
-4. The tier's engine is asked. Its `timeout_secs` is the deadline from admission and
+4. The tier's engine is asked. Its `timeout_secs` is the deadline from admission (the
+   wait in line is not counted against it) and
    covers everything: an engine that has not started answering is
    `DEADLINE_EXCEEDED` as the RPC's status; one that stops mid-way is
    `DEADLINE_EXCEEDED` as the last item of the stream.
@@ -64,7 +75,7 @@ recorded).
 |---|---|
 | The service | `crates/llm` (`crates/llm/CLAUDE.md`), proto `proto/tbd/llm/v1/llm.proto`, REST through the protocol under `/v1/llm/` |
 | The engines | `crates/llm/src/engine/`: the trait, `ollama.rs`, `llamacpp.rs`, `stub.rs`; one match on the kind, in `build` |
-| The tiers | `configs/llm/base.toml` `[engines.fast]` and `[engines.deep]`: `kind`, `url`, `model`, `timeout_secs`, `embed_model` (the tier embeds only when it is set); URLs and models per environment through `LLM_FAST_URL`, `LLM_FAST_MODEL`, `LLM_DEEP_URL`, `LLM_DEEP_MODEL` |
+| The tiers | `configs/llm/base.toml` `[engines.fast]` and `[engines.deep]`: `kind`, `url`, `model`, `timeout_secs`, `embed_model` (the tier embeds only when it is set), and admission's `max_in_flight`, `max_queued`, `queue_timeout`; URLs and models per environment through `LLM_FAST_URL`, `LLM_FAST_MODEL`, `LLM_DEEP_URL`, `LLM_DEEP_MODEL` |
 | The record | schema `llm` in the shared app database, migration `0029_llm.sql`, Secret `llm-db` from `mise run llm:secrets`, then `mise run db:migrate` |
 | The budget | `[budget] tokens_per_day` (0 is no limit); enforced only when generations are recorded; `unlimited_subjects` exempts the platform's own instruments (the chaos tool's `chaos-load`), never a person |
 | The probe | `[engines] probe_interval` / `probe_timeout`; `tbd_llm_engine_up` and `ListModels.up` |

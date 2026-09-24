@@ -19,6 +19,10 @@ backend is visible instead of clipped.
 | `tbd_cv_notifications_total` | counter | `kind` (`owner`, `requester`), `outcome` (`sent`, `refused`, `failed`, `no_mailbox`, `unreachable`) | the cv service tried to send a mail through the finance service's linked mailbox |
 | `tbd_llm_tokens_total` | counter | `tier` (`fast`, `deep`), `engine` (`ollama`, `llamacpp`, `stub`), `model`, `kind` (`prompt`, `completion`) | a generation's done chunk arrived with the engine's token counts |
 | `tbd_llm_time_to_first_token_seconds` | histogram | `tier`, `engine` | a generation's first text chunk arrived; measured from admission |
+| `tbd_llm_in_flight` | gauge | `tier` | requests running on the tier now (admission's slots taken) |
+| `tbd_llm_queued` | gauge | `tier` | requests waiting for a slot on the tier now |
+| `tbd_llm_queue_wait_seconds` | histogram | `tier` | an admitted request got its slot; how long it waited in line |
+| `tbd_llm_refused_total` | counter | `tier`, `reason` (`queue_full`, `queue_timeout`) | admission refused a request with `RESOURCE_EXHAUSTED` |
 | `tbd_llm_engine_up` | gauge | `tier`, `engine` | the llm service's probe of a tier's engine (every `[engines] probe_interval`): 1 while it answers, else 0; never drives the service's own health |
 | `tbd_stream_items_total` | counter | `kind`, `direction` (`in`, `out`) | an item crosses a stream |
 | `tbd_engine_client_requests_total` | counter | `backend` (`engine`, `ledger`, …: the protocol's `[services]` name), `route`, `status` | the protocol finishes a call to a backend, measured on the client side |

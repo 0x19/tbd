@@ -6,6 +6,7 @@
 //! engines (Ollama, llama.cpp, the test stub) are built from `[engines]` here
 //! and handed to the service; nothing above [`engine`] names one.
 
+pub mod admission;
 pub mod config;
 pub mod engine;
 pub mod probe;

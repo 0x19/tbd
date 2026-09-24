@@ -9149,6 +9149,14 @@
           "engine_version": {
             "type": "string"
           },
+          "in_flight": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "max_in_flight": {
+            "type": "integer",
+            "format": "int32"
+          },
           "model": {
             "type": "string"
           },
@@ -9169,6 +9177,10 @@
           },
           "up": {
             "type": "boolean"
+          },
+          "waiting": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },
