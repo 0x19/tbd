@@ -63,6 +63,18 @@ Postgres, the entries are counted in thousands per subject, not billions, and on
 is one thing to back up, migrate and reason about. A study says when that stops being
 true.
 
+**A multi-model database in its place (SurrealDB).** One engine for documents, graph
+edges, vectors and full-text search, written in Rust, embeddable, and sold for exactly
+this: agent memory as a knowledge graph with vector recall. Rejected for now, for four
+reasons. It would be a second stateful system to run, back up and test beside a Postgres
+that already has vector indexes and serves the rest of the platform. Its ready-made memory
+layer is the part this RFC means to build and understand, not buy. Its third major
+version is months old and its index layouts have changed between minor releases. Its
+licence restricts offering it as a service until it becomes Apache 2.0 in 2030. It
+would win if memory became a dense graph whose main question is several hops deep; the
+memory study measures how deep recall actually goes, and this is revisited if the answer
+is "often more than one".
+
 **Caller-declared tools, as the model APIs offer them.** Rejected: a platform that runs
 whatever tool a request describes runs whatever the request wants. The tools are the
 platform's, listed and schema-checked.
@@ -85,3 +97,4 @@ back, how often a wrong one does, and what it costs per turn.
 ## Status log
 
 - 2026-09-24: opened.
+- 2026-09-24: a multi-model database considered in place of Postgres; rejected for now, with the condition that would reopen it.
