@@ -555,10 +555,13 @@ mod tests {
             Some("smo objavili")
         );
         assert_eq!(
-            voice_slip("hr", "Najnovije vesti iz Rusta.").as_deref(),
+            voice_slip("hr", "Najnovije vesti o Rustu.").as_deref(),
             Some("vesti")
         );
-        assert_eq!(voice_slip("hr", "Ove sedmice").as_deref(), Some("sedmice"));
+        assert_eq!(
+            voice_slip("hr", "Dvije sedmice").as_deref(),
+            Some("sedmice")
+        );
         assert_eq!(
             voice_slip("hr", "Takođe je izašao izveštaj.").as_deref(),
             Some("Takođe")
