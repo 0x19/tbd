@@ -1,4 +1,4 @@
-import { type Bend, CELL, type Cell, px, route, segments, trace } from "@/lib/mesh";
+import { type Bend, CELL, type Cell, path, px, route, segments, trace } from "@/lib/mesh";
 import { cn } from "@/lib/utils";
 
 /**
@@ -9,19 +9,26 @@ import { cn } from "@/lib/utils";
  * page, densest at that edge, and the box around it fades it out towards
  * the content. Same 72px grid as the spine, drawn as a pattern from the
  * spine and the anchored edge, so every node sits on an intersection at any
- * width. Kept faint on purpose, and alive in three quiet ways: packets run
+ * width. A chain of blocks runs through it on its own row, a block every
+ * second column pointing at the one before, the tiles' traces tapping in and
+ * crossing it: the packet on the way in, the chain on the way through. Kept
+ * faint on purpose, and alive in three quiet ways: packets run
  * away from the spine, rings ripple out from the hub on it every few
  * seconds, and the halos on the points of presence breathe (`.mesh-packet`,
  * `.mesh-ripple`, `.mesh-halo`, `site.css`; all stop under
  * prefers-reduced-motion). Decoration only: `aria-hidden`, no pointer events.
  */
 
-const ROWS = 8;
+const ROWS = 10;
+// The chain of blocks runs along this row, the one row no tile node uses.
+const CHAIN = 6;
 const H = ROWS * CELL;
 const TILE = 10;
 // Tiles either side of the spine: enough for a 2560px screen with the spine
 // near its middle.
 const TILES = 4;
+// How far the chain and its line reach either side, in cells.
+const REACH = (TILES + 1) * TILE;
 
 // Rows count from the anchored edge, so the densest row hugs it: a cell is
 // (col, rowFromEdge), placed by `at` for the anchor in hand.
@@ -140,12 +147,18 @@ function layout(anchor: Anchor) {
       }
     }
   }
+  // The chain: one line along its row, a block every second column across the
+  // whole width, each pointing at the one before it.
+  solidTraces.push(trace(at([-REACH, CHAIN]), at([REACH, CHAIN])));
+  const blocks: Cell[] = [];
+  for (let c = -REACH; c <= REACH; c += 2) blocks.push(at([c, CHAIN]));
   const solid = segments(solidTraces);
   const dashed = segments(dashedTraces);
 
   // Three packets: right along the fabric, left along it, and one off the bottom.
   const T = (k: number, n: string, k2: number, n2: string, bend?: Bend) =>
     trace(cell(k, variant(k), n), cell(k2, variant(k2), n2), bend);
+  const chain = (from: number, to: number) => path(trace(at([from, CHAIN]), at([to, CHAIN])));
   const packets = [
     {
       d: route(
@@ -182,16 +195,57 @@ function layout(anchor: Anchor) {
       duration: 7,
       delay: 11,
     },
+    {
+      d: route(
+        T(2, "a", 2, "b"),
+        T(2, "b", 2, "d"),
+        T(2, "d", 2, "e"),
+        T(2, "e", 2, "j"),
+        trace(cell(2, A, "j"), at([25, 8])),
+      ),
+      duration: 12,
+      delay: 3,
+    },
+    {
+      d: route(
+        T(-2, "d", -2, "b"),
+        T(-2, "b", -2, "a"),
+        T(-2, "a", -3, "i"),
+        T(-3, "i", -3, "g"),
+        T(-3, "g", -3, "j"),
+        T(-3, "j", -4, "c"),
+      ),
+      duration: 14,
+      delay: 8,
+    },
+    {
+      d: route(
+        T(1, "j", 1, "g"),
+        T(1, "g", 1, "e"),
+        T(1, "e", 1, "h"),
+        T(1, "h", 1, "k"),
+        trace(cell(1, B, "k"), at([18, 8])),
+      ),
+      duration: 11,
+      delay: 6,
+    },
+    { d: chain(-14, 14), duration: 26, delay: 2 },
+    { d: chain(12, -16), duration: 24, delay: 13 },
+    {
+      d: route(T(0, "a", 0, "b"), T(0, "b", 0, "d"), T(0, "d", 0, "e"), T(0, "e", 0, "j")),
+      duration: 9,
+      delay: 16,
+    },
   ];
   const hub = px(cell(0, A, "a"));
-  return { solid, dashed, nodes, packets, hub };
+  return { solid, dashed, nodes, packets, hub, blocks };
 }
 
 const layouts = { top: layout("top"), bottom: layout("bottom") };
 
 /** The fabric itself, hung from the top or the bottom edge of its box. */
 export function MeshFabric({ anchor }: { anchor: Anchor }) {
-  const { solid, dashed, nodes, packets, hub } = layouts[anchor];
+  const { solid, dashed, nodes, packets, hub, blocks } = layouts[anchor];
   const grid = `mesh-grid-${anchor}`;
   return (
     <svg
@@ -233,6 +287,26 @@ export function MeshFabric({ anchor }: { anchor: Anchor }) {
         {dashed.map((d) => (
           <path key={d} d={d} />
         ))}
+      </g>
+
+      {/* ------------------------------------------------------- blocks */}
+      {/* The chain on its row: each block a header and three transactions,
+          knocking the line and the grid out, with the hash of the one before
+          pointing in from the left. */}
+      <g strokeWidth="1.1" className="[stroke-opacity:0.6] dark:[stroke-opacity:0.65]">
+        {blocks.map((b) => {
+          const [x, y] = px(b);
+          return (
+            <g key={`block-${x}-${y}`}>
+              <rect x={x - 32} y={y - 22} width={64} height={44} rx={3} fill="var(--background)" />
+              <path d={`M${x - 23} ${y - 12} H${x - 2}`} strokeWidth="1.4" />
+              <path d={`M${x - 23} ${y - 2} H${x + 18}`} strokeWidth="0.7" />
+              <path d={`M${x - 23} ${y + 5} H${x + 10}`} strokeWidth="0.7" />
+              <path d={`M${x - 23} ${y + 12} H${x + 14}`} strokeWidth="0.7" />
+              <path d={`M${x - 40} ${y - 4} L${x - 34} ${y} L${x - 40} ${y + 4}`} strokeWidth="0.9" />
+            </g>
+          );
+        })}
       </g>
 
       {/* ------------------------------------------------------ packets */}

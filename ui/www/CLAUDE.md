@@ -161,8 +161,9 @@ practice log is `localStorage`, per browser, and its page says so.
   removed. Behind the hero and behind the footer is one drawing,
   `src/components/mesh-fabric.tsx`: a mesh of points of presence grown to the whole
   width, two hand-laid tiles alternating and joined at their seams, on a 72px grid
-  drawn as a pattern from the spine, faint, with packets, ripples from the hub and
-  breathing halos (all stop under `prefers-reduced-motion`). `Opening` hangs it from
+  drawn as a pattern from the spine, faint, with a chain of blocks running through it
+  on its own row (a block every second column, pointing at the one before), packets,
+  ripples from the hub and breathing halos (all stop under `prefers-reduced-motion`). `Opening` hangs it from
   the top of the home page, fading down into the facts strip (where the request comes
   in from); `Closing`, wrapped round the footer in the root layout, hangs it from the
   bottom of every page, fading up (where the reply goes out to), and on the home page
