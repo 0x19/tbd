@@ -138,7 +138,7 @@ export function Workbench() {
   const [budget, setBudget] = useState<{ used: number; limit: number; unlimited: boolean } | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const abort = useRef<AbortController | null>(null);
-  const endRef = useRef<HTMLDivElement | null>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
@@ -161,7 +161,20 @@ export function Workbench() {
     const timer = window.setInterval(() => setNow(Date.now()), 250);
     return () => window.clearInterval(timer);
   }, [running]);
-  useEffect(() => endRef.current?.scrollIntoView({ block: "end" }), [turns]);
+  // Follow the newest turn by scrolling the transcript's own box, never the
+  // window. (A block body on purpose: an effect that returns anything but a
+  // function, such as the promise `scrollIntoView` now returns, crashes the
+  // page when React calls it as the cleanup.)
+  useEffect(() => {
+    const box = scrollRef.current;
+    if (box) box.scrollTop = box.scrollHeight;
+  }, [turns]);
+
+  // Ready to type on arrival, without the jump `autoFocus` makes by scrolling the
+  // window to the prompt.
+  useEffect(() => {
+    if (admin) inputRef.current?.focus({ preventScroll: true });
+  }, [admin]);
 
   const refreshBudget = useCallback(async () => {
     try {
@@ -433,7 +446,7 @@ export function Workbench() {
   return (
     <div
       className={cn(
-        "grid min-h-[70dvh] overflow-hidden rounded-lg border lg:h-[calc(100dvh-10rem)]",
+        "grid min-h-[70dvh] overflow-hidden rounded-lg border lg:h-[calc(100dvh-13rem)]",
         panel ? "lg:grid-cols-[13rem_minmax(0,1fr)_22rem]" : "lg:grid-cols-[13rem_minmax(0,1fr)]",
       )}
     >
@@ -499,7 +512,7 @@ export function Workbench() {
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6" aria-live="polite">
+        <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6" aria-live="polite">
           {turns.length === 0 ? <Intro onPick={(q) => setPrompt(q)} /> : null}
           <ol className="grid gap-6">
             {turns.map((turn) => (
@@ -515,7 +528,6 @@ export function Workbench() {
               </li>
             ))}
           </ol>
-          <div ref={endRef} />
         </div>
 
         <div className="relative border-t p-3">
@@ -556,7 +568,6 @@ export function Workbench() {
               placeholder={t("wb.placeholder")}
               aria-label={t("wb.placeholder")}
               className="min-h-6 flex-1 resize-none bg-transparent text-sm outline-none"
-              autoFocus
             />
             {running ? (
               <Button size="sm" variant="outline" onClick={() => abort.current?.abort()}>
