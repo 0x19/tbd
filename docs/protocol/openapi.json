@@ -4933,48 +4933,6 @@
         }
       }
     },
-    "/v1/subjects/{subject_id}/events": {
-      "get": {
-        "tags": [
-          "engine"
-        ],
-        "summary": "`GET /v1/subjects/{subject_id}/events`: engine `Subscribe` as SSE.",
-        "operationId": "events",
-        "parameters": [
-          {
-            "name": "subject_id",
-            "in": "path",
-            "description": "The subject to follow",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "A stream of `EventBody` events; a failure is an `error` event carrying `Problem`",
-            "content": {
-              "text/event-stream": {
-                "schema": {
-                  "$ref": "#/components/schemas/EventBody"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "The engine is unavailable",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/v1/radar/ping": {
       "get": {
         "tags": [
@@ -5006,6 +4964,48 @@
           },
           "default": {
             "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/subjects/{subject_id}/events": {
+      "get": {
+        "tags": [
+          "engine"
+        ],
+        "summary": "`GET /v1/subjects/{subject_id}/events`: engine `Subscribe` as SSE.",
+        "operationId": "events",
+        "parameters": [
+          {
+            "name": "subject_id",
+            "in": "path",
+            "description": "The subject to follow",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A stream of `EventBody` events; a failure is an `error` event carrying `Problem`",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The engine is unavailable",
             "content": {
               "application/json": {
                 "schema": {
