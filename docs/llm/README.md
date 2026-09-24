@@ -103,8 +103,13 @@ Envoy. In the local cluster they run on the host (`host.k3d.internal`); in compo
 
 | Tier | Engine | Serves | Wire |
 |---|---|---|---|
-| `fast` | Ollama | the model that fits the 16 GB card | `POST /api/chat` as newline-delimited JSON, `GET /api/tags`, `POST /api/embed` |
-| `deep` | `llama-server` | the large mixture-of-experts model, attention on the GPU and experts in RAM; started after the fast model has loaded, into what it left of the card, and with `--reasoning-format` so its reasoning arrives apart from its answer | `POST /v1/chat/completions` as server-sent events with `stream_options.include_usage`, `GET /v1/models`, `POST /v1/embeddings` (needs `--embeddings`) |
+| `fast` | `llama-server` (container `llama-fast`, port 8082) | the model that fits the 16 GB card, whole on the GPU: `-np 4 --kv-unified -c 32768`, four slots sharing one cache so a long conversation is not cut at a quarter of it, and `max_in_flight = 4` to match (study 0002) | as below |
+| `deep` | `llama-server` (container `llama-deep`, port 8081) | the large mixture-of-experts model, attention on the GPU and experts in RAM, into what the fast model left of the card, and with `--reasoning-format` so its reasoning arrives apart from its answer | `POST /v1/chat/completions` as server-sent events with `stream_options.include_usage`, `GET /v1/models`, `POST /v1/embeddings` (needs `--embeddings`) |
+
+Both tiers run the same engine since study 0002 measured it against Ollama on the same
+card. Ollama is still installed and the `ollama` kind still works, but its service is
+stopped and disabled on the host: an idle Ollama loads a model on the first request it
+gets and would take the card from the fast tier.
 
 A missing usage is reported as zeros, never estimated. Which model each tier serves is
 one value in configuration; the RFC that chose it lives in the site's lab.

@@ -38,8 +38,9 @@ standing when more people ask than the card can serve.
 Borrow the shape from rollups: an **L1** that does the expensive, generic work and an
 **L2** that owns everything with a policy in it.
 
-**L1 is whatever runs the weights.** Today that is Ollama for the model on the card
-and llama.cpp's server for the model in memory; later it is an engine of our own,
+**L1 is whatever runs the weights.** Today that is llama.cpp's server for both the
+model on the card and the model in memory (study 0002 moved the fast tier to it from
+Ollama); later it is an engine of our own,
 written in Rust on candle, one layer at a time (weight loading, the tokenizer, the
 forward pass, the cache, batching, sampling), each layer a study with a number to beat.
 An engine holds a model and turns a prompt into a stream of tokens. It knows nothing
@@ -107,7 +108,8 @@ see the end of.
 Build the `llm` service as described, with these choices fixed for the first study and
 open to the measurements after it.
 
-**The fast tier** runs on the card, served by Ollama. The candidate is a 20 billion
+**The fast tier** runs on the card, served by llama.cpp's server with four parallel
+slots over one shared cache (it was Ollama until study 0002). The candidate is a 20 billion
 parameter mixture-of-experts model with a few billion active parameters per token, at
 4-bit, which leaves the card room for the context; the challenger is Google's 26B
 mixture-of-experts release of the same season. The first study measures both on this
@@ -134,10 +136,11 @@ fast tier starts at one or two in flight), and the service exports how many are 
 flight, how long they waited and how many were refused.
 
 **One engine for both tiers, once measured.** Both tiers stay behind the same contract,
-so the fast tier's engine can move to the one the deep tier uses, with continuous
+so the fast tier's engine could move to the one the deep tier uses, with continuous
 batching and a small draft model for speculative decoding where one exists for the
-model. It moves when a study shows it at least as fast and at least as stable on this
-card; until then the fast tier stays where it is.
+model, when a study showed it at least as fast and as stable on this card. Study 0002
+did: 171 tokens a second for one caller against 126, and 281 over four callers against
+120. The draft model was slower on this model and is not used.
 
 **The record** lives in the platform's Postgres, in the service's own schema, keyed by
 the verified subject. Without the database the service still runs: it records nothing
@@ -196,3 +199,6 @@ and where, before it sends anything.
   its engine really runs in parallel (one on each tier today), keeps a short line
   behind them, and refuses beyond it at once with a reason; a wait that runs out is
   refused too. The model listing says, per tier, how many are running and waiting.
+- 2026-09-24: the fast tier moved to the deep tier's engine (study 0002): four slots over
+  one shared cache, admission raised to four running, no draft model. The previous
+  engine is off, because an idle one would load a model and take the card.

@@ -31,19 +31,21 @@ probe_timeout = "3s"
 # deployment's engines are chosen in a reviewed file. "stub" is the in-process
 # test engine and is refused in production.
 [engines.fast]
-# The model that fits the GPU and answers a visitor: Ollama on the host.
-kind = "ollama"
-url = "http://127.0.0.1:11434"
-model = "gpt-oss:20b"
+# The model that fits the GPU and answers a visitor: llama-server on the host,
+# the same engine as the deep tier (study 0002: 171 tok/s on one stream against
+# Ollama's 126, and 281 tok/s over four at once against Ollama's 120).
+kind = "llamacpp"
+url = "http://127.0.0.1:8082"
+model = "gpt-oss-20b"
 # Whole-request deadline, seconds.
 timeout_secs = 120
 # The embedding model, when this tier embeds at all. Empty: it does not, and
 # Embed on it is refused before any engine is asked; a chat model does not embed.
 embed_model = ""
 # Admission. Requests the tier runs at once: what the engine really runs in
-# parallel (Ollama's OLLAMA_NUM_PARALLEL on the host is 1), so the engine's own
-# invisible queue stays empty and the wait is here, bounded and measured.
-max_in_flight = 1
+# parallel (llama-server's four slots, `-np 4`), so the engine's own invisible
+# queue stays empty and the wait is here, bounded and measured.
+max_in_flight = 4
 # Requests that may wait for a slot; one more is refused at once with "busy".
 # At about three seconds a short answer, eight is a wait a person tolerates.
 max_queued = 8
