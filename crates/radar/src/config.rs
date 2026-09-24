@@ -40,6 +40,66 @@ pub struct Config {
     /// `[[sources]]`
     #[serde(default)]
     pub sources: Vec<SourceSpec>,
+    /// `[archive]`
+    #[serde(default)]
+    pub archive: Archive,
+}
+
+/// `[archive]`: where the backfill reads past weeks from, and how it writes
+/// them. The live feeds carry ten recent entries at most.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Archive {
+    /// The Go blog's full index.
+    pub go_blog: String,
+    /// Go's release history, every release with its date and note.
+    pub go_releases: String,
+    /// The Rust blog's index.
+    pub rust_blog: String,
+    /// Inside Rust's index.
+    pub inside_rust: String,
+    /// This Week in Rust's archive of issues.
+    pub twir: String,
+    /// GitHub's issue search.
+    pub github: String,
+    /// Accepted Go proposals closed in a range (`{from}`, `{to}` as YYYY-MM-DD).
+    pub go_proposals_query: String,
+    /// Rust RFCs merged in a range.
+    pub rust_rfcs_query: String,
+    /// Pages of 100 read per GitHub query at most.
+    pub max_github_pages: u32,
+    /// Pause between two page fetches of one archive, milliseconds.
+    pub pause_ms: u64,
+    /// The llm tier archive digests are written with.
+    pub tier: String,
+    /// Archive digests written at once (the tier's other slots stay free).
+    pub parallel: usize,
+    /// Fewer items than this in a week, for a language: no digest.
+    pub min_items: usize,
+    /// Retries of a digest after a busy or dropped llm call, with backoff.
+    pub retries: u32,
+}
+
+impl Default for Archive {
+    fn default() -> Self {
+        Self {
+            go_blog: "https://go.dev/blog/all".to_owned(),
+            go_releases: "https://go.dev/doc/devel/release".to_owned(),
+            rust_blog: "https://blog.rust-lang.org/".to_owned(),
+            inside_rust: "https://blog.rust-lang.org/inside-rust/".to_owned(),
+            twir: "https://this-week-in-rust.org/blog/archives/index.html".to_owned(),
+            github: "https://api.github.com/search/issues".to_owned(),
+            go_proposals_query:
+                "repo:golang/go is:issue label:Proposal-Accepted closed:{from}..{to}".to_owned(),
+            rust_rfcs_query: "repo:rust-lang/rfcs is:pr is:merged merged:{from}..{to}".to_owned(),
+            max_github_pages: 10,
+            pause_ms: 1000,
+            tier: "fast".to_owned(),
+            parallel: 2,
+            min_items: 2,
+            retries: 3,
+        }
+    }
 }
 
 /// `[server]`
@@ -250,6 +310,15 @@ impl Config {
     /// # Errors
     /// A human-readable reason.
     pub fn validate(&self) -> Result<(), String> {
+        if !matches!(self.archive.tier.as_str(), "fast" | "deep") {
+            return Err(format!(
+                "[archive] tier must be fast or deep, not {:?}",
+                self.archive.tier
+            ));
+        }
+        if self.archive.parallel == 0 {
+            return Err("[archive] parallel must be at least 1".to_owned());
+        }
         if !matches!(self.llm.tier.as_str(), "fast" | "deep") {
             return Err(format!(
                 "[llm] tier must be fast or deep, not {:?}",

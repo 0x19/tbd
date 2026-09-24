@@ -68,6 +68,8 @@ pub struct DigestRow {
     pub status: String,
     /// When it was published.
     pub published_at: Option<DateTime<Utc>>,
+    /// `"live"` (the weekly run) or `"archive"` (the backfill).
+    pub origin: String,
 }
 
 /// How much a change matters in production: a named category, never a score.
@@ -106,7 +108,7 @@ pub struct Change {
 macro_rules! digest_columns {
     () => {
         "id, week, language, lang, created_at, changed, why, drill, script, \
-         item_count, model, stub, summary, changes, status, published_at"
+         item_count, model, stub, summary, changes, status, published_at, origin"
     };
 }
 
@@ -188,10 +190,15 @@ impl Store {
         to: DateTime<Utc>,
         limit: i64,
     ) -> Result<Vec<ItemRow>, StoreError> {
+        // One row per URL: a post read from a live feed (named by its feed id)
+        // and from an archive (named by its URL) is one item.
         let rows = sqlx::query(
-            "select id, source, language, guid, title, url, summary, published_at
-             from radar.items
-             where language = $1 and published_at >= $2 and published_at < $3
+            "select * from (
+               select distinct on (url) id, source, language, guid, title, url, summary, published_at
+               from radar.items
+               where language = $1 and published_at >= $2 and published_at < $3
+               order by url, length(summary) desc, id
+             ) one
              order by published_at desc, id desc limit $4",
         )
         .bind(language)
@@ -201,6 +208,57 @@ impl Store {
         .fetch_all(&self.pool)
         .await?;
         Ok(rows.iter().map(item_row).collect())
+    }
+
+    /// The earliest week the weekly run has a digest for: the backfill stops
+    /// before it, so the archive never overwrites a live issue.
+    ///
+    /// # Errors
+    /// The database refused.
+    pub async fn earliest_live_week(&self) -> Result<Option<String>, StoreError> {
+        let row = sqlx::query("select min(week) from radar.digests where origin = 'live'")
+            .fetch_one(&self.pool)
+            .await?;
+        Ok(row.get::<Option<String>, _>(0))
+    }
+
+    /// Store an archive digest, published at once and marked `archive`; an
+    /// existing digest for the week is left alone (`None`), so a stopped
+    /// backfill resumes without rewriting anything.
+    ///
+    /// # Errors
+    /// The database refused.
+    pub async fn put_archive_digest(&self, d: &DigestRow) -> Result<Option<DigestRow>, StoreError> {
+        let row = sqlx::query(
+            "insert into radar.digests
+               (week, language, lang, changed, why, drill, script, item_count, model, stub,
+                summary, changes, status, published_at, published_by, origin)
+             values ($1, $2, $3, '', '', $4, $5, $6, $7, $8, $9, $10,
+                     'published', now(), 'backfill', 'archive')
+             on conflict (week, language, lang) do nothing
+             returning id, created_at, published_at",
+        )
+        .bind(&d.week)
+        .bind(&d.language)
+        .bind(&d.lang)
+        .bind(&d.drill)
+        .bind(&d.script)
+        .bind(d.item_count)
+        .bind(&d.model)
+        .bind(d.stub)
+        .bind(&d.summary)
+        .bind(Json(&d.changes))
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.map(|row| {
+            let mut out = d.clone();
+            out.id = row.get("id");
+            out.created_at = Some(row.get("created_at"));
+            out.published_at = Some(row.get("published_at"));
+            PUBLISHED.clone_into(&mut out.status);
+            "archive".clone_into(&mut out.origin);
+            out
+        }))
     }
 
     /// Whether the week's digest for a language and reader language exists.
@@ -372,5 +430,6 @@ fn digest_row(r: &sqlx::postgres::PgRow) -> DigestRow {
         changes: r.get::<Json<Vec<Change>>, _>("changes").0,
         status: r.get("status"),
         published_at: r.get("published_at"),
+        origin: r.get("origin"),
     }
 }

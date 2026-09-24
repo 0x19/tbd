@@ -29,6 +29,15 @@ reader language (`en`, `hr`). The contract is `docs/quietpager/README.md`.
   One digest run at a time (`running`, released on drop); `RunDigest` starts it in
   the background by default because a run takes minutes and the edge and gateway
   cut long requests, and a cancelled gRPC call would abort the run with it.
+- `archive.rs`: the sources' archives for the backfill (the feeds hold ten recent
+  entries): one pure parser per archive page (anchored patterns, tested against saved
+  fixtures in `tests/fixtures/archive/`), GitHub's search over a date range, paged.
+  Re-save a fixture when a site changes its markup and a parser test says so.
+- `backfill.rs`: the archive run: import, cut before the first live week, then weeks
+  oldest first, `[archive] parallel` digests at a time on `[archive] tier`, retries
+  with backoff; single-flight, resumable (existing digests are never rewritten),
+  progress readable through `GetBackfill`. Futures are built boxed before they are
+  driven (a closure over the stream trips rust-lang/rust#102211 in a spawned task).
 - `service.rs`: reads are public; `Refresh` and `RunDigest` need the admin role on
   the caller Envoy verified. Without a store every RPC but `Ping` is `UNAVAILABLE`.
 
@@ -38,6 +47,9 @@ Invariants:
   and a draft is `NOT_FOUND` for anyone else.
 - A change's impact is one of three named categories, never a score, and its link is
   one of the items the model was given.
+- Archive digests are `origin: archive`, published at once, labelled as not
+  individually reviewed and never numbered; the backfill never writes a week the
+  weekly run has written, nor after it.
 - A digest is written by a model and says so on every surface (`ai_written`), and
   `stub` is true when the llm's stub engine wrote it: a placeholder never looks real.
 - `PingResponse.stub` is `true`, as in every service; the chaos check asserts it.

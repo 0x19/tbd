@@ -441,3 +441,120 @@ async fn a_draft_is_for_admins_until_it_is_published() {
         .digests;
     assert!(hidden.is_empty(), "unpublished goes back to draft");
 }
+
+const FIXTURES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/archive");
+
+async fn archive_pages() -> MockServer {
+    let server = MockServer::start().await;
+    for (route, file) in [
+        ("/go/blog/all", "go_blog.html"),
+        ("/go/doc/devel/release", "go_releases.html"),
+        ("/rust/", "rust_blog.html"),
+        ("/rust/inside-rust/", "inside_rust.html"),
+        ("/twir/archives", "twir_archive.html"),
+    ] {
+        let body = std::fs::read_to_string(format!("{FIXTURES}/{file}")).unwrap();
+        Mock::given(method("GET"))
+            .and(path(route))
+            .respond_with(ResponseTemplate::new(200).set_body_string(body))
+            .mount(&server)
+            .await;
+    }
+    let issue = std::fs::read_to_string(format!("{FIXTURES}/twir_issue.html")).unwrap();
+    Mock::given(method("GET"))
+        .and(wiremock::matchers::path_regex(r"^/twir/blog/.*"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(issue))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/search/issues"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(serde_json::json!({ "total_count": 0, "items": [] })),
+        )
+        .mount(&server)
+        .await;
+    server
+}
+
+#[tokio::test]
+async fn backfill_imports_the_archives_and_walks_every_week() {
+    use tbd_proto::radar::v1::{BackfillRequest, GetBackfillRequest};
+
+    let pages = archive_pages().await;
+    let base = pages.uri();
+    let (llm_url, _llm) = support::llm_stub().await;
+    let (server, _pool) = support::start_with_store(|c| {
+        c.llm.url = llm_url;
+        c.archive.go_blog = format!("{base}/go/blog/all");
+        c.archive.go_releases = format!("{base}/go/doc/devel/release");
+        c.archive.rust_blog = format!("{base}/rust/");
+        c.archive.inside_rust = format!("{base}/rust/inside-rust/");
+        c.archive.twir = format!("{base}/twir/archives");
+        c.archive.github = format!("{base}/search/issues");
+        c.archive.pause_ms = 0;
+        c.archive.retries = 0;
+    })
+    .await;
+    let mut client = server.client().await;
+
+    let bad = client
+        .backfill(as_caller(
+            "owner",
+            Some("admin"),
+            BackfillRequest {
+                from_week: "2026-W39".into(),
+                to_week: "2026-W37".into(),
+            },
+        ))
+        .await
+        .unwrap_err();
+    assert_eq!(bad.code(), Code::InvalidArgument);
+
+    let started = client
+        .backfill(as_caller(
+            "owner",
+            Some("admin"),
+            BackfillRequest {
+                from_week: "2026-W37".into(),
+                to_week: "2026-W38".into(),
+            },
+        ))
+        .await
+        .unwrap()
+        .into_inner();
+    assert!(started.started);
+
+    let denied = client
+        .get_backfill(as_caller("someone", Some("viewer"), GetBackfillRequest {}))
+        .await
+        .unwrap_err();
+    assert_eq!(denied.code(), Code::PermissionDenied);
+
+    let mut progress = None;
+    for _ in 0..200 {
+        let p = client
+            .get_backfill(as_caller("owner", Some("admin"), GetBackfillRequest {}))
+            .await
+            .unwrap()
+            .into_inner()
+            .progress
+            .unwrap();
+        if !p.running && p.phase == "done" {
+            progress = Some(p);
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    let p = progress.expect("the backfill finishes");
+    assert!(
+        p.items_imported > 0,
+        "items came from the archive pages: {p:?}"
+    );
+    assert_eq!(p.weeks_total, 2);
+    assert_eq!(p.weeks_done, 2);
+    // The stub model answers without headings: every digest attempted fails,
+    // the rest are thin weeks; nothing is written, and the run still ends.
+    assert_eq!(p.written, 0);
+    assert!(p.failed + p.skipped > 0, "{p:?}");
+}

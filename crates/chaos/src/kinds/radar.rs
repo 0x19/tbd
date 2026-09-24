@@ -117,6 +117,7 @@ impl Service for Radar {
             fetch: tbd_radar::config::Fetch::default(),
             digest: tbd_radar::config::Digest::default(),
             sources: Vec::new(),
+            archive: tbd_radar::config::Archive::default(),
         };
         let runtime = Runtime {
             fault: tbd_common::fault::FaultHandle::new(self.behavior.clone()),

@@ -35,6 +35,7 @@ backend is visible instead of clipped.
 | `tbd_radar_fetches_total` | counter | `source` (the configured name), `outcome` (`ok`, `failed`) | the radar read one of its sources, on the timer or through `Refresh` |
 | `tbd_radar_items_new_total` | counter | `source` | items the radar saw for the first time in that read |
 | `tbd_radar_digests_total` | counter | `language` (`go`, `rust`), `lang` (`en`, `hr`), `outcome` (`written`, `no_items`, `failed`) | the radar tried to write a week's digest, on the schedule or through `RunDigest` |
+| `tbd_radar_backfill_total` | counter | `language`, `lang`, `outcome` (`written`, `thin`, `exists`, `failed`) | the radar's backfill decided a past week's digest: written, a week with too few items, already written, or failed after its retries |
 | `tbd_llm_engine_up` | gauge | `tier`, `engine` | the llm service's probe of a tier's engine (every `[engines] probe_interval`): 1 while it answers, else 0; never drives the service's own health |
 | `tbd_stream_items_total` | counter | `kind`, `direction` (`in`, `out`) | an item crosses a stream |
 | `tbd_engine_client_requests_total` | counter | `backend` (`engine`, `ledger`, …: the protocol's `[services]` name), `route`, `status` | the protocol finishes a call to a backend, measured on the client side |

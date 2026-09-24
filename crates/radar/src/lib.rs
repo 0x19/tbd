@@ -6,6 +6,8 @@
 //! server can be run from `main`, from integration tests on an ephemeral port,
 //! and from the chaos tool with fault injection and counters attached.
 
+pub mod archive;
+pub mod backfill;
 pub mod config;
 pub mod digest;
 pub mod fetch;
@@ -127,7 +129,16 @@ pub async fn serve_with(
             config.fetch.clone(),
             config.digest.clone(),
         );
-        service = service.with_store(store, worker.clone(), config.digest.page_size);
+        let backfill = backfill::Backfill::new(
+            store.clone(),
+            archive::Archive::new(config.archive.clone(), &config.fetch)?,
+            digest::Writer::new(&config.llm)?,
+            config.archive.clone(),
+            config.digest.clone(),
+        );
+        service = service
+            .with_store(store, worker.clone(), config.digest.page_size)
+            .with_backfill(backfill);
         tracing::info!(
             sources = config.sources.len(),
             fetch_every_secs = config.fetch.interval_secs,

@@ -4997,6 +4997,92 @@
         }
       }
     },
+    "/v1/radar/backfill": {
+      "post": {
+        "tags": [
+          "radar"
+        ],
+        "summary": "tbd.radar.v1.RadarService/Backfill",
+        "description": "Transcoded from `/tbd.radar.v1.RadarService/Backfill` on the `radar` backend.",
+        "operationId": "RadarService.Backfill",
+        "requestBody": {
+          "description": "`tbd.radar.v1.BackfillRequest`; path variables override their fields",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/tbd.radar.v1.BackfillRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "`tbd.radar.v1.BackfillResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.radar.v1.BackfillResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/radar/backfill/status": {
+      "post": {
+        "tags": [
+          "radar"
+        ],
+        "summary": "tbd.radar.v1.RadarService/GetBackfill",
+        "description": "Transcoded from `/tbd.radar.v1.RadarService/GetBackfill` on the `radar` backend.",
+        "operationId": "RadarService.GetBackfill",
+        "requestBody": {
+          "description": "`tbd.radar.v1.GetBackfillRequest`; path variables override their fields",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/tbd.radar.v1.GetBackfillRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "`tbd.radar.v1.GetBackfillResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.radar.v1.GetBackfillResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/radar/digests": {
       "get": {
         "tags": [
@@ -10273,6 +10359,81 @@
           }
         }
       },
+      "tbd.radar.v1.BackfillProgress": {
+        "type": "object",
+        "description": "`tbd.radar.v1.BackfillProgress`",
+        "properties": {
+          "current_week": {
+            "type": "string"
+          },
+          "failed": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "finished_at": {
+            "type": "string"
+          },
+          "from_week": {
+            "type": "string"
+          },
+          "items_imported": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "phase": {
+            "type": "string"
+          },
+          "running": {
+            "type": "boolean"
+          },
+          "skipped": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "started_at": {
+            "type": "string"
+          },
+          "to_week": {
+            "type": "string"
+          },
+          "weeks_done": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "weeks_total": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "written": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "tbd.radar.v1.BackfillRequest": {
+        "type": "object",
+        "description": "`tbd.radar.v1.BackfillRequest`",
+        "properties": {
+          "from_week": {
+            "type": "string"
+          },
+          "to_week": {
+            "type": "string"
+          }
+        }
+      },
+      "tbd.radar.v1.BackfillResponse": {
+        "type": "object",
+        "description": "`tbd.radar.v1.BackfillResponse`",
+        "properties": {
+          "progress": {
+            "$ref": "#/components/schemas/tbd.radar.v1.BackfillProgress"
+          },
+          "started": {
+            "type": "boolean"
+          }
+        }
+      },
       "tbd.radar.v1.Change": {
         "type": "object",
         "description": "`tbd.radar.v1.Change`",
@@ -10346,6 +10507,9 @@
           "model": {
             "type": "string"
           },
+          "origin": {
+            "type": "string"
+          },
           "published_at": {
             "type": "string"
           },
@@ -10366,6 +10530,19 @@
           },
           "why": {
             "type": "string"
+          }
+        }
+      },
+      "tbd.radar.v1.GetBackfillRequest": {
+        "type": "object",
+        "description": "`tbd.radar.v1.GetBackfillRequest`"
+      },
+      "tbd.radar.v1.GetBackfillResponse": {
+        "type": "object",
+        "description": "`tbd.radar.v1.GetBackfillResponse`",
+        "properties": {
+          "progress": {
+            "$ref": "#/components/schemas/tbd.radar.v1.BackfillProgress"
           }
         }
       },

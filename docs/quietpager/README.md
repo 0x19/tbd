@@ -18,6 +18,8 @@ the open-source grader lives in `github.com/quietpager/qp` and the katas in
 | `ListItems` | `GET /v1/radar/items?language=&limit=` | anyone |
 | `Refresh` | `POST /v1/radar/refresh` | admin role |
 | `PublishDigest` | `POST /v1/radar/digests/{id}/publish` (`publish` false takes it back to draft) | admin role |
+| `Backfill` | `POST /v1/radar/backfill` (`from_week`, `to_week`, e.g. `2025-W01`..`2026-W38`): starts the archive run in the background | admin role |
+| `GetBackfill` | `POST /v1/radar/backfill/status`: phase, weeks done of total, current week, written, skipped, failed | admin role |
 | `RunDigest` | `POST /v1/radar/digests/run`: starts the week's run in the background and returns (`started`, or `already_running`); `force` rewrites the week's, `wait` waits for it (direct callers only; the edge's timeouts cut a wait) | admin role |
 
 On the site's host (`www.`), Envoy serves the reads open with a per-address rate
@@ -59,3 +61,20 @@ carries `ai_written: true`, and `stub: true` when the llm's stub engine wrote it
 **Metrics.** `tbd_radar_fetches_total{source,outcome}`,
 `tbd_radar_items_new_total{source}`, `tbd_radar_digests_total{language,lang,outcome}`
 (`docs/observability/metrics.md`).
+
+**The archive.** Past weeks come from each source's own archive, since the feeds carry
+ten recent entries at most (`[archive]` in `configs/radar/base.toml`): the Go blog index,
+Go's release history (each release with its note), the Rust blog and Inside Rust indexes
+(dated by their paths), This Week in Rust's archive (each issue read for its official
+links, crate of the week and tooling updates, and its official links kept as items of
+their own), and GitHub's search over the whole range for accepted Go proposals (closed in
+the range) and merged Rust RFCs. `Backfill` imports all of it, stops before the first
+week the weekly run has written, and walks the weeks oldest first: per language with at
+least `min_items` items and per reader language, one digest on `[archive] tier` (fast),
+`parallel` at a time, retried with backoff after a busy or dropped call. Archive digests
+are `origin: archive`, published at once and labelled on the page as not individually
+reviewed and unnumbered, so the numbered series stays the reviewed weekly issues. A digest
+that exists is never rewritten, so a stopped run resumes. Items read from a feed and from
+an archive are one item per URL. `svc:radar` is exempt from the llm service's daily
+budget (`unlimited_subjects`), bounded by admission like any caller, its generations still
+recorded. Metric: `tbd_radar_backfill_total{language,lang,outcome}`.

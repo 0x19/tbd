@@ -60,6 +60,26 @@ service RadarService {
       body: "*"
     };
   }
+
+  // Write the archive: every week in the range, oldest first, from each
+  // source's own archive, one digest per language and reader language on the
+  // archive tier, published at once and marked `origin: archive`. Weeks already
+  // written are skipped, so a stopped run resumes. Starts in the background.
+  // Admin only.
+  rpc Backfill(BackfillRequest) returns (BackfillResponse) {
+    option (google.api.http) = {
+      post: "/v1/radar/backfill"
+      body: "*"
+    };
+  }
+
+  // Where the backfill is. Admin only.
+  rpc GetBackfill(GetBackfillRequest) returns (GetBackfillResponse) {
+    option (google.api.http) = {
+      post: "/v1/radar/backfill/status"
+      body: "*"
+    };
+  }
 }
 
 message PingRequest {
@@ -126,6 +146,9 @@ message Digest {
   string status = 16;
   // RFC 3339; empty while a draft.
   string published_at = 17;
+  // "live" (the weekly run, reviewed by the owner) or "archive" (the backfill,
+  // not individually reviewed).
+  string origin = 18;
 }
 
 // How much a change matters to someone running the language in production.
@@ -224,4 +247,41 @@ message PublishDigestRequest {
 
 message PublishDigestResponse {
   Digest digest = 1;
+}
+
+message BackfillRequest {
+  // ISO weeks, inclusive, e.g. "2025-W01" and "2026-W38".
+  string from_week = 1;
+  string to_week = 2;
+}
+
+message BackfillResponse {
+  // A run was started; false when one is already running.
+  bool started = 1;
+  BackfillProgress progress = 2;
+}
+
+message GetBackfillRequest {}
+
+message GetBackfillResponse {
+  BackfillProgress progress = 1;
+}
+
+message BackfillProgress {
+  bool running = 1;
+  string from_week = 2;
+  string to_week = 3;
+  // "import" while reading the archives, "write" while writing digests, "done".
+  string phase = 4;
+  int32 items_imported = 5;
+  int32 weeks_total = 6;
+  int32 weeks_done = 7;
+  string current_week = 8;
+  int32 written = 9;
+  // Digests not written because the week was thin or already written.
+  int32 skipped = 10;
+  int32 failed = 11;
+  // RFC 3339.
+  string started_at = 12;
+  string finished_at = 13;
 }

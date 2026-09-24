@@ -109,12 +109,29 @@ impl Writer {
         }))
     }
 
-    /// Write one digest from `items`.
+    /// Write one digest from `items` on the configured tier.
     ///
     /// # Errors
     /// The llm service failed, timed out, or answered without the headings.
     pub async fn write(
         &self,
+        week: &str,
+        language: &str,
+        lang: &str,
+        items: &[ItemRow],
+    ) -> Result<DigestRow, DigestError> {
+        self.write_on(&self.config.tier, week, language, lang, items)
+            .await
+    }
+
+    /// Write one digest from `items` on `tier` (`"fast"` or `"deep"`): the
+    /// archive writes on its own tier, the weekly run on `[llm] tier`.
+    ///
+    /// # Errors
+    /// The llm service failed, timed out, or answered without the headings.
+    pub async fn write_on(
+        &self,
+        tier: &str,
         week: &str,
         language: &str,
         lang: &str,
@@ -131,7 +148,7 @@ impl Writer {
                     content: user_prompt(week, language, items),
                 },
             ],
-            tier: if self.config.tier == "fast" {
+            tier: if tier == "fast" {
                 Tier::Fast
             } else {
                 Tier::Deep

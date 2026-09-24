@@ -104,3 +104,26 @@ language = "rust"
 url = "https://api.github.com/search/issues"
 query = "repo:rust-lang/rfcs is:pr is:merged merged:>={since}"
 lookback_days = 14
+
+[archive]
+# The backfill (`Backfill`, admin): past weeks come from each source's archive,
+# since the feeds above carry ten recent entries at most. `{from}` and `{to}` in
+# the GitHub queries become the range's first and last day.
+go_blog = "https://go.dev/blog/all"
+go_releases = "https://go.dev/doc/devel/release"
+rust_blog = "https://blog.rust-lang.org/"
+inside_rust = "https://blog.rust-lang.org/inside-rust/"
+twir = "https://this-week-in-rust.org/blog/archives/index.html"
+github = "https://api.github.com/search/issues"
+go_proposals_query = "repo:golang/go is:issue label:Proposal-Accepted closed:{from}..{to}"
+rust_rfcs_query = "repo:rust-lang/rfcs is:pr is:merged merged:{from}..{to}"
+max_github_pages = 10
+# Between two pages of one archive (TWiR issues are read one by one), ms.
+pause_ms = 1000
+# Archive digests are written on the fast tier, two at a time so the tier keeps
+# slots for the workbench; a week with fewer than min_items items for a language
+# gets no digest; a busy or dropped llm call is retried with backoff.
+tier = "fast"
+parallel = 2
+min_items = 2
+retries = 3

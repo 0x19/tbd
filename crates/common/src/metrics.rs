@@ -121,6 +121,9 @@ pub mod names {
     /// Counter: the radar tried to write a digest. Labels `language` (`go`,
     /// `rust`), `lang` (`en`, `hr`), `outcome` (`written`, `no_items`, `failed`).
     pub const RADAR_DIGESTS_TOTAL: &str = "tbd_radar_digests_total";
+    /// Counter: the radar's backfill decided a week's digest. Labels `language`,
+    /// `lang`, `outcome` (`written`, `thin`, `exists`, `failed`).
+    pub const RADAR_BACKFILL_TOTAL: &str = "tbd_radar_backfill_total";
     /// Counter of idempotency rows purged after their TTL.
     pub const LEDGER_IDEMPOTENCY_PURGED_TOTAL: &str = "tbd_ledger_idempotency_purged_total";
     /// Gauge of outbox events not yet published.

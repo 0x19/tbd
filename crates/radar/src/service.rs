@@ -12,15 +12,18 @@ use tbd_common::{
     principal::Principal,
 };
 use tbd_proto::radar::v1::{
-    Change as WireChange, Digest, GetDigestRequest, GetDigestResponse, Impact as WireImpact, Item,
-    ListDigestsRequest, ListDigestsResponse, ListItemsRequest, ListItemsResponse, PingRequest,
-    PingResponse, PublishDigestRequest, PublishDigestResponse, RefreshRequest, RefreshResponse,
-    RunDigestRequest, RunDigestResponse, radar_service_server::RadarService,
+    BackfillProgress, BackfillRequest, BackfillResponse, Change as WireChange, Digest,
+    GetBackfillRequest, GetBackfillResponse, GetDigestRequest, GetDigestResponse,
+    Impact as WireImpact, Item, ListDigestsRequest, ListDigestsResponse, ListItemsRequest,
+    ListItemsResponse, PingRequest, PingResponse, PublishDigestRequest, PublishDigestResponse,
+    RefreshRequest, RefreshResponse, RunDigestRequest, RunDigestResponse,
+    radar_service_server::RadarService,
 };
 use tonic::{Code, Request, Response, Status};
 
 use crate::{
     Runtime,
+    backfill::{Backfill, BackfillError, Progress},
     config::Ping,
     store::{Change, DigestRow, Impact, ItemRow, PUBLISHED, Store},
     worker::{RunError, Worker},
@@ -36,6 +39,7 @@ pub struct Radar {
     runtime: Runtime,
     store: Option<Store>,
     worker: Option<Worker>,
+    backfill: Option<Backfill>,
     page_size: u32,
 }
 
@@ -48,6 +52,7 @@ impl Radar {
             runtime,
             store: None,
             worker: None,
+            backfill: None,
             page_size: 20,
         }
     }
@@ -58,6 +63,13 @@ impl Radar {
         self.store = Some(store);
         self.worker = Some(worker);
         self.page_size = page_size.max(1);
+        self
+    }
+
+    /// Attach the backfill.
+    #[must_use]
+    pub fn with_backfill(mut self, backfill: Backfill) -> Self {
+        self.backfill = Some(backfill);
         self
     }
 
@@ -176,6 +188,26 @@ fn to_digest(d: DigestRow) -> Digest {
         changes: d.changes.into_iter().map(to_change).collect(),
         status: d.status,
         published_at: d.published_at.map(|t| t.to_rfc3339()).unwrap_or_default(),
+        origin: d.origin,
+    }
+}
+
+fn to_progress(p: Progress) -> BackfillProgress {
+    let n = |v: u32| i32::try_from(v).unwrap_or(i32::MAX);
+    BackfillProgress {
+        running: p.running,
+        from_week: p.from_week,
+        to_week: p.to_week,
+        phase: p.phase,
+        items_imported: i32::try_from(p.items_imported).unwrap_or(i32::MAX),
+        weeks_total: n(p.weeks_total),
+        weeks_done: n(p.weeks_done),
+        current_week: p.current_week,
+        written: n(p.written),
+        skipped: n(p.skipped),
+        failed: n(p.failed),
+        started_at: p.started_at.map(|t| t.to_rfc3339()).unwrap_or_default(),
+        finished_at: p.finished_at.map(|t| t.to_rfc3339()).unwrap_or_default(),
     }
 }
 
@@ -384,5 +416,48 @@ impl RadarService for Radar {
                 Status::not_found(format!("no digest {}", req.id)),
             )),
         }
+    }
+
+    async fn backfill(
+        &self,
+        request: Request<BackfillRequest>,
+    ) -> Result<Response<BackfillResponse>, Status> {
+        let mut timer = self.admit("RadarService/Backfill").await?;
+        let who = self.admin(&request, &mut timer)?;
+        self.store(&mut timer)?;
+        let Some(backfill) = &self.backfill else {
+            return Err(self.reject(&mut timer, Status::unavailable("no backfill")));
+        };
+        let req = request.into_inner();
+        match backfill.start(&req.from_week, &req.to_week) {
+            Ok(started) => {
+                tracing::info!(subject = %who.sub, from = %req.from_week, to = %req.to_week, started, "radar backfill requested");
+                Ok(Response::new(BackfillResponse {
+                    started,
+                    progress: Some(to_progress(backfill.progress())),
+                }))
+            }
+            Err(BackfillError::Range(m)) => {
+                Err(self.reject(&mut timer, Status::invalid_argument(m)))
+            }
+            Err(BackfillError::NoWriter) => Err(self.reject(
+                &mut timer,
+                Status::failed_precondition("no llm service configured"),
+            )),
+        }
+    }
+
+    async fn get_backfill(
+        &self,
+        request: Request<GetBackfillRequest>,
+    ) -> Result<Response<GetBackfillResponse>, Status> {
+        let mut timer = self.admit("RadarService/GetBackfill").await?;
+        self.admin(&request, &mut timer)?;
+        let Some(backfill) = &self.backfill else {
+            return Err(self.reject(&mut timer, Status::unavailable("no backfill")));
+        };
+        Ok(Response::new(GetBackfillResponse {
+            progress: Some(to_progress(backfill.progress())),
+        }))
     }
 }
