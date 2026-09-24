@@ -6,9 +6,15 @@
 #   api.<base>       Envoy edge :18080  (REST, SSE, GraphQL, WebSocket, gRPC)   public
 #   grafana.<base>, logs.<base>, profiles.<base>, metrics.<base>, chaosadmin.<base>
 #                    Envoy :18080, which signs the browser in through Ory Hydra
+#   finance.<base>   the finance UI; the bank OAuth callback is open, the rest gated
+#   cv.<base>        the full CV behind the sign-in and the owner's approval
 #   auth.<base>      sign-in: Ory Hydra + Kratos + login pages, via Envoy :18080      public
+#   <base>           the company site (ui/www), Envoy's `www.*` host                  public
+#                    www.<base> redirects to the apex, so there is one canonical URL;
+#                    with SITE_DOMAIN set (the site on a domain of its own, sites.d/),
+#                    the apex redirects there too, and api.<site> may serve the API
 #
-# Env: BASE_DOMAIN, ACME_EMAIL.
+# Env: BASE_DOMAIN, ACME_EMAIL, SITE_DOMAIN (compose defaults it to BASE_DOMAIN).
 {
 	email {$ACME_EMAIL}
 	servers {
@@ -29,7 +35,9 @@
 	}
 }
 
-api.{$BASE_DOMAIN} {
+# The API host. A snippet so that the site's own domain can carry it as well
+# (`api.<site>` in sites.d/); Envoy's API virtual host matches any name.
+(api) {
 	encode zstd gzip
 
 	# gRPC needs an end-to-end HTTP/2 stream: clients arrive over h2 with TLS,
@@ -57,6 +65,10 @@ api.{$BASE_DOMAIN} {
 	}
 }
 
+api.{$BASE_DOMAIN} {
+	import api
+}
+
 grafana.{$BASE_DOMAIN} {
 	import gated
 }
@@ -78,7 +90,57 @@ chaosadmin.{$BASE_DOMAIN} {
 	import gated
 }
 
+# The finance service's browser surface. Envoy's `finance.*` host decides what is
+# open and what needs the login; today the only route is the bank's OAuth callback.
+finance.{$BASE_DOMAIN} {
+	import gated
+}
+
+# The full CV: request, approve, download (docs/cv/README.md). Envoy's `cv.*`
+# host signs the browser in like the others.
+cv.{$BASE_DOMAIN} {
+	import gated
+}
+
 # Where people sign in: Ory Hydra, Kratos and the login pages, via Envoy.
 auth.{$BASE_DOMAIN} {
 	import gated
 }
+
+# The company site. Public, no sign-in. The Host is rewritten to the www name
+# because that is what Envoy's public `www.*` virtual host matches, which keeps
+# the domain itself out of envoy.yaml.
+(site) {
+	encode zstd gzip
+	reverse_proxy cluster:18080 {
+		header_up Host www.{$BASE_DOMAIN}
+		header_up X-Forwarded-Proto https
+	}
+	log {
+		output stdout
+		format json
+	}
+}
+
+# One canonical name for the site. www redirects to it, and so does the base
+# domain's apex when the site lives on a domain of its own (SITE_DOMAIN, served
+# from sites.d/): the same build answering on two names would be duplicate
+# content, and the one it names as canonical must be the one people can reach.
+# With SITE_DOMAIN equal to the base (the compose default) the apex serves the
+# site itself and nothing redirects.
+www.{$BASE_DOMAIN} {
+	redir https://{$SITE_DOMAIN}{uri} permanent
+}
+
+{$BASE_DOMAIN} {
+	@elsewhere not host {$SITE_DOMAIN}
+	redir @elsewhere https://{$SITE_DOMAIN}{uri} permanent
+	import site
+}
+
+# The site under a domain of its own (a company domain while the platform stays
+# on the base): one file per domain in sites.d/, git-ignored like .env, each an
+# apex importing `site`, a www redirecting to it, and optionally `api.<domain>`
+# importing `api`. See sites.d/README.md.
+# A glob that matches nothing imports nothing.
+import sites.d/*.caddy

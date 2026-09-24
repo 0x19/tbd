@@ -1,0 +1,25 @@
+name: tbd_auth
+description: Signing in through the SSO and staying signed in - authorization code with PKCE in the system browser, tokens in the platform's secure store, refresh, sign-out - behind one interface a test can replace.
+version: 0.1.0
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ^3.12.0
+  flutter: ">=3.47.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_appauth: ^12.1.0
+  flutter_secure_storage: ^11.2.0
+  meta: ^1.19.0
+  tbd_core:
+    path: ../tbd_core
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  tbd_testing:
+    path: ../tbd_testing
+  very_good_analysis: ^11.0.0

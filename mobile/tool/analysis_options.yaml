@@ -1,0 +1,6 @@
+# The workspace's lints (mobile/analysis_options.yaml) for the scripts.
+include: ../analysis_options.yaml
+
+linter:
+  rules:
+    public_member_api_docs: false

@@ -1,0 +1,49 @@
+# playground configuration, shared layer. `configs/playground/<env>.toml` is merged
+# over this file; tables merge key by key, any other value replaces. Every key
+# is listed here so an environment file only needs what it changes. Flags and
+# their environment variables (PLAYGROUND_*) override both.
+
+[server]
+# Where the gRPC server listens. Loopback on purpose; containers bind 0.0.0.0
+# through PLAYGROUND_LISTEN_ADDR.
+listen = "127.0.0.1:50055"
+
+[metrics]
+# Prometheus /metrics listener. Embedders (tests, the chaos tool) turn it off.
+listen = "0.0.0.0:9464"
+
+[ping]
+# Longest message Ping echoes; longer is INVALID_ARGUMENT. The one knob that
+# proves TOML reaches an RPC.
+max_message_len = 1024
+
+[game]
+# The success rate the sandbox is meant to hold over the window. A player wins
+# by pushing the measured rate under it.
+target = 0.99
+# How many seconds of traffic the objective is judged over. Short enough that a
+# healed world climbs visibly back out of a breach rather than sitting broken
+# while old failures age out.
+window_seconds = 30
+# The other half of the objective: the p99 the sandbox must stay under, in
+# milliseconds, averaged over the window. This is what makes `latency` a move
+# rather than a decoration — 400 ms of injected delay never fails a request
+# under a 2 s timeout, so without this clause it did nothing at all.
+latency_target_ms = 250.0
+# The shared budget: the most it ever holds, and how fast a token comes back.
+max_tokens = 10
+refill_seconds = 3
+# Synthetic traffic against the sandbox, in requests per second. Modest: this
+# runs on the same cluster as everything else.
+rate = 20.0
+
+[sandbox]
+# The instances callers break are fixed in code (crates/playground/src/sandbox.rs):
+# two engines, a ledger and a protocol, all on ephemeral ports.
+# The scoreboard, rewritten whenever somebody breaks the objective.
+scores = ".playground/scores.json"
+# In a container this is PLAYGROUND_SCORES (the manifest points it at the volume).
+keep_scores = 20
+# The most live event streams served at once. Past it, a caller is asked to
+# poll instead, which the REST surface supports anyway.
+max_watchers = 200

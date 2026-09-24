@@ -394,6 +394,78 @@ min_requests = 50
     assert!(result.events[0].error.is_none());
 }
 
+/// `llm_generate` streams every generation to its done chunk on the stub
+/// engines and meters what a latency cannot say: tokens and the time to the
+/// first token. A fault on the instance then fails the generations at
+/// admission, counted as failures of the operation.
+#[tokio::test]
+async fn llm_generations_are_metered_and_a_fault_fails_them() {
+    let file: tbd_chaos::scenario::ScenarioFile = toml::from_str(
+        r#"
+[scenario]
+name = "inline-llm"
+
+[stack.llms.l]
+
+[load]
+rate = 40
+duration = "1s"
+timeout = "10s"
+
+[[load.operations]]
+op = "llm_generate"
+
+[[timeline]]
+at = "600ms"
+action = "set_behavior"
+service = "l"
+[timeline.behavior]
+type = "error"
+kind = "unavailable"
+rate = 1.0
+
+[assertions]
+min_requests = 20
+max_error_rate = 0.90
+
+[assertions.services.l]
+min_requests = 20
+"#,
+    )
+    .unwrap();
+    file.check().unwrap();
+
+    let result = tbd_chaos::scenario::run_scenario(&file).await;
+    assert!(
+        result.passed,
+        "{}",
+        tbd_chaos::scenario::report::render(&result)
+    );
+    let load = result.load.as_ref().unwrap();
+    let op = &load.per_op["llm_generate"];
+    assert!(op.total >= 20, "{op:?}");
+    assert!(
+        op.failed > 0 && op.failed < op.total,
+        "the fault fails the later generations only: {op:?}"
+    );
+    let done = op.counters["generations"];
+    assert_eq!(
+        done + op.failed,
+        op.total,
+        "every generation either reached its done chunk or failed"
+    );
+    assert!(op.counters["completion_tokens"] > 0);
+    assert!(op.counters["prompt_tokens"] > 0);
+    let ttft = &op.samples["ttft"];
+    assert!(ttft.p50_ms > 0.0 && ttft.p99_ms >= ttft.p50_ms, "{ttft:?}");
+    assert_eq!(
+        load.errors.get("transport"),
+        Some(&op.failed),
+        "an injected UNAVAILABLE is a transport failure, like every gRPC operation's: {:?}",
+        load.errors
+    );
+}
+
 #[test]
 fn scenario_file_rejects_dangling_and_unknown() {
     let bad = r#"

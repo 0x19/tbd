@@ -17,7 +17,12 @@ use tbd_proto::engine::v1::{EvaluateRequest, SubscribeRequest, subscribe_respons
 use utoipa::ToSchema;
 use utoipa_axum::{router::OpenApiRouter, routes};
 
-use crate::{AppState, Principal, Problem, error::ErrorBody, principal::Key, state::Readiness};
+use crate::{
+    AppState, Problem,
+    error::ErrorBody,
+    principal::{Caller, Key},
+    state::Readiness,
+};
 use tbd_common::metrics::StreamGuard;
 
 /// The REST routes with their `OpenAPI` paths: one source for both, so the
@@ -45,6 +50,10 @@ pub(crate) fn reserved_paths() -> &'static [(&'static str, &'static str)] {
         ("GET", "/v1/subjects/{subject_id}/events"),
         ("GET", "/openapi.json"),
         ("GET", "/ws"),
+        ("GET", crate::mux::PATH),
+        ("POST", crate::mcp::PATH),
+        ("GET", crate::mcp::PATH),
+        ("DELETE", crate::mcp::PATH),
         ("GET", "/graphql"),
         ("POST", "/graphql"),
     ]
@@ -69,15 +78,17 @@ pub struct Health {
     responses(
         (status = 200, description = "The principal Envoy verified", body = Me),
         (status = 401, description = "Envoy forwarded no identity", body = ErrorBody)))]
-async fn me(principal: Principal) -> Json<Me> {
+async fn me(Caller(principal): Caller) -> Json<Me> {
     Json(Me {
         client_id: principal.client_id().map(str::to_owned),
         kind: principal.kind_slug(),
         subject: principal.sub,
         org: principal.org,
-        key: principal.key,
+        key: principal.key.map(Into::into),
         scopes: principal.scopes,
         role: principal.role,
+        email: principal.email,
+        name: principal.name,
     })
 }
 
@@ -98,6 +109,10 @@ pub struct Me {
     pub scopes: Vec<String>,
     /// Role, when the consent step stamped one.
     pub role: Option<String>,
+    /// E-mail address, when the token carries one (a person's ID token does).
+    pub email: Option<String>,
+    /// Display name, when the token carries one.
+    pub name: Option<String>,
 }
 
 /// Readiness: every required backend answers `SERVING` to a live health
@@ -198,11 +213,11 @@ pub enum EventBody {
         (status = 503, description = "The engine is unavailable", body = ErrorBody)))]
 async fn events(
     State(state): State<AppState>,
-    principal: Option<Principal>,
+    caller: Option<Caller>,
     Path(subject_id): Path<String>,
 ) -> Result<Sse<impl Stream<Item = Result<SseEvent, Infallible>>>, Problem> {
     tracing::debug!(
-        caller = principal.as_ref().map(Principal::kind_slug),
+        caller = caller.as_ref().map(|c| c.kind_slug()),
         "events stream requested"
     );
     let stream = state

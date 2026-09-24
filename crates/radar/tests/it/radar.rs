@@ -1,0 +1,560 @@
+//! The radar's own behaviour: reading sources into the store, the admin gate,
+//! and a digest that is refused rather than stored half.
+
+use std::fmt::Write as _;
+
+use chrono::{Duration, Utc};
+use tbd_proto::radar::v1::{
+    GetDigestRequest, ListDigestsRequest, ListItemsRequest, PublishDigestRequest, RefreshRequest,
+    RunDigestRequest,
+};
+use tbd_radar::config::SourceKind;
+use tonic::Code;
+use wiremock::{
+    Mock, MockServer, ResponseTemplate,
+    matchers::{method, path},
+};
+
+use crate::support::{self, as_caller, source};
+
+fn atom(entries: &[(&str, &str)]) -> String {
+    let when = (Utc::now() - Duration::days(1)).to_rfc3339();
+    let mut s = format!(
+        r#"<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom"><title>t</title><id>f</id><updated>{when}</updated>"#
+    );
+    for (id, title) in entries {
+        let _ = write!(
+            s,
+            r#"<entry><title>{title}</title><id>{id}</id><link href="https://example.org/{id}"/><updated>{when}</updated><summary>About {title}.</summary></entry>"#
+        );
+    }
+    s.push_str("</feed>");
+    s
+}
+
+fn rss(items: &[(&str, &str)]) -> String {
+    let when = (Utc::now() - Duration::days(2)).to_rfc2822();
+    let mut s = String::from(
+        r#"<?xml version="1.0"?><rss version="2.0"><channel><title>t</title><link>https://example.org</link><description>d</description>"#,
+    );
+    for (id, title) in items {
+        let _ = write!(
+            s,
+            "<item><title>{title}</title><guid>{id}</guid><link>https://example.org/{id}</link><pubDate>{when}</pubDate></item>"
+        );
+    }
+    s.push_str("</channel></rss>");
+    s
+}
+
+fn github(titles: &[&str]) -> serde_json::Value {
+    let when = (Utc::now() - Duration::days(3)).to_rfc3339();
+    serde_json::json!({
+        "total_count": titles.len(),
+        "items": titles.iter().enumerate().map(|(n, t)| serde_json::json!({
+            "html_url": format!("https://github.com/x/y/issues/{n}"),
+            "title": t, "body": "Accepted.", "updated_at": when, "closed_at": null,
+        })).collect::<Vec<_>>(),
+    })
+}
+
+async fn sources() -> MockServer {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/go.atom"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(atom(&[("a1", "Go 1.27"), ("a2", "Iterators")])),
+        )
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/twir.rss"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_string(rss(&[("r1", "This Week in Rust 600")])),
+        )
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/search/issues"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(github(&["proposal: slices", "proposal: maps"])),
+        )
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/broken"))
+        .respond_with(ResponseTemplate::new(500))
+        .mount(&server)
+        .await;
+    server
+}
+
+#[tokio::test]
+async fn reads_without_a_store_are_unavailable() {
+    let server = support::start().await;
+    let mut client = server.client().await;
+    let err = client
+        .list_digests(ListDigestsRequest::default())
+        .await
+        .unwrap_err();
+    assert_eq!(err.code(), Code::Unavailable);
+}
+
+#[tokio::test]
+async fn refresh_reads_every_kind_and_is_idempotent() {
+    let feeds = sources().await;
+    let base = feeds.uri();
+    let (server, _pool) = support::start_with_store(|c| {
+        c.sources = vec![
+            source(
+                "go-blog",
+                SourceKind::Atom,
+                "go",
+                &format!("{base}/go.atom"),
+            ),
+            source("twir", SourceKind::Rss, "rust", &format!("{base}/twir.rss")),
+            source(
+                "go-proposals",
+                SourceKind::Github,
+                "go",
+                &format!("{base}/search/issues"),
+            ),
+        ];
+    })
+    .await;
+    let mut client = server.client().await;
+
+    let first = client
+        .refresh(as_caller("owner", Some("admin"), RefreshRequest {}))
+        .await
+        .unwrap()
+        .into_inner();
+    assert_eq!((first.sources, first.failed, first.new_items), (3, 0, 5));
+    let again = client
+        .refresh(as_caller("owner", Some("admin"), RefreshRequest {}))
+        .await
+        .unwrap()
+        .into_inner();
+    assert_eq!(again.new_items, 0, "an item read twice is stored once");
+
+    let go = client
+        .list_items(ListItemsRequest {
+            language: "go".into(),
+            limit: 0,
+        })
+        .await
+        .unwrap()
+        .into_inner()
+        .items;
+    assert_eq!(go.len(), 4);
+    assert!(go.iter().all(|i| i.language == "go"));
+    let rust = client
+        .list_items(ListItemsRequest {
+            language: "rust".into(),
+            limit: 0,
+        })
+        .await
+        .unwrap()
+        .into_inner()
+        .items;
+    assert_eq!(rust.len(), 1);
+    assert_eq!(rust[0].title, "This Week in Rust 600");
+}
+
+#[tokio::test]
+async fn a_failing_source_is_counted_and_the_rest_are_read() {
+    let feeds = sources().await;
+    let base = feeds.uri();
+    let (server, _pool) = support::start_with_store(|c| {
+        c.sources = vec![
+            source("broken", SourceKind::Atom, "go", &format!("{base}/broken")),
+            source(
+                "go-blog",
+                SourceKind::Atom,
+                "go",
+                &format!("{base}/go.atom"),
+            ),
+        ];
+    })
+    .await;
+    let done = server
+        .client()
+        .await
+        .refresh(as_caller("owner", Some("admin"), RefreshRequest {}))
+        .await
+        .unwrap()
+        .into_inner();
+    assert_eq!((done.sources, done.failed, done.new_items), (2, 1, 2));
+}
+
+#[tokio::test]
+async fn refresh_and_run_digest_are_for_admins_only() {
+    let (server, _pool) = support::start_with_store(|_| {}).await;
+    let mut client = server.client().await;
+
+    let nobody = client.refresh(RefreshRequest {}).await.unwrap_err();
+    assert_eq!(nobody.code(), Code::Unauthenticated);
+    let viewer = client
+        .refresh(as_caller("someone", Some("viewer"), RefreshRequest {}))
+        .await
+        .unwrap_err();
+    assert_eq!(viewer.code(), Code::PermissionDenied);
+    let digest = client
+        .run_digest(as_caller(
+            "someone",
+            None,
+            RunDigestRequest {
+                force: false,
+                wait: true,
+            },
+        ))
+        .await
+        .unwrap_err();
+    assert_eq!(digest.code(), Code::PermissionDenied);
+}
+
+#[tokio::test]
+async fn run_digest_without_an_llm_service_says_so() {
+    let (server, _pool) = support::start_with_store(|_| {}).await;
+    let err = server
+        .client()
+        .await
+        .run_digest(as_caller(
+            "owner",
+            Some("admin"),
+            RunDigestRequest {
+                force: false,
+                wait: true,
+            },
+        ))
+        .await
+        .unwrap_err();
+    assert_eq!(err.code(), Code::FailedPrecondition);
+}
+
+#[tokio::test]
+async fn an_answer_without_the_headings_is_not_stored() {
+    // The llm service's stub engine echoes the prompt: no headings, so every
+    // digest must be refused, and nothing half-written may reach the list.
+    let (llm_url, _llm) = support::llm_stub().await;
+    let feeds = sources().await;
+    let base = feeds.uri();
+    let (server, _pool) = support::start_with_store(|c| {
+        c.llm.url = llm_url;
+        c.llm.timeout_secs = 30;
+        c.sources = vec![source(
+            "go-blog",
+            SourceKind::Atom,
+            "go",
+            &format!("{base}/go.atom"),
+        )];
+    })
+    .await;
+    let mut client = server.client().await;
+    client
+        .refresh(as_caller("owner", Some("admin"), RefreshRequest {}))
+        .await
+        .unwrap();
+
+    let run = client
+        .run_digest(as_caller(
+            "owner",
+            Some("admin"),
+            RunDigestRequest {
+                force: true,
+                wait: true,
+            },
+        ))
+        .await
+        .unwrap()
+        .into_inner();
+    assert!(run.week.contains("-W"), "a week label: {}", run.week);
+    assert!(
+        run.digests.is_empty(),
+        "no digest from an answer without headings"
+    );
+    let listed = client
+        .list_digests(ListDigestsRequest::default())
+        .await
+        .unwrap()
+        .into_inner()
+        .digests;
+    assert!(listed.is_empty());
+}
+
+#[tokio::test]
+async fn filters_are_checked() {
+    let (server, _pool) = support::start_with_store(|_| {}).await;
+    let err = server
+        .client()
+        .await
+        .list_digests(ListDigestsRequest {
+            language: "python".into(),
+            ..Default::default()
+        })
+        .await
+        .unwrap_err();
+    assert_eq!(err.code(), Code::InvalidArgument);
+}
+
+#[tokio::test]
+async fn run_digest_starts_in_the_background_by_default() {
+    let (llm_url, _llm) = support::llm_stub().await;
+    let (server, _pool) = support::start_with_store(|c| {
+        c.llm.url = llm_url;
+    })
+    .await;
+    let run = server
+        .client()
+        .await
+        .run_digest(as_caller(
+            "owner",
+            Some("admin"),
+            RunDigestRequest {
+                force: false,
+                wait: false,
+            },
+        ))
+        .await
+        .unwrap()
+        .into_inner();
+    assert!(run.started, "a background run was started");
+    assert!(!run.already_running);
+    assert!(
+        run.digests.is_empty(),
+        "a background run returns before it writes"
+    );
+    assert!(run.week.contains("-W"));
+}
+
+/// A draft digest written straight into the store, the way the worker leaves one.
+async fn seed_draft(pool: &sqlx::PgPool) -> i64 {
+    sqlx::query_scalar(
+        "insert into radar.digests (week, language, lang, drill, script, item_count, model, summary, changes)
+         values ('2026-W39', 'go', 'en', 'Do x.', 'Hello.', 3, 'gpt-oss-120b', 'A quiet week.',
+                 '[{\"title\":\"t\",\"impact\":\"breaking\",\"area\":\"stdlib\",\"url\":\"https://go.dev/a\",
+                    \"what\":\"w\",\"production_impact\":\"p\",\"try_it\":\"x\"}]')
+         returning id",
+    )
+    .fetch_one(pool)
+    .await
+    .unwrap()
+}
+
+#[tokio::test]
+async fn a_draft_is_for_admins_until_it_is_published() {
+    let (server, pool) = support::start_with_store(|_| {}).await;
+    let id = seed_draft(&pool).await;
+    let mut client = server.client().await;
+    let everyone = |drafts: bool| ListDigestsRequest {
+        include_drafts: drafts,
+        ..Default::default()
+    };
+
+    let public = client
+        .list_digests(everyone(true))
+        .await
+        .unwrap()
+        .into_inner()
+        .digests;
+    assert!(
+        public.is_empty(),
+        "asking for drafts without the role gets none"
+    );
+    let viewer = client
+        .list_digests(as_caller("someone", Some("viewer"), everyone(true)))
+        .await
+        .unwrap()
+        .into_inner()
+        .digests;
+    assert!(viewer.is_empty());
+    let missing = client
+        .get_digest(GetDigestRequest { id })
+        .await
+        .unwrap_err();
+    assert_eq!(
+        missing.code(),
+        Code::NotFound,
+        "a draft does not exist for the public"
+    );
+
+    let admin = client
+        .list_digests(as_caller("owner", Some("admin"), everyone(true)))
+        .await
+        .unwrap()
+        .into_inner()
+        .digests;
+    assert_eq!(admin.len(), 1);
+    assert_eq!(admin[0].status, "draft");
+    assert_eq!(
+        admin[0].changes[0].impact(),
+        tbd_proto::radar::v1::Impact::Breaking
+    );
+
+    let denied = client
+        .publish_digest(as_caller(
+            "someone",
+            Some("viewer"),
+            PublishDigestRequest { id, publish: true },
+        ))
+        .await
+        .unwrap_err();
+    assert_eq!(denied.code(), Code::PermissionDenied);
+
+    let published = client
+        .publish_digest(as_caller(
+            "owner",
+            Some("admin"),
+            PublishDigestRequest { id, publish: true },
+        ))
+        .await
+        .unwrap()
+        .into_inner()
+        .digest
+        .unwrap();
+    assert_eq!(published.status, "published");
+    assert!(!published.published_at.is_empty());
+    let now_public = client
+        .list_digests(everyone(false))
+        .await
+        .unwrap()
+        .into_inner()
+        .digests;
+    assert_eq!(now_public.len(), 1);
+    assert_eq!(now_public[0].summary, "A quiet week.");
+
+    client
+        .publish_digest(as_caller(
+            "owner",
+            Some("admin"),
+            PublishDigestRequest { id, publish: false },
+        ))
+        .await
+        .unwrap();
+    let hidden = client
+        .list_digests(everyone(false))
+        .await
+        .unwrap()
+        .into_inner()
+        .digests;
+    assert!(hidden.is_empty(), "unpublished goes back to draft");
+}
+
+const FIXTURES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/archive");
+
+async fn archive_pages() -> MockServer {
+    let server = MockServer::start().await;
+    for (route, file) in [
+        ("/go/blog/all", "go_blog.html"),
+        ("/go/doc/devel/release", "go_releases.html"),
+        ("/rust/", "rust_blog.html"),
+        ("/rust/inside-rust/", "inside_rust.html"),
+        ("/twir/archives", "twir_archive.html"),
+    ] {
+        let body = std::fs::read_to_string(format!("{FIXTURES}/{file}")).unwrap();
+        Mock::given(method("GET"))
+            .and(path(route))
+            .respond_with(ResponseTemplate::new(200).set_body_string(body))
+            .mount(&server)
+            .await;
+    }
+    let issue = std::fs::read_to_string(format!("{FIXTURES}/twir_issue.html")).unwrap();
+    Mock::given(method("GET"))
+        .and(wiremock::matchers::path_regex(r"^/twir/blog/.*"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(issue))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/search/issues"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(serde_json::json!({ "total_count": 0, "items": [] })),
+        )
+        .mount(&server)
+        .await;
+    server
+}
+
+#[tokio::test]
+async fn backfill_imports_the_archives_and_walks_every_week() {
+    use tbd_proto::radar::v1::{BackfillRequest, GetBackfillRequest};
+
+    let pages = archive_pages().await;
+    let base = pages.uri();
+    let (llm_url, _llm) = support::llm_stub().await;
+    let (server, _pool) = support::start_with_store(|c| {
+        c.llm.url = llm_url;
+        c.archive.go_blog = format!("{base}/go/blog/all");
+        c.archive.go_releases = format!("{base}/go/doc/devel/release");
+        c.archive.rust_blog = format!("{base}/rust/");
+        c.archive.inside_rust = format!("{base}/rust/inside-rust/");
+        c.archive.twir = format!("{base}/twir/archives");
+        c.archive.github = format!("{base}/search/issues");
+        c.archive.pause_ms = 0;
+        c.archive.retries = 0;
+    })
+    .await;
+    let mut client = server.client().await;
+
+    let bad = client
+        .backfill(as_caller(
+            "owner",
+            Some("admin"),
+            BackfillRequest {
+                from_week: "2026-W39".into(),
+                to_week: "2026-W37".into(),
+            },
+        ))
+        .await
+        .unwrap_err();
+    assert_eq!(bad.code(), Code::InvalidArgument);
+
+    let started = client
+        .backfill(as_caller(
+            "owner",
+            Some("admin"),
+            BackfillRequest {
+                from_week: "2026-W37".into(),
+                to_week: "2026-W38".into(),
+            },
+        ))
+        .await
+        .unwrap()
+        .into_inner();
+    assert!(started.started);
+
+    let denied = client
+        .get_backfill(as_caller("someone", Some("viewer"), GetBackfillRequest {}))
+        .await
+        .unwrap_err();
+    assert_eq!(denied.code(), Code::PermissionDenied);
+
+    let mut progress = None;
+    for _ in 0..200 {
+        let p = client
+            .get_backfill(as_caller("owner", Some("admin"), GetBackfillRequest {}))
+            .await
+            .unwrap()
+            .into_inner()
+            .progress
+            .unwrap();
+        if !p.running && p.phase == "done" {
+            progress = Some(p);
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    let p = progress.expect("the backfill finishes");
+    assert!(
+        p.items_imported > 0,
+        "items came from the archive pages: {p:?}"
+    );
+    assert_eq!(p.weeks_total, 2);
+    assert_eq!(p.weeks_done, 2);
+    // The stub model answers without headings: every digest attempted fails,
+    // the rest are thin weeks; nothing is written, and the run still ends.
+    assert_eq!(p.written, 0);
+    assert!(p.failed + p.skipped > 0, "{p:?}");
+}

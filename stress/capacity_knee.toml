@@ -1,0 +1,38 @@
+# How many owner workers the ledger takes before latency turns: one measurement
+# per worker count, three times each, five seconds a measurement, on the memory
+# store. The knee is the first count whose p99 passes 50 ms or doubles on the one
+# before it. Every invariant is judged throughout, so a point that is fast and
+# wrong is still a finding. Around three minutes; not in CI.
+
+[campaign]
+name = "capacity_knee"
+description = "Latency against owner workers, with confidence intervals and the knee."
+skip = true
+warmup = "500ms"
+seed = 11
+
+[stack.ledgers.ledger-1]
+grace = "0s"
+
+[workload]
+max_in_flight = 256
+
+[workload.owner]
+subjects = 2
+[workload.owner.mix]
+append = 6
+current = 3
+history = 3
+history_cut = 1
+retract = 1
+idempotent_replay = 1
+
+[sweep]
+parameter = "owner.workers"
+values = [1, 2, 4, 8, 16, 32]
+repeat = 3
+point_duration = "5s"
+
+[sweep.knee]
+p99_ms = 50
+factor = 2.0

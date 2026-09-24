@@ -1,0 +1,66 @@
+name: mobile ios
+
+# Builds the iOS app, signs it with the team's cloud-managed certificate through
+# an App Store Connect API key, and uploads it to TestFlight. Runs on demand
+# (Actions > mobile ios > Run workflow, pick the environment) and on a
+# `mobile-v*` tag. macOS minutes are dear, so the Linux `mobile` job in ci.yml
+# stays the gate; this is the release.
+#
+# Repository secrets (Settings > Secrets and variables > Actions):
+#   APP_STORE_CONNECT_KEY_ID, APP_STORE_CONNECT_ISSUER_ID, APP_STORE_CONNECT_KEY_P8
+#   (the .p8 as base64: `base64 -i AuthKey_XXXX.p8 | tr -d '\n'`), APPLE_TEAM_ID.
+# The API key needs the Admin role for cloud signing to create the certificate.
+
+on:
+  workflow_dispatch:
+    inputs:
+      env:
+        description: "configs/mobile/<env>.json the build is pointed at"
+        type: choice
+        options: [prod, local]
+        default: prod
+  push:
+    tags: ["mobile-v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-ios-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  testflight:
+    name: build, sign, upload to TestFlight
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - uses: jdx/mise-action@v4
+        with:
+          install_args: flutter
+          cache: true
+      - run: mise run mobile:setup
+      - run: mise x -- flutter doctor -v
+      - name: build, sign and upload
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_KEY_P8: ${{ secrets.APP_STORE_CONNECT_KEY_P8 }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          MOBILE_ENV: ${{ inputs.env || 'prod' }}
+          BUILD_NUMBER: ${{ github.run_number }}
+        run: mise x -- sh mobile/tool/testflight.sh
+      - name: keep the archive's logs and dSYMs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-archive-${{ github.run_number }}
+          path: |
+            mobile/apps/tbd/build/ios/archive/Runner.xcarchive/dSYMs
+            mobile/apps/tbd/build/ios/ipa/*.plist
+            mobile/apps/tbd/build/ios/ipa/*.log
+          if-no-files-found: ignore

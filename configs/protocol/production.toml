@@ -10,3 +10,7 @@ url = "http://envoy:50051"
 
 [services.ledger]
 url = "http://envoy:50051"
+
+[mcp]
+# The site's workbench calls MCP from the browser on its own origin.
+allowed_origins = ["https://inorbit.hr"]

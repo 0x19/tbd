@@ -1,0 +1,130 @@
+# ui/www — the site
+
+A personal site rather than a pitch: what I am building, what I have published,
+the prototypes anyone can try, and the company details behind the invoices.
+Next.js on Tailwind, with the admin UI's light/dark/system theme switcher,
+exported to static files and served by Caddy in the cluster behind Envoy and the
+public edge. Nothing here runs on a server.
+
+It is the same visual language as the other surfaces — the tokens in
+`src/app/globals.css` and the Inter / Geist Mono pair are the ones `ui/chaos`
+and `ui/auth` use — so the site, the sign-in pages and the admin UI look like
+one hand made them.
+
+## Run it
+
+```sh
+mise run ui:www:dev      # http://localhost:3003
+mise run ui:www:check    # prettier, eslint, tsc — what CI runs
+pnpm build               # static export into out/
+```
+
+## Edit the content, not the pages
+
+Everything that is a fact lives in [`src/data/site.ts`](src/data/site.ts): who I
+am, the four things I work with, the public projects, the clients, the
+playgrounds, how I like to build, the email and the company details. The pages
+read from it, so changing a sentence never means touching layout.
+
+Two fields are still marked `TODO` because only the company can supply them —
+the registered address and the court register entry (MBS). They render as `—`
+until they are filled in, so an empty field never reads as a real one.
+
+`experience` and `achievements` are the working record behind `/about/`. They
+come from the CV, and where a date is genuinely open the `when` string says so
+in words rather than guessing a month.
+
+## Two languages
+
+The site reads in English or Croatian. What a page says is in
+`src/lib/i18n/messages/` (a file per page, `en` and `hr`), and the facts have a
+Croatian twin in `src/data/site.hr.ts` keyed by company, project, playground or
+stage, so an entry without a translation reads in English until it gets one.
+The first language is decided in the browser: a choice made with the EN/HR
+toggle in the header, kept as one cookie on inorbit.hr so the CV site reads the
+same; otherwise the country the request
+came from, which `/whereami` answers from Cloudflare's header (Croatia, Bosnia,
+Serbia and Montenegro read Croatian); otherwise the browser's language; otherwise
+English. Nothing about the country or the browser is stored.
+
+## The mark
+
+The monogram: the tittle of the _i_ is the body, the _O_ is the orbit. One
+circle, one rounded bar, one dot on a 32-unit grid — no gradients, no type
+inside it, nothing that stops working in one colour at 16 pixels.
+
+The site draws it inline from `src/components/logo.tsx` so it inherits
+`currentColor` and inverts for dark mode by itself. Everything else that needs
+it reads a file:
+
+| File                                                   | For                                                  |
+| ------------------------------------------------------ | ---------------------------------------------------- |
+| `public/brand/mark.svg`                                | the mark, `currentColor` — anything that can inherit |
+| `public/brand/mark-black.svg`, `mark-white.svg`        | fixed colours, for documents and PDFs                |
+| `public/brand/lockup.svg` and its black and white pair | mark plus the name, horizontal                       |
+| `src/app/icon.svg`                                     | the browser tab                                      |
+| `src/app/apple-icon.png`                               | the home-screen icon, reversed out of black          |
+| `src/app/opengraph-image.png`                          | the card a shared link unfurls into                  |
+
+**For invoices and anything printed**: use `mark-black.svg` or
+`lockup-black.svg`. They are plain vectors, so a PDF keeps them sharp at any
+size. The lockup sets the name in Inter via `font-family`; a generator that
+cannot embed Inter should use `mark-black.svg` and set the name in the
+document's own face instead of relying on the SVG's text.
+
+Clear space around the mark is the width of the _i_ stem on every side. Never
+recolour it, put it on a busy ground, or rebuild the lockup by hand — place
+`lockup.svg`.
+
+## Adding a playground
+
+Append an entry to `playgrounds` in `src/data/site.ts`:
+
+```ts
+{ name: "Solidity playground", what: "Paste a contract, watch it parse.", href: "/play/solidity/", tag: "EVM" }
+```
+
+`href: null` means it is still being built: the card appears with a "Building"
+label instead of a dead link. An empty array renders the honest empty state, so
+the page never lists something that is not there.
+
+## The lab
+
+`docs/rfcs/` and `docs/studies/` are the source; `pnpm gen` (or `mise run www:lab`)
+renders every page marked `public: true` into `src/generated/lab/` and refuses to
+write anything when a public page leaks (a host, an address, a port, a path, a
+secret, a cluster name), printing `file:line [rule] "text"`. The generator runs
+before `dev`, `build`, `lint` and `typecheck`; `next dev` does not watch `docs/`, so
+run it again after editing a page. The conventions, the redaction syntax and the
+living-document rule are in `docs/rfcs/README.md`.
+
+## Where it is published
+
+`NEXT_PUBLIC_SITE_URL` (the `SITE_URL` build argument of
+`devops/docker/Dockerfile.www`) is the canonical URL and the base of
+`sitemap.xml`. **Only a build whose host ends in `inorbit.hr` asks robots to
+index it**; every other build — the one on the development domain, for instance
+— ships `Disallow: /`. `mise run local:build` passes `SITE_DOMAIN` from
+`devops/edge/.env` (the site's own domain, not the platform's `BASE_DOMAIN`, which
+redirects to it); unset, the image's default `https://inorbit.hr` applies.
+
+| Where                         | How it gets there                                                                                                                                                    |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `http://localhost:3003/`      | `mise run ui:www:dev`                                                                                                                                                |
+| `http://www.localhost:18080/` | the local cluster, through Envoy's `www.*` virtual host                                                                                                              |
+| `https://<base domain>/`      | the public edge (`devops/edge/Caddyfile`) rewrites the apex Host to `www.<base domain>` so one Envoy rule serves both, and `www.<base domain>` redirects to the apex |
+
+## Pages
+
+| Path                          | What it is                                                                                                                                                                              |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/`                           | Who this is, the playgrounds, what I have built, what I am doing now, how I like to build                                                                                               |
+| `/lab/`                       | What is being built now: the live demos (Break it, the model demo once it is up), the RFCs and the studies, rendered from `docs/rfcs/` and `docs/studies/`; admins-only until published |
+| `/playgrounds/`               | "Play": the music tools. Break it lives under the lab                                                                                                                                   |
+| `/work/`                      | Every public repository, with the year it was written (`/projects/` sends the browser here)                                                                                             |
+| `/about/`                     | The person and the record: the story, selected work, every position, the PDF (`public/cv/`, `mise run www:cv`); the full version is behind `cv.<domain>` (`docs/cv/README.md`)          |
+| `/cv/`                        | Sends the browser to `/about/`; kept for old links and the PDF beside it                                                                                                                |
+| `/contact/`                   | The address, and nothing resembling a form                                                                                                                                              |
+| `/legal/`                     | Company details (imprint, OIB) and the privacy notice                                                                                                                                   |
+| `/terms/`                     | Terms of use for the site and the playgrounds                                                                                                                                           |
+| `/robots.txt`, `/sitemap.xml` | Generated at build time from `src/data/site.ts`                                                                                                                                         |

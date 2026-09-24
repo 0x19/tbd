@@ -1,0 +1,505 @@
+/*
+ * Motion and texture for the site, kept out of globals.css so the palette file
+ * stays identical to the one ui/auth and ui/chaos ship. Everything here is
+ * decoration: it degrades to nothing under prefers-reduced-motion.
+ */
+
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.marquee-track {
+  animation: marquee 42s linear infinite;
+}
+
+/* Revealed on scroll by an IntersectionObserver that sets data-shown. */
+.reveal {
+  opacity: 0;
+  transform: translateY(12px);
+  transition:
+    opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.reveal[data-shown="true"] {
+  opacity: 1;
+  transform: none;
+}
+
+/* A display line that wipes in from the left, used for the hero only. */
+.display-line {
+  display: block;
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marquee-track {
+    animation: none;
+  }
+
+  .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
+
+/* The packets in the hero drawing crawl along their traces, each on its own
+   route and clock; they fade in as they enter and out as they leave. */
+@keyframes mesh-packet {
+  0% {
+    offset-distance: 0%;
+    opacity: 0;
+  }
+  8% {
+    opacity: 0.75;
+  }
+  92% {
+    opacity: 0.75;
+  }
+  100% {
+    offset-distance: 100%;
+    opacity: 0;
+  }
+}
+
+.mesh-packet {
+  opacity: 0;
+  animation: mesh-packet 14s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mesh-packet {
+    display: none;
+  }
+}
+
+/* The lab's prose: RFCs and studies rendered from markdown at build time
+   (tool/lab-data.ts). The tokens are the site's; only the rhythm is set here. */
+.lab-prose {
+  font-size: 1.0625rem;
+  line-height: 1.7;
+}
+.lab-prose > * + * {
+  margin-top: 1.1em;
+}
+.lab-prose h2 {
+  margin-top: 2.4em;
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+.lab-prose h3 {
+  margin-top: 1.8em;
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+.lab-prose h4 {
+  margin-top: 1.4em;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+.lab-prose p,
+.lab-prose li {
+  text-wrap: pretty;
+}
+.lab-prose ul,
+.lab-prose ol {
+  padding-left: 1.4em;
+}
+.lab-prose ul {
+  list-style: disc;
+}
+.lab-prose ol {
+  list-style: decimal;
+}
+.lab-prose li + li {
+  margin-top: 0.35em;
+}
+.lab-prose a {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.lab-prose a:hover {
+  color: var(--muted-foreground);
+}
+.lab-prose code {
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+  padding: 0.1em 0.35em;
+  border-radius: 0.3rem;
+  background: var(--muted);
+}
+/* A status-log line outside the prose (the lab index, a lab's timeline): the
+   same code and link marks, sized to the line. */
+.lab-inline code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  padding: 0.05em 0.3em;
+  border-radius: 0.25rem;
+  background: var(--muted);
+}
+.lab-inline a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.lab-prose pre {
+  overflow-x: auto;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+.lab-prose pre code {
+  padding: 0;
+  background: none;
+}
+.lab-prose blockquote {
+  padding-left: 1.25rem;
+  border-left: 2px solid var(--border);
+  color: var(--muted-foreground);
+}
+.lab-prose table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9375rem;
+}
+.lab-prose th,
+.lab-prose td {
+  padding: 0.5rem 0.75rem 0.5rem 0;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+.lab-prose th {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: 500;
+  color: var(--muted-foreground);
+}
+.lab-prose hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+
+/* A redaction: the fact is withheld in the open, not paraphrased away. The
+   reason is in the title, so it arrives on hover. */
+.redacted {
+  display: inline-block;
+  width: 7ch;
+  height: 1em;
+  vertical-align: -0.15em;
+  margin: 0 0.1em;
+  border-radius: 2px;
+  background: var(--foreground);
+  cursor: help;
+}
+.redacted-block {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 3.5rem;
+  border-radius: 0.375rem;
+  background: var(--foreground);
+  color: var(--background);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  cursor: help;
+}
+
+/* The one packet on the home page's spine: from the hero to the last port,
+   measured by `Spine` in home.tsx, fading in at the top and out at the end. */
+@keyframes spine-packet {
+  0% {
+    transform: translate(-50%, 0);
+    opacity: 0;
+  }
+  4% {
+    opacity: 0.7;
+  }
+  96% {
+    opacity: 0.7;
+  }
+  100% {
+    transform: translate(-50%, var(--spine-end));
+    opacity: 0;
+  }
+}
+
+.spine-packet {
+  opacity: 0;
+  animation: spine-packet 70s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spine-packet {
+    display: none;
+  }
+}
+
+/* The facts strip's edges: a light runs round the outline with a tail, and a
+   drop falls down each divider. The dash offset grows, so the pattern moves
+   backwards along the path and the shared dash start is the head; the longer
+   strokes trail behind it. */
+@keyframes strip-run {
+  to {
+    stroke-dashoffset: 1000;
+  }
+}
+
+@keyframes strip-fall {
+  to {
+    stroke-dashoffset: 400;
+  }
+}
+
+.strip-loop > * {
+  animation: strip-run 16s linear infinite;
+}
+
+.strip-loop .strip-glow {
+  stroke-dasharray: 60 940;
+  opacity: 0.35;
+  filter: blur(3px);
+}
+
+.strip-loop .strip-tail {
+  stroke-dasharray: 60 940;
+  opacity: 0.22;
+}
+
+.strip-loop .strip-head {
+  stroke-dasharray: 14 986;
+  opacity: 0.9;
+}
+
+/* The strip the reply leaves by: the same loop, mirrored, so it runs the other way. */
+.strip-reverse {
+  transform: scaleX(-1);
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.strip-drop > * {
+  animation: strip-fall 7s linear infinite;
+  animation-delay: inherit;
+}
+
+.strip-drop .strip-tail {
+  stroke-dasharray: 22 378;
+  opacity: 0.22;
+}
+
+.strip-drop .strip-head {
+  stroke-dasharray: 6 394;
+  opacity: 0.9;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .strip-edge {
+    display: none;
+  }
+}
+
+/* The closing mesh's two quiet signs of life: rings that ripple out from the
+   hub on the spine (a 1-unit circle scaled up, the stroke kept at 1px), and
+   halos on the points of presence that breathe. */
+@keyframes mesh-ripple {
+  0% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  100% {
+    transform: scale(240);
+    opacity: 0;
+  }
+}
+
+.mesh-ripple {
+  transform-box: fill-box;
+  transform-origin: center;
+  opacity: 0;
+  animation: mesh-ripple 9s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+@keyframes mesh-halo {
+  0%,
+  100% {
+    transform: scale(1);
+    stroke-opacity: 0.3;
+  }
+  50% {
+    transform: scale(1.18);
+    stroke-opacity: 0.55;
+  }
+}
+
+.mesh-halo {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: mesh-halo 7s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mesh-ripple {
+    display: none;
+  }
+
+  .mesh-halo {
+    animation: none;
+  }
+}
+
+/* The live dot on a playground card: one soft ping every few seconds. */
+@keyframes live-ping {
+  0% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  70%,
+  100% {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+}
+
+.live-ping {
+  animation: live-ping 2.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-ping {
+    display: none;
+  }
+}
+
+/* A model's answer in the workbench (src/lib/markdown.ts): compact prose at the
+   transcript's size, code blocks with their language and a copy button. */
+.md > * + * {
+  margin-top: 0.75em;
+}
+.md h1,
+.md h2,
+.md h3,
+.md h4 {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin-top: 1.1em;
+}
+.md h1 {
+  font-size: 1.15rem;
+}
+.md h2 {
+  font-size: 1.05rem;
+}
+.md h3,
+.md h4 {
+  font-size: 0.95rem;
+}
+.md ul,
+.md ol {
+  padding-left: 1.3em;
+}
+.md ul {
+  list-style: disc;
+}
+.md ol {
+  list-style: decimal;
+}
+.md li + li {
+  margin-top: 0.25em;
+}
+.md li > ul,
+.md li > ol {
+  margin-top: 0.25em;
+}
+.md a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.md strong {
+  font-weight: 600;
+}
+.md code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  padding: 0.05em 0.3em;
+  border-radius: 0.25rem;
+  background: var(--muted);
+}
+.md hr {
+  border-color: var(--border);
+}
+.md blockquote {
+  border-left: 2px solid var(--border);
+  padding-left: 0.8em;
+  color: var(--muted-foreground);
+}
+.md table {
+  display: block;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: 0.85em;
+}
+.md th,
+.md td {
+  border: 1px solid var(--border);
+  padding: 0.3em 0.6em;
+  text-align: left;
+}
+.md .md-image {
+  color: var(--muted-foreground);
+  font-style: italic;
+}
+.md .md-code {
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  overflow: hidden;
+}
+.md .md-code-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.25rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in oklab, var(--muted) 60%, transparent);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--muted-foreground);
+}
+.md .md-code-head button:hover {
+  color: var(--foreground);
+}
+.md .md-code-actions {
+  display: flex;
+  gap: 0.9rem;
+}
+.md .md-code-head button[data-run] {
+  color: var(--foreground);
+}
+.md .md-code pre {
+  overflow-x: auto;
+  padding: 0.75rem;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  line-height: 1.55;
+}
+.md .md-code pre code {
+  background: none;
+  padding: 0;
+  font-size: inherit;
+}

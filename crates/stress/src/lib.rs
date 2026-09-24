@@ -25,6 +25,8 @@ pub mod model;
 pub mod replay;
 pub mod report;
 pub mod shrink;
+pub mod stats;
+pub mod sweep;
 pub mod trace;
 pub mod workers;
 
@@ -34,7 +36,8 @@ pub use executor::{PROGRESS_INTERVAL, run, run_with_clients};
 pub use finding::{Finding, FindingSummary, ReplayOutcome, WorkerClass};
 pub use fuzz::FuzzCase;
 pub use hooks::{Hooks, StressEvent};
-pub use metrics::{Latency, LoadSnapshot, Metrics, OpSnapshot, TargetCounts};
+pub use metrics::{Latency, LoadSnapshot, Meter, Metrics, OpSnapshot, TargetCounts};
 pub use replay::{Replayed, replay, replay_finding};
 pub use report::{CampaignResult, CheckCount, StressSnapshot, render, summary};
 pub use shrink::{Budget, shrink};
+pub use stats::{Ci, bootstrap_ci, knee, quantile};

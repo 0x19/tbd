@@ -4,6 +4,7 @@
 pub mod config;
 pub mod fault;
 pub mod metrics;
+pub mod principal;
 pub mod profiling;
 pub mod runtime;
 pub mod shutdown;

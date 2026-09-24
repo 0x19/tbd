@@ -1,0 +1,163 @@
+syntax = "proto3";
+
+package tbd.arena.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/timestamp.proto";
+
+// The arena: one live view of what the platform is doing, for the lab's pages.
+// It reads the model service's tiers, the metrics store's rates, and the chaos
+// tool's runs and last end-to-end check of every way in, and republishes them
+// as one snapshot. A figure a source could not give is absent, never zero;
+// `sources` says which source is behind and why.
+service ArenaService {
+  // Echo a message. Proves configuration, telemetry and fault injection reach
+  // an RPC.
+  rpc Ping(PingRequest) returns (PingResponse) {
+    option (google.api.http) = {get: "/v1/arena/ping"};
+  }
+  // What the platform is doing now, in one answer: each model tier's queue
+  // and speed, the last end-to-end check of every way in, and the chaos
+  // tool's current run.
+  rpc GetSnapshot(GetSnapshotRequest) returns (GetSnapshotResponse) {
+    option (google.api.http) = {get: "/v1/arena/snapshot"};
+  }
+  // The same snapshot as a stream: the current one at once, then one a
+  // second. Every frame is whole, so a reader that falls behind skips to the
+  // latest rather than replaying what it missed.
+  rpc Watch(WatchRequest) returns (stream WatchResponse) {
+    option (google.api.http) = {get: "/v1/arena/events"};
+  }
+}
+
+message PingRequest {
+  string message = 1;
+}
+
+message PingResponse {
+  string message = 1;
+  // Version of the binary that answered.
+  string version = 2;
+  // True while the service is a placeholder with nothing real behind it.
+  bool stub = 3;
+}
+
+message GetSnapshotRequest {}
+
+message GetSnapshotResponse {
+  Snapshot snapshot = 1;
+}
+
+message WatchRequest {}
+
+message WatchResponse {
+  Snapshot snapshot = 1;
+}
+
+message Snapshot {
+  // When this snapshot was made; a reader tells a stalled stream from a quiet
+  // one by it.
+  google.protobuf.Timestamp now = 1;
+  // One per model tier, as the model service reports it.
+  repeated TierState tiers = 2;
+  // One per way in (rest, sse, websocket, mcp, grpc), from the chaos tool's
+  // last end-to-end check; empty until one has run.
+  repeated SurfaceState surfaces = 3;
+  // When those checks ran.
+  google.protobuf.Timestamp surfaces_checked_at = 4;
+  // How many tools an agent is offered over MCP, from the same check.
+  optional uint32 mcp_tools = 5;
+  // The chaos tool's current run, or that there is none.
+  ChaosRun chaos = 6;
+  // Every source the snapshot is built from, and whether it is current.
+  repeated SourceState sources = 7;
+  // The sandbox runner (RFC 0010), as it answered and as the metrics store
+  // counts its runs; absent when no runner is configured.
+  RunnerState runner = 8;
+}
+
+message RunnerState {
+  // The runner answered its last read.
+  bool up = 1;
+  // It runs on the in-process stub engine; its figures are not real runs.
+  bool stub = 2;
+  // Runs now, and the most it runs at once.
+  uint32 in_flight = 3;
+  uint32 max_in_flight = 4;
+  // The languages it runs ("go", "rust").
+  repeated string languages = 5;
+  // Over the last five minutes, from the metrics store: runs a minute, runs a
+  // minute the sandbox did not answer ("unavailable"), and the whole run's
+  // median and 99th percentile in milliseconds (container start to removal).
+  optional double runs_per_minute = 6;
+  optional double unavailable_per_minute = 7;
+  optional double p50_ms = 8;
+  optional double p99_ms = 9;
+}
+
+message TierState {
+  // "fast" or "deep".
+  string tier = 1;
+  string engine = 2;
+  string model = 3;
+  // The engine answered its last probe.
+  bool up = 4;
+  // The tier runs on the in-process stub engine; its figures are not real.
+  bool stub = 5;
+  // Admission, now: running, the most it runs at once, and waiting.
+  uint32 in_flight = 6;
+  uint32 max_in_flight = 7;
+  uint32 waiting = 8;
+  // Completion tokens a second over the last minute, from the metrics store.
+  optional double tokens_per_second = 9;
+  // Time to the first token over the last five minutes, median and 99th
+  // percentile, in milliseconds.
+  optional double ttft_p50_ms = 10;
+  optional double ttft_p99_ms = 11;
+  // Requests admission refused in the last minute.
+  optional double refused_per_minute = 12;
+}
+
+message SurfaceState {
+  // "rest", "sse", "websocket", "mcp" or "grpc".
+  string name = 1;
+  // The check passed.
+  bool up = 2;
+  // How long the check took, in milliseconds.
+  double latency_ms = 3;
+  // The check that stands for this way in, and what it observed.
+  string check = 4;
+  string detail = 5;
+}
+
+message ChaosRun {
+  // "idle" (nothing running), "running", or "absent" (no chaos tool
+  // configured, or it did not answer).
+  string state = 1;
+  string id = 2;
+  // "scenario", "load", "validate" or "stress".
+  string kind = 3;
+  string name = 4;
+  // The run's current phase, when it reports one.
+  string phase = 5;
+  double elapsed_s = 6;
+  // Over the last second of load: requests a second, the share that failed,
+  // and the 99th percentile latency since the run started.
+  double rps = 7;
+  double error_rate = 8;
+  double p99_ms = 9;
+  // Completion tokens a second across the run's model operations, when it
+  // runs any.
+  optional double tokens_per_second = 10;
+}
+
+message SourceState {
+  // "llm", "runner", "metrics" or "chaos".
+  string name = 1;
+  // The last read succeeded.
+  bool ok = 2;
+  // Seconds since the last successful read; absent when there has been none.
+  optional double age_s = 3;
+  // Why the last read failed, or "not configured".
+  string error = 4;
+}

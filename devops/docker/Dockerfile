@@ -28,6 +28,10 @@ COPY Cargo.toml Cargo.lock ./
 COPY .cargo ./.cargo
 COPY crates ./crates
 COPY proto ./proto
+# `sqlx::migrate!` in crates/db embeds this directory at compile time, so it is
+# build input, not runtime data. Without it the build fails with "error
+# canonicalizing migration directory", which reads like a path bug.
+COPY migrations ./migrations
 RUN cargo chef prepare --recipe-path recipe.json
 
 # ---------------------------------------------------------------------------
@@ -45,6 +49,11 @@ COPY Cargo.toml Cargo.lock ./
 COPY .cargo ./.cargo
 COPY crates ./crates
 COPY proto ./proto
+COPY migrations ./migrations
+# Data a crate compiles in with include_str! (the finance chart of accounts
+# under configs/finance/hr/); the runtime stage copies configs again for the
+# files read at start.
+COPY configs ./configs
 RUN cargo build --locked --release -p tbd-${BIN} \
  && cp target/release/${BIN} /usr/local/bin/app
 

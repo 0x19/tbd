@@ -1,0 +1,58 @@
+[package]
+name = "tbd-lab"
+description = "The bench the services are run on: starting them in-process, holding them in a stack, driving load at them, and reaching them over TLS. Depends on no service crate, so anything that drives services can depend on it."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+tbd-common.workspace = true
+tbd-engine.workspace = true
+tbd-finance.workspace = true
+tbd-humans.workspace = true
+tbd-ledger.workspace = true
+tbd-protocol.workspace = true
+tbd-proto.workspace = true
+tbd-stress.workspace = true
+
+anyhow.workspace = true
+axum.workspace = true
+chrono.workspace = true
+base64.workspace = true
+async-trait.workspace = true
+futures.workspace = true
+http.workspace = true
+humantime-serde.workspace = true
+rand.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-tungstenite = { workspace = true, features = ["rustls-tls-webpki-roots"] }
+tokio-util.workspace = true
+tower.workspace = true
+tonic = { workspace = true, features = ["tls-ring", "tls-webpki-roots"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-pki-types = { version = "1", features = ["std"] }
+webpki-roots = "1"
+tonic-health.workspace = true
+tracing.workspace = true
+prost-types.workspace = true
+humantime.workspace = true
+toml.workspace = true
+url.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
+
+[[test]]
+name = "it"
+path = "tests/it/main.rs"
+
+[lints]
+workspace = true

@@ -1,0 +1,5 @@
+# radar, environment "local": the llm service through Envoy's internal listener,
+# which routes by gRPC service name; never straight to the service.
+
+[llm]
+url = "http://envoy:50051"

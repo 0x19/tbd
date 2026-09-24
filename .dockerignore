@@ -5,6 +5,11 @@
 !Cargo.lock
 !.cargo/
 !crates/
+# The project's migrations, embedded at compile time by `sqlx::migrate!` in
+# crates/db. Without this the build fails inside the image with
+# "error canonicalizing migration directory", which reads like a path bug
+# rather than a missing build context.
+!migrations/
 !proto/
 !configs/
 !scenarios/
@@ -21,3 +26,26 @@
 !ui/auth/
 ui/auth/node_modules/
 ui/auth/.next/
+# The company site (Dockerfile.www builds it from source; never its outputs), and
+# the markdown its lab renders at build time.
+!ui/www/
+ui/www/node_modules/
+ui/www/.next/
+ui/www/out/
+ui/www/src/generated/
+!docs/rfcs/
+!docs/studies/
+!docs/lab/
+!devops/docker/www.Caddyfile
+# The finance UI (Dockerfile.finances builds it from source; never its outputs).
+!ui/finances/
+ui/finances/node_modules/
+ui/finances/.next/
+ui/finances/out/
+!devops/docker/finances.Caddyfile
+# The cv UI (ui/cv), a static export served by Caddy: Dockerfile.cv-ui.
+!ui/cv/
+ui/cv/node_modules/
+ui/cv/.next/
+ui/cv/out/
+!devops/docker/cv.Caddyfile

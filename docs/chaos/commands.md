@@ -141,7 +141,8 @@ JSON output, one element per scenario:
     "error_rate": 0.1669, "throughput_rps": 199.6,
     "latency": { "p50_ms": 1.2, "p90_ms": 1.8, "p99_ms": 2.2, "max_ms": 2.3, "mean_ms": 1.3 },
     "per_target": { "protocol-1": { "total": 599, "failed": 100 } },
-    "per_op": { "rest_evaluate": { "total": 599, "failed": 100, "latency": { "p50_ms": 1.2, "...": 0 } } },
+    "per_op": { "rest_evaluate": { "total": 599, "failed": 100, "latency": { "p50_ms": 1.2, "...": 0 },
+                                   "counters": {}, "samples": {} } },
     "errors": { "http 503": 100 }
   },
   "services": { "engine-1": { "total": 658, "failed": 100 } },
@@ -158,6 +159,13 @@ JSON output, one element per scenario:
 Field notes:
 
 - `load` is absent when the scenario has no `[load]`.
+- `per_op.<op>.counters` and `samples` are what the operation metered itself beside its
+  latency, by name: counters as totals over the window (a rate is the counter divided by
+  `elapsed_s`; `llm_generate` reports `prompt_tokens`, `completion_tokens`, `generations` and
+  `answered`, so tokens per second is `completion_tokens / elapsed_s`), samples as
+  latency quantiles (`llm_generate` reports `ttft`, the time to the first chunk).
+  Both are left out when empty, and records written before meters existed have neither.
+  The text report prints them as `meter` and `timing` lines under the operation.
 - `latency` covers successful requests only; failures are counted, not timed.
 - `services` holds engine-side counters at the end of the run. After a restart they
   belong to the new instance, so they cover the time since the restart.

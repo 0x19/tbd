@@ -1,0 +1,19 @@
+{
+  "note": "Words the site's redaction check refuses on a public lab page, beyond what its rules infer: Kubernetes resource and Secret names, cluster hosts, and anything else that names a piece of the deployment. Keep it to nouns; the rules already catch hosts, addresses, ports and paths.",
+  "words": [
+    "ledger-postgres",
+    "ledger-db",
+    "finance-db",
+    "cv-db",
+    "llm-db",
+    "cv-private",
+    "tbd-env",
+    "k3d-tbd",
+    "nevio-server",
+    "host.k3d.internal",
+    "host.docker.internal",
+    "kubeconfig",
+    "secretKeyRef",
+    "configMapRef"
+  ]
+}

@@ -1,0 +1,13 @@
+# Flutter's own ignores for an app; the workspace's live in the repo root .gitignore.
+.dart_tool/
+.flutter-plugins-dependencies
+build/
+.idea/
+*.iml
+ios/Flutter/.last_build_id
+ios/Flutter/ephemeral/
+ios/.symlinks/
+ios/Pods/
+android/.gradle/
+android/local.properties
+android/.kotlin/

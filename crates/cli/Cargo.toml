@@ -14,12 +14,14 @@ path = "src/main.rs"
 
 [dependencies]
 tbd-common.workspace = true
+tbd-db.workspace = true
 
 anyhow.workspace = true
 clap.workspace = true
 comfy-table.workspace = true
 owo-colors = { workspace = true, features = ["supports-colors"] }
 thiserror.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 toml.workspace = true
 
 [dev-dependencies]

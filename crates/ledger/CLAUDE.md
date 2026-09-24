@@ -77,8 +77,8 @@ Invariants:
 
 Tests: `tests/it/conformance.rs` is the store contract, generic over the backend, run
 through the `conformance_suite!` macro: `memory::*` in `tests/it/main.rs`, `pg::*` in
-`tests/it/pg.rs` against a real Postgres (a `pgvector` container each test starts
-through `testcontainers`, or the admin URL in `LEDGER_TEST_DATABASE_URL`, which is what
+`tests/it/pg.rs` against a real Postgres (the one reusable `tbd-test-postgres` container
+through `tbd_db::testing`, or the admin URL in `LEDGER_TEST_DATABASE_URL`, which is what
 CI's services block sets; a database per test). Never enumerate a backend's behaviour
 outside the suite: a case added there runs on every store. `clickhouse::*` drives the
 sink against a real ClickHouse the same way (`LEDGER_TEST_CLICKHOUSE_URL` or a

@@ -1,0 +1,618 @@
+# The chart of accounts the books are seeded with: RRiF-ov računski plan za
+# poduzetnike, XXVIII. izdanje (2025) numbering (docs/accountant/rules.md §1).
+#
+# Every account the accountant used in the 2025 books (docs/accountant/gfi-2025.md
+# §1, 77 rows) is here under its own code and name, and every synthetic account
+# they sit under. A synthetic account takes no posting; an analytic one names its
+# parent, the longest account code that is a prefix of its own. Class and kind
+# are not written here: the code's first digit decides them (0/1/3 asset,
+# 2 liability, 4 expense, 7 revenue, 8 result, 9 equity).
+#
+# Synthetic names are working titles from the accountant's analytics and the
+# RRiF class headings; the paid RRiF edition has the verbatim ones. Adding an
+# account here adds it to every party on their next books call; an account a
+# party adds itself goes through UpsertLedgerAccount instead.
+
+[chart]
+name = "RRiF XXVIII (2025)"
+edition = "2025"
+
+# ---- class 0: long-term assets ----
+[[account]]
+code = "031"
+name = "Oprema"
+synthetic = true
+
+[[account]]
+code = "0311"
+name = "Računalna oprema"
+
+[[account]]
+code = "03100"
+name = "Uredska oprema (blagajne, alarmi, klima uređaji, tv)-PS"
+
+[[account]]
+code = "03110"
+name = "Računalna oprema-PS"
+
+[[account]]
+code = "03120"
+name = "Telekomunikacijska oprema (mobiteli, tel. centrale)-PS"
+
+[[account]]
+code = "036"
+name = "Predujmovi za materijalnu imovinu"
+synthetic = true
+
+[[account]]
+code = "0360"
+name = "Predujmovi za materijalnu imovinu"
+
+[[account]]
+code = "037"
+name = "Materijalna imovina u pripremi"
+synthetic = true
+
+[[account]]
+code = "0371"
+name = "Oprema u pripremi"
+
+[[account]]
+code = "039"
+name = "Akumulirana amortizacija postrojenja i opreme"
+synthetic = true
+
+[[account]]
+code = "0391"
+name = "Akumulirana amortizacija opreme"
+
+[[account]]
+code = "03910"
+name = "Akumulirana amortizacija opreme-PS"
+
+# ---- class 1: cash, receivables, prepaid taxes ----
+[[account]]
+code = "100"
+name = "Novac na računima u banci"
+synthetic = true
+
+[[account]]
+code = "1000"
+name = "Transakcijski račun u banci, Erste"
+
+[[account]]
+code = "1009"
+name = "Transakcijski prijelazni račun"
+
+[[account]]
+code = "102"
+name = "Blagajna"
+synthetic = true
+
+[[account]]
+code = "1020"
+name = "Glavna blagajna"
+
+[[account]]
+code = "115"
+name = "Dani zajmovi, depoziti i sl."
+synthetic = true
+
+[[account]]
+code = "11506"
+name = "Zajmovi članovima uprave i zaposlenicima"
+
+[[account]]
+code = "115091"
+name = "Zajmovi dani fizičkim osobama"
+
+[[account]]
+code = "11513"
+name = "Depoziti za ostale poslovne aktivnosti"
+
+[[account]]
+code = "121"
+name = "Kupci iz EU i iz trećih zemalja"
+synthetic = true
+
+[[account]]
+code = "1211"
+name = "Kupci dobara i usluga iz trećih zemalja"
+
+[[account]]
+code = "124"
+name = "Potraživanja za kamate"
+synthetic = true
+
+[[account]]
+code = "1243"
+name = "Potraživanje za kamatu iz danih zajmova"
+
+[[account]]
+code = "125"
+name = "Potraživanja za predujmove dobavljačima"
+synthetic = true
+
+[[account]]
+code = "1252"
+name = "Potraživanja za predujmljene usluge dobavljačima iz 3z"
+
+[[account]]
+code = "133"
+name = "Potraživanja od članova društva"
+synthetic = true
+
+[[account]]
+code = "1331"
+name = "Potraživanja od članova društva za privatne troškove"
+
+[[account]]
+code = "140"
+name = "Pretporez"
+synthetic = true
+
+[[account]]
+code = "140012"
+name = "Pretporez po ulaznim računima 25%"
+
+[[account]]
+code = "140022"
+name = "Pretporez iz predujmova 25%"
+
+[[account]]
+code = "14032"
+name = "Pretporez od primljenih usluga iz EU 25%"
+
+[[account]]
+code = "14042"
+name = "Pretporez od porez. obveznika bez sjedišta u RH 25%"
+
+[[account]]
+code = "14052"
+name = "PDV pri uvozu dobara 25%"
+
+[[account]]
+code = "1407"
+name = "Potraživanja za razliku većeg pretporeza od obveza"
+
+[[account]]
+code = "141"
+name = "Potraživanja za više plaćeni porez na dohodak"
+synthetic = true
+
+[[account]]
+code = "1410"
+name = "Potraživanja za porez na dohodak iz plaća"
+
+[[account]]
+code = "142"
+name = "Potraživanja za više plaćene doprinose"
+synthetic = true
+
+[[account]]
+code = "1424"
+name = "Potraživanja za više plaćeni doprinos za zapošljavanje"
+
+[[account]]
+code = "143"
+name = "Potraživanja za predujmove poreza na dobitak"
+synthetic = true
+
+[[account]]
+code = "1430"
+name = "Potraživanja za plaćene predujmove poreza na dobitak"
+
+[[account]]
+code = "145"
+name = "Potraživanja za ostale poreze i članarine"
+synthetic = true
+
+[[account]]
+code = "1450"
+name = "Potraživanja za plaćenu članarinu turističkim zajednicama"
+
+# ---- class 2: liabilities ----
+[[account]]
+code = "201"
+name = "Obveze prema članovima društva"
+synthetic = true
+
+[[account]]
+code = "2010"
+name = "Obveze s osnova udjela u dobitku"
+
+[[account]]
+code = "220"
+name = "Dobavljači u zemlji"
+synthetic = true
+
+[[account]]
+code = "2200"
+name = "Obveze prema dobavljačima dobara i usluga"
+
+[[account]]
+code = "221"
+name = "Dobavljači iz EU i iz trećih zemalja"
+synthetic = true
+
+[[account]]
+code = "2210"
+name = "Dobavljači dobara i usluga iz EU"
+
+[[account]]
+code = "2211"
+name = "Dobavljači dobara i usluga iz trećih zemalja"
+
+[[account]]
+code = "230"
+name = "Obveze za plaće"
+synthetic = true
+
+[[account]]
+code = "2300"
+name = "Obveze za neto plaće"
+
+[[account]]
+code = "239"
+name = "Ostale kratkoročne obveze"
+synthetic = true
+
+[[account]]
+code = "2399"
+name = "Obveze za obračunane akontacije pd plaćene u idućoj god"
+
+[[account]]
+code = "240"
+name = "Obveze za PDV"
+synthetic = true
+
+[[account]]
+code = "24032"
+name = "Obveze za PDV za primljene usluge iz EU 25%"
+
+[[account]]
+code = "24042"
+name = "Obveza PDV-a od porez. obveznika bez sjedišta u RH 25%"
+
+[[account]]
+code = "241"
+name = "Obveze za porez na dohodak"
+synthetic = true
+
+[[account]]
+code = "2410"
+name = "Obveze za porez na dohodak iz plaća"
+
+[[account]]
+code = "242"
+name = "Obveze za doprinose"
+synthetic = true
+
+[[account]]
+code = "2420"
+name = "Obveze za doprinos za MO iz plaća I. stup"
+
+[[account]]
+code = "2421"
+name = "Obveze za doprinos za MO iz plaća II. stup"
+
+[[account]]
+code = "2423"
+name = "Obveze za doprinos za zdravstveno osiguranje na plaće"
+
+[[account]]
+code = "243"
+name = "Obveze za porez na dohodak od kapitala"
+synthetic = true
+
+[[account]]
+code = "24311"
+name = "Porez na dohodak od kapitala na isplate dobitka"
+
+# ---- class 3: small inventory ----
+[[account]]
+code = "350"
+name = "Sitan inventar na zalihi"
+synthetic = true
+
+[[account]]
+code = "3500"
+name = "Sitan inventar na zalihi"
+
+[[account]]
+code = "360"
+name = "Sitan inventar u uporabi"
+synthetic = true
+
+[[account]]
+code = "3600"
+name = "Sitan inventar u uporabi"
+
+[[account]]
+code = "363"
+name = "Otpis sitnog inventara"
+synthetic = true
+
+[[account]]
+code = "3630"
+name = "Otpis sitnog inventara"
+
+# ---- class 4: expenses ----
+[[account]]
+code = "401"
+name = "Troškovi materijala"
+synthetic = true
+
+[[account]]
+code = "4010"
+name = "Uredski materijal (papir, registratori, olovke, usb-stick)"
+
+[[account]]
+code = "404"
+name = "Troškovi sitnog inventara"
+synthetic = true
+
+[[account]]
+code = "4040"
+name = "Troškovi sitnog inventara"
+
+[[account]]
+code = "405"
+name = "Potrošeni rezervni dijelovi"
+synthetic = true
+
+[[account]]
+code = "4050"
+name = "Potrošeni rezervni dijelovi za popravak vlastite opreme"
+
+[[account]]
+code = "410"
+name = "Troškovi telefona, interneta i prijevoza"
+synthetic = true
+
+[[account]]
+code = "4100"
+name = "Troškovi telefona, interneta i sl."
+
+[[account]]
+code = "416"
+name = "Intelektualne i osobne usluge"
+synthetic = true
+
+[[account]]
+code = "4164"
+name = "Knjigovodstvene usluge"
+
+[[account]]
+code = "417"
+name = "Komunalne usluge i garažiranje"
+synthetic = true
+
+[[account]]
+code = "4175"
+name = "Garažiranje i parkiranje vozila"
+
+[[account]]
+code = "419"
+name = "Ostale vanjske usluge"
+synthetic = true
+
+[[account]]
+code = "4199"
+name = "Ostali nespomenuti vanjski troškovi, usluge"
+
+[[account]]
+code = "420"
+name = "Troškovi neto plaća"
+synthetic = true
+
+[[account]]
+code = "4200"
+name = "Troškovi neto plaća"
+
+[[account]]
+code = "421"
+name = "Troškovi poreza i prireza iz plaća"
+synthetic = true
+
+[[account]]
+code = "4210"
+name = "Troškovi poreza i prireza"
+
+[[account]]
+code = "422"
+name = "Troškovi doprinosa iz plaća"
+synthetic = true
+
+[[account]]
+code = "4220"
+name = "Troškovi doprinosa iz plaća"
+
+[[account]]
+code = "423"
+name = "Troškovi doprinosa na plaće"
+synthetic = true
+
+[[account]]
+code = "4230"
+name = "Troškovi doprinosa na plaće"
+
+[[account]]
+code = "431"
+name = "Amortizacija"
+synthetic = true
+
+[[account]]
+code = "4312"
+name = "Amortizacija opreme"
+
+[[account]]
+code = "460"
+name = "Troškovi službenih putovanja"
+synthetic = true
+
+[[account]]
+code = "4607"
+name = "Ostali troškovi na službenom putu (cestarina, trajekt)"
+
+[[account]]
+code = "461"
+name = "Nadoknade troškova, darovi i potpore radnicima"
+synthetic = true
+
+[[account]]
+code = "4616"
+name = "Prigodne nagrade (božićnice, uskrsnice, regres)"
+
+[[account]]
+code = "464"
+name = "Premije osiguranja"
+synthetic = true
+
+[[account]]
+code = "4649"
+name = "Premije za ostale oblike osiguranja"
+
+[[account]]
+code = "465"
+name = "Bankovne usluge i platni promet"
+synthetic = true
+
+[[account]]
+code = "4650"
+name = "Troškovi platnog prometa"
+
+[[account]]
+code = "468"
+name = "Ostali troškovi poslovanja"
+synthetic = true
+
+[[account]]
+code = "4684"
+name = "Trošak HRT pretplate"
+
+[[account]]
+code = "4686"
+name = "Troškovi prava uporabe računalnih programa"
+
+[[account]]
+code = "469"
+name = "Ostali nematerijalni troškovi"
+synthetic = true
+
+[[account]]
+code = "4698"
+name = "Troškovi ZAMP-a, opomena i dr."
+
+[[account]]
+code = "474"
+name = "Zatezne kamate"
+synthetic = true
+
+[[account]]
+code = "4740"
+name = "Zatezne kamate iz trgovačkih ugovora"
+
+[[account]]
+code = "4741"
+name = "Zatezne kamate na poreze, doprinose i dr. davanja"
+
+[[account]]
+code = "475"
+name = "Negativne tečajne razlike"
+synthetic = true
+
+[[account]]
+code = "4750"
+name = "Negativne tečajne razlike iz obveza za nabave u inozemstvu"
+
+[[account]]
+code = "479"
+name = "Ostali financijski rashodi"
+synthetic = true
+
+[[account]]
+code = "4797"
+name = "Troškovi ovršnog postupka"
+
+[[account]]
+code = "4799"
+name = "Ostali nespomenuti financijski troškovi"
+
+[[account]]
+code = "485"
+name = "Naknadno utvrđeni troškovi"
+synthetic = true
+
+[[account]]
+code = "4850"
+name = "Naknadno utvrđeni troškovi, računi iz prethodnih godina"
+
+[[account]]
+code = "486"
+name = "Darovanja"
+synthetic = true
+
+[[account]]
+code = "4860"
+name = "Darovanje za općekorisne namjene (do 2% prihoda)"
+
+# ---- class 7: revenue ----
+[[account]]
+code = "751"
+name = "Prihodi od prodaje usluga u zemlji"
+synthetic = true
+
+[[account]]
+code = "7518"
+name = "Prihodi od programskih usluga"
+
+[[account]]
+code = "754"
+name = "Prihodi od prodaje usluga u inozemstvu"
+synthetic = true
+
+[[account]]
+code = "75402"
+name = "Prihod od prodaje programskih usluga u EU"
+
+[[account]]
+code = "75411"
+name = "Prihod od prodaje programskih usluga u treće zemlje"
+
+[[account]]
+code = "771"
+name = "Prihodi od kamata"
+synthetic = true
+
+[[account]]
+code = "7710"
+name = "Prihodi od kamata iz financijske imovine i dr."
+
+[[account]]
+code = "772"
+name = "Ostali financijski prihodi"
+synthetic = true
+
+[[account]]
+code = "7724"
+name = "Ostali financijski prihodi"
+
+# ---- class 9: equity ----
+[[account]]
+code = "900"
+name = "Temeljni kapital"
+synthetic = true
+
+[[account]]
+code = "9000"
+name = "Upisani temeljni kapital članova d.o.o."
+
+[[account]]
+code = "940"
+name = "Zadržani dobitak"
+synthetic = true
+
+[[account]]
+code = "94010"
+name = "Zadržani dobitak članova društva"

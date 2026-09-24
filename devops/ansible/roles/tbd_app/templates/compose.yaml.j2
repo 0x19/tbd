@@ -26,6 +26,13 @@ services:
       PROTOCOL_ENGINE_URL: http://engine:{{ engine_port }}
       PROTOCOL_HUMANS_URL: http://humans:{{ humans_port }}
       PROTOCOL_LEDGER_URL: http://ledger:{{ ledger_port }}
+      PROTOCOL_RUNNER_URL: http://runner:{{ runner_port }}
+      PROTOCOL_RADAR_URL: http://radar:{{ radar_port }}
+      PROTOCOL_ARENA_URL: http://arena:{{ arena_port }}
+      PROTOCOL_LLM_URL: http://llm:{{ llm_port }}
+      PROTOCOL_CV_URL: http://cv:{{ cv_port }}
+      PROTOCOL_PLAYGROUND_URL: http://playground:{{ playground_port }}
+      PROTOCOL_FINANCE_URL: http://finance:{{ finance_port }}
     ports:
       - "{{ protocol_port }}:{{ protocol_port }}"
     depends_on:
@@ -95,6 +102,108 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: "{{ otlp_endpoint | default('') }}"
       PYROSCOPE_SERVER_ADDRESS: "{{ pyroscope_server | default('') }}"
     restart: unless-stopped
+  finance:
+    image: {{ finance_image }}:{{ image_tag }}
+    environment:
+      RUST_LOG: {{ rust_log }}
+      LOG_FORMAT: {{ log_format }}
+      TBD_ENV: production
+      FINANCE_LISTEN_ADDR: 0.0.0.0:{{ finance_port }}
+      FINANCE_METRICS_ADDR: 0.0.0.0:9464
+      FINANCE_DATABASE_URL: "postgres://ledger:{{ vault_ledger_postgres_password }}@ledger-postgres:5432/tbd?sslmode=disable"
+      FINANCE_EB_APPLICATION_ID: "{{ vault_finance_eb_application_id | default('') }}"
+      FINANCE_EB_PRIVATE_KEY: "{{ vault_finance_eb_private_key | default('') }}"
+      FINANCE_CONNECTOR_KEY: "{{ vault_finance_connector_key | default('') }}"
+      FINANCE_GOOGLE_CLIENT_ID: "{{ vault_finance_google_client_id | default('') }}"
+      FINANCE_GOOGLE_CLIENT_SECRET: "{{ vault_finance_google_client_secret | default('') }}"
+      FINANCE_GOOGLE_SEND_CLIENT_ID: "{{ vault_finance_google_send_client_id | default('') }}"
+      FINANCE_GOOGLE_SEND_CLIENT_SECRET: "{{ vault_finance_google_send_client_secret | default('') }}"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "{{ otlp_endpoint | default('') }}"
+      PYROSCOPE_SERVER_ADDRESS: "{{ pyroscope_server | default('') }}"
+    restart: unless-stopped
+  playground:
+    image: {{ playground_image }}:{{ image_tag }}
+    environment:
+      RUST_LOG: {{ rust_log }}
+      LOG_FORMAT: {{ log_format }}
+      TBD_ENV: production
+      PLAYGROUND_LISTEN_ADDR: 0.0.0.0:{{ playground_port }}
+      PLAYGROUND_METRICS_ADDR: 0.0.0.0:9464
+      OTEL_EXPORTER_OTLP_ENDPOINT: "{{ otlp_endpoint | default('') }}"
+      PYROSCOPE_SERVER_ADDRESS: "{{ pyroscope_server | default('') }}"
+    restart: unless-stopped
+  cv:
+    image: {{ cv_image }}:{{ image_tag }}
+    environment:
+      RUST_LOG: {{ rust_log }}
+      LOG_FORMAT: {{ log_format }}
+      TBD_ENV: production
+      CV_LISTEN_ADDR: 0.0.0.0:{{ cv_port }}
+      CV_METRICS_ADDR: 0.0.0.0:9464
+      CV_DATABASE_URL: "postgres://ledger:{{ vault_ledger_postgres_password }}@ledger-postgres:5432/tbd?sslmode=disable"
+      CV_FINANCE_URL: http://finance:{{ finance_port }}
+      CV_PRIVATE_JSON: "{{ vault_cv_private_json | default('') }}"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "{{ otlp_endpoint | default('') }}"
+      PYROSCOPE_SERVER_ADDRESS: "{{ pyroscope_server | default('') }}"
+    restart: unless-stopped
+  llm:
+    image: {{ llm_image }}:{{ image_tag }}
+    environment:
+      RUST_LOG: {{ rust_log }}
+      LOG_FORMAT: {{ log_format }}
+      TBD_ENV: production
+      LLM_LISTEN_ADDR: 0.0.0.0:{{ llm_port }}
+      LLM_METRICS_ADDR: 0.0.0.0:9464
+      LLM_DATABASE_URL: "postgres://ledger:{{ vault_ledger_postgres_password }}@ledger-postgres:5432/tbd?sslmode=disable"
+      LLM_FAST_URL: {{ llm_fast_url | default('http://host.docker.internal:8082') }}
+      LLM_FAST_MODEL: {{ llm_fast_model | default('gpt-oss-20b') }}
+      LLM_DEEP_URL: {{ llm_deep_url | default('http://host.docker.internal:8081') }}
+      LLM_DEEP_MODEL: {{ llm_deep_model | default('gpt-oss-120b') }}
+      OTEL_EXPORTER_OTLP_ENDPOINT: "{{ otlp_endpoint | default('') }}"
+      PYROSCOPE_SERVER_ADDRESS: "{{ pyroscope_server | default('') }}"
+    restart: unless-stopped
+  arena:
+    image: {{ arena_image }}:{{ image_tag }}
+    environment:
+      RUST_LOG: {{ rust_log }}
+      LOG_FORMAT: {{ log_format }}
+      TBD_ENV: production
+      ARENA_LISTEN_ADDR: 0.0.0.0:{{ arena_port }}
+      ARENA_METRICS_ADDR: 0.0.0.0:9464
+      ARENA_LLM_URL: http://llm:{{ llm_port }}
+      ARENA_RUNNER_URL: http://runner:{{ runner_port }}
+      ARENA_METRICS_URL: "{{ arena_metrics_url | default('') }}"
+      ARENA_CHAOS_URL: "{{ 'http://chaos:7700/api/chaos/v1' if (chaos_enabled | default(false)) else '' }}"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "{{ otlp_endpoint | default('') }}"
+      PYROSCOPE_SERVER_ADDRESS: "{{ pyroscope_server | default('') }}"
+    restart: unless-stopped
+  radar:
+    image: {{ radar_image }}:{{ image_tag }}
+    environment:
+      RUST_LOG: {{ rust_log }}
+      LOG_FORMAT: {{ log_format }}
+      TBD_ENV: production
+      RADAR_LISTEN_ADDR: 0.0.0.0:{{ radar_port }}
+      RADAR_METRICS_ADDR: 0.0.0.0:9464
+      RADAR_DATABASE_URL: "postgres://ledger:{{ vault_ledger_postgres_password }}@ledger-postgres:5432/tbd?sslmode=disable"
+      RADAR_LLM_URL: http://llm:{{ llm_port }}
+      RADAR_GITHUB_TOKEN: "{{ vault_radar_github_token | default('') }}"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "{{ otlp_endpoint | default('') }}"
+      PYROSCOPE_SERVER_ADDRESS: "{{ pyroscope_server | default('') }}"
+    restart: unless-stopped
+  runner:
+    image: {{ runner_image }}:{{ image_tag }}
+    environment:
+      RUST_LOG: {{ rust_log }}
+      LOG_FORMAT: {{ log_format }}
+      TBD_ENV: production
+      RUNNER_LISTEN_ADDR: 0.0.0.0:{{ runner_port }}
+      RUNNER_METRICS_ADDR: 0.0.0.0:9464
+      RUNNER_SANDBOX_URL: {{ runner_sandbox_url | default('http://host.docker.internal:7788') }}
+      RUNNER_SANDBOX_TOKEN: "{{ vault_runner_sandbox_token | default('') }}"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "{{ otlp_endpoint | default('') }}"
+      PYROSCOPE_SERVER_ADDRESS: "{{ pyroscope_server | default('') }}"
+    restart: unless-stopped
 {% if chaos_enabled | default(false) %}
 
   # chaos API + admin UI. Off by default; dev hosts set chaos_enabled: true.
@@ -108,6 +217,13 @@ services:
       CHAOS_LISTEN_ADDR: 0.0.0.0:7700
       CHAOS_PROTOCOL_URL: http://protocol:{{ protocol_port }}
       CHAOS_ENGINE_URL: http://engine:{{ engine_port }}
+      CHAOS_RUNNER_URL: http://runner:{{ runner_port }}
+      CHAOS_RADAR_URL: http://radar:{{ radar_port }}
+      CHAOS_ARENA_URL: http://arena:{{ arena_port }}
+      CHAOS_LLM_URL: http://llm:{{ llm_port }}
+      CHAOS_CV_URL: http://cv:{{ cv_port }}
+      CHAOS_PLAYGROUND_URL: http://playground:{{ playground_port }}
+      CHAOS_FINANCE_URL: http://finance:{{ finance_port }}
       CHAOS_HUMANS_URL: http://humans:{{ humans_port }}
       CHAOS_LEDGER_URL: http://ledger:{{ ledger_port }}
       CHAOS_RESULTS_DIR: /data/results

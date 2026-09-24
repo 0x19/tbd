@@ -1,0 +1,110 @@
+# llm configuration, shared layer. `configs/llm/<env>.toml` is merged
+# over this file; tables merge key by key, any other value replaces. Every key
+# is listed here so an environment file only needs what it changes. Flags and
+# their environment variables (LLM_*) override both.
+
+[server]
+# Where the gRPC server listens. Loopback on purpose; containers bind 0.0.0.0
+# through LLM_LISTEN_ADDR.
+listen = "127.0.0.1:50057"
+
+[metrics]
+# Prometheus /metrics listener. Embedders (tests, the chaos tool) turn it off.
+listen = "0.0.0.0:9464"
+
+[ping]
+# Longest message Ping echoes; longer is INVALID_ARGUMENT. The one knob that
+# proves TOML reaches an RPC.
+max_message_len = 1024
+
+[engines]
+# The tier a request without one goes to.
+default_tier = "fast"
+# How often each engine is asked whether it is up, and how long one probe may take.
+probe_interval = "15s"
+probe_timeout = "3s"
+
+# The engines are the L1: whatever runs the weights. Each tier has the same
+# keys and only the values differ; nothing above this table names an engine.
+# They are dialled directly, like databases, so the URLs are not Envoy's.
+# `kind` is never overridable from a flag or a variable on purpose: a
+# deployment's engines are chosen in a reviewed file. "stub" is the in-process
+# test engine and is refused in production.
+[engines.fast]
+# The model that fits the GPU and answers a visitor: llama-server on the host,
+# the same engine as the deep tier (study 0002: 171 tok/s on one stream against
+# Ollama's 126, and 281 tok/s over four at once against Ollama's 120).
+kind = "llamacpp"
+url = "http://127.0.0.1:8082"
+model = "gpt-oss-20b"
+# Whole-request deadline, seconds.
+timeout_secs = 120
+# The embedding model, when this tier embeds at all. Empty: it does not, and
+# Embed on it is refused before any engine is asked; a chat model does not embed.
+embed_model = ""
+# Admission. Requests the tier runs at once: what the engine really runs in
+# parallel (llama-server's four slots, `-np 4`), so the engine's own invisible
+# queue stays empty and the wait is here, bounded and measured.
+max_in_flight = 4
+# Requests that may wait for a slot; one more is refused at once with "busy".
+# At about three seconds a short answer, eight is a wait a person tolerates.
+max_queued = 8
+# How long one waits in line before it is refused.
+queue_timeout = "30s"
+# The chat template's arguments when a request asks the model to reason, and
+# when it asks it not to (sent as llama.cpp's `chat_template_kwargs`). The
+# switch is the template's: gpt-oss takes `reasoning_effort` (low, medium,
+# high) and ignores `enable_thinking`, which told false made it reason longer
+# and answer nothing (measured 2026-09-24: effort low answered in 58 tokens
+# where enable_thinking=false took 209). Qwen-style templates take
+# `{ enable_thinking = true | false }`, the default when a tier leaves these out.
+reasoning_on = { reasoning_effort = "medium" }
+reasoning_off = { reasoning_effort = "low" }
+
+[engines.deep]
+# The large model that runs from memory for quality: llama-server on the host
+# with the experts in RAM and attention on the GPU.
+kind = "llamacpp"
+url = "http://127.0.0.1:8081"
+model = "gpt-oss-120b"
+timeout_secs = 900
+embed_model = ""
+# One answer at a time from memory; a short line, a long patience.
+max_in_flight = 1
+max_queued = 2
+queue_timeout = "120s"
+# gpt-oss as well: the same switch.
+reasoning_on = { reasoning_effort = "medium" }
+reasoning_off = { reasoning_effort = "low" }
+
+[generate]
+# Bounds on one request. Anything over is INVALID_ARGUMENT; max_tokens is
+# clamped to the cap rather than refused.
+max_messages = 64
+max_message_len = 32768
+max_tokens_cap = 4096
+max_embed_inputs = 64
+
+[budget]
+# Tokens (prompt plus completion) one caller may spend per UTC day; 0 is no
+# limit. Enforced only when generations are recorded (a store is configured).
+tokens_per_day = 200000
+# Subjects the limit does not apply to: the platform's own instruments, never
+# a person. The chaos tool's load operations call as chaos-load and would
+# spend a day's budget in a few minutes of measurement (they did, on the
+# first day). Their generations are still recorded.
+# svc:radar writes the Radar's public digests; its archive backfill is a few
+# hundred generations at once, still bounded by each tier's admission.
+unlimited_subjects = ["chaos-load", "svc:radar"]
+
+[store]
+# The Postgres schema `llm`: sessions and generations, the budget's source.
+# The URL is a credential and comes only from LLM_DATABASE_URL; empty means no
+# store: nothing is recorded and the budget is unlimited, said at start.
+max_connections = 5
+
+[agents]
+# The agents the service speaks as (RFC 0011): one <id>.toml per agent and the
+# knowledge files they name. Relative to the working directory (/app in the
+# image). An empty or absent directory is no agents.
+dir = "configs/llm/agents"

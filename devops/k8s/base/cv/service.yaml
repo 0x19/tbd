@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: cv
+  labels:
+    app.kubernetes.io/name: cv
+spec:
+  # Headless: Envoy resolves every pod and balances itself.
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: cv
+  ports:
+    - name: grpc
+      port: 50056
+      targetPort: grpc
+      protocol: TCP
+      appProtocol: grpc

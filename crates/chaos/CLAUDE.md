@@ -1,10 +1,12 @@
 # crates/chaos
 
 The `chaos` binary: validate, up, run, check, stress, serve, config, kinds. A framework with two
-extension points, `service::Service` and `load::ops::Operation`; this project's
-specifics live in `kinds/` (one module per service kind, each with its spec, handle,
-validate checks and a `static KIND` registered in `kinds::ALL`), `load/ops.rs` (the
-protocol operations) and `load/ledger_ops.rs` (the ledger ones: a per-run `Pool` of
+extension points, `service::Service` and `load::ops::Operation`, both in `crates/lab`
+(re-exported here). The core kinds live in `crates/lab/src/kinds/` (one module per
+service kind, each with its spec, handle, validate checks and a `static KIND`), this
+project's own under `kinds/` here, and `kinds::ALL` here registers them all;
+`crates/lab/src/load/ops.rs` holds the protocol and finance operations and
+`load/ledger_ops.rs` the ledger ones ( a per-run `Pool` of
 subjects that remembers what was written, so reads hit real facts and a `NotFound` on a
 read is a real failure, while a retraction that finds nothing valued is the contract
 answering an overlapping retraction; `ledger_lifecycle` and `ledger_erase_cycle` assert
@@ -25,7 +27,8 @@ is a change there too.
 Where things are:
 - `main.rs` is the only file allowed to print to stdout (`print_stdout` lint allowed
   there). It also sets the default log filter that silences the in-process services.
-- Service kinds are data: `kinds/{engine,protocol,ledger}.rs`, registered in
+- Service kinds are data: `crates/lab/src/kinds/{engine,protocol,ledger,humans,finance}.rs`
+  and `kinds/playground.rs` here, registered in
   `kinds::ALL` above the `tbd:kinds-end` marker (`tbd new service` inserts there and
   renders a module like `kinds/ledger.rs`). Topology tables, launchers, cross-checks,
   validate targets and checks, `--target`, `CHAOS_<KIND>_URL`, runtime add and clone,
@@ -45,6 +48,10 @@ Where things are:
   stress crate's events. The workers, model, invariants and findings are the stress
   crate's; nothing about the ledger's contract belongs here.
 - `scenario/assertions.rs` works on an immutable `Snapshot`; assertions are sync.
+- An operation reports one latency (the generator times `run()`) and may meter more
+  through `clients.meter` (`tbd_stress::metrics::Meter`: named counters and timings per
+  operation, on `OpSnapshot.counters`/`samples`); the report, the run record and the UI
+  carry them, and `absorb`/`reset` do too. `llm_generate` is the one that does.
 - `load/generator.rs` is open loop with an absolute-deadline pacer and a
   `max_in_flight` semaphore. Do not turn it closed loop; latency must not lower the
   rate.

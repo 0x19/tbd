@@ -1,0 +1,88 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llm
+  labels:
+    app.kubernetes.io/name: llm
+spec:
+  # One on purpose: admission (`[engines.<tier>] max_in_flight`) is counted per
+  # process, so a second replica would double what the engines are asked to run
+  # at once and bring back the engine's own invisible queue.
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: llm
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9464"
+        prometheus.io/path: /metrics
+      labels:
+        app.kubernetes.io/name: llm
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: llm
+          # Overlays pin the tag.
+          image: ghcr.io/0x19/tbd-llm:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: grpc
+              containerPort: 50057
+            - name: metrics
+              containerPort: 9464
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: tbd-env
+          env:
+            # Optional on purpose: without the database nothing is recorded and
+            # the budget is unlimited (the service says so at start and on the
+            # wire), so a cluster before `mise run llm:secrets` still runs.
+            - name: LLM_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: llm-db
+                  key: database-url
+                  optional: true
+          livenessProbe:
+            grpc:
+              port: 50057
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          readinessProbe:
+            grpc:
+              port: 50057
+            initialDelaySeconds: 1
+            periodSeconds: 5
+          # A release binary keeps its symbols and the in-process profiler maps
+          # them: every service idles at 170 to 290 MB resident. 256Mi was the
+          # first thing a load run hit (OOMKilled at 2000 req/s on the ledger).
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            # The in-process profiler (pprof-rs) needs a writable temp dir for
+            # its sample buffers; the root filesystem stays read-only.
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi

@@ -5,12 +5,14 @@ It starts the real services in this process, drives them through their real surf
 injects faults into them at runtime, and asserts on what happened. No mocks, no
 containers, no ports to free up afterwards.
 
-It is also a framework. This project plugs in three service kinds (engine, protocol,
-ledger; [kinds.md](kinds.md)) and eleven operations (REST, GraphQL, WebSocket and gRPC
-against the protocol; append, current, history, retract, a lifecycle, an erasure cycle
-and a fuzzer against the ledger, [scenarios.md](scenarios.md#load)). A
-new service brings one kind module and one registry line, both written by
-`tbd new service`; a future project plugs in its own and reuses the runner, the load
+It is also a framework. This project plugs in six service kinds (engine, protocol,
+ledger, humans, finance, playground; [kinds.md](kinds.md)) and sixteen operations (REST,
+GraphQL, WebSocket and gRPC against the protocol; append, current, history, retract, a
+lifecycle, an erasure cycle and a fuzzer against the ledger; ping, money, access, the
+trial balance and the opening import against finance, [scenarios.md](scenarios.md#load)).
+The five core kinds and the operations live in `crates/lab`, the runner and the registry
+in `crates/chaos`. A new service brings one kind module and one registry line, both
+written by `tbd new service`; a future project plugs in its own and reuses the runner, the load
 generator, the timeline, the assertions and the reports unchanged. Stress campaigns
 ([stress.md](stress.md), `chaos stress`) put model-checking workers on the ledger around
 the same stack and timeline and turn every contract violation into a finding with the

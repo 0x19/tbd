@@ -1,0 +1,6 @@
+# Never commit credentials or pulled bank data.
+data/
+*.pem
+*.key
+*.crt
+__pycache__/

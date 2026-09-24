@@ -41,6 +41,12 @@ pub struct Config {
     /// `[principals]`
     #[serde(default)]
     pub principals: Principals,
+    /// `[socket]`
+    #[serde(default)]
+    pub socket: Socket,
+    /// `[mcp]`
+    #[serde(default)]
+    pub mcp: Mcp,
 }
 
 /// `[server]`
@@ -93,6 +99,85 @@ impl Default for Health {
         Self {
             probe_interval: Duration::from_secs(5),
             probe_timeout: Duration::from_secs(1),
+        }
+    }
+}
+
+/// `[socket]`: the multiplexed WebSocket at `/v1/ws`.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct Socket {
+    /// Calls that may be in flight at once on one connection. A further call
+    /// is refused with `rate_limited` until one ends.
+    pub max_calls: usize,
+    /// Largest frame a client may send. The WebSocket layer refuses a larger
+    /// one, so keep it at or under the REST body cap.
+    pub max_frame_bytes: usize,
+}
+
+impl Default for Socket {
+    fn default() -> Self {
+        Self {
+            max_calls: 64,
+            max_frame_bytes: 256 * 1024,
+        }
+    }
+}
+
+/// `[mcp]`: public RPCs as MCP tools at `/mcp` (streamable HTTP, stateless).
+/// The same registry as REST and the socket, narrowed to an allowlist: an
+/// agent gets only the tools named here, never a new RPC by default. The
+/// caller is whoever Envoy verified, as everywhere else.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct Mcp {
+    /// Serve `/mcp` at all.
+    pub enabled: bool,
+    /// Messages a streaming tool collects before it answers with what it has
+    /// and says it stopped.
+    pub max_stream_items: usize,
+    /// How long a streaming tool may run before it answers with what it has.
+    #[serde(with = "humantime_serde")]
+    pub stream_timeout: Duration,
+    /// Largest request body.
+    pub max_body_bytes: usize,
+    /// The tools an agent may list and call, by name (`<backend>_<method>`).
+    /// Default deny: an RPC not named here is not a tool. Nothing that
+    /// writes, deletes, sends, moves money, reads personal data or injects a
+    /// fault belongs here.
+    pub tools: Vec<String>,
+    /// Pages allowed to call `/mcp` from a browser, by origin
+    /// (`https://example.org`). A request that carries an `Origin` not listed
+    /// is refused 403 before any tool is touched: the site calls MCP with its
+    /// signed-in visitor's cookie, and a cookie travels with a cross-site
+    /// request too. Agents send no `Origin` and are never affected. Empty: no
+    /// browser may call it.
+    pub allowed_origins: Vec<String>,
+}
+
+/// The tools offered when `[mcp] tools` is not set: the models, read and used
+/// under the caller's budget, and the health pings. Equal to `base.toml`.
+pub const DEFAULT_MCP_TOOLS: &[&str] = &[
+    "llm_generate",
+    "llm_list_models",
+    "llm_get_budget",
+    "llm_embed",
+    "llm_ping",
+    "llm_list_agents",
+    "humans_ping",
+    "ledger_ping",
+    "playground_ping",
+];
+
+impl Default for Mcp {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            max_stream_items: 512,
+            stream_timeout: Duration::from_secs(300),
+            max_body_bytes: 2 * 1024 * 1024,
+            tools: DEFAULT_MCP_TOOLS.iter().map(|&t| t.to_owned()).collect(),
+            allowed_origins: Vec::new(),
         }
     }
 }
@@ -186,6 +271,8 @@ impl Config {
             services,
             health: Health::default(),
             principals: Principals::default(),
+            socket: Socket::default(),
+            mcp: Mcp::default(),
         }
     }
 

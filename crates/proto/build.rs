@@ -40,7 +40,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut compiler = protox::Compiler::new([proto_root.as_path()])?;
     compiler
         .include_imports(true)
-        .include_source_info(false)
+        // The comments in the contract travel with it: the gateway describes
+        // every RPC and field with them (MCP tool descriptions, JSON Schema).
+        .include_source_info(true)
         .open_files(&files)?;
     let fds = compiler.file_descriptor_set();
 

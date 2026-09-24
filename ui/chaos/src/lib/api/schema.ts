@@ -109,6 +109,11 @@ export const OpSnapshot = z.object({
   total: z.number(),
   failed: z.number(),
   latency: Latency,
+  // What the operation metered itself, beside its latency: named counters
+  // (a rate is the counter over `elapsed_s`) and named timings as quantiles.
+  // Absent from records written before meters existed.
+  counters: z.record(z.string(), z.number()).default({}),
+  samples: z.record(z.string(), Latency).default({}),
 });
 
 export const LoadSnapshot = z.object({
@@ -206,6 +211,43 @@ export type RunSummary = z.infer<typeof RunSummary>;
 export const CheckCount = z.object({ passed: z.number(), violated: z.number() });
 export type CheckCount = z.infer<typeof CheckCount>;
 
+/** An estimate and the 95% bootstrap interval around it. */
+export const Ci = z.object({ estimate: z.number(), low: z.number(), high: z.number() });
+export type Ci = z.infer<typeof Ci>;
+
+/** One measured value of a swept parameter. */
+export const PointStats = z.object({
+  value: z.number(),
+  achieved_rps: z.number(),
+  error_rate: z.number(),
+  requests: z.number(),
+  p50: Ci,
+  p99: Ci,
+  repeats: z.number(),
+  findings: z.number(),
+});
+export type PointStats = z.infer<typeof PointStats>;
+
+/** What a sweep measured (docs/chaos/stress.md). */
+export const SweepResult = z.object({
+  parameter: z.string(),
+  points: z.array(PointStats),
+  knee: z.number().nullish(),
+  knee_reason: z.string().nullish(),
+});
+export type SweepResult = z.infer<typeof SweepResult>;
+
+/** Where a running sweep is; point and repeat count from one. */
+export const SweepProgress = z.object({
+  parameter: z.string(),
+  value: z.number(),
+  point: z.number(),
+  points: z.number(),
+  repeat: z.number(),
+  repeats: z.number(),
+});
+export type SweepProgress = z.infer<typeof SweepProgress>;
+
 /** One `stress` SSE frame: the checks a second. */
 export const StressSnapshot = z.object({
   elapsed_s: z.number(),
@@ -218,6 +260,7 @@ export const StressSnapshot = z.object({
   findings: z.number(),
   subjects: z.number(),
   workers: z.record(z.string(), z.number()),
+  sweep: SweepProgress.nullish(),
 });
 export type StressSnapshot = z.infer<typeof StressSnapshot>;
 
@@ -304,6 +347,7 @@ export const StressResult = z.object({
   tolerated: z.number().default(0),
   redriven: z.number().default(0),
   findings: z.array(FindingSummary),
+  sweep: SweepResult.nullish(),
   stopped_early: z.boolean().default(false),
   error: z.string().nullish(),
 });
@@ -542,9 +586,19 @@ export const OpKind = z.enum([
   "ledger_lifecycle",
   "ledger_erase_cycle",
   "ledger_fuzz",
+  "finance_ping",
+  "finance_money",
+  "finance_access",
+  "finance_trial_balance",
+  "finance_import_opening",
+  "llm_generate",
+  "llm_generate_deep",
 ]);
-/** The kind of instance an operation targets (mirrors `OpKind::target_kind`). */
-export const opTargetKind = (op: OpKind): string => (op.startsWith("ledger_") ? "ledger" : "protocol");
+/** The kind of instance an operation targets (mirrors `OpKind::target_kind`): the prefix names it, protocol otherwise. */
+export const opTargetKind = (op: OpKind): string => {
+  const prefix = op.split("_")[0];
+  return ["ledger", "finance", "llm"].includes(prefix) ? prefix : "protocol";
+};
 export type OpKind = z.infer<typeof OpKind>;
 
 /** The `[load]` table of a scenario, as JSON. */

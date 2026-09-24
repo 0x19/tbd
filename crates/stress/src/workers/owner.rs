@@ -601,6 +601,11 @@ impl Owner {
         let mut nexts = Vec::new();
         let mut cursor_from = None;
         for _ in 0..MAX_PAGES {
+            // A cancelled run must not wait out a long walk, and a walk cut
+            // short is not judged: the pages would be missing their tail.
+            if self.ctx.cancel.is_cancelled() {
+                return None;
+            }
             let req = Request::Current {
                 subject: SubjectRef::Own,
                 paths: paths.clone(),
@@ -646,6 +651,9 @@ impl Owner {
         let mut nexts = Vec::new();
         let mut cursor_from = None;
         for _ in 0..MAX_PAGES {
+            if self.ctx.cancel.is_cancelled() {
+                return None;
+            }
             let req = Request::History {
                 subject: SubjectRef::Own,
                 paths: vec![],

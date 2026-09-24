@@ -1,0 +1,38 @@
+# Money survives the wire, to the cent, under load.
+#
+# Two amounts, chosen to catch the failures that matter: a debit of -4,250 minor
+# units and a credit of 1,450,082 -- the latter a real settlement, 14,500.82
+# EUR, big enough that a float starts losing it and awkward enough that a naive
+# decimal parse does too.
+#
+# What this proves that a unit test cannot: the value keeps its magnitude *and
+# its sign* across the store, the gRPC encoding and the JSON the transcoder
+# renders int64 as, while the service is busy. A flipped sign is the quietest
+# bug in accounting software -- every total still looks plausible.
+#
+# Any deviation is a `contract` failure, so it cannot be threshold-tuned away.
+
+[scenario]
+name = "finance_money"
+description = "Amounts come back as the exact minor units they went in as, with the right sign"
+
+[stack.finances.finance-1]
+seed = "access"
+
+[load]
+rate = 200
+duration = "3s"
+warmup = "300ms"
+
+[[load.operations]]
+op = "finance_money"
+weight = 1
+
+[assertions]
+max_error_rate = 0.0
+max_p99_ms = 50
+min_requests = 400
+
+[assertions.services.finance-1]
+min_requests = 400
+max_failed = 0

@@ -12,12 +12,18 @@ mise run local:build     # build the engine, protocol and chaos images and impor
 mise run local:deploy    # apply observability, host services and the app; waits for readiness
 mise run local:traffic   # 30 rounds of `chaos validate` through Envoy (TRAFFIC_ROUNDS=n)
 mise run local:load      # sustained load through Envoy, 8 workers (LOAD_SECONDS=n); fills dashboards and profiles
-mise run local:restart   # after a code change: rebuild, import, roll the app pods
+mise run local:restart   # after a code change: rebuild, import, migrate the database, roll the app pods
+mise run db:migrate      # only the migrations (`--status` to look); services never migrate on start
 mise run local:status    # every pod
 mise run local:urls      # the port map below
 mise run k9s             # TUI on the cluster
 mise run local:down      # delete the cluster; PVC data on the RAID is kept
 ```
+
+A migration under `/migrations` reaches the cluster's database only through `db:migrate`
+(the `tbd migrate` CLI, over a port-forward, with the URL from the `finance-db` secret):
+`local:restart` runs it before rolling the pods, and a build that adds a column rolled
+without it answers "internal error" until it is run.
 
 `mise run ansible:local` runs `devops/ansible/playbooks/local.yml`, which does the same
 steps idempotently and is the template for provisioning a real box the same way. Pass
@@ -30,11 +36,21 @@ steps idempotently and is the template for provisioning a real box the same way.
 | `tbd` | `envoy` | 2 | edge and engine load balancer |
 | `tbd` | `protocol` | 2 | the edge gateway: REST, SSE, GraphQL, WebSocket, gRPC over the backends registered in `configs/protocol` (engine, humans, ledger), reached through Envoy's internal listener; `/readyz` reports each |
 | `tbd` | `engine` | 2 | gRPC compute |
+| `tbd` | `runner` | 1 | gRPC `runner` service, scaffolded by `tbd new service`; a stub until its RPCs land |
+| `tbd` | `radar` | 1 | gRPC `radar` service, scaffolded by `tbd new service`; a stub until its RPCs land |
+| `tbd` | `arena` | 1 | gRPC `arena` service, scaffolded by `tbd new service`; a stub until its RPCs land |
+| `tbd` | `llm` | 1 | gRPC `llm` service, scaffolded by `tbd new service`; a stub until its RPCs land |
+| `tbd` | `cv` | 1 | gRPC `cv` service, scaffolded by `tbd new service`; a stub until its RPCs land |
+| `tbd` | `playground` | 1 | gRPC `playground` service, scaffolded by `tbd new service`; a stub until its RPCs land |
+| `tbd` | `finance` | 1 | gRPC `finance` service, scaffolded by `tbd new service`; a stub until its RPCs land |
 | `tbd` | `humans` | 1 | gRPC `humans` service, scaffolded by `tbd new service`; a stub until its RPCs land |
 | `tbd` | `ledger` | 1 | the facts ledger (`docs/ledger/README.md`): Postgres store, outbox into ClickHouse, gRPC facts API |
 | `tbd` | `ledger-postgres` | 1 | Postgres 17 + pgvector for the ledger (StatefulSet, 10Gi); `mise run ledger:psql` |
 | `tbd` | `clickhouse` | 1 | analytics sink for the ledger's outbox (StatefulSet, 10Gi); `mise run ledger:clickhouse` |
 | `tbd` | `chaos` | 1 | `chaos serve`: API and admin UI, behind Envoy at `/api/chaos/v1` and the `chaos.localhost` host |
+| `tbd` | `www` | 1 | the company site (`ui/www`) on Caddy, behind Envoy's `www.localhost` host |
+| `tbd` | `finances-ui` | 1 | the finance UI (`ui/finances`) on Caddy, behind Envoy's `finance.localhost` host and its browser login; `/v1/` on that host goes to the protocol |
+| `tbd` | `cv-ui` | 1 | the full CV's two pages (`ui/cv`) on Caddy, behind Envoy's `cv.localhost` host and its browser login; the cv service answers `/v1/cv/` through the protocol (`docs/cv/README.md`) |
 | `auth` | `postgres`, `hydra`, `kratos`, `auth-ui` | 1 each | sign-in and tokens ([auth/README.md](auth/README.md)); `auth.localhost:18080` |
 | `observability` | `victoria-metrics` | 1 | metrics store and scraper |
 | `observability` | `victoria-logs` | 1 | log store |
@@ -55,6 +71,9 @@ on this machine use.
 | 18080 | `tbd/envoy-lb` | Envoy edge: REST, SSE, GraphQL, WebSocket, gRPC |
 | 15051 | `tbd/envoy-lb` | Envoy engine load balancer, gRPC |
 | 18080 | `tbd/envoy-lb` | `/api/chaos/v1/` on the same edge port and the admin UI at `http://chaos.localhost:18080/` ([chaos/ui.md](chaos/ui.md)) |
+| 18080 | `tbd/envoy-lb` | the company site at `http://www.localhost:18080/`; in public the edge serves it at the base domain itself ([../ui/www/README.md](../ui/www/README.md)) |
+| 18080 | `tbd/envoy-lb` | the finance UI at `http://finance.localhost:18080/`, signed in through Ory ([../ui/finances/README.md](../ui/finances/README.md)) |
+| 18080 | `tbd/envoy-lb` | the full CV at `http://cv.localhost:18080/`, signed in through Ory ([../ui/cv/README.md](../ui/cv/README.md)) |
 | 3000 | `observability/grafana-lb` | Grafana, admin/admin on the LAN (publicly: sign-in through Envoy) |
 | 9090 | `observability/victoria-metrics-lb` | VictoriaMetrics UI and API |
 | 14317 | `observability/otel-collector-lb` | OTLP/gRPC into the collector, for processes on the host |
@@ -126,7 +145,8 @@ internet ─443─▶ FRITZ!Box (port forward) ─▶ host: Caddy (TLS) ─▶ E
    machine: another stack's Envoy holds them), set `EDGE_HTTP_PORT`/`EDGE_HTTPS_PORT`
    and forward external 80 → that port and 443 → that port.
 3. **Start the edge.** Copy `devops/edge/.env.example` to `devops/edge/.env`, fill in
-   `BASE_DOMAIN` and `ACME_EMAIL`, then `mise run edge:up`. `mise run edge:logs` shows the certificates being issued.
+   `BASE_DOMAIN` and `ACME_EMAIL` (and `SITE_DOMAIN` when the company site is canonical on
+   a domain of its own, `devops/edge/sites.d/README.md`), then `mise run edge:up`. `mise run edge:logs` shows the certificates being issued.
 4. **Verify from outside** (a phone off Wi-Fi, or any other network):
 
    ```sh
@@ -139,6 +159,14 @@ internet ─443─▶ FRITZ!Box (port forward) ─▶ host: Caddy (TLS) ─▶ E
    switched on in the zone's Network settings first; see `devops/edge/README.md`. Any
    `https://`/`wss://` target is verified against the public roots; a private CA (a
    staging edge, Caddy's `tls internal`) needs `--ca-cert root.crt`.
+
+**From a phone.** The mobile app (`/mobile`) reaches the cluster the same way: a phone
+or an emulator cannot resolve `*.localhost`, so `configs/mobile/local.json` names
+`auth.<base>` and `api.<base>` through this edge, and the issuer in a token is the one
+the stack was deployed with. For an offline loop against k3d on the same machine,
+forward Envoy's edge port into the Android emulator (`adb reverse tcp:18080 tcp:18080`)
+and point a copy of `local.json` at `http://localhost:18080` and `localhost:18080`
+(plaintext gRPC below 443); the issuer must still match what Hydra was deployed with.
 
 What stays private: the OTLP port and the engine load balancer. Grafana, VictoriaLogs,
 Pyroscope, VictoriaMetrics and the chaos admin UI are reachable on their subdomains only

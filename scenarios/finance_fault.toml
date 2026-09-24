@@ -1,0 +1,51 @@
+# A fault on the finance surface must arrive as a clean gRPC status, never as a
+# contract break, and the service must heal on its own.
+#
+# The distinction this scenario defends: `max_error_rate` allows the injected
+# failures, but an `OpError::Contract` is *never* allowed by any assertion --
+# a wrong echo, or a stub flag that flipped under stress, fails the run
+# outright. Failing loudly is fine; answering wrongly is not.
+#
+# It matters more for money than for anything else here. A finance service that
+# degrades into plausible-looking wrong answers under load is worse than one
+# that refuses, because the wrong answers get written down.
+
+[scenario]
+name = "finance_fault"
+description = "Finance fails 50% of requests for one second; errors are clean gRPC statuses, then it recovers"
+
+[stack.finances.finance-1]
+
+[load]
+rate = 200
+duration = "3s"
+warmup = "300ms"
+
+[[load.operations]]
+op = "finance_ping"
+weight = 1
+
+[[timeline]]
+at = "1s"
+action = "set_behavior"
+service = "finance-1"
+[timeline.behavior]
+type = "error"
+kind = "unavailable"
+rate = 0.5
+
+[[timeline]]
+at = "2s"
+action = "set_behavior"
+service = "finance-1"
+[timeline.behavior]
+type = "healthy"
+
+[assertions]
+# One third of the run at 50% failure: about 17%, allow 30%.
+max_error_rate = 0.30
+min_requests = 400
+
+[assertions.services.finance-1]
+min_requests = 400
+max_failed = 200

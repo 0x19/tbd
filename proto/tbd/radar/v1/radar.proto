@@ -1,0 +1,287 @@
+syntax = "proto3";
+
+package tbd.radar.v1;
+
+import "google/api/annotations.proto";
+
+// The radar service: what changed in Go and Rust this week. It reads the
+// official sources on a timer, keeps every item it has seen, and once a week
+// asks the llm service for a digest per language and reader language. Reads
+// are public; Refresh and RunDigest are for the admin role. Every digest is
+// written by a model and says so (`ai_written`), on every surface.
+service RadarService {
+  // Echo a message. Proves configuration, telemetry and fault injection reach
+  // an RPC.
+  rpc Ping(PingRequest) returns (PingResponse) {
+    option (google.api.http) = {get: "/v1/radar/ping"};
+  }
+
+  // Digests, newest week first: published ones, and drafts too for an admin
+  // who asks for them.
+  rpc ListDigests(ListDigestsRequest) returns (ListDigestsResponse) {
+    option (google.api.http) = {get: "/v1/radar/digests"};
+  }
+
+  // One digest by id.
+  rpc GetDigest(GetDigestRequest) returns (GetDigestResponse) {
+    option (google.api.http) = {get: "/v1/radar/digests/{id}"};
+  }
+
+  // The items the service has read, newest first: the raw material of a digest.
+  rpc ListItems(ListItemsRequest) returns (ListItemsResponse) {
+    option (google.api.http) = {get: "/v1/radar/items"};
+  }
+
+  // Read every source now instead of waiting for the timer. Admin only.
+  rpc Refresh(RefreshRequest) returns (RefreshResponse) {
+    option (google.api.http) = {
+      post: "/v1/radar/refresh"
+      body: "*"
+    };
+  }
+
+  // Write this week's digests now instead of waiting for the schedule, or
+  // rewrite them. Admin only. A run takes minutes (the model writes each digest
+  // in turn), so by default it starts in the background and returns at once;
+  // the digests appear in ListDigests as each is written. One run at a time.
+  rpc RunDigest(RunDigestRequest) returns (RunDigestResponse) {
+    option (google.api.http) = {
+      post: "/v1/radar/digests/run"
+      body: "*"
+    };
+  }
+
+  // Make a draft digest public, or take a published one back (`publish` false).
+  // Admin only. New digests are drafts until then: the page says they are
+  // human-reviewed, and this is the review.
+  rpc PublishDigest(PublishDigestRequest) returns (PublishDigestResponse) {
+    option (google.api.http) = {
+      post: "/v1/radar/digests/{id}/publish"
+      body: "*"
+    };
+  }
+
+  // Write the archive: every week in the range, oldest first, from each
+  // source's own archive, one digest per language and reader language on the
+  // archive tier, published at once and marked `origin: archive`. Weeks already
+  // written are skipped, so a stopped run resumes. Starts in the background.
+  // Admin only.
+  rpc Backfill(BackfillRequest) returns (BackfillResponse) {
+    option (google.api.http) = {
+      post: "/v1/radar/backfill"
+      body: "*"
+    };
+  }
+
+  // Where the backfill is. Admin only.
+  rpc GetBackfill(GetBackfillRequest) returns (GetBackfillResponse) {
+    option (google.api.http) = {
+      post: "/v1/radar/backfill/status"
+      body: "*"
+    };
+  }
+}
+
+message PingRequest {
+  string message = 1;
+}
+
+message PingResponse {
+  string message = 1;
+  // Version of the binary that answered.
+  string version = 2;
+  // True while the service is a placeholder with nothing real behind it.
+  bool stub = 3;
+}
+
+// One thing a source published: a blog post, a release, an accepted proposal,
+// a merged RFC.
+message Item {
+  int64 id = 1;
+  // The source's name from configuration, e.g. "go-blog".
+  string source = 2;
+  // "go" or "rust".
+  string language = 3;
+  string title = 4;
+  string url = 5;
+  // RFC 3339; empty when the source gives no date (then the time it was read).
+  string published_at = 6;
+  // The source's own summary, trimmed; may be empty.
+  string summary = 7;
+}
+
+// One week's digest for one language, in one reader language.
+message Digest {
+  int64 id = 1;
+  // ISO week the digest covers, e.g. "2026-W39".
+  string week = 2;
+  // "go" or "rust".
+  string language = 3;
+  // The reader language: "en" or "hr".
+  string lang = 4;
+  // RFC 3339.
+  string created_at = 5;
+  // Markdown, one per section.
+  // The old shape, before `summary` and `changes`: kept for the digests
+  // written then. New digests leave both empty.
+  string changed = 6;
+  string why = 7;
+  string drill = 8;
+  // The 60-second script the avatar reads, plain text.
+  string script = 9;
+  // How many items the digest was written from.
+  int32 item_count = 10;
+  // The model that wrote it, as the llm service named it.
+  string model = 11;
+  // Always true: a digest is written by a language model.
+  bool ai_written = 12;
+  // True when the model was the llm service's stub engine (tests, local).
+  bool stub = 13;
+  // Two or three sentences on the week.
+  string summary = 14;
+  // One entry per change, Breaking first. Empty for digests written before
+  // changes existed; those carry `changed` and `why` instead.
+  repeated Change changes = 15;
+  // "draft" (admins only) or "published".
+  string status = 16;
+  // RFC 3339; empty while a draft.
+  string published_at = 17;
+  // "live" (the weekly run, reviewed by the owner) or "archive" (the backfill,
+  // not individually reviewed).
+  string origin = 18;
+}
+
+// How much a change matters to someone running the language in production.
+// A named category, never a score.
+enum Impact {
+  IMPACT_UNSPECIFIED = 0;
+  // Can break a build or a running service.
+  IMPACT_BREAKING = 1;
+  // Changes how you work or what you should reach for.
+  IMPACT_WORTH_KNOWING = 2;
+  // Tooling and ergonomics.
+  IMPACT_NICE_TO_KNOW = 3;
+}
+
+// One change in a digest. Its `url` is always one of the week's source items.
+message Change {
+  string title = 1;
+  Impact impact = 2;
+  // runtime, compiler, stdlib, tooling, language or ecosystem.
+  string area = 3;
+  string url = 4;
+  string what = 5;
+  string production_impact = 6;
+  string try_it = 7;
+}
+
+message ListDigestsRequest {
+  // "go" or "rust"; empty for both.
+  string language = 1;
+  // "en" or "hr"; empty for both.
+  string lang = 2;
+  // At most this many; 0 means the service's default.
+  int32 limit = 3;
+  // Drafts too, for an admin; ignored for anyone else.
+  bool include_drafts = 4;
+}
+
+message ListDigestsResponse {
+  repeated Digest digests = 1;
+}
+
+message GetDigestRequest {
+  int64 id = 1;
+}
+
+message GetDigestResponse {
+  Digest digest = 1;
+}
+
+message ListItemsRequest {
+  // "go" or "rust"; empty for both.
+  string language = 1;
+  // At most this many; 0 means the service's default.
+  int32 limit = 2;
+}
+
+message ListItemsResponse {
+  repeated Item items = 1;
+}
+
+message RefreshRequest {}
+
+message RefreshResponse {
+  // Sources read, and how many of them failed.
+  int32 sources = 1;
+  int32 failed = 2;
+  // Items seen for the first time.
+  int32 new_items = 3;
+}
+
+message RunDigestRequest {
+  // Rewrite digests that already exist for the week.
+  bool force = 1;
+  // Wait for the run and return its digests, instead of starting it in the
+  // background. For callers that reach the service directly (tests, tools);
+  // through the edge a wait is cut by the routing timeouts.
+  bool wait = 2;
+}
+
+message RunDigestResponse {
+  // The week the run writes.
+  string week = 1;
+  // The digests it produced; only with `wait`.
+  repeated Digest digests = 2;
+  // A background run was started.
+  bool started = 3;
+  // A run was already in progress; nothing new was started.
+  bool already_running = 4;
+}
+
+message PublishDigestRequest {
+  int64 id = 1;
+  // False takes a published digest back to draft.
+  bool publish = 2;
+}
+
+message PublishDigestResponse {
+  Digest digest = 1;
+}
+
+message BackfillRequest {
+  // ISO weeks, inclusive, e.g. "2025-W01" and "2026-W38".
+  string from_week = 1;
+  string to_week = 2;
+}
+
+message BackfillResponse {
+  // A run was started; false when one is already running.
+  bool started = 1;
+  BackfillProgress progress = 2;
+}
+
+message GetBackfillRequest {}
+
+message GetBackfillResponse {
+  BackfillProgress progress = 1;
+}
+
+message BackfillProgress {
+  bool running = 1;
+  string from_week = 2;
+  string to_week = 3;
+  // "import" while reading the archives, "write" while writing digests, "done".
+  string phase = 4;
+  int32 items_imported = 5;
+  int32 weeks_total = 6;
+  int32 weeks_done = 7;
+  string current_week = 8;
+  int32 written = 9;
+  // Digests not written because the week was thin or already written.
+  int32 skipped = 10;
+  int32 failed = 11;
+  // RFC 3339.
+  string started_at = 12;
+  string finished_at = 13;
+}

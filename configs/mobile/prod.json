@@ -1,0 +1,6 @@
+{
+  "_comment": "What a TestFlight or store build is pointed at: the one deployed edge there is today, the local cluster behind its public domain (docs/local-cluster.md). When a separate production stack exists, this file names it; the issuer must be the one that stack's Hydra was deployed with, or every token is invalid.",
+  "env": "prod",
+  "auth": { "issuer": "https://auth.proximity.is" },
+  "api": { "base_url": "https://api.proximity.is", "grpc_authority": "api.proximity.is:443" }
+}

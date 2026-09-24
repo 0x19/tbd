@@ -1,0 +1,58 @@
+# arena configuration, shared layer. `configs/arena/<env>.toml` is merged
+# over this file; tables merge key by key, any other value replaces. Every key
+# is listed here so an environment file only needs what it changes. Flags and
+# their environment variables (ARENA_*) override both.
+
+[server]
+# Where the gRPC server listens. Loopback on purpose; containers bind 0.0.0.0
+# through ARENA_LISTEN_ADDR.
+listen = "127.0.0.1:50058"
+
+[metrics]
+# Prometheus /metrics listener. Embedders (tests, the chaos tool) turn it off.
+listen = "0.0.0.0:9464"
+
+[ping]
+# Longest message Ping echoes; longer is INVALID_ARGUMENT. The one knob that
+# proves TOML reaches an RPC.
+max_message_len = 1024
+
+[sources]
+# Where the snapshot's figures come from. An empty URL turns that source off;
+# its figures are then absent and `sources` says "not configured".
+# The model service, through Envoy's internal listener when deployed
+# (ARENA_LLM_URL).
+llm_url = "http://127.0.0.1:50057"
+# The sandbox runner (RFC 0010), the same way (ARENA_RUNNER_URL): what it runs
+# and how full it is, read as svc:arena.
+runner_url = "http://127.0.0.1:50060"
+# The metrics store's Prometheus query API, for tokens a second, time to the
+# first token and refusals, and the runner's runs and run times
+# (ARENA_METRICS_URL). Observability is dialled
+# directly, like a database.
+metrics_url = ""
+# The chaos tool's API root, ending in /api/chaos/v1 (ARENA_CHAOS_URL): its
+# current run, followed live, and its last end-to-end check of every way in.
+chaos_url = ""
+# A chaos schedule the arena keeps in place (it looks once a minute and creates
+# it when missing): check every way in end to end on this cron (six fields,
+# UTC), never posting to Slack. Empty: the arena only reads whatever check ran
+# last.
+validate_cron = "0 */2 * * * *"
+
+[collect]
+# How often each source is read, and one read's deadline.
+llm_every = "1s"
+runner_every = "2s"
+metrics_every = "5s"
+chaos_every = "5s"
+timeout = "3s"
+
+[watch]
+# One snapshot a tick, to every viewer.
+tick = "1s"
+# Streams open at once; one more is refused as busy.
+max_viewers = 64
+# The role a caller needs. "admin" while the lab is private; empty opens the
+# arena to any verified caller when the lab is published (RFC 0006).
+require_role = "admin"

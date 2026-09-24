@@ -1,0 +1,23 @@
+# The cv UI (ui/cv): a Next.js static export served by Caddy, the
+# same shape as Dockerfile.www. Nothing is baked in at build time: the API is
+# same-origin and the host comes from Envoy.
+#   docker build -f devops/docker/Dockerfile.cv-ui -t ghcr.io/0x19/tbd-cv-ui .
+FROM node:24-alpine AS build
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN corepack enable && corepack prepare pnpm@12 --activate
+WORKDIR /src
+COPY ui/cv/package.json ui/cv/pnpm-lock.yaml ui/cv/pnpm-workspace.yaml ./
+RUN pnpm install --frozen-lockfile
+COPY ui/cv/ ./
+RUN pnpm build
+
+FROM caddy:2.10-alpine
+# The published binary carries cap_net_bind_service so it can take :80. A
+# container that runs as a non-root user with no privilege escalation cannot
+# exec a file with capabilities at all, and nothing here binds a low port:
+# strip them.
+RUN apk add --no-cache libcap && setcap -r /usr/bin/caddy && apk del libcap
+ENV XDG_CONFIG_HOME=/tmp XDG_DATA_HOME=/tmp
+COPY devops/docker/cv.Caddyfile /etc/caddy/Caddyfile
+COPY --from=build /src/out /srv
+EXPOSE 8080

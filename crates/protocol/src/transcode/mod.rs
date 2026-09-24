@@ -6,8 +6,9 @@
 
 mod bind;
 pub(crate) mod call;
-mod codec;
+pub(crate) mod codec;
 mod openapi;
+pub mod schema;
 pub mod template;
 
 use std::{collections::BTreeMap, sync::Arc};
@@ -147,10 +148,40 @@ impl Binding {
     }
 }
 
-/// Every binding the registered backends carry, in a stable order.
+/// One public RPC, addressable by name. Several bindings of the same RPC share
+/// one entry: a caller that addresses the RPC itself (the multiplexed socket)
+/// sends the whole request message, so the HTTP body and path rules, which are
+/// what differs between bindings, do not apply.
+#[derive(Debug, Clone)]
+pub struct Rpc {
+    /// The registry backend the call goes to.
+    pub backend: String,
+    /// The RPC.
+    pub method: MethodDescriptor,
+    /// `/tbd.ledger.v1.LedgerService/Current`.
+    pub grpc_path: PathAndQuery,
+    /// Server streaming: many answers, then the call ends.
+    pub streaming: bool,
+}
+
+impl Rpc {
+    /// `tbd.ledger.v1.LedgerService/Current`, the name callers address.
+    #[must_use]
+    pub fn name(&self) -> String {
+        format!(
+            "{}/{}",
+            self.method.parent_service().full_name(),
+            self.method.name()
+        )
+    }
+}
+
+/// Every binding the registered backends carry, in a stable order, and the
+/// RPCs behind them.
 #[derive(Debug, Clone)]
 pub struct Transcoder {
     bindings: Vec<Arc<Binding>>,
+    rpcs: BTreeMap<String, Arc<Rpc>>,
 }
 
 /// The descriptor pool of the whole contract (`tbd_proto::DESCRIPTOR_SET_ALL`).
@@ -242,13 +273,30 @@ impl Transcoder {
             (a.template.axum.as_str(), a.verb.as_str())
                 .cmp(&(b.template.axum.as_str(), b.verb.as_str()))
         });
-        Ok(Self { bindings })
+        let mut rpcs: BTreeMap<String, Arc<Rpc>> = BTreeMap::new();
+        for binding in &bindings {
+            rpcs.entry(binding.rpc()).or_insert_with(|| {
+                Arc::new(Rpc {
+                    backend: binding.backend.clone(),
+                    method: binding.method.clone(),
+                    grpc_path: binding.grpc_path.clone(),
+                    streaming: binding.streaming,
+                })
+            });
+        }
+        Ok(Self { bindings, rpcs })
     }
 
     /// The bindings, sorted by path then verb.
     #[must_use]
     pub fn bindings(&self) -> &[Arc<Binding>] {
         &self.bindings
+    }
+
+    /// The public RPCs by name, one entry per RPC however many routes it has.
+    #[must_use]
+    pub fn rpcs(&self) -> &BTreeMap<String, Arc<Rpc>> {
+        &self.rpcs
     }
 
     /// One axum route per binding; the same path with several verbs merges.

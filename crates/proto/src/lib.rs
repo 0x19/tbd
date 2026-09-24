@@ -47,3 +47,66 @@ pub mod humans {
             include_bytes!(concat!(env!("OUT_DIR"), "/humans_descriptor.bin"));
     }
 }
+
+pub mod finance {
+    pub mod v1 {
+        tonic::include_proto!("tbd.finance.v1");
+        /// Encoded `FileDescriptorSet` for this package, for gRPC reflection.
+        pub const DESCRIPTOR_SET: &[u8] =
+            include_bytes!(concat!(env!("OUT_DIR"), "/finance_descriptor.bin"));
+    }
+}
+
+pub mod playground {
+    pub mod v1 {
+        tonic::include_proto!("tbd.playground.v1");
+        /// Encoded `FileDescriptorSet` for this package, for gRPC reflection.
+        pub const DESCRIPTOR_SET: &[u8] =
+            include_bytes!(concat!(env!("OUT_DIR"), "/playground_descriptor.bin"));
+    }
+}
+
+pub mod cv {
+    pub mod v1 {
+        tonic::include_proto!("tbd.cv.v1");
+        /// Encoded `FileDescriptorSet` for this package, for gRPC reflection.
+        pub const DESCRIPTOR_SET: &[u8] =
+            include_bytes!(concat!(env!("OUT_DIR"), "/cv_descriptor.bin"));
+    }
+}
+
+pub mod llm {
+    pub mod v1 {
+        tonic::include_proto!("tbd.llm.v1");
+        /// Encoded `FileDescriptorSet` for this package, for gRPC reflection.
+        pub const DESCRIPTOR_SET: &[u8] =
+            include_bytes!(concat!(env!("OUT_DIR"), "/llm_descriptor.bin"));
+    }
+}
+
+pub mod arena {
+    pub mod v1 {
+        tonic::include_proto!("tbd.arena.v1");
+        /// Encoded `FileDescriptorSet` for this package, for gRPC reflection.
+        pub const DESCRIPTOR_SET: &[u8] =
+            include_bytes!(concat!(env!("OUT_DIR"), "/arena_descriptor.bin"));
+    }
+}
+
+pub mod radar {
+    pub mod v1 {
+        tonic::include_proto!("tbd.radar.v1");
+        /// Encoded `FileDescriptorSet` for this package, for gRPC reflection.
+        pub const DESCRIPTOR_SET: &[u8] =
+            include_bytes!(concat!(env!("OUT_DIR"), "/radar_descriptor.bin"));
+    }
+}
+
+pub mod runner {
+    pub mod v1 {
+        tonic::include_proto!("tbd.runner.v1");
+        /// Encoded `FileDescriptorSet` for this package, for gRPC reflection.
+        pub const DESCRIPTOR_SET: &[u8] =
+            include_bytes!(concat!(env!("OUT_DIR"), "/runner_descriptor.bin"));
+    }
+}

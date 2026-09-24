@@ -11,6 +11,39 @@ data:
   ENGINE_METRICS_ADDR: 0.0.0.0:9464
   PROTOCOL_LISTEN_ADDR: 0.0.0.0:8080
   PROTOCOL_METRICS_ADDR: 0.0.0.0:9464
+  RUNNER_LISTEN_ADDR: 0.0.0.0:50060
+  RUNNER_METRICS_ADDR: 0.0.0.0:9464
+  # The sandbox daemon runs on the host (RFC 0010), dialled directly like the
+  # llm engines; its token comes from the runner-sandbox Secret.
+  RUNNER_SANDBOX_URL: http://host.k3d.internal:7788
+  RADAR_LISTEN_ADDR: 0.0.0.0:50059
+  RADAR_METRICS_ADDR: 0.0.0.0:9464
+  # The radar writes its digests through the llm service, via Envoy's internal
+  # listener; its database URL and GitHub token are Secrets (radar-db, radar-github).
+  RADAR_LLM_URL: http://envoy:50051
+  ARENA_LISTEN_ADDR: 0.0.0.0:50058
+  ARENA_METRICS_ADDR: 0.0.0.0:9464
+  # The arena's sources: the model service through Envoy, the metrics store
+  # directly (observability, like a database). The chaos tool is set only by
+  # the overlays that deploy it.
+  ARENA_LLM_URL: http://envoy:50051
+  ARENA_RUNNER_URL: http://envoy:50051
+  ARENA_METRICS_URL: http://victoria-metrics.observability.svc.cluster.local:8428
+  ARENA_CHAOS_URL: ""
+  LLM_LISTEN_ADDR: 0.0.0.0:50057
+  LLM_METRICS_ADDR: 0.0.0.0:9464
+  # The llm service's engines run on the host (k3d's name for it), dialled
+  # directly like a database; the prod overlay sets its own.
+  LLM_FAST_URL: http://host.k3d.internal:8082
+  LLM_FAST_MODEL: gpt-oss-20b
+  LLM_DEEP_URL: http://host.k3d.internal:8081
+  LLM_DEEP_MODEL: gpt-oss-120b
+  CV_LISTEN_ADDR: 0.0.0.0:50056
+  CV_METRICS_ADDR: 0.0.0.0:9464
+  PLAYGROUND_LISTEN_ADDR: 0.0.0.0:50055
+  PLAYGROUND_METRICS_ADDR: 0.0.0.0:9464
+  FINANCE_LISTEN_ADDR: 0.0.0.0:50054
+  FINANCE_METRICS_ADDR: 0.0.0.0:9464
   HUMANS_LISTEN_ADDR: 0.0.0.0:50053
   HUMANS_METRICS_ADDR: 0.0.0.0:9464
   LEDGER_LISTEN_ADDR: 0.0.0.0:50052
@@ -23,6 +56,15 @@ data:
   PROTOCOL_ENGINE_URL: http://envoy:50051
   PROTOCOL_HUMANS_URL: http://envoy:50051
   PROTOCOL_LEDGER_URL: http://envoy:50051
+  PROTOCOL_RUNNER_URL: http://envoy:50051
+  PROTOCOL_RADAR_URL: http://envoy:50051
+  PROTOCOL_ARENA_URL: http://envoy:50051
+  PROTOCOL_LLM_URL: http://envoy:50051
+  PROTOCOL_CV_URL: http://envoy:50051
+  # The cv service reaches finance for the mail through the internal listener too.
+  CV_FINANCE_URL: http://envoy:50051
+  PROTOCOL_PLAYGROUND_URL: http://envoy:50051
+  PROTOCOL_FINANCE_URL: http://envoy:50051
   # OTLP/gRPC collector for traces. Alloy in the observability namespace.
   OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector.observability.svc:4317
   OTEL_TRACES_SAMPLER_ARG: "1.0"

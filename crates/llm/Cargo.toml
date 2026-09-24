@@ -1,0 +1,50 @@
+[package]
+name = "tbd-llm"
+description = "The llm service: the layer over the engines that run the weights. Streams generations, embeds, routes by tier, keeps the caller's budget and the record of every generation."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "llm"
+path = "src/main.rs"
+
+[dependencies]
+tbd-common.workspace = true
+tbd-db.workspace = true
+tbd-proto.workspace = true
+
+anyhow.workspace = true
+async-trait.workspace = true
+chrono.workspace = true
+clap.workspace = true
+futures.workspace = true
+humantime-serde.workspace = true
+metrics.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sqlx.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-stream.workspace = true
+tokio-util = { workspace = true, features = ["codec", "io"] }
+toml.workspace = true
+tonic.workspace = true
+tonic-health.workspace = true
+tonic-reflection.workspace = true
+tracing.workspace = true
+url.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+base64.workspace = true
+tbd-db = { workspace = true, features = ["testing"] }
+tokio = { workspace = true, features = ["test-util"] }
+wiremock.workspace = true
+
+[lints]
+workspace = true

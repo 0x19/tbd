@@ -37,8 +37,57 @@ need_stdout = true
 background = false
 on_change_strategy = "kill_then_restart"
 
+[jobs.finance]
+command = ["cargo", "run", "-p", "tbd-finance", "--color", "always"]
+need_stdout = true
+background = false
+on_change_strategy = "kill_then_restart"
+
+[jobs.playground]
+command = ["cargo", "run", "-p", "tbd-playground", "--color", "always"]
+need_stdout = true
+background = false
+on_change_strategy = "kill_then_restart"
+
+[jobs.cv]
+command = ["cargo", "run", "-p", "tbd-cv", "--color", "always"]
+need_stdout = true
+background = false
+on_change_strategy = "kill_then_restart"
+
+[jobs.llm]
+command = ["cargo", "run", "-p", "tbd-llm", "--color", "always"]
+need_stdout = true
+background = false
+on_change_strategy = "kill_then_restart"
+
+[jobs.arena]
+command = ["cargo", "run", "-p", "tbd-arena", "--color", "always"]
+need_stdout = true
+background = false
+on_change_strategy = "kill_then_restart"
+
+[jobs.radar]
+command = ["cargo", "run", "-p", "tbd-radar", "--color", "always"]
+need_stdout = true
+background = false
+on_change_strategy = "kill_then_restart"
+
+[jobs.runner]
+command = ["cargo", "run", "-p", "tbd-runner", "--color", "always"]
+need_stdout = true
+background = false
+on_change_strategy = "kill_then_restart"
+
 [keybindings]
 e = "job:engine"
 p = "job:protocol"
+u = "job:runner"
+r = "job:radar"
+a = "job:arena"
+m = "job:llm"
+c = "job:cv"
+g = "job:playground"
+f = "job:finance"
 h = "job:humans"
 l = "job:ledger"

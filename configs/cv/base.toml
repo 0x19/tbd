@@ -1,0 +1,49 @@
+# cv configuration, shared layer. `configs/cv/<env>.toml` is merged
+# over this file; tables merge key by key, any other value replaces. Every key
+# is listed here so an environment file only needs what it changes. Flags and
+# their environment variables (CV_*) override both.
+
+[server]
+# Where the gRPC server listens. Loopback on purpose; containers bind 0.0.0.0
+# through CV_LISTEN_ADDR.
+listen = "127.0.0.1:50056"
+
+[metrics]
+# Prometheus /metrics listener. Embedders (tests, the chaos tool) turn it off.
+listen = "0.0.0.0:9464"
+
+[ping]
+# Longest message Ping echoes; longer is INVALID_ARGUMENT. The one knob that
+# proves TOML reaches an RPC.
+max_message_len = 1024
+
+[store]
+# The connection URL comes from the environment only (CV_DATABASE_URL, the
+# cv-db Secret); empty means no store, and every RPC but Ping answers
+# UNAVAILABLE. Pool size.
+max_connections = 5
+
+[finance]
+# Where the finance service is reached for the mail: through Envoy's internal
+# listener in a deployment (CV_FINANCE_URL=http://envoy:50051). Empty means the
+# owner is not told of requests; they still work.
+url = ""
+
+[notify]
+# The mail that tells the owner someone asked. `from` is the address of a
+# mailbox linked in the finance app with permission to send; `to` is where
+# the owner reads; `url` is the gated site, whose admin page the mail links.
+# Empty `from` or `to` turns notifications off.
+from = ""
+to = ""
+url = ""
+
+[private]
+# Path to the JSON with the fields only the full CV carries (phone, address,
+# references). Deployments pass the JSON itself through CV_PRIVATE_JSON from
+# the cv-private Secret instead. Empty means the full CV carries none.
+path = ""
+
+[render]
+# Longest a render may take before the download answers DEADLINE_EXCEEDED.
+timeout_secs = 20

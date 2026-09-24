@@ -1,0 +1,53 @@
+# sandboxd: one Go or Rust program per throwaway gVisor sandbox (RFC 0010,
+# docs/sandbox/README.md). Installed by `mise run sandbox:deploy`.
+#
+# The daemon is the only thing that starts a sandbox, so it can reach Docker;
+# everything else about it is taken away: no user of its own (a new one each
+# start), no capabilities, a read-only system, and a firewall that lets in only
+# this machine and the local cluster's network. The token callers must present
+# is a root-only credential handed to it by systemd.
+[Unit]
+Description=tbd sandboxd (one program per gVisor sandbox)
+Requires=docker.service
+After=docker.service network-online.target
+
+[Service]
+EnvironmentFile=/etc/tbd/sandboxd.env
+Environment=SANDBOXD_TOKEN_FILE=%d/token
+Environment=DOCKER_CONFIG=%t/sandboxd
+LoadCredential=token:/etc/credstore/sandboxd.token
+ExecStart=/usr/local/bin/sandboxd
+Restart=on-failure
+RestartSec=2
+
+DynamicUser=yes
+SupplementaryGroups=docker
+RuntimeDirectory=sandboxd
+CapabilityBoundingSet=
+AmbientCapabilities=
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+# Only this machine and the local cluster's network may connect; the token is
+# the second check.
+IPAddressDeny=any
+IPAddressAllow=localhost
+IPAddressAllow=172.16.0.0/12
+
+[Install]
+WantedBy=multi-user.target

@@ -19,6 +19,10 @@ services:
     environment:
       BASE_DOMAIN: ${BASE_DOMAIN:?set BASE_DOMAIN}
       ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL}
+      # The company site's own domain (served from sites.d/). Defaults to the base, so
+      # with one domain nothing redirects; set, the base domain's apex and www send the
+      # browser there, and the site has one canonical URL.
+      SITE_DOMAIN: ${SITE_DOMAIN:-${BASE_DOMAIN}}
     volumes:
       # The directory, not the file: editors and sed replace the file's inode, and a
       # single-file bind mount would keep showing the old content to Caddy.

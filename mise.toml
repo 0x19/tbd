@@ -27,6 +27,7 @@ ANSIBLE_INVENTORY = "inventory/dev.yml"
 "cargo:bacon" = "latest"
 buf = "latest"
 typos = "latest"
+"ubi:typst/typst" = "0.15.1"
 kubectl = "latest"
 kustomize = "latest"
 k3d = "latest"
@@ -39,6 +40,9 @@ uv = "latest"
 # ui/chaos (Next.js). node is pinned to the line the kit targets; pnpm is its package manager.
 node = "24"
 pnpm = "latest"
+# /mobile (Flutter workspace). Pinned: a pub workspace needs Flutter >= 3.38, and every
+# task runs flutter through mise so the machine and CI agree.
+flutter = "3.47.5"
 
 # ---------------------------------------------------------------- build ----
 
@@ -77,8 +81,16 @@ run = [
   "buf lint proto",
 ]
 
+[tasks."test:db:reset"]
+description = "Remove the shared test containers (tbd-test-postgres, tbd-test-clickhouse); the next test run starts fresh ones. For an image bump or a corrupted volume, never routine"
+run = """
+for name in tbd-test-postgres tbd-test-clickhouse; do
+  if docker inspect "$name" >/dev/null 2>&1; then docker rm -f "$name" >/dev/null && echo "removed $name"; else echo "$name: not running"; fi
+done
+"""
+
 [tasks.test]
-description = "Unit + integration tests (nextest) and doctests. The ledger's store tests need Docker or LEDGER_TEST_DATABASE_URL / LEDGER_TEST_CLICKHOUSE_URL; with neither they are skipped with a warning (and fail under CI=1)"
+description = "Unit + integration tests (nextest) and doctests. Database-backed tests share one reusable Postgres container (tbd-test-postgres; ClickHouse: tbd-test-clickhouse) or use TBD_TEST_DATABASE_URL / LEDGER_TEST_*_URL; test:db:reset removes the containers. The ledger's store tests need Docker or LEDGER_TEST_DATABASE_URL / LEDGER_TEST_CLICKHOUSE_URL; with neither they are skipped with a warning (and fail under CI=1)"
 # The progress bar writes carriage returns, which smear into one line when
 # output goes through mise. The per-test list is what we want anyway.
 env = { NEXTEST_HIDE_PROGRESS_BAR = "1" }
@@ -256,6 +268,10 @@ run = [
   "mise run stress:run",
   "mise run ui:check",
   "mise run ui:auth:check",
+  "mise run ui:www:check",
+  "mise run ui:finances:check",
+  "mise run ui:cv:check",
+  "mise run mobile:check",
 ]
 
 # ------------------------------------------------------------- scaffold ----
@@ -313,9 +329,37 @@ run = "cargo run -p tbd-ledger"
 description = "Run the humans service (gRPC on HUMANS_LISTEN_ADDR)"
 run = "cargo run -p tbd-humans"
 
+[tasks."run:finance"]
+description = "Run the finance service (gRPC on FINANCE_LISTEN_ADDR)"
+run = "cargo run -p tbd-finance"
+
+[tasks."run:playground"]
+description = "Run the playground service (gRPC on PLAYGROUND_LISTEN_ADDR)"
+run = "cargo run -p tbd-playground"
+
+[tasks."run:cv"]
+description = "Run the cv service (gRPC on CV_LISTEN_ADDR)"
+run = "cargo run -p tbd-cv"
+
+[tasks."run:llm"]
+description = "Run the llm service (gRPC on LLM_LISTEN_ADDR)"
+run = "cargo run -p tbd-llm"
+
+[tasks."run:arena"]
+description = "Run the arena service (gRPC on ARENA_LISTEN_ADDR)"
+run = "cargo run -p tbd-arena"
+
+[tasks."run:radar"]
+description = "Run the radar service (gRPC on RADAR_LISTEN_ADDR)"
+run = "cargo run -p tbd-radar"
+
+[tasks."run:runner"]
+description = "Run the runner service (gRPC on RUNNER_LISTEN_ADDR)"
+run = "cargo run -p tbd-runner"
+
 [tasks.dev]
 description = "Both services in one terminal (parallel, output prefixed per service)"
-depends = ["run:engine", "run:protocol", "run:ledger", "run:humans"]
+depends = ["run:engine", "run:protocol", "run:ledger", "run:humans", "run:finance", "run:playground", "run:cv", "run:llm", "run:arena", "run:radar", "run:runner"]
 
 [tasks."watch:engine"]
 description = "Engine with auto-reload on file change (bacon)"
@@ -333,6 +377,34 @@ run = "bacon ledger"
 description = "Humans with auto-reload on file change (bacon)"
 run = "bacon humans"
 
+[tasks."watch:finance"]
+description = "Finance with auto-reload on file change (bacon)"
+run = "bacon finance"
+
+[tasks."watch:playground"]
+description = "Playground with auto-reload on file change (bacon)"
+run = "bacon playground"
+
+[tasks."watch:cv"]
+description = "Cv with auto-reload on file change (bacon)"
+run = "bacon cv"
+
+[tasks."watch:llm"]
+description = "Llm with auto-reload on file change (bacon)"
+run = "bacon llm"
+
+[tasks."watch:arena"]
+description = "Arena with auto-reload on file change (bacon)"
+run = "bacon arena"
+
+[tasks."watch:radar"]
+description = "Radar with auto-reload on file change (bacon)"
+run = "bacon radar"
+
+[tasks."watch:runner"]
+description = "Runner with auto-reload on file change (bacon)"
+run = "bacon runner"
+
 # --------------------------------------------------------------- docker ----
 
 [tasks."docker:build"]
@@ -342,6 +414,13 @@ run = [
   "docker build -f devops/docker/Dockerfile --build-arg BIN=engine   --build-arg PORT=50051 -t $IMAGE_REGISTRY/tbd-engine:$IMAGE_TAG .",
   "docker build -f devops/docker/Dockerfile --build-arg BIN=protocol --build-arg PORT=8080  -t $IMAGE_REGISTRY/tbd-protocol:$IMAGE_TAG .",
   "docker build -f devops/docker/Dockerfile --build-arg BIN=chaos    --build-arg PORT=7700  -t $IMAGE_REGISTRY/tbd-chaos:$IMAGE_TAG .",
+  "docker build -f devops/docker/Dockerfile --build-arg BIN=runner --build-arg PORT=50060 -t $IMAGE_REGISTRY/tbd-runner:$IMAGE_TAG .",
+  "docker build -f devops/docker/Dockerfile --build-arg BIN=radar --build-arg PORT=50059 -t $IMAGE_REGISTRY/tbd-radar:$IMAGE_TAG .",
+  "docker build -f devops/docker/Dockerfile --build-arg BIN=arena --build-arg PORT=50058 -t $IMAGE_REGISTRY/tbd-arena:$IMAGE_TAG .",
+  "docker build -f devops/docker/Dockerfile --build-arg BIN=llm --build-arg PORT=50057 -t $IMAGE_REGISTRY/tbd-llm:$IMAGE_TAG .",
+  "docker build -f devops/docker/Dockerfile --build-arg BIN=cv --build-arg PORT=50056 -t $IMAGE_REGISTRY/tbd-cv:$IMAGE_TAG .",
+  "docker build -f devops/docker/Dockerfile --build-arg BIN=playground --build-arg PORT=50055 -t $IMAGE_REGISTRY/tbd-playground:$IMAGE_TAG .",
+  "docker build -f devops/docker/Dockerfile --build-arg BIN=finance --build-arg PORT=50054 -t $IMAGE_REGISTRY/tbd-finance:$IMAGE_TAG .",
   "docker build -f devops/docker/Dockerfile --build-arg BIN=humans --build-arg PORT=50053 -t $IMAGE_REGISTRY/tbd-humans:$IMAGE_TAG .",
   "docker build -f devops/docker/Dockerfile --build-arg BIN=ledger --build-arg PORT=50052 -t $IMAGE_REGISTRY/tbd-ledger:$IMAGE_TAG .",
 ]
@@ -352,6 +431,13 @@ run = [
   "docker push $IMAGE_REGISTRY/tbd-engine:$IMAGE_TAG",
   "docker push $IMAGE_REGISTRY/tbd-protocol:$IMAGE_TAG",
   "docker push $IMAGE_REGISTRY/tbd-chaos:$IMAGE_TAG",
+  "docker push $IMAGE_REGISTRY/tbd-runner:$IMAGE_TAG",
+  "docker push $IMAGE_REGISTRY/tbd-radar:$IMAGE_TAG",
+  "docker push $IMAGE_REGISTRY/tbd-arena:$IMAGE_TAG",
+  "docker push $IMAGE_REGISTRY/tbd-llm:$IMAGE_TAG",
+  "docker push $IMAGE_REGISTRY/tbd-cv:$IMAGE_TAG",
+  "docker push $IMAGE_REGISTRY/tbd-playground:$IMAGE_TAG",
+  "docker push $IMAGE_REGISTRY/tbd-finance:$IMAGE_TAG",
   "docker push $IMAGE_REGISTRY/tbd-humans:$IMAGE_TAG",
   "docker push $IMAGE_REGISTRY/tbd-ledger:$IMAGE_TAG",
 ]
@@ -407,10 +493,20 @@ mise run ui:build
 docker build -f devops/docker/Dockerfile --build-arg BIN=engine   --build-arg PORT=50051 -t $IMAGE_REGISTRY/tbd-engine:dev .
 docker build -f devops/docker/Dockerfile --build-arg BIN=protocol --build-arg PORT=8080  -t $IMAGE_REGISTRY/tbd-protocol:dev .
 docker build -f devops/docker/Dockerfile --build-arg BIN=chaos    --build-arg PORT=7700  -t $IMAGE_REGISTRY/tbd-chaos:dev .
+docker build -f devops/docker/Dockerfile --build-arg BIN=runner --build-arg PORT=50060 -t $IMAGE_REGISTRY/tbd-runner:dev .
+docker build -f devops/docker/Dockerfile --build-arg BIN=radar --build-arg PORT=50059 -t $IMAGE_REGISTRY/tbd-radar:dev .
+docker build -f devops/docker/Dockerfile --build-arg BIN=arena --build-arg PORT=50058 -t $IMAGE_REGISTRY/tbd-arena:dev .
+docker build -f devops/docker/Dockerfile --build-arg BIN=llm --build-arg PORT=50057 -t $IMAGE_REGISTRY/tbd-llm:dev .
+docker build -f devops/docker/Dockerfile --build-arg BIN=cv --build-arg PORT=50056 -t $IMAGE_REGISTRY/tbd-cv:dev .
+docker build -f devops/docker/Dockerfile --build-arg BIN=playground --build-arg PORT=50055 -t $IMAGE_REGISTRY/tbd-playground:dev .
+docker build -f devops/docker/Dockerfile --build-arg BIN=finance --build-arg PORT=50054 -t $IMAGE_REGISTRY/tbd-finance:dev .
 docker build -f devops/docker/Dockerfile --build-arg BIN=humans --build-arg PORT=50053 -t $IMAGE_REGISTRY/tbd-humans:dev .
 docker build -f devops/docker/Dockerfile --build-arg BIN=ledger --build-arg PORT=50052 -t $IMAGE_REGISTRY/tbd-ledger:dev .
 docker build -f devops/docker/Dockerfile.auth-ui $(mise run -q auth:ui-build-args) -t $IMAGE_REGISTRY/tbd-auth-ui:dev .
-k3d image import -m direct -c "$K3D_CLUSTER" $IMAGE_REGISTRY/tbd-engine:dev $IMAGE_REGISTRY/tbd-protocol:dev $IMAGE_REGISTRY/tbd-chaos:dev $IMAGE_REGISTRY/tbd-humans:dev $IMAGE_REGISTRY/tbd-ledger:dev $IMAGE_REGISTRY/tbd-auth-ui:dev
+docker build -f devops/docker/Dockerfile.www $(mise run -q www:build-args) -t $IMAGE_REGISTRY/tbd-www:dev .
+docker build -f devops/docker/Dockerfile.finances -t $IMAGE_REGISTRY/tbd-finances-ui:dev .
+docker build -f devops/docker/Dockerfile.cv-ui -t $IMAGE_REGISTRY/tbd-cv-ui:dev .
+k3d image import -m direct -c "$K3D_CLUSTER" $IMAGE_REGISTRY/tbd-engine:dev $IMAGE_REGISTRY/tbd-protocol:dev $IMAGE_REGISTRY/tbd-chaos:dev $IMAGE_REGISTRY/tbd-runner:dev $IMAGE_REGISTRY/tbd-radar:dev $IMAGE_REGISTRY/tbd-arena:dev $IMAGE_REGISTRY/tbd-llm:dev $IMAGE_REGISTRY/tbd-cv:dev $IMAGE_REGISTRY/tbd-playground:dev $IMAGE_REGISTRY/tbd-finance:dev $IMAGE_REGISTRY/tbd-humans:dev $IMAGE_REGISTRY/tbd-ledger:dev $IMAGE_REGISTRY/tbd-auth-ui:dev $IMAGE_REGISTRY/tbd-www:dev $IMAGE_REGISTRY/tbd-finances-ui:dev $IMAGE_REGISTRY/tbd-cv-ui:dev
 """
 
 # The chaos UI links to grafana.<domain>, logs.<domain>, ... of the public edge.
@@ -420,14 +516,17 @@ k3d image import -m direct -c "$K3D_CLUSTER" $IMAGE_REGISTRY/tbd-engine:dev $IMA
 hide = true
 run = """
 domain="${BASE_DOMAIN:-$(grep -s '^BASE_DOMAIN=' devops/edge/.env | cut -d= -f2- | tr -d '"')}"
+# The company site's own domain, when it has one (devops/edge/.env SITE_DOMAIN): the
+# browser hosts under it need their login callbacks registered (seed-clients.sh).
+site="${SITE_DOMAIN:-$(grep -s '^SITE_DOMAIN=' devops/edge/.env | cut -d= -f2- | tr -d '"')}"
 auth_url="${domain:+https://auth.$domain}"; auth_url="${auth_url:-http://auth.localhost:18080}"
 printf 'CHAOS_PUBLIC_DOMAIN=%s\nAUTH_PUBLIC_URL=%s\n' "$domain" "$auth_url" > devops/k8s/overlays/local/edge.env
 echo "chaos UI links: ${domain:-localhost (no devops/edge/.env and BASE_DOMAIN unset)}"
 # The identity stack's public URL: the edge when there is one, else the local host name.
 if [ -n "$domain" ]; then
-  printf 'AUTH_PUBLIC_URL=https://auth.%s\nBASE_DOMAIN=%s\nAUTH_INSECURE_COOKIES=false\n' "$domain" "$domain" > devops/k8s/auth/auth.env
+  printf 'AUTH_PUBLIC_URL=https://auth.%s\nBASE_DOMAIN=%s\nSITE_DOMAIN=%s\nAUTH_INSECURE_COOKIES=false\n' "$domain" "$domain" "$site" > devops/k8s/auth/auth.env
 else
-  printf 'AUTH_PUBLIC_URL=http://auth.localhost:18080\nBASE_DOMAIN=localhost\nAUTH_INSECURE_COOKIES=true\n' > devops/k8s/auth/auth.env
+  printf 'AUTH_PUBLIC_URL=http://auth.localhost:18080\nBASE_DOMAIN=localhost\nSITE_DOMAIN=\nAUTH_INSECURE_COOKIES=true\n' > devops/k8s/auth/auth.env
 fi
 echo "auth: $(head -1 devops/k8s/auth/auth.env | cut -d= -f2)"
 """
@@ -462,9 +561,219 @@ pnpm lint
 pnpm typecheck
 """
 
+[tasks."nda:pdf"]
+description = "Render docs/nda/nda.{hr,en}.md to docs/nda/*.pdf with the finances UI's Playwright Chromium (docs/nda/README.md)"
+depends = ["ui:finances:install"]
+dir = "ui/finances"
+run = "node ../../docs/nda/render.mjs"
+
 [tasks."ui:auth:build"]
 description = "Build the sign-in UI image (ghcr.io/0x19/tbd-auth-ui:dev)"
 run = "docker build -f devops/docker/Dockerfile.auth-ui $(mise run -q auth:ui-build-args) -t $IMAGE_REGISTRY/tbd-auth-ui:dev ."
+
+# ------------------------------------------------------------- mobile ----
+# The Flutter workspace under /mobile (mobile/CLAUDE.md). Flutter is pinned in
+# [tools]; every task runs it through mise so the version is the same everywhere.
+
+[tasks."mobile:setup"]
+description = "Fetch the workspace's Dart dependencies (pub workspace: one lock file)"
+dir = "mobile"
+run = "flutter pub get"
+
+[tasks."mobile:env"]
+usage = 'arg "[env]" help="local | prod (default local)"'
+description = "Merge configs/mobile/base.json with configs/mobile/<env>.json into mobile/build/env.<env>.json: mise run mobile:env local"
+dir = "mobile"
+run = 'dart run tool/env.dart "${usage_env:-local}"'
+
+[tasks."mobile:config"]
+usage = 'arg "[env]" help="local | prod (default local)"'
+description = "Print the effective mobile configuration for an environment, like `chaos config`: mise run mobile:config prod"
+dir = "mobile"
+run = 'dart run tool/env.dart "${usage_env:-local}" --print'
+
+[tasks."mobile:gen"]
+description = "Regenerate Dart from /proto (buf, remote Dart plugin), the theme tokens from the web kit's globals.css, and the app's l10n classes"
+run = [
+  "buf generate --template mobile/buf.gen.yaml proto",
+  "cd mobile && dart run tool/theme.dart",
+  "cd mobile/apps/tbd && flutter gen-l10n",
+]
+
+[tasks."mobile:check"]
+description = "Format check, analyze (fatal infos), the Me <-> openapi.json and theme <-> globals.css drift checks, and every package's tests; part of ci"
+dir = "mobile"
+depends = ["mobile:setup"]
+run = [
+  "dart format --set-exit-if-changed .",
+  "dart analyze --fatal-infos .",
+  "dart run tool/openapi_check.dart",
+  "dart run tool/theme.dart --check",
+  "sh -c 'for p in apps/tbd packages/*; do [ -d $p/test ] || continue; echo \"== $p\"; (cd $p && flutter test) || exit 1; done'",
+]
+
+[tasks."mobile:run"]
+usage = 'arg "[env]" help="local | prod (default local)"'
+description = "Run the app on the connected device or emulator against an environment: mise run mobile:run local"
+dir = "mobile/apps/tbd"
+depends = ["mobile:setup"]
+run = [
+  'dart run ../../tool/env.dart "${usage_env:-local}"',
+  'flutter run --dart-define-from-file=../../build/env.${usage_env:-local}.json',
+]
+
+[tasks."mobile:build"]
+usage = 'arg "[env]" help="local | prod (default prod)"'
+description = "Release builds: an Android APK, and iOS without code signing: mise run mobile:build prod"
+dir = "mobile/apps/tbd"
+depends = ["mobile:setup"]
+run = [
+  'dart run ../../tool/env.dart "${usage_env:-prod}"',
+  'flutter build apk --release --dart-define-from-file=../../build/env.${usage_env:-prod}.json',
+  'sh -c "command -v xcodebuild >/dev/null && flutter build ios --release --no-codesign --dart-define-from-file=../../build/env.${usage_env:-prod}.json || echo \"ios: no xcodebuild on this machine, skipped\""',
+]
+
+[tasks."mobile:testflight"]
+usage = 'arg "[env]" help="prod | local (default prod)"'
+description = "On a Mac with Xcode: build, sign through the App Store Connect API key and upload to TestFlight (the same script CI runs; needs APP_STORE_CONNECT_* and APPLE_TEAM_ID in the environment)"
+dir = "mobile"
+depends = ["mobile:setup"]
+run = 'MOBILE_ENV="${usage_env:-prod}" BUILD_NUMBER="${BUILD_NUMBER:-$(date +%Y%m%d%H%M)}" sh tool/testflight.sh'
+
+[tasks."mobile:e2e"]
+usage = 'arg "[env]" help="local | prod (default local)"'
+description = "Integration test against the edge configs/mobile/<env>.json names, signed in through the fake with MOBILE_TOKEN (mise run auth:token): mise run mobile:e2e local"
+dir = "mobile/apps/tbd"
+depends = ["mobile:setup"]
+run = [
+  'dart run ../../tool/env.dart "${usage_env:-local}"',
+  'flutter test integration_test --dart-define-from-file=../../build/env.${usage_env:-local}.json --dart-define=MOBILE_TOKEN="${MOBILE_TOKEN:-}"',
+]
+
+[tasks."ui:finances:install"]
+hide = true
+dir = "ui/finances"
+run = "pnpm install --frozen-lockfile"
+
+[tasks."ui:finances:dev"]
+description = "Next.js dev server for the finance UI on :3004 against the local cluster's edge (NEXT_PUBLIC_FINANCE_TOKEN from `mise run auth:token`)"
+depends = ["ui:finances:install"]
+dir = "ui/finances"
+run = "pnpm dev"
+
+[tasks."ui:finances:check"]
+description = "ui/finances: prettier, eslint, tsc (same bar as ui/chaos)"
+depends = ["ui:finances:install"]
+dir = "ui/finances"
+run = """
+pnpm format:check
+pnpm lint
+pnpm typecheck
+"""
+
+[tasks."ui:finances:build"]
+description = "Build the finance UI image (ghcr.io/0x19/tbd-finances-ui:dev)"
+run = "docker build -f devops/docker/Dockerfile.finances -t $IMAGE_REGISTRY/tbd-finances-ui:dev ."
+
+[tasks."ui:finances:e2e"]
+description = "Browser smoke of the deployed finance UI through Envoy (UI_BASE=http://finance.localhost:18080)"
+depends = ["ui:finances:install"]
+dir = "ui/finances"
+run = "pnpm e2e"
+
+[tasks."ui:cv:install"]
+hide = true
+dir = "ui/cv"
+run = "pnpm install --frozen-lockfile"
+
+[tasks."ui:cv:dev"]
+description = "Next.js dev server for the cv UI on :3005 against the local cluster's edge (NEXT_PUBLIC_CV_TOKEN from `mise run auth:token`)"
+depends = ["ui:cv:install"]
+dir = "ui/cv"
+run = "pnpm dev"
+
+[tasks."ui:cv:check"]
+description = "ui/cv: prettier, eslint, tsc (same bar as ui/chaos)"
+depends = ["ui:cv:install"]
+dir = "ui/cv"
+run = """
+pnpm format:check
+pnpm lint
+pnpm typecheck
+"""
+
+[tasks."ui:cv:build"]
+description = "Build the cv UI image (ghcr.io/0x19/tbd-cv-ui:dev)"
+run = "docker build -f devops/docker/Dockerfile.cv-ui -t $IMAGE_REGISTRY/tbd-cv-ui:dev ."
+
+[tasks."ui:www:install"]
+hide = true
+dir = "ui/www"
+run = "pnpm install --frozen-lockfile"
+
+[tasks."ui:www:dev"]
+description = "Next.js dev server for the company site on :3003"
+depends = ["ui:www:install"]
+dir = "ui/www"
+run = "pnpm dev"
+
+# The CV as a PDF, from the same facts as the site: tool/cv-data.ts writes
+# crates/cv/assets/cv.json out of src/data/site.ts and Typst sets
+# crates/cv/assets/cv.typ with the Inter the invoices use. Both files are the cv
+# service's too (it renders the full version from them), so the JSON is committed
+# and `ui:www:check` fails when it is stale. The PDF is committed (public/cv/), so
+# the image build needs no Typst.
+[tasks."www:cv"]
+description = "Write crates/cv/assets/cv.json from ui/www/src/data/site.ts and render the public CV PDF (ui/www/public/cv/)"
+dir = "ui/www"
+run = """
+node --no-warnings tool/cv-data.ts
+typst compile --font-path ../../crates/render/assets/fonts --ignore-system-fonts ../../crates/cv/assets/cv.typ public/cv/nevio-vesic.pdf
+"""
+
+[tasks."www:lab"]
+description = "Render docs/rfcs and docs/studies into ui/www/src/generated/lab (gitignored) and run the redaction check: a public page that names a host, an address, a port, a path, a secret or a cluster name fails with file:line"
+depends = ["ui:www:install"]
+dir = "ui/www"
+run = "pnpm gen"
+
+[tasks."ui:www:check"]
+description = "ui/www: the lab render and its redaction check, prettier, eslint, tsc (same bar as ui/chaos), and the generated files it owns are current (the CV data in crates/cv/assets, the site guide's knowledge in configs/llm/agents)"
+depends = ["ui:www:install"]
+dir = "ui/www"
+run = """
+pnpm gen
+pnpm format:check
+pnpm lint
+pnpm typecheck
+node --no-warnings tool/cv-data.ts >/dev/null
+git diff --exit-code -- ../../crates/cv/assets/cv.json || { echo "crates/cv/assets/cv.json is stale: run mise run www:cv and commit it"; exit 1; }
+node --no-warnings tool/agent-knowledge.ts >/dev/null
+git diff --exit-code -- ../../configs/llm/agents/site.knowledge.json || { echo "configs/llm/agents/site.knowledge.json is stale: run mise run www:agent and commit it"; exit 1; }
+"""
+
+[tasks."www:agent"]
+description = "Write the site guide's knowledge (configs/llm/agents/site.knowledge.json, RFC 0011) from src/data/site.ts and the public lab documents: a brief for every turn and each page's text. Committed; ui:www:check fails when it is stale"
+depends = ["ui:www:install"]
+dir = "ui/www"
+run = "node --no-warnings tool/agent-knowledge.ts"
+
+# The site is published at the base domain of the public edge; a build for any
+# other host asks robots to stay away, so the canonical URL is a build argument.
+# The site's own domain (SITE_DOMAIN in the environment or devops/edge/.env), never
+# the platform's BASE_DOMAIN: the base domain redirects to the site, and a build that
+# named the base as canonical told search engines the site lived there. Unset, the
+# image's default (https://inorbit.hr) applies.
+[tasks."www:build-args"]
+hide = true
+run = """
+domain="${SITE_DOMAIN:-$(grep -s '^SITE_DOMAIN=' devops/edge/.env | cut -d= -f2- | tr -d '"')}"
+[ -n "$domain" ] && echo "--build-arg SITE_URL=https://$domain"
+"""
+
+[tasks."ui:www:build"]
+description = "Build the company site image (ghcr.io/0x19/tbd-www:dev)"
+run = "docker build -f devops/docker/Dockerfile.www $(mise run -q www:build-args) -t $IMAGE_REGISTRY/tbd-www:dev ."
 
 [tasks."ledger:secrets"]
 description = "Create the ledger-db Secret in tbd once (random passwords; never on disk). Pass URLs for managed databases: mise run ledger:secrets postgres://... http://user:pw@clickhouse:8123"
@@ -485,6 +794,69 @@ kubectl -n tbd create secret generic ledger-db \
   --from-literal=database-url="$pg_url" \
   --from-literal=clickhouse-url="$ch_url"
 echo "ledger-db created"
+"""
+
+[tasks."finance:secrets"]
+description = "Create the finance Secrets in tbd: finance-db (the app database URL, derived from ledger-db) and, given the key file, finance-bank (Enable Banking application id + RSA key). Never on disk in the repo."
+usage = '''
+arg "[application_id]" help="Enable Banking application id (the JWT kid)"
+arg "[private_key_path]" help="path to the application's PKCS#8 PEM, e.g. ~/.config/enablebanking/private.key"
+arg "[postgres_url]" help="external app database URL; default derives from the ledger-db Secret's password on the in-cluster Postgres, database tbd"
+'''
+run = """
+kubectl apply -f devops/k8s/base/namespace.yaml >/dev/null
+if kubectl -n tbd get secret finance-db >/dev/null 2>&1; then
+  echo "finance-db exists; leaving it"
+else
+  if [ -n "${usage_postgres_url:-}" ]; then
+    url="$usage_postgres_url"
+  else
+    pw=$(kubectl -n tbd get secret ledger-db -o jsonpath='{.data.postgres-password}' | base64 -d)
+    [ -n "$pw" ] || { echo "ledger-db Secret missing; run mise run ledger:secrets first" >&2; exit 1; }
+    url="postgres://ledger:$pw@ledger-postgres.tbd.svc:5432/tbd?sslmode=disable"
+  fi
+  kubectl -n tbd create secret generic finance-db --from-literal=database-url="$url"
+  echo "finance-db created"
+fi
+if [ -n "${usage_application_id:-}" ] && [ -n "${usage_private_key_path:-}" ]; then
+  if kubectl -n tbd get secret finance-bank >/dev/null 2>&1; then
+    echo "finance-bank exists; leaving it (delete it to rotate)"
+  else
+    grep -q "BEGIN PRIVATE KEY" "$usage_private_key_path" || { echo "$usage_private_key_path is not a PKCS#8 PEM (convert: openssl pkcs8 -topk8 -nocrypt)" >&2; exit 1; }
+    kubectl -n tbd create secret generic finance-bank \
+      --from-literal=application-id="$usage_application_id" \
+      --from-file=private-key="$usage_private_key_path"
+    echo "finance-bank created"
+  fi
+else
+  echo "no application id / key given; finance-bank not created (the sync worker stays off)"
+fi
+"""
+
+[tasks."finance:connector-secrets"]
+description = "Create or update the finance-connectors Secret in tbd: the sealing key for stored connector credentials (kept when the Secret exists, so nothing is unlinked), the Google OAuth client for Gmail, and the send-only client when given (docs/finance/gmail.md)."
+usage = '''
+arg "[google_client_id]" help="Google OAuth client id (Web application), redirect https://finance.<domain>/connectors/callback"
+arg "[google_client_secret]" help="its secret"
+arg "[google_send_client_id]" help="the send-only client's id (a published project asking for gmail.send alone); optional"
+arg "[google_send_client_secret]" help="its secret"
+'''
+run = """
+kubectl apply -f devops/k8s/base/namespace.yaml >/dev/null
+key=$(kubectl -n tbd get secret finance-connectors -o jsonpath='{.data.key}' 2>/dev/null | base64 -d)
+if [ -n "$key" ]; then
+  echo "finance-connectors exists; keeping its sealing key (every linked connector stays linked) and replacing the clients"
+else
+  key=$(openssl rand -base64 32)
+fi
+kubectl -n tbd create secret generic finance-connectors \
+  --from-literal=key="$key" \
+  --from-literal=google-client-id="${usage_google_client_id:-}" \
+  --from-literal=google-client-secret="${usage_google_client_secret:-}" \
+  --from-literal=google-send-client-id="${usage_google_send_client_id:-}" \
+  --from-literal=google-send-client-secret="${usage_google_send_client_secret:-}" \
+  --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+echo "finance-connectors written; roll the finance deployment to pick it up"
 """
 
 [tasks."ledger:deploy"]
@@ -626,10 +998,46 @@ kubectl -n auth logs job/seed-clients | tail -3
 description = "Browser check of sign-up + authorization code (PKCE) + token exchange against auth.<domain> (AUTH_URL overrides)"
 depends = ["ui:install"]
 dir = "ui/chaos"
+# The check registers a person and promotes them to admin, to prove the role
+# model works. It must not leave them behind: `role == admin` is what gates the
+# chaos admin UI, Grafana, the logs and the metrics UIs, so a forgotten fixture
+# is a real account with real access. Purge runs whether the check passed or
+# failed -- a failed run leaves the same account.
 run = """
 export AUTH_URL="${AUTH_URL:-$(grep -s '^AUTH_PUBLIC_URL=' ../../devops/k8s/auth/auth.env | cut -d= -f2-)}"
 pnpm exec playwright install chromium >/dev/null
-node e2e/auth.mjs
+status=0
+node e2e/auth.mjs || status=$?
+( cd ../.. && mise run auth:e2e:purge ) || echo "warning: could not purge e2e identities"
+exit $status
+"""
+
+[tasks."auth:e2e:purge"]
+description = "Delete the identities auth:e2e creates (e2e-*@example.com). Safe to run any time."
+# Uses Kratos' own CLI in its pod rather than curl against the admin API: the
+# identity document nests ids (recovery and verification addresses carry their
+# own), so shell-grepping it picks the wrong ones.
+run = """
+pod=$(kubectl -n auth get pods -l app.kubernetes.io/name=kratos -o name 2>/dev/null | head -1)
+pod=${pod:-$(kubectl -n auth get pods -o name | grep kratos | head -1)}
+pod=${pod#pod/}
+prefix="${E2E_PREFIX:-e2e-}"
+ids=$(kubectl -n auth exec "$pod" -c kratos -- kratos list identities --endpoint http://127.0.0.1:4434 --format json 2>/dev/null \
+  | python3 -c "
+import sys, json, os
+prefix = os.environ.get('PREFIX', 'e2e-')
+d = json.load(sys.stdin)
+for i in d.get('identities', []):
+    email = (i.get('traits') or {}).get('email') or ''
+    if email.startswith(prefix):
+        print(i['id'], email)
+" )
+if [ -z "$ids" ]; then echo "no identities with prefix '$prefix'"; exit 0; fi
+echo "$ids" | while read -r id email; do
+  kubectl -n auth exec "$pod" -c kratos -- kratos delete identity "$id" --endpoint http://127.0.0.1:4434 >/dev/null 2>&1 \
+    && echo "deleted $email ($id)" || echo "FAILED $email ($id)"
+done
+echo "$(echo "$ids" | wc -l) identities processed"
 """
 
 [tasks."auth:token"]
@@ -653,7 +1061,7 @@ mise run ledger:deploy
 kubectl apply -k devops/k8s/overlays/local
 kubectl -n observability rollout status statefulset/victoria-metrics statefulset/victoria-logs statefulset/tempo --timeout=180s
 kubectl -n observability rollout status statefulset/pyroscope deployment/otel-collector deployment/grafana --timeout=300s
-kubectl -n tbd rollout status deployment/engine deployment/protocol deployment/envoy deployment/chaos deployment/humans deployment/ledger --timeout=180s
+kubectl -n tbd rollout status deployment/engine deployment/protocol deployment/envoy deployment/chaos deployment/runner deployment/radar deployment/arena deployment/llm deployment/cv deployment/playground deployment/finance deployment/humans deployment/ledger --timeout=180s
 mise run local:urls
 """
 
@@ -664,9 +1072,190 @@ run = """
 mise run local:build
 kubectl apply -k devops/k8s/overlays/local
 kubectl -n tbd rollout status statefulset/ledger-postgres statefulset/clickhouse --timeout=180s
-kubectl -n tbd rollout restart deployment/engine deployment/protocol deployment/chaos deployment/ledger deployment/humans
-kubectl -n tbd rollout status deployment/engine deployment/protocol deployment/chaos deployment/humans deployment/ledger --timeout=180s
+mise run db:migrate
+kubectl -n tbd rollout restart deployment/engine deployment/protocol deployment/chaos deployment/ledger deployment/humans deployment/finance deployment/www deployment/playground deployment/cv deployment/finances-ui deployment/cv-ui deployment/llm deployment/arena deployment/radar deployment/runner
+kubectl -n tbd rollout status deployment/engine deployment/protocol deployment/chaos deployment/runner deployment/radar deployment/arena deployment/llm deployment/cv deployment/playground deployment/finance deployment/humans deployment/ledger deployment/www deployment/finances-ui deployment/cv-ui --timeout=180s
 """
+
+[tasks."cv:secrets"]
+description = "Create the cv Secrets in tbd: cv-db (the app database URL, derived from ledger-db like finance-db) and, given the file, cv-private (the full CV's phone, address and references as JSON; kept outside the repository, e.g. ~/Documents/cv/private.json). Run again with a file to replace the private fields."
+usage = '''
+arg "[private_json_path]" help="path to the JSON with the fields only the full CV carries: {phone, address, references: [{name, role, contact}]}"
+arg "[postgres_url]" help="external app database URL; default derives from the ledger-db Secret's password on the in-cluster Postgres, database tbd"
+'''
+run = """
+kubectl apply -f devops/k8s/base/namespace.yaml >/dev/null
+if kubectl -n tbd get secret cv-db >/dev/null 2>&1; then
+  echo "cv-db exists; leaving it"
+else
+  if [ -n "${usage_postgres_url:-}" ]; then
+    url="$usage_postgres_url"
+  else
+    pw=$(kubectl -n tbd get secret ledger-db -o jsonpath='{.data.postgres-password}' | base64 -d)
+    [ -n "$pw" ] || { echo "ledger-db Secret missing; run mise run ledger:secrets first" >&2; exit 1; }
+    url="postgres://ledger:$pw@ledger-postgres.tbd.svc:5432/tbd?sslmode=disable"
+  fi
+  kubectl -n tbd create secret generic cv-db --from-literal=database-url="$url"
+  echo "cv-db created"
+fi
+if [ -n "${usage_private_json_path:-}" ]; then
+  python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert isinstance(d, dict), "not an object"' "$usage_private_json_path" || { echo "$usage_private_json_path is not a JSON object" >&2; exit 1; }
+  kubectl -n tbd create secret generic cv-private --from-file=private.json="$usage_private_json_path" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+  echo "cv-private set from $usage_private_json_path; roll the cv deployment to pick it up"
+fi
+"""
+
+[tasks."llm:secrets"]
+description = "Create the llm Secret in tbd: llm-db (the app database URL, derived from ledger-db like cv-db). Without it the service runs, records nothing and enforces no budget."
+usage = '''
+arg "[postgres_url]" help="external app database URL; default derives from the ledger-db Secret's password on the in-cluster Postgres, database tbd"
+'''
+run = """
+kubectl apply -f devops/k8s/base/namespace.yaml >/dev/null
+if kubectl -n tbd get secret llm-db >/dev/null 2>&1; then
+  echo "llm-db exists; leaving it"
+else
+  if [ -n "${usage_postgres_url:-}" ]; then
+    url="$usage_postgres_url"
+  else
+    pw=$(kubectl -n tbd get secret ledger-db -o jsonpath='{.data.postgres-password}' | base64 -d)
+    [ -n "$pw" ] || { echo "ledger-db Secret missing; run mise run ledger:secrets first" >&2; exit 1; }
+    url="postgres://ledger:$pw@ledger-postgres.tbd.svc:5432/tbd?sslmode=disable"
+  fi
+  kubectl -n tbd create secret generic llm-db --from-literal=database-url="$url"
+  echo "llm-db created; roll the llm deployment to pick it up"
+fi
+"""
+
+[tasks."sandbox:install"]
+description = "Install gVisor (runsc, a pinned release, checksum verified) on the host and register it with Docker by reload, never restart: running containers stay up (docs/sandbox/README.md)"
+run = "devops/sandbox/install-gvisor.sh"
+
+[tasks."sandbox:images"]
+description = "Build the sandbox's two toolchain images locally (Go with its standard library pre-built, Rust); never pushed"
+run = """
+docker build -t tbd-sandbox-go:dev - < devops/docker/sandbox-go.Dockerfile
+docker build -t tbd-sandbox-rust:dev - < devops/docker/sandbox-rust.Dockerfile
+"""
+
+[tasks."sandbox:secrets"]
+description = "The token between the runner and sandboxd: a root-only systemd credential on the host and the runner-sandbox Secret in tbd, the same value. Kept if it exists; ROTATE=1 makes a new one"
+run = """
+set -euo pipefail
+cred=/etc/credstore/sandboxd.token
+if [ "${ROTATE:-0}" = 1 ] || ! sudo test -s "$cred"; then
+  sudo install -d -o root -g root -m 0700 /etc/credstore
+  openssl rand -hex 32 | sudo tee "$cred" >/dev/null
+  sudo chmod 0600 "$cred"
+  echo "new sandbox token written to the host credential store"
+fi
+kubectl apply -f devops/k8s/base/namespace.yaml >/dev/null
+sudo cat "$cred" | tr -d '\n' | kubectl -n tbd create secret generic runner-sandbox --from-file=token=/dev/stdin --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+echo "runner-sandbox Secret in tbd matches the host credential"
+"""
+
+[tasks."sandbox:deploy"]
+description = "Build sandboxd, install it with its config and the hardened systemd unit, and start it on this host (after sandbox:install, sandbox:images, sandbox:secrets)"
+run = """
+set -euo pipefail
+cargo build --release -p tbd-sandboxd
+sudo install -o root -g root -m 0755 target/release/sandboxd /usr/local/bin/sandboxd
+sudo install -d -o root -g root -m 0755 /etc/tbd/sandboxd
+sudo install -o root -g root -m 0644 configs/sandboxd/*.toml /etc/tbd/sandboxd/
+printf 'TBD_ENV=local\nSANDBOXD_CONFIG_DIR=/etc/tbd/sandboxd\nSANDBOXD_LISTEN_ADDR=0.0.0.0:7788\nRUST_LOG=info\nLOG_FORMAT=json\n' | sudo tee /etc/tbd/sandboxd.env >/dev/null
+sudo install -o root -g root -m 0644 devops/sandbox/sandboxd.service /etc/systemd/system/sandboxd.service
+sudo systemctl daemon-reload
+sudo systemctl enable sandboxd >/dev/null 2>&1
+sudo systemctl restart sandboxd
+for i in $(seq 1 30); do curl -fs http://127.0.0.1:7788/healthz >/dev/null && break; sleep 0.5; done
+curl -fs http://127.0.0.1:7788/healthz && echo " sandboxd up"
+"""
+
+[tasks."sandbox:test"]
+description = "Every sandbox test on this host, the escape suite included: real gVisor sandboxes (needs sandbox:install and sandbox:images)"
+run = "cargo nextest run -p tbd-sandboxd --run-ignored all --no-fail-fast --test-threads 1"
+
+[tasks."sandbox:escape"]
+description = "Only the escape suite, one line per hostile program (case, outcome, why it was stopped, milliseconds): study 0003's table"
+run = "cargo nextest run -p tbd-sandboxd --run-ignored only --no-capture --test-threads 1 -E 'test(/^escape::/)' 2>&1 | grep -E '^escape |Summary'"
+
+[tasks."radar:secrets"]
+description = "Create the radar Secrets in tbd: radar-db (the app database URL, derived from ledger-db like llm-db) and, given a token, radar-github (read-only, for GitHub's search API; without it the search runs unauthenticated). Run again with a token to replace it."
+usage = '''
+arg "[github_token]" help="a GitHub token with no scopes (public data only); optional"
+arg "[postgres_url]" help="external app database URL; default derives from the ledger-db Secret's password on the in-cluster Postgres, database tbd"
+'''
+run = """
+kubectl apply -f devops/k8s/base/namespace.yaml >/dev/null
+if kubectl -n tbd get secret radar-db >/dev/null 2>&1; then
+  echo "radar-db exists; leaving it"
+else
+  if [ -n "${usage_postgres_url:-}" ]; then
+    url="$usage_postgres_url"
+  else
+    pw=$(kubectl -n tbd get secret ledger-db -o jsonpath='{.data.postgres-password}' | base64 -d)
+    [ -n "$pw" ] || { echo "ledger-db Secret missing; run mise run ledger:secrets first" >&2; exit 1; }
+    url="postgres://ledger:$pw@ledger-postgres.tbd.svc:5432/tbd?sslmode=disable"
+  fi
+  kubectl -n tbd create secret generic radar-db --from-literal=database-url="$url"
+  echo "radar-db created"
+fi
+if [ -n "${usage_github_token:-}" ]; then
+  kubectl -n tbd delete secret radar-github --ignore-not-found >/dev/null
+  kubectl -n tbd create secret generic radar-github --from-literal=token="$usage_github_token"
+  echo "radar-github set"
+fi
+echo "roll the radar deployment to pick them up: kubectl -n tbd rollout restart deployment/radar"
+"""
+
+[tasks."radar:site"]
+description = "Put the Radar's published issues into the site's HTML: rebuild the www image from a git archive of HEAD (its build reads the published digests from the live radar API, tool/radar-data.ts) and roll it. Run after publishing an issue on the page."
+run = """
+set -e
+sha=$(git rev-parse --short HEAD)
+dir=$(mktemp -d)
+trap 'rm -rf "$dir"' EXIT
+git archive HEAD | tar -x -C "$dir"
+args=$(mise run -q www:build-args)
+docker build -f "$dir/devops/docker/Dockerfile.www" $args -t "$IMAGE_REGISTRY/tbd-www:dev" -t "$IMAGE_REGISTRY/tbd-www:$sha" "$dir"
+k3d image import -m direct -c "$K3D_CLUSTER" "$IMAGE_REGISTRY/tbd-www:dev"
+kubectl -n tbd rollout restart deployment/www
+kubectl -n tbd rollout status deployment/www --timeout=240s
+"""
+
+[tasks."cv:grant"]
+description = "Let the cv service send mail as the owner: grant its subject (svc:cv) read access to the owner's own parties, where the linked mailbox lives (the cv binary's grant one-shot over a port-forward, the URL from the cv-db Secret). One-time."
+usage = '''
+arg "<owner_subject>" help="the owner's subject, as GET /v1/me shows it"
+arg "[party]" help="one party id only, instead of every party the owner owns"
+'''
+run = '''
+set -e
+url=$(kubectl -n tbd get secret cv-db -o jsonpath='{.data.database-url}' | base64 -d | sed 's#@ledger-postgres[.]tbd[.]svc:5432#@127.0.0.1:15432#')
+[ -n "$url" ] || { echo "cv-db Secret missing; run mise run cv:secrets first" >&2; exit 1; }
+kubectl -n tbd port-forward svc/ledger-postgres 15432:5432 >/dev/null 2>&1 &
+pf=$!
+trap 'kill $pf 2>/dev/null' EXIT
+sleep 2
+CV_DATABASE_URL="$url" cargo run -q -p tbd-cv -- grant --owner-subject "$usage_owner_subject" ${usage_party:+--party "$usage_party"}
+'''
+
+[tasks."db:migrate"]
+description = "Apply the pending migrations under /migrations to the cluster's database (the tbd CLI through a port-forward, the URL from the finance-db secret); services do not migrate on start, so run this before rolling a build that adds a column"
+usage = 'flag "--status" help="report what is applied and what is pending, write nothing"'
+run = '''
+set -e
+url=$(kubectl -n tbd get secret finance-db -o jsonpath='{.data.database-url}' | base64 -d | sed 's#@ledger-postgres[.]tbd[.]svc:5432#@127.0.0.1:15432#')
+kubectl -n tbd port-forward svc/ledger-postgres 15432:5432 >/dev/null 2>&1 &
+pf=$!
+trap 'kill $pf 2>/dev/null' EXIT
+sleep 2
+if [ "${usage_status:-false}" = "true" ]; then
+  cargo run -q -p tbd-cli -- migrate --database-url "$url" --status
+else
+  cargo run -q -p tbd-cli -- migrate --database-url "$url"
+fi
+'''
 
 [tasks."local:urls"]
 run = """
@@ -674,6 +1263,7 @@ echo "edge (REST/WS/GraphQL/gRPC)  http://localhost:18080"
 echo "engine LB (gRPC)             http://localhost:15051"
 echo "chaos API                    http://localhost:18080/api/chaos/v1/overview"
 echo "chaos UI                     http://chaos.localhost:18080/   (browsers resolve *.localhost themselves)"
+echo "company site                 http://www.localhost:18080/     (the public edge serves it at the base domain itself)"
 echo "sign-in (Hydra/Kratos)       $(grep -s '^AUTH_PUBLIC_URL=' devops/k8s/auth/auth.env | cut -d= -f2-)/login   discovery: /.well-known/openid-configuration"
 echo "grafana (admin/admin)        http://localhost:3000"
 echo "victoria-metrics             http://localhost:9090"
@@ -709,7 +1299,7 @@ echo "loading for ${secs}s (8 workers) ..."; wait; echo "done"
 """
 
 [tasks."edge:up"]
-description = "Public TLS edge on the host: Caddy with Let's Encrypt for api/grafana/logs/profiles/metrics.<BASE_DOMAIN> (settings in devops/edge/.env)"
+description = "Public TLS edge on the host: Caddy with Let's Encrypt for api/grafana/logs/profiles/metrics.<BASE_DOMAIN> and the site on SITE_DOMAIN (settings in devops/edge/.env)"
 run = """
 docker compose -f devops/edge/compose.yaml up -d
 docker compose -f devops/edge/compose.yaml exec caddy caddy reload --config /etc/caddy/Caddyfile

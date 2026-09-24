@@ -1,0 +1,48 @@
+// The chrome: header, theme, sign-out. Keys are `nav.<slug>`.
+import type { Dict } from "./index";
+
+export const en: Dict = {
+  "nav.title": "The full CV",
+  "nav.admin": "Requests",
+  "nav.home": "Your access",
+  "nav.signed_in": "Signed in",
+  "nav.sign_out": "Sign out",
+  "nav.toggle_theme": "Toggle theme",
+  "nav.theme.light": "Light",
+  "nav.theme.dark": "Dark",
+  "nav.theme.system": "System",
+  "nav.site": "inorbit.hr",
+  "nav.play": "Play",
+  "nav.work": "Work",
+  "nav.about": "About",
+  "nav.contact": "Contact",
+  "nav.pages": "Pages",
+  "nav.elsewhere": "Elsewhere",
+  "nav.legal": "Legal",
+  "nav.terms": "Terms",
+  "nav.language": "Language",
+  "nav.tagline": "Backend and blockchain systems.",
+};
+
+export const hr: Dict = {
+  "nav.title": "Cijeli životopis",
+  "nav.admin": "Zahtjevi",
+  "nav.home": "Vaš pristup",
+  "nav.signed_in": "Prijavljeni",
+  "nav.sign_out": "Odjava",
+  "nav.toggle_theme": "Promijeni temu",
+  "nav.theme.light": "Svijetla",
+  "nav.theme.dark": "Tamna",
+  "nav.theme.system": "Sustav",
+  "nav.site": "inorbit.hr",
+  "nav.play": "Igra",
+  "nav.work": "Rad",
+  "nav.about": "O meni",
+  "nav.contact": "Kontakt",
+  "nav.pages": "Stranice",
+  "nav.elsewhere": "Drugdje",
+  "nav.legal": "Pravno",
+  "nav.terms": "Uvjeti",
+  "nav.language": "Jezik",
+  "nav.tagline": "Backend i blockchain sustavi.",
+};

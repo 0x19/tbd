@@ -3,6 +3,8 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+mod mcp;
+mod mux;
 mod support;
 mod transcode;
 
@@ -314,7 +316,7 @@ async fn me_reads_the_subject_envoy_forwarded() {
     assert_eq!(body["code"], "unauthenticated");
 
     let payload = base64::engine::general_purpose::URL_SAFE_NO_PAD
-        .encode(br#"{"sub":"person-42","aud":["tbd-api"],"scp":["tbd.api"]}"#);
+        .encode(br#"{"sub":"person-42","aud":["tbd-api"],"scp":["tbd.api"],"email":"p@example.com","name":"Person 42"}"#);
     let res = http
         .get(stack.url("/v1/me"))
         .header("x-jwt-payload", payload)
@@ -327,6 +329,8 @@ async fn me_reads_the_subject_envoy_forwarded() {
     assert_eq!(body["kind"], "person");
     assert_eq!(body["scopes"], json!(["tbd.api"]));
     assert!(body["client_id"].is_null());
+    assert_eq!(body["email"], "p@example.com");
+    assert_eq!(body["name"], "Person 42");
 }
 
 /// The caller kind follows the claims: a client-credentials token is a

@@ -1,0 +1,9 @@
+# Dart from /proto, into packages/tbd_proto/lib/gen. Run from the repository
+# root: buf generate --template mobile/buf.gen.yaml proto  (mise run mobile:gen).
+# Remote plugin: no protoc or protoc_plugin on the machine; the BSR runs it.
+version: v2
+plugins:
+  - remote: buf.build/protocolbuffers/dart
+    out: mobile/packages/tbd_proto/lib/gen
+    opt:
+      - grpc

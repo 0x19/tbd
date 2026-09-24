@@ -43,6 +43,7 @@ uuid.workspace = true
 [dev-dependencies]
 proptest.workspace = true
 testcontainers.workspace = true
+tbd-db = { workspace = true, features = ["testing"] }
 tokio = { workspace = true, features = ["test-util"] }
 
 [lints]

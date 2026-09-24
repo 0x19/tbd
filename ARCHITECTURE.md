@@ -13,7 +13,7 @@ never before.
                               ▲ scrape            ▲ OTLP              ▲ stdout JSON
                               │                   │                   │
  clients ──REST/SSE/GraphQL/WS/gRPC──▶  envoy :8080  ──▶  protocol  ──▶  envoy :50051  ──▶  engine
-                                        (edge)          (translate)     (engine LB)      (compute)
+ (browsers, programs, the phone)        (edge)          (translate)     (engine LB)      (compute)
                                         gRPC by service name goes straight to the engine
                                           │ verifies every token (JWKS)
                       ┌───────────────────┴──────────────────────────────────────────────┐
@@ -26,7 +26,9 @@ Three processes plus Envoy. Envoy is the only thing anything talks to: clients h
 edge, protocol instances reach engines through its engine load balancer. Envoy is also
 the only thing that authenticates: bearer JWTs from Hydra on the API, a browser login
 (OAuth2 filter) on the UI hosts, nothing behind it checks a token
-([docs/auth/README.md](docs/auth/README.md)). The protocol
+([docs/auth/README.md](docs/auth/README.md)). The phone app (`/mobile`) is a bearer
+client like any program: PKCE through the system browser, then `api.<domain>` with the
+token, REST and gRPC alike ([docs/mobile/README.md](docs/mobile/README.md)). The protocol
 owns every client-facing surface and no business logic. The engine owns compute and
 speaks only gRPC. Services share generated types (`tbd-proto`) and plumbing
 (`tbd-common`), nothing else. Every request is traced end to end and measured at every
@@ -39,11 +41,20 @@ hop; the same observability stack runs locally and in production.
 | `tbd-common` | telemetry (logs, OTLP traces, trace propagation, the shared gRPC span), Prometheus metrics with the shared metric names, shutdown, shared CLI flags, fault injection, the embedder `Runtime`, layered config | tokio, tracing, clap, opentelemetry, metrics, http (types) |
 | `tbd-proto` | code generated from `/proto` at build time via `protox` + `tonic-prost-build` | tonic, prost |
 | `tbd-engine` | `tbd.engine.v1.EngineService` implementation, health, reflection | common, proto |
+| `tbd-runner` | `tbd.runner.v1.RunnerService` implementation, health, reflection; scaffolded by `tbd new service`, a stub until its RPCs land | common, proto |
+| `tbd-radar` | `tbd.radar.v1.RadarService` implementation, health, reflection; scaffolded by `tbd new service`, a stub until its RPCs land | common, proto |
+| `tbd-arena` | `tbd.arena.v1.ArenaService` implementation, health, reflection; scaffolded by `tbd new service`, a stub until its RPCs land | common, proto |
+| `tbd-llm` | `tbd.llm.v1.LlmService` implementation, health, reflection: the L2 over the model engines. The engines (Ollama, llama.cpp, a test stub) are the L1, replaceable and named only in the service's engine table; the service owns the contract, the caller's budget, routing by tier, the record of every generation and its measurement (`docs/llm/README.md`) | common, db, proto |
+| `tbd-cv` | `tbd.cv.v1.CvService` implementation, health, reflection; scaffolded by `tbd new service`, a stub until its RPCs land | common, proto |
+| `tbd-playground` | `tbd.playground.v1.PlaygroundService` implementation, health, reflection; scaffolded by `tbd new service`, a stub until its RPCs land | common, proto |
+| `tbd-render` | Typst as an embedded PDF engine: a template compiled into the binary with the Inter fonts and the files it reads, inputs from JSON, pinned or unpinned PDF options; no filesystem, packages or network | typst, serde_json |
+| `tbd-finance` | `tbd.finance.v1.FinanceService` implementation, health, reflection; scaffolded by `tbd new service`, a stub until its RPCs land | common, proto, db, render |
 | `tbd-humans` | `tbd.humans.v1.HumansService` implementation, health, reflection; scaffolded by `tbd new service`, a stub until its RPCs land | common, proto |
 | `tbd-ledger` | the facts ledger: `store::Store` (Postgres via sqlx, or in memory), outbox drained into ClickHouse, erasure sweeper, and the thin `tbd.ledger.v1.LedgerService` over it; readiness follows the store | common, proto |
 | `tbd-protocol` | axum router: REST, SSE, WebSocket bridge, GraphQL, protocol gRPC; a registry of traced, measured gRPC backends from `[services]` in `configs/protocol`; the descriptor-driven transcoder that serves every `google.api.http`-annotated RPC over REST or SSE | common, proto |
 | `tbd-cli` | the `tbd` binary: scaffolds services from embedded templates and registers them in every shared file; owns no runtime code | clap, toml |
 | `tbd-stress` | stress campaigns against the ledger: closed-loop workers with a client-side model per subject, the contract as invariant checkers, findings with the trace that led there; the load metrics type chaos reports | proto, tonic |
+| `/mobile` (Dart) | the Flutter workspace: `tbd_core` (Env, Result, errors, trace ids), `tbd_api` (the client for the edge), `tbd_auth` (PKCE, secure store, session), `tbd_proto` (buf-generated from `/proto`), `tbd_ui` (the web kit's tokens, generated), `apps/tbd` | the edge only, over HTTPS and gRPC; never a service directly |
 | `tbd-chaos` | `chaos` binary: runs the services in-process, validates, loads, injects faults, runs stress campaigns around its stack and timeline; `chaos serve` exposes all of it as an HTTP API and serves the admin UI from `ui/chaos` | everything above |
 
 Each service crate is `lib.rs` + thin `main.rs`. `serve_on(listener, config, shutdown)`
@@ -58,6 +69,7 @@ Protocol surfaces map onto engine RPCs:
 | `GET /v1/subjects/{id}/events` (SSE) | `Subscribe` (server stream) |
 | `GET /v1/engine/subjects/{id}/events` (SSE), `/v1/ledger/...` (REST) | transcoded from the `google.api.http` options in the protos: any registered backend's annotated RPCs (`docs/protocol/README.md`) |
 | `/ws` | `Session` (bidirectional stream) |
+| `/v1/ws` | every public RPC multiplexed over one socket, by name: unary and server streams, calls told apart by the client's `id` |
 | `GET /readyz`, GraphQL `engineReady` | `grpc.health.v1.Health/Check` on every registered backend (`/readyz` reports each; the `required` ones gate it) |
 
 Envoy routes, from `devops/envoy/envoy.yaml`:
@@ -66,6 +78,13 @@ Envoy routes, from `devops/envoy/envoy.yaml`:
 |---|---|---|
 | `/healthz`, `/readyz` (no token needed; everything else below needs a bearer JWT) | protocol | 5 s |
 | gRPC `/tbd.engine.v1.EngineService/*` | engine | none, retries on connect failure and `UNAVAILABLE` |
+| internal LB (50051) gRPC `/tbd.runner.v1.RunnerService/*` | runner | none, retries on connect failure and `UNAVAILABLE` |
+| internal LB (50051) gRPC `/tbd.radar.v1.RadarService/*` | radar | none, retries on connect failure and `UNAVAILABLE` |
+| internal LB (50051) gRPC `/tbd.arena.v1.ArenaService/*` | arena | none, retries on connect failure and `UNAVAILABLE` |
+| internal LB (50051) gRPC `/tbd.llm.v1.LlmService/*` | llm | none, retries on connect failure and `UNAVAILABLE` |
+| internal LB (50051) gRPC `/tbd.cv.v1.CvService/*` | cv | none, retries on connect failure and `UNAVAILABLE` |
+| internal LB (50051) gRPC `/tbd.playground.v1.PlaygroundService/*` | playground | none, retries on connect failure and `UNAVAILABLE` |
+| internal LB (50051) gRPC `/tbd.finance.v1.FinanceService/*` | finance | none, retries on connect failure and `UNAVAILABLE` |
 | internal LB (50051) gRPC `/tbd.humans.v1.HumansService/*` | humans | none, retries on connect failure and `UNAVAILABLE` |
 | internal LB (50051) gRPC `/tbd.ledger.v1.LedgerService/*` | ledger | none, retries on connect failure and `UNAVAILABLE` |
 | internal LB (50051) gRPC `/grpc.health.v1.Health/*` with `x-tbd-backend: <name>` | that service (the protocol's backend probes; the health path is shared) | none |
@@ -75,7 +94,7 @@ Envoy routes, from `devops/envoy/envoy.yaml`:
 | everything else | protocol | 15 s, retries only when the request was never sent |
 | engine LB (50051), all gRPC | engine | none |
 | host `auth.*` | hydra / kratos / login pages, open | 15 s |
-| hosts `grafana.*`, `logs.*`, `profiles.*`, `metrics.*`, `chaosadmin.*` | the UI, after the browser login | none |
+| hosts `grafana.*`, `logs.*`, `profiles.*`, `metrics.*`, `chaosadmin.*`, `finance.*`, `cv.*` | the UI, after the browser login (`cv.*`: any role; the cv service decides the rest) | none |
 
 ## Invariants
 

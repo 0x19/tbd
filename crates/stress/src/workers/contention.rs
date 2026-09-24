@@ -181,6 +181,10 @@ impl Contention {
         let mut cursor_from = None;
         let binding = self.binding();
         for _ in 0..MAX_PAGES {
+            // A cancelled run must not wait out a long walk.
+            if self.ctx.cancel.is_cancelled() {
+                return None;
+            }
             let request = if current {
                 Request::Current {
                     subject: Self::subject_ref(si),

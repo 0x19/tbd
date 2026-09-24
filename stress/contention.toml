@@ -1,0 +1,38 @@
+# What sharing costs: thirty-two contention workers over a pool of subjects that
+# shrinks from sixty-four to one, three measurements each. Fewer subjects means
+# more writers per subject; the p99 and the error rate say how the ledger takes
+# it, and `acked_visible` and `current_consistent` say whether it stayed correct
+# while it did. Around two minutes; not in CI.
+
+[campaign]
+name = "contention"
+description = "Latency and correctness against the number of subjects thirty-two writers share."
+skip = true
+warmup = "500ms"
+seed = 12
+
+[stack.ledgers.ledger-1]
+grace = "0s"
+
+[workload]
+max_in_flight = 256
+
+[workload.owner]
+workers = 0
+
+[workload.contention]
+workers = 32
+[workload.contention.mix]
+append = 5
+current = 2
+history = 2
+retract = 1
+
+[sweep]
+parameter = "contention.subjects"
+values = [64, 16, 4, 2, 1]
+repeat = 3
+point_duration = "4s"
+
+[sweep.knee]
+factor = 3.0

@@ -72,7 +72,40 @@ the logic belongs in the service. The contract is `docs/protocol/README.md`.
   health included; a non-JSON body is `unsupported_media_type`, a body that does not
   parse is `bad_request` with a `field` detail named `body`.
 - `ws.rs`: bridges a WebSocket to an engine `Session` stream, one session per socket,
-  JSON envelope `{type: data|heartbeat|close|error, ...}` outbound.
+  JSON envelope `{type: data|heartbeat|close|error, ...}` outbound. Frozen: chaos's
+  `ws_echo` check reads it, and its `error` frame keeps `message` where the rest of the
+  gateway says `error`.
+- `mux.rs`: the multiplexed socket at `/v1/ws`. The same public RPCs as REST, addressed
+  by name (`transcoder.rpcs()`), many calls per connection told apart by the client's
+  `id`. One task per call, one loop per connection: the loop owns the socket and the
+  table of calls in flight, so the terminal frame is sent exactly once (the task reports
+  it, or the loop cancelled it), and one bounded channel carries frames from tasks to
+  the loop, which is the backpressure. Limits come from `[socket]`
+  (`max_calls`, `max_frame_bytes`). Each call is a `RequestTimer` with transport `ws`
+  and the RPC name as its route; the connection is a `StreamGuard` of kind `mux`.
+- `invoke.rs`: one RPC by name with a JSON body, as the caller (`request` builds the
+  message strictly, `invoke` calls unary or streaming over `backend.transport()` with
+  the forwarded `x-jwt-payload`). `mux.rs` and `mcp.rs` both call it; the REST path
+  binds path and query first and stays in `transcode/call.rs`.
+- `mcp.rs`: `/mcp`, the RPCs in `transcoder.rpcs()` that `[mcp] tools` allowlists as
+  MCP tools, default deny (`DEFAULT_MCP_TOOLS` equals `base.toml`; a unit test holds
+  both to the registry). Never allowlist anything that writes, deletes, sends, moves
+  money, reads personal data, injects a fault or streams without end. Each call logs
+  one `audit`-target line (tool, subject, status, time; never content). rmcp, streamable
+  HTTP, stateless, `NeverSessionManager`, JSON responses, `Host` check off: the API host
+  takes bearer tokens only). Tool name `<backend>_<method_snake>`, description from the
+  proto comment (`transcode/schema.rs::method_comment`; the descriptor set carries
+  source info for this), input schema from `transcode/schema.rs`. The caller is the
+  `Principal` in the request extensions (rmcp hands the HTTP parts to the handler); no
+  principal is a protocol error. Streams are collected under `[mcp]` caps and
+  summarised (`text` joined, `reasoning` apart, `last` kept). Each call is a
+  `RequestTimer` with transport `mcp`. `[mcp] enabled = false` removes the route.
+  `origin_guard` (a layer on the `/mcp` router) refuses 403 any request whose `Origin`
+  is not in `[mcp] allowed_origins`: the site's workbench calls it with a cookie, and
+  cookies ride along cross-site; agents send no `Origin`.
+- `transcode/schema.rs`: inline JSON Schema per message with the `OpenAPI` spellings,
+  well-known types in their JSON forms, recursion cut at the second visit; tests hold it
+  to every request message's fields.
 - `grpc.rs`: the protocol's own gRPC (`ProtocolService/Ping`), health and reflection,
   mounted into the axum router via `Routes::into_axum_router`. Health also reports
   every registered backend under its `service` name (`ENGINE_SERVICE` is the engine's),

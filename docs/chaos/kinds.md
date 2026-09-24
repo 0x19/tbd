@@ -9,9 +9,16 @@ declared and what derives from it: [extending.md](extending.md#add-a-service-kin
 | Kind | Table | Surface | Fault injection | Store faults | Counters | Load target | Addable | Validate target (default, env) | Fields |
 |---|---|---|---|---|---|---|---|---|---|
 | `engine` | `[stack.engines.<name>]` | grpc | yes | no | yes | no | yes | `http://127.0.0.1:50051`, `CHAOS_ENGINE_URL` | `heartbeat` (duration, default `1s`) |
-| `protocol` | `[stack.protocols.<name>]` | http/ws/graphql/grpc | no | no | no | yes | yes | `http://127.0.0.1:8080`, `CHAOS_PROTOCOL_URL` | `engine` (a running engine, required) |
+| `protocol` | `[stack.protocols.<name>]` | http/ws/graphql/grpc | no | no | no | yes | yes | `http://127.0.0.1:8080`, `CHAOS_PROTOCOL_URL` | `engine` (a running engine, required); `engine_url` (text) |
 | `ledger` | `[stack.ledgers.<name>]` | grpc | yes | yes | yes | yes | yes | `http://127.0.0.1:50052`, `CHAOS_LEDGER_URL` | `grace` (duration, default `7d`); `database_url` (text) |
 | `humans` | `[stack.humans.<name>]` | grpc | yes | no | yes | no | yes | `http://127.0.0.1:50053`, `CHAOS_HUMANS_URL` | none |
+| `finance` | `[stack.finances.<name>]` | grpc | yes | no | yes | yes | yes | `http://127.0.0.1:50054`, `CHAOS_FINANCE_URL` | `database_url` (text); `seed` (text) |
+| `playground` | `[stack.playgrounds.<name>]` | grpc | yes | no | yes | no | yes | `http://127.0.0.1:50055`, `CHAOS_PLAYGROUND_URL` | none |
+| `cv` | `[stack.cvs.<name>]` | grpc | yes | no | yes | no | yes | `http://127.0.0.1:50056`, `CHAOS_CV_URL` | none |
+| `llm` | `[stack.llms.<name>]` | grpc | yes | no | yes | yes | yes | `http://127.0.0.1:50057`, `CHAOS_LLM_URL` | none |
+| `arena` | `[stack.arenas.<name>]` | grpc | yes | no | yes | no | yes | `http://127.0.0.1:50058`, `CHAOS_ARENA_URL` | none |
+| `radar` | `[stack.radars.<name>]` | grpc | yes | no | yes | no | yes | `http://127.0.0.1:50059`, `CHAOS_RADAR_URL` | none |
+| `runner` | `[stack.runners.<name>]` | grpc | yes | no | yes | no | yes | `http://127.0.0.1:50060`, `CHAOS_RUNNER_URL` | none |
 
 | Check | Surface | Kind | Passes when |
 |---|---|---|---|
@@ -24,8 +31,23 @@ declared and what derives from it: [extending.md](extending.md#add-a-service-kin
 | `sse_events` | sse | `protocol` | `GET /v1/subjects/{id}/events` delivers two events |
 | `graphql_evaluate` | graphql | `protocol` | `version`, `engineReady` and `evaluate` resolve without errors |
 | `ws_echo` | ws | `protocol` | `/ws` echoes a text frame as a `data` message |
+| `ws_mux` | ws | `protocol` | `/v1/ws` calls a public RPC by name and ends it on cancel |
+| `http_mcp_tools` | http | `protocol` | `POST /mcp` `tools/list` answers; every tool has an object input schema and none is an operation that writes, deletes, sends or injects a fault (the allowlist holds) |
 | `grpc_protocol_health` | grpc | `protocol` | the overall health check answers |
 | `grpc_protocol_ping` | grpc | `protocol` | `Ping` echoes the message |
 | `grpc_ledger_ping` | grpc | `ledger` | `Ping` echoes the message and names the store behind it |
 | `grpc_ledger_facts` | grpc | `ledger` | append, current, history, retract, a history cut without the value, erase, restore, on a throwaway subject |
 | `grpc_humans_ping` | grpc | `humans` | `Ping` echoes the message and is labelled a stub |
+| `grpc_finance_ping` | grpc | `finance` | `Ping` echoes the message and is labelled a stub |
+| `grpc_finance_books_balanced` | grpc | `finance` | every company in the caller's grant has a balanced `TrialBalance` for the current year (rows adding up to the totals); an instance with no database, or a call with no verified caller, says so in the detail and passes |
+| `grpc_playground_ping` | grpc | `playground` | `Ping` echoes the message and is labelled a stub |
+| `grpc_cv_ping` | grpc | `cv` | `Ping` echoes the message and is labelled a stub |
+| `grpc_cv_access_unauthenticated` | grpc | `cv` | `GetAccess` without a verified caller is UNAUTHENTICATED: identity comes from Envoy or not at all |
+| `grpc_llm_ping` | grpc | `llm` | `Ping` echoes the message and is labelled a stub |
+| `grpc_llm_models_lists_both_tiers` | grpc | `llm` | `ListModels` names the fast and the deep tier, each with its engine and model, and says whether the engine is up (a down engine is reported, not failed) |
+| `grpc_llm_generate_unauthenticated` | grpc | `llm` | `Generate` without a verified caller is UNAUTHENTICATED: a caller is whoever Envoy verified, never a claim in the request |
+| `grpc_arena_ping` | grpc | `arena` | `Ping` echoes the message and is labelled a stub |
+| `grpc_arena_snapshot_unauthenticated` | grpc | `arena` | `GetSnapshot` without a verified caller is UNAUTHENTICATED while the arena requires a role: the live view is not open until the lab is |
+| `grpc_radar_ping` | grpc | `radar` | `Ping` echoes the message and is labelled a stub |
+| `grpc_runner_ping` | grpc | `runner` | `Ping` echoes the message and is labelled a stub |
+| `grpc_runner_unauthenticated` | grpc | `runner` | `Run` without a verified caller is UNAUTHENTICATED before anything runs: code runs only for someone the gateway verified |

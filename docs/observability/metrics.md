@@ -12,10 +12,31 @@ backend is visible instead of clipped.
 
 | Metric | Type | Labels | Recorded when |
 |---|---|---|---|
-| `tbd_requests_total` | counter | `transport` (`http`, `grpc`), `route`, `status` | a request finishes; `status` is `ok`, an HTTP code, or a gRPC code name |
+| `tbd_requests_total` | counter | `transport` (`http`, `grpc`, `ws`), `route`, `status` | a request finishes; `status` is `ok`, an HTTP code, or a gRPC code name |
 | `tbd_request_duration_seconds` | histogram | `transport`, `route` | same moment; for streams this is time to first response |
 | `tbd_requests_in_flight` | gauge | `transport` | incremented on admission, decremented on completion, including early returns |
-| `tbd_streams_active` | gauge | `kind` (`subscribe`, `session`, `ws`, `sse`) | a stream opens or closes |
+| `tbd_streams_active` | gauge | `kind` (`subscribe`, `session`, `ws`, `sse`, `mux`) | a stream opens or closes |
+| `tbd_cv_notifications_total` | counter | `kind` (`owner`, `requester`), `outcome` (`sent`, `refused`, `failed`, `no_mailbox`, `unreachable`) | the cv service tried to send a mail through the finance service's linked mailbox |
+| `tbd_llm_tokens_total` | counter | `tier` (`fast`, `deep`), `engine` (`ollama`, `llamacpp`, `stub`), `model`, `kind` (`prompt`, `completion`) | a generation's done chunk arrived with the engine's token counts |
+| `tbd_llm_time_to_first_token_seconds` | histogram | `tier`, `engine` | a generation's first text chunk arrived; measured from admission |
+| `tbd_llm_in_flight` | gauge | `tier` | requests running on the tier now (admission's slots taken) |
+| `tbd_llm_queued` | gauge | `tier` | requests waiting for a slot on the tier now |
+| `tbd_llm_queue_wait_seconds` | histogram | `tier` | an admitted request got its slot; how long it waited in line |
+| `tbd_llm_refused_total` | counter | `tier`, `reason` (`queue_full`, `queue_timeout`) | admission refused a request with `RESOURCE_EXHAUSTED` |
+| `tbd_runner_runs_total` | counter | `language`, `outcome` (the sandbox's, or `unavailable`) | a run went through the runner service to the sandbox |
+| `tbd_runner_duration_seconds` | histogram | `language` | a run through the runner ended, container start to removal included |
+| `tbd_runner_in_flight` | gauge | | runs the runner has in flight now |
+| `tbd_sandbox_runs_total` | counter | `language` (`go`, `rust`), `outcome` (`ok`, `exit`, `compile_error`, `killed`) | the sandbox daemon on the host finished a run (docs/sandbox/README.md) |
+| `tbd_sandbox_duration_seconds` | histogram | `language`, `step` (`compile`, `run`) | a sandbox step ended, by itself or stopped from outside |
+| `tbd_sandbox_in_flight` | gauge | | sandbox runs in progress on the host |
+| `tbd_arena_viewers` | gauge | | streams of the arena's snapshot (`ArenaService/Watch`) open now |
+| `tbd_arena_source_ok` | gauge | `source` (`llm`, `metrics`, `chaos`) | the arena's last read of that source: 1 when it succeeded, else 0 |
+| `tbd_arena_source_age_seconds` | gauge | `source` | seconds since the arena last read that source successfully; absent until the first success |
+| `tbd_radar_fetches_total` | counter | `source` (the configured name), `outcome` (`ok`, `failed`) | the radar read one of its sources, on the timer or through `Refresh` |
+| `tbd_radar_items_new_total` | counter | `source` | items the radar saw for the first time in that read |
+| `tbd_radar_digests_total` | counter | `language` (`go`, `rust`), `lang` (`en`, `hr`), `outcome` (`written`, `no_items`, `failed`) | the radar tried to write a week's digest, on the schedule or through `RunDigest` |
+| `tbd_radar_backfill_total` | counter | `language`, `lang`, `outcome` (`written`, `thin`, `exists`, `failed`) | the radar's backfill decided a past week's digest: written, a week with too few items, already written, or failed after its retries |
+| `tbd_llm_engine_up` | gauge | `tier`, `engine` | the llm service's probe of a tier's engine (every `[engines] probe_interval`): 1 while it answers, else 0; never drives the service's own health |
 | `tbd_stream_items_total` | counter | `kind`, `direction` (`in`, `out`) | an item crosses a stream |
 | `tbd_engine_client_requests_total` | counter | `backend` (`engine`, `ledger`, …: the protocol's `[services]` name), `route`, `status` | the protocol finishes a call to a backend, measured on the client side |
 | `tbd_engine_client_duration_seconds` | histogram | `backend`, `route` | same moment |

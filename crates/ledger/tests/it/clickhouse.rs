@@ -3,8 +3,10 @@
 //! what the store produced.
 //!
 //! The server comes from `LEDGER_TEST_CLICKHOUSE_URL` (CI's services block)
-//! or a container this test starts through Docker. With neither the test
-//! fails and says so.
+//! or the one reusable container, `tbd-test-clickhouse`, started by whichever
+//! test gets there first and never removed by a test (see `tbd_db::testing`
+//! for why; `mise run test:db:reset` removes it). With neither the test fails
+//! and says so.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
@@ -17,43 +19,62 @@ use tbd_ledger::{
     store::{Envelope, EventKind, NewFact, OutboxEvent, ScopeId, Source, Store},
 };
 use testcontainers::{
-    ContainerAsync, GenericImage, ImageExt,
+    GenericImage, ImageExt, ReuseDirective,
     core::{IntoContainerPort, WaitFor},
     runners::AsyncRunner,
 };
 
 const IMAGE: (&str, &str) = ("clickhouse/clickhouse-server", "26.8.2.7");
+const CONTAINER: &str = "tbd-test-clickhouse";
 
 struct ChTest {
     publisher: ClickHousePublisher,
-    _container: Option<ContainerAsync<GenericImage>>,
 }
 
 async fn server() -> ChTest {
-    let (url, container) = if let Ok(url) = std::env::var("LEDGER_TEST_CLICKHOUSE_URL")
+    let url = if let Ok(url) = std::env::var("LEDGER_TEST_CLICKHOUSE_URL")
         && !url.trim().is_empty()
     {
-        (url, None)
+        url
     } else {
-        let container = GenericImage::new(IMAGE.0, IMAGE.1)
-            .with_exposed_port(8123.tcp())
-            // ClickHouse logs to files inside the container, not to its
-            // streams, so readiness is the schema call below succeeding.
-            .with_wait_for(WaitFor::Nothing)
-            .with_env_var("CLICKHOUSE_USER", "test")
-            .with_env_var("CLICKHOUSE_PASSWORD", "test")
-            .with_env_var("CLICKHOUSE_DB", "ledger")
-            .start()
-            .await
-            .unwrap_or_else(|e| {
-                panic!(
-                    "the ClickHouse sink tests need Docker (to start {}:{}) or LEDGER_TEST_CLICKHOUSE_URL: {e}",
-                    IMAGE.0, IMAGE.1
-                )
-            });
-        let port = container.get_host_port_ipv4(8123).await.unwrap();
-        let host = container.get_host().await.unwrap();
-        (format!("http://test:test@{host}:{port}"), Some(container))
+        let mut url = None;
+        let mut last = None;
+        // Two processes can race to create the one container; the loser sees
+        // a name conflict and finds the winner's on the next try.
+        for attempt in 0..6u32 {
+            match GenericImage::new(IMAGE.0, IMAGE.1)
+                .with_exposed_port(8123.tcp())
+                // ClickHouse logs to files inside the container, not to its
+                // streams, so readiness is the schema call below succeeding.
+                .with_wait_for(WaitFor::Nothing)
+                .with_env_var("CLICKHOUSE_USER", "test")
+                .with_env_var("CLICKHOUSE_PASSWORD", "test")
+                .with_env_var("CLICKHOUSE_DB", "ledger")
+                .with_container_name(CONTAINER)
+                .with_reuse(ReuseDirective::Always)
+                .start()
+                .await
+            {
+                Ok(container) => {
+                    let port = container.get_host_port_ipv4(8123).await.unwrap();
+                    let host = container.get_host().await.unwrap();
+                    url = Some(format!("http://test:test@{host}:{port}"));
+                    break;
+                }
+                Err(e) => {
+                    last = Some(e);
+                    tokio::time::sleep(Duration::from_millis(300 * u64::from(attempt + 1))).await;
+                }
+            }
+        }
+        url.unwrap_or_else(|| {
+            panic!(
+                "the ClickHouse sink tests need Docker (to run {}:{} as `{CONTAINER}`) or LEDGER_TEST_CLICKHOUSE_URL: {}",
+                IMAGE.0,
+                IMAGE.1,
+                last.unwrap()
+            )
+        })
     };
     let publisher = ClickHousePublisher::new(&url).unwrap();
     let deadline = tokio::time::Instant::now() + Duration::from_secs(90);
@@ -67,10 +88,7 @@ async fn server() -> ChTest {
             Err(e) => panic!("clickhouse schema: {e}"),
         }
     }
-    ChTest {
-        publisher,
-        _container: container,
-    }
+    ChTest { publisher }
 }
 
 fn fact(path: &str) -> NewFact {

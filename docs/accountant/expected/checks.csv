@@ -1,0 +1,12 @@
+check,rule,tolerance
+assets_equal_liabilities,bil:065 == bil:126,0.14
+result_bil_equals_rdg,bil:088 == rdg:187,0.00
+equity_sum,bil:067 == bil:068 + bil:084 + bil:087,0.00
+pd_revenue,pd:1 == rdg:180,0.00
+pd_expenses,pd:2 == rdg:181,0.00
+rdg_tax,rdg:185 == pd:55,0.00
+dop_residence,dop:254 + dop:255 == rdg:129 + rdg:130,0.14
+dop_activity,dop:243+244+247+249+250+251+252+253 == rdg:129 + rdg:130,0.14
+dop_loans_bounded,dop:231 + dop:232 + dop:233 <= bil:023+026+028+030+056+059+061+062,0.00
+tb_balanced,sum(total_debit) == sum(total_credit),0.00
+retained_rollforward,bil:085 == prior bil:085 + prior bil:088 - distributions,0.00

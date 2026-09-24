@@ -11,13 +11,15 @@ use metrics_exporter_prometheus::{Matcher, PrometheusBuilder};
 
 /// Metric names. Shared so dashboards and alerts can rely on them.
 pub mod names {
-    /// Counter: requests handled. Labels `transport`, `route`, `status`.
+    /// Counter: requests handled. Labels `transport` (`http`, `grpc`, `ws`:
+    /// one call on the multiplexed socket), `route`, `status`.
     pub const REQUESTS_TOTAL: &str = "tbd_requests_total";
     /// Histogram (seconds): time to answer, or to first response on streams. Labels `transport`, `route`.
     pub const REQUEST_DURATION: &str = "tbd_request_duration_seconds";
     /// Gauge: requests currently being handled. Label `transport`.
     pub const REQUESTS_IN_FLIGHT: &str = "tbd_requests_in_flight";
-    /// Gauge: open streams. Label `kind` (`subscribe`, `session`, `ws`, `sse`).
+    /// Gauge: open streams. Label `kind` (`subscribe`, `session`, `ws`, `sse`,
+    /// `mux`: one multiplexed socket, whatever it carries).
     pub const STREAMS_ACTIVE: &str = "tbd_streams_active";
     /// Counter: items on streams. Labels `kind`, `direction` (`in`, `out`).
     pub const STREAM_ITEMS_TOTAL: &str = "tbd_stream_items_total";
@@ -67,6 +69,61 @@ pub mod names {
     pub const LEDGER_ERASURE_TOMBSTONES_TOTAL: &str = "tbd_ledger_erasure_tombstones_total";
     /// Gauge of erasures waiting, by `state` (`pending`, `due`).
     pub const LEDGER_ERASURES_PENDING: &str = "tbd_ledger_erasures_pending";
+    /// Counter of mails the cv service tried to send through finance, by `kind`
+    /// (`owner`, `requester`) and `outcome` (`sent`, `refused`, `failed`,
+    /// `no_mailbox`, `unreachable`).
+    pub const CV_NOTIFICATIONS_TOTAL: &str = "tbd_cv_notifications_total";
+    /// Counter: tokens the llm service's engines reported. Labels `tier`, `engine`,
+    /// `model`, `kind` (`prompt`, `completion`).
+    pub const LLM_TOKENS_TOTAL: &str = "tbd_llm_tokens_total";
+    /// Histogram: seconds from admitting a generation to its first text chunk.
+    /// Labels `tier`, `engine`.
+    pub const LLM_TIME_TO_FIRST_TOKEN: &str = "tbd_llm_time_to_first_token_seconds";
+    /// Gauge: 1 while the tier's engine answered its last probe, else 0. Labels
+    /// `tier`, `engine`.
+    pub const LLM_ENGINE_UP: &str = "tbd_llm_engine_up";
+    /// Gauge: requests running on the tier now. Label `tier`.
+    pub const LLM_IN_FLIGHT: &str = "tbd_llm_in_flight";
+    /// Gauge: requests waiting for a slot on the tier now. Label `tier`.
+    pub const LLM_QUEUED: &str = "tbd_llm_queued";
+    /// Histogram: seconds an admitted request waited for its slot. Label `tier`.
+    pub const LLM_QUEUE_WAIT: &str = "tbd_llm_queue_wait_seconds";
+    /// Counter: requests refused by admission. Labels `tier`, `reason`
+    /// (`queue_full`, `queue_timeout`).
+    pub const LLM_REFUSED_TOTAL: &str = "tbd_llm_refused_total";
+    /// Gauge: streams of the arena's snapshot open now.
+    pub const ARENA_VIEWERS: &str = "tbd_arena_viewers";
+    /// Gauge: 1 while the arena's last read of a source succeeded. Label `source`
+    /// (`llm`, `metrics`, `chaos`).
+    pub const ARENA_SOURCE_OK: &str = "tbd_arena_source_ok";
+    /// Gauge: seconds since the arena last read a source successfully. Label `source`.
+    pub const ARENA_SOURCE_AGE: &str = "tbd_arena_source_age_seconds";
+    /// Counter: sandbox runs, by `language` (`go`, `rust`) and `outcome` (`ok`,
+    /// `exit`, `compile_error`, `killed`).
+    pub const SANDBOX_RUNS_TOTAL: &str = "tbd_sandbox_runs_total";
+    /// Histogram: seconds a sandbox step took, by `language` and `step`
+    /// (`compile`, `run`).
+    pub const SANDBOX_DURATION: &str = "tbd_sandbox_duration_seconds";
+    /// Gauge: sandbox runs in progress on the machine.
+    pub const SANDBOX_IN_FLIGHT: &str = "tbd_sandbox_in_flight";
+    /// Counter: runs through the runner service, by `language` and `outcome`
+    /// (the sandbox's, or `unavailable`).
+    pub const RUNNER_RUNS_TOTAL: &str = "tbd_runner_runs_total";
+    /// Histogram: seconds a run took through the runner, by `language`.
+    pub const RUNNER_DURATION: &str = "tbd_runner_duration_seconds";
+    /// Gauge: runs the runner has in flight now.
+    pub const RUNNER_IN_FLIGHT: &str = "tbd_runner_in_flight";
+    /// Counter: the radar read a source. Labels `source` (the configured name),
+    /// `outcome` (`ok`, `failed`).
+    pub const RADAR_FETCHES_TOTAL: &str = "tbd_radar_fetches_total";
+    /// Counter: items the radar saw for the first time. Label `source`.
+    pub const RADAR_ITEMS_NEW_TOTAL: &str = "tbd_radar_items_new_total";
+    /// Counter: the radar tried to write a digest. Labels `language` (`go`,
+    /// `rust`), `lang` (`en`, `hr`), `outcome` (`written`, `no_items`, `failed`).
+    pub const RADAR_DIGESTS_TOTAL: &str = "tbd_radar_digests_total";
+    /// Counter: the radar's backfill decided a week's digest. Labels `language`,
+    /// `lang`, `outcome` (`written`, `thin`, `exists`, `failed`).
+    pub const RADAR_BACKFILL_TOTAL: &str = "tbd_radar_backfill_total";
     /// Counter of idempotency rows purged after their TTL.
     pub const LEDGER_IDEMPOTENCY_PURGED_TOTAL: &str = "tbd_ledger_idempotency_purged_total";
     /// Gauge of outbox events not yet published.
@@ -138,6 +195,26 @@ pub fn install(addr: SocketAddr, service: &str) -> Result<(), MetricsError> {
             COUNT_BUCKETS,
         )
         .map_err(|e| MetricsError::Install(e.to_string()))?
+        .set_buckets_for_metric(
+            Matcher::Full(names::LLM_TIME_TO_FIRST_TOKEN.into()),
+            DURATION_BUCKETS,
+        )
+        .map_err(|e| MetricsError::Install(e.to_string()))?
+        .set_buckets_for_metric(
+            Matcher::Full(names::LLM_QUEUE_WAIT.into()),
+            DURATION_BUCKETS,
+        )
+        .map_err(|e| MetricsError::Install(e.to_string()))?
+        .set_buckets_for_metric(
+            Matcher::Full(names::SANDBOX_DURATION.into()),
+            DURATION_BUCKETS,
+        )
+        .map_err(|e| MetricsError::Install(e.to_string()))?
+        .set_buckets_for_metric(
+            Matcher::Full(names::RUNNER_DURATION.into()),
+            DURATION_BUCKETS,
+        )
+        .map_err(|e| MetricsError::Install(e.to_string()))?
         .install()
         .map_err(|e| MetricsError::Install(e.to_string()))?;
 
@@ -162,6 +239,10 @@ fn describe() {
     describe_counter!(
         names::REQUESTS_TOTAL,
         "Requests handled, by transport, route and status."
+    );
+    describe_counter!(
+        names::CV_NOTIFICATIONS_TOTAL,
+        "Mails the cv service tried to send through finance, by kind and outcome."
     );
     describe_histogram!(
         names::REQUEST_DURATION,
@@ -192,6 +273,7 @@ fn describe() {
     );
     describe_gauge!(names::BUILD_INFO, "Always 1; carries the version label.");
     describe_ledger();
+    describe_llm();
 }
 
 /// The ledger's metrics, described apart so each list stays readable.
@@ -276,6 +358,76 @@ fn describe_ledger() {
 }
 
 /// The ledger's outbox, analytics and table metrics.
+fn describe_llm() {
+    use metrics::{Unit, describe_counter, describe_gauge, describe_histogram};
+    describe_counter!(
+        names::LLM_TOKENS_TOTAL,
+        "Tokens the llm service's engines reported, by tier, engine, model and kind."
+    );
+    describe_histogram!(
+        names::LLM_TIME_TO_FIRST_TOKEN,
+        Unit::Seconds,
+        "Seconds from admitting a generation to its first text chunk."
+    );
+    describe_gauge!(
+        names::LLM_ENGINE_UP,
+        "1 while the tier's engine answered its last probe, else 0."
+    );
+    describe_gauge!(names::LLM_IN_FLIGHT, "Requests running on the tier now.");
+    describe_gauge!(
+        names::LLM_QUEUED,
+        "Requests waiting for a slot on the tier now."
+    );
+    describe_histogram!(
+        names::LLM_QUEUE_WAIT,
+        Unit::Seconds,
+        "Seconds an admitted request waited for its slot."
+    );
+    describe_counter!(
+        names::LLM_REFUSED_TOTAL,
+        "Requests refused by admission, by tier and reason (queue_full, queue_timeout)."
+    );
+    describe_gauge!(
+        names::ARENA_VIEWERS,
+        "Streams of the arena's snapshot open now."
+    );
+    describe_gauge!(
+        names::ARENA_SOURCE_OK,
+        "1 while the arena's last read of a source succeeded, else 0."
+    );
+    describe_counter!(
+        names::SANDBOX_RUNS_TOTAL,
+        "Sandbox runs, by language and outcome (ok, exit, compile_error, killed)."
+    );
+    describe_histogram!(
+        names::SANDBOX_DURATION,
+        Unit::Seconds,
+        "Seconds a sandbox step took, by language and step (compile, run)."
+    );
+    describe_gauge!(
+        names::SANDBOX_IN_FLIGHT,
+        "Sandbox runs in progress on the machine."
+    );
+    describe_counter!(
+        names::RUNNER_RUNS_TOTAL,
+        "Runs through the runner service, by language and outcome."
+    );
+    describe_histogram!(
+        names::RUNNER_DURATION,
+        Unit::Seconds,
+        "Seconds a run took through the runner, by language."
+    );
+    describe_gauge!(
+        names::RUNNER_IN_FLIGHT,
+        "Runs the runner has in flight now."
+    );
+    describe_gauge!(
+        names::ARENA_SOURCE_AGE,
+        Unit::Seconds,
+        "Seconds since the arena last read a source successfully."
+    );
+}
+
 fn describe_ledger_outbox() {
     use metrics::{Unit, describe_counter, describe_gauge, describe_histogram};
     describe_gauge!(

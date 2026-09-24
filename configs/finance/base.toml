@@ -1,0 +1,87 @@
+# finance configuration, shared layer. `configs/finance/<env>.toml` is merged
+# over this file; tables merge key by key, any other value replaces. Every key
+# is listed here so an environment file only needs what it changes. Flags and
+# their environment variables (FINANCE_*) override both.
+
+[server]
+# Where the gRPC server listens. Loopback on purpose; containers bind 0.0.0.0
+# through FINANCE_LISTEN_ADDR.
+listen = "127.0.0.1:50054"
+
+[metrics]
+# Prometheus /metrics listener. Embedders (tests, the chaos tool) turn it off.
+listen = "0.0.0.0:9464"
+
+[ping]
+# Longest message Ping echoes; longer is INVALID_ARGUMENT. The one knob that
+# proves TOML reaches an RPC.
+max_message_len = 1024
+
+[store]
+# Postgres. The URL is a credential and lives only in the environment
+# (FINANCE_DATABASE_URL), never in this file. Empty here means the service runs
+# without a store: Ping answers, every data RPC is UNAVAILABLE.
+max_connections = 10
+
+[provider]
+# The open-banking API. The application id and the RSA private key are
+# credentials and live only in the environment (FINANCE_EB_APPLICATION_ID,
+# FINANCE_EB_PRIVATE_KEY or FINANCE_EB_PRIVATE_KEY_PATH), never here. With
+# neither, the syncer does not start.
+base_url = "https://api.enablebanking.com"
+# Per-request timeout, seconds.
+timeout_secs = 60
+# Where the bank sends the browser after authorization: registered with the
+# provider, on the finance UI host, where the page completes the connection
+# as the signed-in person. Environments override the host.
+redirect_url = "https://finance.proximity.is/connect/callback"
+
+[sync]
+# PSD2 lets a bank cap unattended fetches at about four per account per day,
+# and Erste does: the fifth fetch of a day answers 429 with no Retry-After,
+# and after the six-hour backoff only a couple more go through. (A burst of
+# twelve on a freshly authorised account passed once; that was the exception,
+# not the rule -- prototype/bank/FINDINGS.md.) So: three scheduled fetches a
+# day, eight hours apart, and the fourth kept for a person pressing Refresh.
+# Nothing here is faster than the bank books: card payments arrive as
+# pending and book the next business day.
+#
+# How often the loop wakes to look for due accounts, seconds.
+interval_secs = 900
+# Least time between two scheduled fetches of one account, seconds (8h).
+min_interval_secs = 28800
+# Fetches per account per day, counting a person's manual refreshes.
+budget_per_day = 4
+# How many the scheduler may spend; the rest is reserved for a person pressing
+# Refresh, who must not be told "come back tomorrow" because a timer spent it.
+scheduled_budget = 3
+# How far back a routine fetch reaches past the last booked date, days.
+overlap_days = 7
+# The first fetch of a new account reaches back to 1 January of the current
+# year, and never less than this many days. Measured on Erste
+# (prototype/bank/FINDINGS.md): an unattended fetch returns 90 days whatever
+# is asked for; the full year comes from the attended pull right after
+# authorization, which is what the connect flow does.
+initial_history_days = 90
+# How long before a consent lapses the service starts saying so, days.
+reconsent_lead_days = 14
+# Backoff after a 429 with no Retry-After, seconds (6h, as documented; Erste
+# sends no Retry-After).
+default_backoff_secs = 21600
+
+[connectors]
+# Linked external accounts: mailboxes today, vendor portals later. The key
+# that seals their credentials and the Google OAuth client live only in the
+# environment (FINANCE_CONNECTOR_KEY, FINANCE_GOOGLE_CLIENT_ID,
+# FINANCE_GOOGLE_CLIENT_SECRET), never here. Without the key nothing can be
+# linked. The redirect URL is registered with each provider and must be on
+# the finance UI host, where the page completes the link as the signed-in
+# person.
+redirect_url = "https://finance.proximity.is/connectors/callback"
+
+[mail]
+# Sending from a linked mailbox whose consent included it (Gmail: the send
+# scope, asked for at link time). `allow_to` is a safety for environments
+# where a test must never reach a real recipient: empty means anyone; set,
+# a send to any other address is refused before the provider is asked.
+allow_to = []

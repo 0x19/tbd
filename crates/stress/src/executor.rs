@@ -19,7 +19,7 @@ use crate::{
     finding::Finding,
     hooks::{Hooks, StressEvent},
     metrics::Metrics,
-    report::{CampaignResult, StressSnapshot},
+    report::{CampaignResult, StressSnapshot, SweepProgress},
     workers::{Checks, Context, contention::Contention, fuzz::Fuzz, owner::Owner},
 };
 
@@ -83,7 +83,8 @@ pub async fn run_with_clients(
     let (ftx, frx) = mpsc::unbounded_channel::<Finding>();
     let run_start = Instant::now();
 
-    // Workers: owners spread over the targets, contention on the first, fuzz spread.
+    // The live metrics are the phase's, reset between them; the total accumulates.
+    let total = Metrics::new();
     let shared = Shared {
         metrics: Arc::clone(&metrics),
         checks: Arc::clone(&checks),
@@ -92,18 +93,8 @@ pub async fn run_with_clients(
         cancel: cancel.clone(),
         started: run_start,
     };
-    let (mut workers, mut subjects_total) =
-        spawn_owners(&campaign, &targets, result.store.as_deref(), &shared);
-    subjects_total += spawn_others(
-        &mut workers,
-        &campaign,
-        &targets,
-        result.store.as_deref(),
-        &shared,
-    );
     // Every sender of the findings channel must go: `Collected` ends when the
     // last worker drops its clone.
-    drop(shared);
     drop(ftx);
 
     let collected = Collected::spawn(
@@ -112,29 +103,26 @@ pub async fn run_with_clients(
         cancel.clone(),
         hooks.clone(),
     );
-    let progress = Progress::new(&campaign, &metrics, &checks, &collected, subjects_total);
+    let progress = Progress::new(&campaign, &metrics, &checks, &collected);
     let snapshot = |phase: &str, elapsed: Duration| progress.snapshot(phase, elapsed);
-
-    warmup(&campaign, hooks, &metrics, &checks, &cancel).await;
-
-    hooks.emit(StressEvent::Phase { name: "run".into() });
     let measured_start = Instant::now();
-    measure(
+
+    let phase_error = measure_it(
+        &campaign,
+        &targets,
+        result.store.as_deref(),
+        &shared,
+        &total,
+        &progress,
         hooks,
-        &metrics,
-        &snapshot,
-        measured_start,
-        campaign.campaign.duration,
-        &cancel,
+        &mut result.sweep,
     )
     .await;
-    cancel.cancel();
-    while let Some(joined) = workers.join_next().await {
-        if let Err(e) = joined
-            && result.error.is_none()
-        {
-            result.error = Some(format!("a worker panicked: {e}"));
-        }
+    drop(shared);
+    if let Some(e) = phase_error
+        && result.error.is_none()
+    {
+        result.error = Some(e);
     }
     let (mut findings, stopped_early) = collected.finish().await;
 
@@ -145,7 +133,7 @@ pub async fn run_with_clients(
         .await;
     }
 
-    result.load = Some(metrics.snapshot());
+    result.load = Some(total.snapshot());
     result.checks = checks.snapshot();
     (result.tolerated, result.redriven) = checks.faults();
     result.findings = findings;
@@ -157,6 +145,43 @@ pub async fn run_with_clients(
     result.passed = result.error.is_none() && result.findings.is_empty();
     result.duration_s = started.elapsed().as_secs_f64();
     result
+}
+
+/// The measured work: a sweep's points, or one phase. `Some` when a worker
+/// panicked.
+#[allow(clippy::too_many_arguments)]
+async fn measure_it(
+    campaign: &Arc<Campaign>,
+    targets: &[Named],
+    store: Option<&str>,
+    shared: &Shared,
+    total: &Metrics,
+    progress: &Progress,
+    hooks: &Hooks,
+    sweep_out: &mut Option<crate::report::SweepResult>,
+) -> Option<String> {
+    if campaign.sweep.is_some() {
+        let (sweep, error) =
+            crate::sweep::run(campaign, targets, store, shared, total, progress, hooks).await;
+        *sweep_out = Some(sweep);
+        return error;
+    }
+    let error = measured_phase(
+        Phase {
+            campaign,
+            targets,
+            store,
+            shared,
+            progress,
+            hooks,
+            warmup: campaign.campaign.warmup,
+            reset_checks: true,
+        },
+        &|phase, elapsed| progress.snapshot(phase, elapsed),
+    )
+    .await;
+    total.absorb(&shared.metrics);
+    error
 }
 
 /// Ping every target; the first store name wins.
@@ -229,17 +254,88 @@ impl Collected {
 }
 
 /// What every worker shares.
-struct Shared {
-    metrics: Arc<Metrics>,
-    checks: Arc<Checks>,
-    findings: mpsc::UnboundedSender<Finding>,
-    semaphore: Arc<Semaphore>,
-    cancel: tokio_util::sync::CancellationToken,
-    started: Instant,
+pub(crate) struct Shared {
+    pub metrics: Arc<Metrics>,
+    pub checks: Arc<Checks>,
+    pub findings: mpsc::UnboundedSender<Finding>,
+    pub semaphore: Arc<Semaphore>,
+    pub cancel: tokio_util::sync::CancellationToken,
+    pub started: Instant,
+}
+
+impl Shared {
+    /// The same state under a token of its own, so one phase's workers can be
+    /// stopped without ending the run.
+    fn for_phase(&self) -> Self {
+        Self {
+            metrics: Arc::clone(&self.metrics),
+            checks: Arc::clone(&self.checks),
+            findings: self.findings.clone(),
+            semaphore: Arc::clone(&self.semaphore),
+            cancel: self.cancel.child_token(),
+            started: self.started,
+        }
+    }
+}
+
+/// One measured phase: its own workers, its own cancellation, its own numbers.
+pub(crate) struct Phase<'a> {
+    /// The campaign as this phase runs it (a sweep point is a variant).
+    pub campaign: &'a Arc<Campaign>,
+    /// Where the workers go.
+    pub targets: &'a [Named],
+    /// The store the targets reported.
+    pub store: Option<&'a str>,
+    /// The run's shared state; the phase takes a child token from it.
+    pub shared: &'a Shared,
+    /// What the per-second frames read.
+    pub progress: &'a Progress,
+    /// Where the frames go.
+    pub hooks: &'a Hooks,
+    /// Warm up first and discard the numbers.
+    pub warmup: Option<Duration>,
+    /// Also discard the warmup's invariant evaluations (the first phase only:
+    /// a sweep's later points keep what the earlier ones proved).
+    pub reset_checks: bool,
+}
+
+/// Spawn the workers, warm up, measure, stop them, wait. `Some` when a worker
+/// panicked.
+pub(crate) async fn measured_phase(
+    p: Phase<'_>,
+    snapshot: &impl Fn(&str, Duration) -> StressSnapshot,
+) -> Option<String> {
+    let shared = p.shared.for_phase();
+    let (mut workers, owner_subjects) = spawn_owners(p.campaign, p.targets, p.store, &shared);
+    let subjects =
+        owner_subjects + spawn_others(&mut workers, p.campaign, p.targets, p.store, &shared);
+    p.progress.set_shape(p.campaign, subjects);
+    warmup(p.warmup, p.hooks, &shared, p.reset_checks).await;
+    p.hooks.emit(StressEvent::Phase { name: "run".into() });
+    let started = Instant::now();
+    measure(
+        p.hooks,
+        &shared.metrics,
+        snapshot,
+        started,
+        p.campaign.campaign.duration,
+        &shared.cancel,
+    )
+    .await;
+    shared.cancel.cancel();
+    let mut error = None;
+    while let Some(joined) = workers.join_next().await {
+        if let Err(e) = joined
+            && error.is_none()
+        {
+            error = Some(format!("a worker panicked: {e}"));
+        }
+    }
+    error
 }
 
 /// Spawn the owner workers over the targets, round robin.
-fn spawn_owners(
+pub(crate) fn spawn_owners(
     campaign: &Arc<Campaign>,
     targets: &[Named],
     store: Option<&str>,
@@ -288,7 +384,7 @@ fn context(
 /// Spawn the contention workers (all on the first target, sharing one set of
 /// subjects) and the fuzz workers (spread over the targets). Returns how many
 /// subjects they own.
-fn spawn_others(
+pub(crate) fn spawn_others(
     workers: &mut tokio::task::JoinSet<()>,
     campaign: &Arc<Campaign>,
     targets: &[Named],
@@ -352,7 +448,7 @@ async fn measure(
     }
 }
 
-/// A client with the target's name.
+/// A client with the target's name, as a phase sees it.
 #[derive(Clone)]
 pub struct Named {
     /// The target's name, for metrics and findings.
@@ -372,6 +468,7 @@ fn empty_result(campaign: &Campaign, targets: &[String]) -> CampaignResult {
         store: None,
         targets: targets.to_vec(),
         load: None,
+        sweep: None,
         checks: BTreeMap::new(),
         tolerated: 0,
         redriven: 0,
@@ -392,38 +489,41 @@ fn emit_done(hooks: &Hooks, metrics: &Metrics, snapshot: StressSnapshot) {
     });
 }
 
-/// Warmup: the same workload, then the numbers are discarded.
-async fn warmup(
-    campaign: &Campaign,
-    hooks: &Hooks,
-    metrics: &Metrics,
-    checks: &Checks,
-    cancel: &tokio_util::sync::CancellationToken,
-) {
-    let Some(warmup) = campaign.campaign.warmup else {
+/// Warmup: the same workload, then the numbers are discarded. The invariant
+/// counters are cleared only for the first phase; a sweep's later points add to
+/// what the earlier ones evaluated.
+async fn warmup(warmup: Option<Duration>, hooks: &Hooks, shared: &Shared, reset_checks: bool) {
+    let Some(warmup) = warmup.filter(|w| !w.is_zero()) else {
+        shared.metrics.reset();
         return;
     };
-    if warmup.is_zero() {
-        return;
-    }
     hooks.emit(StressEvent::Phase {
         name: "warmup".into(),
     });
     tokio::select! {
         () = tokio::time::sleep(warmup) => {}
-        () = cancel.cancelled() => {}
+        () = shared.cancel.cancelled() => {}
     }
-    metrics.reset();
-    checks.reset();
+    shared.metrics.reset();
+    if reset_checks {
+        shared.checks.reset();
+    }
 }
 
-/// What a per-second snapshot reads.
-struct Progress {
+/// What a per-second snapshot reads. The shape (subjects, workers, where a
+/// sweep is) changes with every phase, so it sits behind a lock.
+pub(crate) struct Progress {
     metrics: Arc<Metrics>,
     checks: Arc<Checks>,
     found: Arc<AtomicU64>,
+    shape: std::sync::Mutex<Shape>,
+}
+
+#[derive(Default)]
+struct Shape {
     subjects: u64,
     workers: BTreeMap<String, u32>,
+    sweep: Option<SweepProgress>,
 }
 
 impl Progress {
@@ -432,28 +532,52 @@ impl Progress {
         metrics: &Arc<Metrics>,
         checks: &Arc<Checks>,
         collected: &Collected,
-        subjects: u64,
     ) -> Self {
-        Self {
+        let p = Self {
             metrics: Arc::clone(metrics),
             checks: Arc::clone(checks),
             found: Arc::clone(&collected.found),
-            subjects,
-            workers: [
-                ("owner", campaign.workload.owner.workers),
-                ("contention", campaign.workload.contention.workers),
-                ("fuzz", campaign.workload.fuzz.workers),
-            ]
-            .into_iter()
-            .filter(|(_, n)| *n > 0)
-            .map(|(k, n)| (k.to_owned(), n))
-            .collect(),
-        }
+            shape: std::sync::Mutex::new(Shape::default()),
+        };
+        p.set_shape(campaign, 0);
+        p
     }
 
-    fn snapshot(&self, phase: &str, elapsed: Duration) -> StressSnapshot {
+    /// How many workers and subjects the phase about to run has.
+    pub(crate) fn set_shape(&self, campaign: &Campaign, subjects: u64) {
+        let mut shape = self.lock();
+        shape.subjects = subjects;
+        shape.workers = [
+            ("owner", campaign.workload.owner.workers),
+            ("contention", campaign.workload.contention.workers),
+            ("fuzz", campaign.workload.fuzz.workers),
+        ]
+        .into_iter()
+        .filter(|(_, n)| *n > 0)
+        .map(|(k, n)| (k.to_owned(), n))
+        .collect();
+    }
+
+    /// Where the sweep is, or `None` outside one.
+    pub(crate) fn set_sweep(&self, sweep: Option<SweepProgress>) {
+        self.lock().sweep = sweep;
+    }
+
+    /// Findings so far, for a point's count.
+    pub(crate) fn found(&self) -> u64 {
+        self.found.load(Ordering::Relaxed)
+    }
+
+    fn lock(&self) -> std::sync::MutexGuard<'_, Shape> {
+        self.shape
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    pub(crate) fn snapshot(&self, phase: &str, elapsed: Duration) -> StressSnapshot {
         let (tolerated, redriven) = self.checks.faults();
         let load = self.metrics.snapshot();
+        let shape = self.lock();
         StressSnapshot {
             elapsed_s: elapsed.as_secs_f64(),
             phase: phase.to_owned(),
@@ -463,8 +587,9 @@ impl Progress {
             redriven,
             checks: self.checks.snapshot(),
             findings: self.found.load(Ordering::Relaxed),
-            subjects: self.subjects,
-            workers: self.workers.clone(),
+            subjects: shape.subjects,
+            workers: shape.workers.clone(),
+            sweep: shape.sweep.clone(),
         }
     }
 }

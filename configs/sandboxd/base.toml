@@ -1,0 +1,35 @@
+# sandboxd configuration, shared layer (docs/sandbox/README.md, RFC 0010).
+# `configs/sandboxd/<env>.toml` is merged over this file. Every key is here.
+
+[server]
+# The API. Only the address the platform's cluster reaches this machine on
+# (the k3d network's gateway, which pods call host.k3d.internal); never a
+# public address. SANDBOXD_LISTEN_ADDR overrides it.
+listen = "127.0.0.1:7788"
+# Prometheus /metrics for the host's scrape.
+metrics = "127.0.0.1:9490"
+
+[limits]
+# Bounds of one run, every one enforced from outside the sandbox.
+max_source_bytes = 65536
+max_stdin_bytes = 65536
+# Output kept per stream; past it the sandbox is removed and the step says so.
+max_output_bytes = 65536
+compile_timeout = "20s"
+run_timeout = "5s"
+# Runs at once on this machine; one more is refused as busy at once.
+max_concurrent = 4
+# The container: memory with swap, processors, processes and threads, the
+# in-memory scratch space, the largest file a program may write.
+memory = "512m"
+cpus = "1"
+pids = 128
+scratch = "256m"
+max_file_bytes = 67108864
+
+[images]
+# Built locally by `mise run sandbox:images`, never pulled at run time.
+go = "tbd-sandbox-go:dev"
+rust = "tbd-sandbox-rust:dev"
+# The Docker runtime: gVisor. Registered by `mise run sandbox:install`.
+runtime = "runsc"

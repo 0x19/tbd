@@ -8,17 +8,28 @@
 #                     x-tbd-backend header, so service replicas are a pure scale-out.
 #   :9901  admin      /ready, /stats/prometheus, /clusters, /config_dump.
 #
-# Clusters resolve by DNS name: `engine`, `protocol`, `humans`, `ledger`, `chaos`, `otel-collector`,
+# Clusters resolve by DNS name: `engine`, `protocol`, `runner`, `radar`, `arena`, `llm`, `cv`, `playground`, `finance`, `humans`, `ledger`, `chaos`, `otel-collector`,
 # `hydra`, `kratos`, `auth-ui`, `grafana`, `victoria-logs`, `pyroscope`,
 # `victoria-metrics`.
 #
 # Authentication happens here and nowhere else (docs/auth/README.md):
 #   - API hosts (`api.<domain>`, the catch-all): every route except health needs a
-#     bearer JWT from Hydra (audience tbd-api), verified against Hydra's JWKS.
-#   - UI hosts (`grafana.`, `logs.`, `profiles.`, `metrics.`, `chaosadmin.`): the
+#     bearer JWT from Hydra (audience tbd-api), verified against Hydra's JWKS. `/mcp`
+#     (the platform as MCP tools for agents) is one of those routes, gated the same way.
+#   - UI hosts (`grafana.`, `logs.`, `profiles.`, `metrics.`, `chaosadmin.`,
+#     `finance.`, `cv.`): the
 #     oauth2 filter logs the browser in through Hydra and stores an ID token cookie,
 #     which the same JWT filter verifies (audience tbd-ui). A bearer token passes
 #     straight through, so scripts work on those hosts too.
+#   - `www.<domain>` is open, except `/lab/` (the site's lab, admins only until it is
+#     published), `/account/` (any signed-in person: where the site's sign-in starts)
+#     and `/v1/me` (the signed-in visitor, 401 rather than a redirect, so the page
+#     can decide what to show). The gate is the same oauth2 + JWT pair. The lab's
+#     calls to the platform (`/v1/llm/`, `/v1/arena/`, `/mcp`) carry the lab's gate; the
+#     socket `/v1/ws` is open but carries a signed-in visitor's identity when there
+#     is one, and the services behind decide.
+#   Signing out (`/oauth2/signout` on any UI host) ends the session at Hydra as well,
+#   through the auth UI's /logout, and returns to that host's root.
 #   - `auth.<domain>` and the local `chaos.*` host are open.
 # One value is environment-specific: the browser-facing authorization URL. The
 # file carries __AUTH_PUBLIC_URL__; the Envoy pod's init container and the compose
@@ -148,6 +159,16 @@ static_resources:
                           path: { exact: /oauth2/callback }
                         signout_path:
                           path: { exact: /oauth2/signout }
+                        # Signing out ends the session at Hydra too, not only the
+                        # cookies on this host: Hydra sends the browser to the auth
+                        # UI's /logout, which revokes every OAuth2 session and ends
+                        # the Kratos session, then back to this host's root. Without
+                        # this the next gated page signed the person straight back
+                        # in. The return URL must be registered on the tbd-ui client
+                        # per host (devops/k8s/auth/seed-clients.sh).
+                        end_session_endpoint: __AUTH_PUBLIC_URL__/oauth2/sessions/logout
+                        post_logout_redirect_uri:
+                          uri: "%REQ(x-forwarded-proto)%://%REQ(:authority)%/"
                         credentials:
                           client_id: tbd-ui
                           token_secret:
@@ -175,6 +196,30 @@ static_resources:
                         deny_redirect_matcher:
                           - name: ":path"
                             string_match: { prefix: "/api/" }
+                          # The lab's drafts file, fetched by the page for an admin:
+                          # a non-admin's fetch gets 401, never a sign-in redirect.
+                          - name: ":path"
+                            string_match: { prefix: "/lab-private/" }
+                          # The radar's admin writes (Refresh, RunDigest) from the page.
+                          - name: ":path"
+                            string_match: { prefix: "/v1/radar/" }
+                          # The site's "who am I" fetch: the filter still validates
+                          # and refreshes the session, but answers 401, never a
+                          # redirect, so the page can show a "Sign in" instead.
+                          - name: ":path"
+                            string_match: { exact: "/v1/me" }
+                          # The lab's demo calls the model service from the page.
+                          - name: ":path"
+                            string_match: { prefix: "/v1/llm/" }
+                          # The lab's live view, over server-sent events or a poll.
+                          - name: ":path"
+                            string_match: { prefix: "/v1/arena/" }
+                          # The workbench's MCP calls.
+                          - name: ":path"
+                            string_match: { exact: "/mcp" }
+                          # The workbench's code runs.
+                          - name: ":path"
+                            string_match: { prefix: "/v1/runner/" }
                         # Scripts with their own bearer token skip the browser login.
                         pass_through_matcher:
                           - name: authorization
@@ -209,6 +254,11 @@ static_resources:
                           audiences: [tbd-ui]
                           from_cookies: [tbd_id]
                           payload_in_metadata: jwt
+                          # The finance UI calls the protocol from the browser on its own
+                          # host; the protocol takes its principal from this header the
+                          # same way it does for a bearer token. Envoy strips whatever a
+                          # client sends in it, so its presence means "verified".
+                          forward_payload_header: x-jwt-payload
                           claim_to_headers:
                             - { header_name: x-user-sub, claim_name: sub }
                             - { header_name: x-user-email, claim_name: email }
@@ -236,6 +286,16 @@ static_resources:
                             requirements:
                               - provider_name: ui-cookie
                               - provider_name: ui-bearer
+                        # Identity when there is one, anonymous otherwise: the site's
+                        # socket serves the open playground and, for a signed-in
+                        # admin, the lab's live view. A valid cookie becomes
+                        # x-jwt-payload; a missing or stale one passes with none,
+                        # and the service behind decides (the arena refuses it).
+                        ui-optional:
+                          requires_any:
+                            requirements:
+                              - provider_name: ui-cookie
+                              - allow_missing_or_failed: {}
                   # Authorization on the verified claims. Disabled by default; routes
                   # that need a scope or a role carry their own policy below.
                   - name: envoy.filters.http.rbac
@@ -307,6 +367,391 @@ static_resources:
                           route: { cluster: kratos, timeout: 15s }
                         - match: { prefix: "/" }
                           route: { cluster: auth-ui, timeout: 15s }
+                    # The company site (ui/www) at the root of the base domain. Public:
+                    # no sign-in, no token, no rate limit, except the two routes that
+                    # open this list. The public edge rewrites the apex Host to
+                    # `www.<domain>` so this one rule serves both the apex and the www
+                    # name; locally it is http://www.localhost:18080/. Every route here
+                    # says which gates are on it, so nothing is inherited by accident.
+                    - name: www
+                      domains: ["www.*"]
+                      routes:
+                        # The lab: RFCs, studies and demos in progress, admins only
+                        # until the first one is published (ui/www/CLAUDE.md names the
+                        # two places the flip touches; this route is one of them). The
+                        # oauth2 filter stays on, so a browser is sent to sign in and
+                        # comes back; a signed-in non-admin gets 403 here, never a page.
+                        - match: { prefix: "/lab/" }
+                          typed_per_filter_config:
+                            envoy.filters.http.jwt_authn:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.PerRouteConfig
+                              requirement_name: ui
+                            envoy.filters.http.rbac:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.rbac.v3.RBACPerRoute
+                              rbac:
+                                rules:
+                                  action: ALLOW
+                                  policies:
+                                    admins:
+                                      permissions: [{ any: true }]
+                                      principals:
+                                        - metadata:
+                                            filter: envoy.filters.http.jwt_authn
+                                            path: [{ key: jwt }, { key: role }]
+                                            value: { string_match: { exact: admin } }
+                          route:
+                            cluster: www
+                            timeout: 15s
+                            retry_policy:
+                              retry_on: connect-failure,refused-stream,reset,unavailable
+                              num_retries: 2
+                              per_try_timeout: 5s
+                        # The lab's drafts (`public: false` documents), rendered by
+                        # ui/www/tool/lab-data.ts into one file under /lab-private/ and
+                        # read by the lab's pages for an admin. Admins only, always:
+                        # this gate does NOT move when the lab is published, because a
+                        # draft is exactly what is not published yet. Caddy marks the
+                        # file private, no-store, so no cache in front keeps a copy.
+                        - match: { prefix: "/lab-private/" }
+                          typed_per_filter_config:
+                            envoy.filters.http.jwt_authn:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.PerRouteConfig
+                              requirement_name: ui
+                            envoy.filters.http.rbac:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.rbac.v3.RBACPerRoute
+                              rbac:
+                                rules:
+                                  action: ALLOW
+                                  policies:
+                                    admins:
+                                      permissions: [{ any: true }]
+                                      principals:
+                                        - metadata:
+                                            filter: envoy.filters.http.jwt_authn
+                                            path: [{ key: jwt }, { key: role }]
+                                            value: { string_match: { exact: admin } }
+                          route:
+                            cluster: www
+                            timeout: 15s
+                        # The radar's writes (Refresh, RunDigest): admins only, the
+                        # same gate as the lab. Matched before the open reads below
+                        # by method. 0s: RunDigest waits for the model to write.
+                        - match:
+                            prefix: "/v1/radar/"
+                            headers: [{ name: ":method", string_match: { exact: POST } }]
+                          typed_per_filter_config:
+                            envoy.filters.http.jwt_authn:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.PerRouteConfig
+                              requirement_name: ui
+                            envoy.filters.http.rbac:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.rbac.v3.RBACPerRoute
+                              rbac:
+                                rules:
+                                  action: ALLOW
+                                  policies:
+                                    admins:
+                                      permissions: [{ any: true }]
+                                      principals:
+                                        - metadata:
+                                            filter: envoy.filters.http.jwt_authn
+                                            path: [{ key: jwt }, { key: role }]
+                                            value: { string_match: { exact: admin } }
+                          route:
+                            cluster: protocol
+                            timeout: 0s
+                        # The radar's drafts: a read that asks for them goes through
+                        # the lab's gate (the sign-in filter, which also refreshes the
+                        # session, then the admin role), so the service sees the admin.
+                        # The page asks only once /v1/me says the visitor is one.
+                        - match:
+                            prefix: "/v1/radar/"
+                            query_parameters:
+                              - name: include_drafts
+                                string_match: { exact: "true" }
+                          typed_per_filter_config:
+                            envoy.filters.http.jwt_authn:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.PerRouteConfig
+                              requirement_name: ui
+                            envoy.filters.http.rbac:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.rbac.v3.RBACPerRoute
+                              rbac:
+                                rules:
+                                  action: ALLOW
+                                  policies:
+                                    admins:
+                                      permissions: [{ any: true }]
+                                      principals:
+                                        - metadata:
+                                            filter: envoy.filters.http.jwt_authn
+                                            path: [{ key: jwt }, { key: role }]
+                                            value: { string_match: { exact: admin } }
+                          route:
+                            cluster: protocol
+                            timeout: 15s
+                        # The radar's reads (digests, items): public and anonymous,
+                        # like the playground's calls, with a per-address rate limit;
+                        # the service shows published issues only.
+                        - match: { prefix: "/v1/radar/" }
+                          typed_per_filter_config:
+                            envoy.filters.http.oauth2:
+                              "@type": type.googleapis.com/envoy.config.route.v3.FilterConfig
+                              disabled: true
+                            envoy.filters.http.jwt_authn:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.PerRouteConfig
+                              disabled: true
+                            envoy.filters.http.rbac:
+                              "@type": type.googleapis.com/envoy.config.route.v3.FilterConfig
+                              disabled: true
+                            envoy.filters.http.local_ratelimit:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.local_ratelimit.v3.LocalRateLimit
+                              stat_prefix: radar_ratelimit
+                              token_bucket: { max_tokens: 60, tokens_per_fill: 30, fill_interval: 10s }
+                              filter_enabled: { default_value: { numerator: 100 }, runtime_key: radar_ratelimit_enabled }
+                              filter_enforced: { default_value: { numerator: 100 }, runtime_key: radar_ratelimit_enforced }
+                              status: { code: TooManyRequests }
+                              rate_limited_as_resource_exhausted: true
+                              local_rate_limit_per_downstream_connection: false
+                              descriptors:
+                                - entries: [{ key: remote_address }]
+                                  token_bucket: { max_tokens: 60, tokens_per_fill: 30, fill_interval: 10s }
+                          route:
+                            cluster: protocol
+                            timeout: 15s
+                            rate_limits:
+                              - actions:
+                                  - remote_address: {}
+                        # Who am I, for the site: any signed-in person. The page shows
+                        # their name, the sign-out, and the lab for an admin; the
+                        # header's "Sign in" points here, so this route is where the
+                        # site's sign-in starts. Gated by sign-in only, no role.
+                        - match: { prefix: "/account/" }
+                          typed_per_filter_config:
+                            envoy.filters.http.jwt_authn:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.PerRouteConfig
+                              requirement_name: ui
+                            envoy.filters.http.rbac:
+                              "@type": type.googleapis.com/envoy.config.route.v3.FilterConfig
+                              disabled: true
+                          route:
+                            cluster: www
+                            timeout: 15s
+                            retry_policy:
+                              retry_on: connect-failure,refused-stream,reset,unavailable
+                              num_retries: 2
+                              per_try_timeout: 5s
+                        # The oauth2 filter answers /oauth2/callback and /oauth2/signout
+                        # itself, but only on a route where it is enabled; without this
+                        # entry the catch-all below (filter off) would swallow the
+                        # callback and the sign-in for /lab/ could never complete.
+                        - match: { prefix: "/oauth2/" }
+                          route:
+                            cluster: www
+                            timeout: 15s
+                        # The lab's demo: the model service, called from the lab's
+                        # pages on this origin. Same gate as the lab (sign-in, then
+                        # the admin role while it is unpublished), the oauth2 filter
+                        # answering a fetch with 401 through deny_redirect_matcher.
+                        # 0s: /v1/llm/generate/events streams.
+                        - match: { prefix: "/v1/llm/" }
+                          typed_per_filter_config:
+                            envoy.filters.http.jwt_authn:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.PerRouteConfig
+                              requirement_name: ui
+                            envoy.filters.http.rbac:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.rbac.v3.RBACPerRoute
+                              rbac:
+                                rules:
+                                  action: ALLOW
+                                  policies:
+                                    admins:
+                                      permissions: [{ any: true }]
+                                      principals:
+                                        - metadata:
+                                            filter: envoy.filters.http.jwt_authn
+                                            path: [{ key: jwt }, { key: role }]
+                                            value: { string_match: { exact: admin } }
+                          route:
+                            cluster: protocol
+                            timeout: 0s
+                        # The lab's live view (the arena): the same gate as the model
+                        # service above. 0s: /v1/arena/events streams a snapshot a
+                        # second for as long as the page is open.
+                        - match: { prefix: "/v1/arena/" }
+                          typed_per_filter_config:
+                            envoy.filters.http.jwt_authn:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.PerRouteConfig
+                              requirement_name: ui
+                            envoy.filters.http.rbac:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.rbac.v3.RBACPerRoute
+                              rbac:
+                                rules:
+                                  action: ALLOW
+                                  policies:
+                                    admins:
+                                      permissions: [{ any: true }]
+                                      principals:
+                                        - metadata:
+                                            filter: envoy.filters.http.jwt_authn
+                                            path: [{ key: jwt }, { key: role }]
+                                            value: { string_match: { exact: admin } }
+                          route:
+                            cluster: protocol
+                            timeout: 0s
+                        # The workbench runs code through the runner (RFC 0010): the
+                        # lab's gate, and 60s, past the sandbox's own deadlines.
+                        - match: { prefix: "/v1/runner/" }
+                          typed_per_filter_config:
+                            envoy.filters.http.jwt_authn:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.PerRouteConfig
+                              requirement_name: ui
+                            envoy.filters.http.rbac:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.rbac.v3.RBACPerRoute
+                              rbac:
+                                rules:
+                                  action: ALLOW
+                                  policies:
+                                    admins:
+                                      permissions: [{ any: true }]
+                                      principals:
+                                        - metadata:
+                                            filter: envoy.filters.http.jwt_authn
+                                            path: [{ key: jwt }, { key: role }]
+                                            value: { string_match: { exact: admin } }
+                          route:
+                            cluster: protocol
+                            timeout: 60s
+                        # The workbench calls the platform over MCP as its signed-in
+                        # admin, the same tools an agent gets on the API host. The
+                        # cookie rides along on a cross-site request too, so the
+                        # protocol refuses any Origin not in [mcp] allowed_origins.
+                        - match: { path: "/mcp" }
+                          typed_per_filter_config:
+                            envoy.filters.http.jwt_authn:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.PerRouteConfig
+                              requirement_name: ui
+                            envoy.filters.http.rbac:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.rbac.v3.RBACPerRoute
+                              rbac:
+                                rules:
+                                  action: ALLOW
+                                  policies:
+                                    admins:
+                                      permissions: [{ any: true }]
+                                      principals:
+                                        - metadata:
+                                            filter: envoy.filters.http.jwt_authn
+                                            path: [{ key: jwt }, { key: role }]
+                                            value: { string_match: { exact: admin } }
+                          route:
+                            cluster: protocol
+                            timeout: 0s
+                        # Who is signed in, for the page's own decisions (which nav
+                        # items to show). The oauth2 filter stays on so the same
+                        # session check and token refresh apply as on the gated
+                        # pages; its deny_redirect_matcher turns the sign-in redirect
+                        # into a 401 for this path, which a fetch can read.
+                        - match: { path: "/v1/me" }
+                          typed_per_filter_config:
+                            envoy.filters.http.jwt_authn:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.PerRouteConfig
+                              requirement_name: ui
+                            envoy.filters.http.rbac:
+                              "@type": type.googleapis.com/envoy.config.route.v3.FilterConfig
+                              disabled: true
+                          route:
+                            cluster: protocol
+                            timeout: 15s
+                        # The playground, on the same host as the site so the page
+                        # and its API are same-origin and no CORS is needed. Public
+                        # on purpose: the service takes no identity, accepts no
+                        # address, rate or duration, and clamps every move it does
+                        # accept (crates/playground/src/faults.rs).
+                        #
+                        # The bucket below is the first per-IP limit in this file:
+                        # `remote_address` as a descriptor action gives each client
+                        # address its own bucket, where a bare token_bucket with no
+                        # descriptors would be one bucket shared by everyone.
+                        # 30 requests per 10 s per address, bursting to 60, which is
+                        # generous for a page that holds one stream open and clicks
+                        # a button now and then.
+                        - match: { prefix: "/v1/playground/" }
+                          typed_per_filter_config:
+                            envoy.filters.http.oauth2:
+                              "@type": type.googleapis.com/envoy.config.route.v3.FilterConfig
+                              disabled: true
+                            envoy.filters.http.jwt_authn:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.PerRouteConfig
+                              disabled: true
+                            envoy.filters.http.rbac:
+                              "@type": type.googleapis.com/envoy.config.route.v3.FilterConfig
+                              disabled: true
+                            envoy.filters.http.local_ratelimit:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.local_ratelimit.v3.LocalRateLimit
+                              stat_prefix: playground_ratelimit
+                              token_bucket: { max_tokens: 60, tokens_per_fill: 30, fill_interval: 10s }
+                              filter_enabled: { default_value: { numerator: 100 }, runtime_key: playground_ratelimit_enabled }
+                              filter_enforced: { default_value: { numerator: 100 }, runtime_key: playground_ratelimit_enforced }
+                              status: { code: TooManyRequests }
+                              rate_limited_as_resource_exhausted: true
+                              local_rate_limit_per_downstream_connection: false
+                              descriptors:
+                                # The key must be the one the action emits
+                                # (`remote_address`), and the value is left out so
+                                # one bucket exists per address rather than per
+                                # literal value.
+                                - entries: [{ key: remote_address }]
+                                  token_bucket: { max_tokens: 60, tokens_per_fill: 30, fill_interval: 10s }
+                          route:
+                            # 0s: /v1/playground/events is a stream that stays open.
+                            cluster: protocol
+                            timeout: 0s
+                            rate_limits:
+                              - actions:
+                                  - remote_address: {}
+                        # The multiplexed socket carries the same RPCs, so the page
+                        # can switch transport without a second origin. Open (the
+                        # playground's calls need no one), but a signed-in visitor's
+                        # cookie travels as x-jwt-payload (`ui-optional`), so a service
+                        # that needs a caller (the model service, the arena) sees one;
+                        # without it they refuse. The identity is fixed at the upgrade,
+                        # so the page refreshes its session (GET /v1/me) first.
+                        - match: { path: "/v1/ws" }
+                          typed_per_filter_config:
+                            envoy.filters.http.oauth2:
+                              "@type": type.googleapis.com/envoy.config.route.v3.FilterConfig
+                              disabled: true
+                            envoy.filters.http.jwt_authn:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.PerRouteConfig
+                              requirement_name: ui-optional
+                            envoy.filters.http.rbac:
+                              "@type": type.googleapis.com/envoy.config.route.v3.FilterConfig
+                              disabled: true
+                          route:
+                            cluster: protocol
+                            timeout: 0s
+                        # The site itself: open.
+                        - match: { prefix: "/" }
+                          typed_per_filter_config:
+                            envoy.filters.http.oauth2:
+                              "@type": type.googleapis.com/envoy.config.route.v3.FilterConfig
+                              disabled: true
+                            envoy.filters.http.jwt_authn:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.PerRouteConfig
+                              disabled: true
+                            envoy.filters.http.rbac:
+                              "@type": type.googleapis.com/envoy.config.route.v3.FilterConfig
+                              disabled: true
+                          route:
+                            cluster: www
+                            timeout: 15s
+                            # Every route here is an idempotent GET of a static
+                            # file. A pod replaced during a deploy resets the
+                            # pooled connection, so retry rather than hand the
+                            # visitor a 503 for a file that exists.
+                            retry_policy:
+                              retry_on: connect-failure,refused-stream,reset,unavailable
+                              num_retries: 2
+                              per_try_timeout: 5s
                     # chaos API on its own host: chaos.api.<domain>/... -> /api/chaos/...
                     - name: chaos-api
                       domains: ["chaos.api.*"]
@@ -366,6 +811,30 @@ static_resources:
                                         path: [{ key: jwt }, { key: scp }]
                                         value: { list_match: { one_of: { string_match: { exact: tbd.api } } } }
                       routes:
+                        # The company's published privacy policy and terms. They exist to be
+                        # read by people who are not signed in — a bank-data provider's
+                        # reviewer, for one — so all three gates come off: oauth2 (which
+                        # would 302 a browser to the sign-in page), jwt_authn and rbac.
+                        # Static files from ui/chaos/public, no API and no data behind them.
+                        - match: { path: "/privacy.html" }
+                          typed_per_filter_config: &public_page
+                            envoy.filters.http.oauth2:
+                              "@type": type.googleapis.com/envoy.config.route.v3.FilterConfig
+                              disabled: true
+                            envoy.filters.http.jwt_authn:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.PerRouteConfig
+                              disabled: true
+                            envoy.filters.http.rbac:
+                              "@type": type.googleapis.com/envoy.config.route.v3.FilterConfig
+                              disabled: true
+                          route:
+                            cluster: chaos
+                            timeout: 15s
+                        - match: { path: "/terms.html" }
+                          typed_per_filter_config: *public_page
+                          route:
+                            cluster: chaos
+                            timeout: 15s
                         - match: { prefix: "/api/chaos/" }
                           route:
                             cluster: chaos
@@ -443,6 +912,122 @@ static_resources:
                           route:
                             cluster: victoria-metrics
                             timeout: 0s
+                    # The finance service's browser surface. Today it holds exactly
+                    # one thing: the bank's OAuth redirect target. The page is static
+                    # and reads the code out of its own URL — nothing here exchanges
+                    # it, so this route mints no consent and stores no secret. It has
+                    # to be open, because the bank redirects a browser that has no
+                    # session with us yet. When the finance service exists, this
+                    # becomes a real UI host behind *ui_gated and the page POSTs the
+                    # code to an authenticated RPC instead of displaying it.
+                    - name: finance
+                      domains: ["finance.*"]
+                      # The finance UI: one person's money. Browser login as on every UI
+                      # host, then a narrower gate than the chaos admin's: an admin, or a
+                      # machine token carrying tbd.finance. Never tbd.api on its own -- a
+                      # token that reads the chaos admin must not read the books.
+                      typed_per_filter_config:
+                        envoy.filters.http.jwt_authn:
+                          "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.PerRouteConfig
+                          requirement_name: ui
+                        envoy.filters.http.rbac:
+                          "@type": type.googleapis.com/envoy.extensions.filters.http.rbac.v3.RBACPerRoute
+                          rbac:
+                            rules:
+                              action: ALLOW
+                              policies:
+                                finance:
+                                  permissions: [{ any: true }]
+                                  principals:
+                                    - metadata:
+                                        filter: envoy.filters.http.jwt_authn
+                                        path: [{ key: jwt }, { key: role }]
+                                        value: { string_match: { exact: admin } }
+                                    - metadata:
+                                        filter: envoy.filters.http.jwt_authn
+                                        path: [{ key: jwt }, { key: scp }]
+                                        value: { list_match: { one_of: { string_match: { exact: tbd.finance } } } }
+                      routes:
+                        # The multiplexed socket: streams stay open.
+                        - match: { path: "/v1/ws" }
+                          route:
+                            cluster: protocol
+                            timeout: 0s
+                        # The finance RPCs through the protocol, same origin as the page.
+                        # The bank's redirect lands on /connect/callback/ (a page below)
+                        # and the page POSTs the code to /v1/finance/connections/complete
+                        # as the signed-in person; nothing here is open.
+                        # Transcoded server-streaming RPCs (SSE) stay open: the
+                        # connectors feed the page draws from is one.
+                        - match: { safe_regex: { regex: "^/v1/.*/events$" } }
+                          route:
+                            cluster: protocol
+                            timeout: 0s
+                        - match: { prefix: "/v1/" }
+                          route:
+                            cluster: protocol
+                            timeout: 60s
+                            retry_policy:
+                              retry_on: connect-failure,refused-stream
+                              num_retries: 1
+                        - match: { path: "/openapi.json" }
+                          route:
+                            cluster: protocol
+                            timeout: 15s
+                        - match: { prefix: "/" }
+                          route:
+                            cluster: finances-ui
+                            timeout: 15s
+                            retry_policy:
+                              retry_on: connect-failure,refused-stream,reset,unavailable
+                              num_retries: 2
+                              per_try_timeout: 5s
+                    # The full CV (docs/cv/README.md): a visitor asks, the owner
+                    # approves, an approved visitor downloads. Browser login as on
+                    # every UI host, then the widest gate there is: any signed-in
+                    # person, whatever their role, because asking is the point. What
+                    # they may do next is the cv service's decision, on the role the
+                    # token carries.
+                    - name: cv
+                      domains: ["cv.*"]
+                      typed_per_filter_config:
+                        envoy.filters.http.jwt_authn:
+                          "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.PerRouteConfig
+                          requirement_name: ui
+                        envoy.filters.http.rbac:
+                          "@type": type.googleapis.com/envoy.extensions.filters.http.rbac.v3.RBACPerRoute
+                          rbac:
+                            rules:
+                              action: ALLOW
+                              policies:
+                                cv:
+                                  permissions: [{ any: true }]
+                                  principals:
+                                    - metadata:
+                                        filter: envoy.filters.http.jwt_authn
+                                        path: [{ key: jwt }, { key: role }]
+                                        value: { string_match: { safe_regex: { regex: "^(admin|editor|viewer)$" } } }
+                      routes:
+                        # The cv RPCs through the protocol, same origin as the page.
+                        - match: { prefix: "/v1/" }
+                          route:
+                            cluster: protocol
+                            timeout: 60s
+                            retry_policy:
+                              retry_on: connect-failure,refused-stream
+                              num_retries: 1
+                        - match: { path: "/openapi.json" }
+                          route:
+                            cluster: protocol
+                            timeout: 15s
+                        - match: { prefix: "/" }
+                          route:
+                            cluster: cv-ui
+                            timeout: 15s
+                            retry_policy:
+                              retry_on: connect-failure,refused-stream,reset,unavailable
+                              num_retries: 2
+                              per_try_timeout: 5s
                     # The API: api.<domain> publicly, localhost:18080 locally. Every
                     # route needs a bearer token except the health endpoints, which
                     # probes, Envoy's own health checks and uptime monitors call.
@@ -541,6 +1126,12 @@ static_resources:
                             cluster: protocol
                             timeout: 0s
                             idle_timeout: 0s
+                        # The multiplexed socket: every public RPC on one connection.
+                        - match: { path: "/v1/ws" }
+                          route:
+                            cluster: protocol
+                            timeout: 0s
+                            idle_timeout: 0s
                         # Server-sent events.
                         - match: { prefix: "/v1/subjects/" }
                           route:
@@ -552,6 +1143,17 @@ static_resources:
                           route:
                             cluster: protocol
                             timeout: 0s
+                        # MCP: every public RPC as a tool. A tool that runs a generation
+                        # takes as long as the generation, so no clock here: the
+                        # protocol bounds it ([mcp] stream_timeout). Retried only when
+                        # the request never reached the protocol.
+                        - match: { path: "/mcp" }
+                          route:
+                            cluster: protocol
+                            timeout: 0s
+                            retry_policy:
+                              retry_on: "connect-failure,refused-stream"
+                              num_retries: 2
                         # Everything else: REST, GraphQL, health.
                         - match: { prefix: "/" }
                           route:
@@ -624,6 +1226,111 @@ static_resources:
                         - match: { prefix: "/grpc.health.v1.Health/", grpc: {}, headers: [{ name: x-tbd-backend, string_match: { exact: humans } }] }
                           route:
                             cluster: humans
+                            timeout: 0s
+                            retry_policy: *grpc_retry
+                        # finance, matched by service name; the engine stays the catch-all.
+                        - match: { prefix: "/tbd.finance.v1.FinanceService/", grpc: {} }
+                          route:
+                            cluster: finance
+                            timeout: 0s
+                            retry_policy: *grpc_retry
+                        # finance health: the grpc.health.v1 path is shared, so the protocol
+                        # names the backend it is asking about in x-tbd-backend.
+                        - match: { prefix: "/grpc.health.v1.Health/", grpc: {}, headers: [{ name: x-tbd-backend, string_match: { exact: finance } }] }
+                          route:
+                            cluster: finance
+                            timeout: 0s
+                            retry_policy: *grpc_retry
+                        # playground, matched by service name; the engine stays the catch-all.
+                        - match: { prefix: "/tbd.playground.v1.PlaygroundService/", grpc: {} }
+                          route:
+                            cluster: playground
+                            timeout: 0s
+                            retry_policy: *grpc_retry
+                        # playground health: the grpc.health.v1 path is shared, so the protocol
+                        # names the backend it is asking about in x-tbd-backend.
+                        - match: { prefix: "/grpc.health.v1.Health/", grpc: {}, headers: [{ name: x-tbd-backend, string_match: { exact: playground } }] }
+                          route:
+                            cluster: playground
+                            timeout: 0s
+                            retry_policy: *grpc_retry
+                        # cv, matched by service name; the engine stays the catch-all.
+                        - match: { prefix: "/tbd.cv.v1.CvService/", grpc: {} }
+                          route:
+                            cluster: cv
+                            timeout: 0s
+                            retry_policy: *grpc_retry
+                        # cv health: the grpc.health.v1 path is shared, so the protocol
+                        # names the backend it is asking about in x-tbd-backend.
+                        - match: { prefix: "/grpc.health.v1.Health/", grpc: {}, headers: [{ name: x-tbd-backend, string_match: { exact: cv } }] }
+                          route:
+                            cluster: cv
+                            timeout: 0s
+                            retry_policy: *grpc_retry
+                        # llm, matched by service name; the engine stays the catch-all.
+                        # A generation streams for seconds and is paid for in tokens:
+                        # retry only a dial that never reached the service, and never
+                        # on a clock. The shared policy's 5 s per try reset every
+                        # generation slower than that and generated it again (seen at
+                        # four generations a second on the CPU: every failure and a
+                        # p50 of 5.2 s sat on that timeout, not on the model).
+                        - match: { prefix: "/tbd.llm.v1.LlmService/", grpc: {} }
+                          route:
+                            cluster: llm
+                            timeout: 0s
+                            retry_policy:
+                              retry_on: "connect-failure,refused-stream"
+                              num_retries: 2
+                        # llm health: the grpc.health.v1 path is shared, so the protocol
+                        # names the backend it is asking about in x-tbd-backend.
+                        - match: { prefix: "/grpc.health.v1.Health/", grpc: {}, headers: [{ name: x-tbd-backend, string_match: { exact: llm } }] }
+                          route:
+                            cluster: llm
+                            timeout: 0s
+                            retry_policy: *grpc_retry
+                        # arena, matched by service name; the engine stays the catch-all.
+                        - match: { prefix: "/tbd.arena.v1.ArenaService/", grpc: {} }
+                          route:
+                            cluster: arena
+                            timeout: 0s
+                            retry_policy: *grpc_retry
+                        # arena health: the grpc.health.v1 path is shared, so the protocol
+                        # names the backend it is asking about in x-tbd-backend.
+                        - match: { prefix: "/grpc.health.v1.Health/", grpc: {}, headers: [{ name: x-tbd-backend, string_match: { exact: arena } }] }
+                          route:
+                            cluster: arena
+                            timeout: 0s
+                            retry_policy: *grpc_retry
+                        # radar, matched by service name; the engine stays the catch-all.
+                        - match: { prefix: "/tbd.radar.v1.RadarService/", grpc: {} }
+                          route:
+                            cluster: radar
+                            timeout: 0s
+                            retry_policy: *grpc_retry
+                        # radar health: the grpc.health.v1 path is shared, so the protocol
+                        # names the backend it is asking about in x-tbd-backend.
+                        - match: { prefix: "/grpc.health.v1.Health/", grpc: {}, headers: [{ name: x-tbd-backend, string_match: { exact: radar } }] }
+                          route:
+                            cluster: radar
+                            timeout: 0s
+                            retry_policy: *grpc_retry
+                        # runner, matched by service name; the engine stays the catch-all.
+                        # Its own policy, like the llm's: a run takes up to the sandbox's
+                        # compile and run deadlines, far past the shared 5 s per try, and a
+                        # run is not idempotent (retrying one runs the code twice), so it
+                        # is retried only when the request never reached the runner.
+                        - match: { prefix: "/tbd.runner.v1.RunnerService/", grpc: {} }
+                          route:
+                            cluster: runner
+                            timeout: 0s
+                            retry_policy:
+                              retry_on: "connect-failure,refused-stream"
+                              num_retries: 2
+                        # runner health: the grpc.health.v1 path is shared, so the protocol
+                        # names the backend it is asking about in x-tbd-backend.
+                        - match: { prefix: "/grpc.health.v1.Health/", grpc: {}, headers: [{ name: x-tbd-backend, string_match: { exact: runner } }] }
+                          route:
+                            cluster: runner
                             timeout: 0s
                             retry_policy: *grpc_retry
                         - match: { prefix: "/" }
@@ -760,6 +1467,223 @@ static_resources:
         base_ejection_time: 30s
         max_ejection_percent: 50
 
+    - name: finance
+      type: STRICT_DNS
+      dns_lookup_family: V4_ONLY
+      dns_refresh_rate: 5s
+      lb_policy: LEAST_REQUEST
+      connect_timeout: 1s
+      typed_extension_protocol_options:
+        envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+          "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+          explicit_http_config:
+            http2_protocol_options: {}
+      load_assignment:
+        cluster_name: finance
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address: { address: finance, port_value: 50054 }
+      health_checks:
+        - timeout: 1s
+          interval: 5s
+          unhealthy_threshold: 2
+          healthy_threshold: 1
+          grpc_health_check:
+            service_name: tbd.finance.v1.FinanceService
+      outlier_detection:
+        consecutive_gateway_failure: 5
+        interval: 5s
+        base_ejection_time: 30s
+        max_ejection_percent: 50
+
+    - name: playground
+      type: STRICT_DNS
+      dns_lookup_family: V4_ONLY
+      dns_refresh_rate: 5s
+      lb_policy: LEAST_REQUEST
+      connect_timeout: 1s
+      typed_extension_protocol_options:
+        envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+          "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+          explicit_http_config:
+            http2_protocol_options: {}
+      load_assignment:
+        cluster_name: playground
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address: { address: playground, port_value: 50055 }
+      health_checks:
+        - timeout: 1s
+          interval: 5s
+          unhealthy_threshold: 2
+          healthy_threshold: 1
+          grpc_health_check:
+            service_name: tbd.playground.v1.PlaygroundService
+      outlier_detection:
+        consecutive_gateway_failure: 5
+        interval: 5s
+        base_ejection_time: 30s
+        max_ejection_percent: 50
+
+    - name: cv
+      type: STRICT_DNS
+      dns_lookup_family: V4_ONLY
+      dns_refresh_rate: 5s
+      lb_policy: LEAST_REQUEST
+      connect_timeout: 1s
+      typed_extension_protocol_options:
+        envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+          "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+          explicit_http_config:
+            http2_protocol_options: {}
+      load_assignment:
+        cluster_name: cv
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address: { address: cv, port_value: 50056 }
+      health_checks:
+        - timeout: 1s
+          interval: 5s
+          unhealthy_threshold: 2
+          healthy_threshold: 1
+          grpc_health_check:
+            service_name: tbd.cv.v1.CvService
+      outlier_detection:
+        consecutive_gateway_failure: 5
+        interval: 5s
+        base_ejection_time: 30s
+        max_ejection_percent: 50
+
+    - name: llm
+      type: STRICT_DNS
+      dns_lookup_family: V4_ONLY
+      dns_refresh_rate: 5s
+      lb_policy: LEAST_REQUEST
+      connect_timeout: 1s
+      typed_extension_protocol_options:
+        envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+          "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+          explicit_http_config:
+            http2_protocol_options: {}
+      load_assignment:
+        cluster_name: llm
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address: { address: llm, port_value: 50057 }
+      health_checks:
+        - timeout: 1s
+          interval: 5s
+          unhealthy_threshold: 2
+          healthy_threshold: 1
+          grpc_health_check:
+            service_name: tbd.llm.v1.LlmService
+      outlier_detection:
+        consecutive_gateway_failure: 5
+        interval: 5s
+        base_ejection_time: 30s
+        max_ejection_percent: 50
+
+    - name: arena
+      type: STRICT_DNS
+      dns_lookup_family: V4_ONLY
+      dns_refresh_rate: 5s
+      lb_policy: LEAST_REQUEST
+      connect_timeout: 1s
+      typed_extension_protocol_options:
+        envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+          "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+          explicit_http_config:
+            http2_protocol_options: {}
+      load_assignment:
+        cluster_name: arena
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address: { address: arena, port_value: 50058 }
+      health_checks:
+        - timeout: 1s
+          interval: 5s
+          unhealthy_threshold: 2
+          healthy_threshold: 1
+          grpc_health_check:
+            service_name: tbd.arena.v1.ArenaService
+      outlier_detection:
+        consecutive_gateway_failure: 5
+        interval: 5s
+        base_ejection_time: 30s
+        max_ejection_percent: 50
+
+    - name: radar
+      type: STRICT_DNS
+      dns_lookup_family: V4_ONLY
+      dns_refresh_rate: 5s
+      lb_policy: LEAST_REQUEST
+      connect_timeout: 1s
+      typed_extension_protocol_options:
+        envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+          "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+          explicit_http_config:
+            http2_protocol_options: {}
+      load_assignment:
+        cluster_name: radar
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address: { address: radar, port_value: 50059 }
+      health_checks:
+        - timeout: 1s
+          interval: 5s
+          unhealthy_threshold: 2
+          healthy_threshold: 1
+          grpc_health_check:
+            service_name: tbd.radar.v1.RadarService
+      outlier_detection:
+        consecutive_gateway_failure: 5
+        interval: 5s
+        base_ejection_time: 30s
+        max_ejection_percent: 50
+
+    - name: runner
+      type: STRICT_DNS
+      dns_lookup_family: V4_ONLY
+      dns_refresh_rate: 5s
+      lb_policy: LEAST_REQUEST
+      connect_timeout: 1s
+      typed_extension_protocol_options:
+        envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+          "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+          explicit_http_config:
+            http2_protocol_options: {}
+      load_assignment:
+        cluster_name: runner
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address: { address: runner, port_value: 50060 }
+      health_checks:
+        - timeout: 1s
+          interval: 5s
+          unhealthy_threshold: 2
+          healthy_threshold: 1
+          grpc_health_check:
+            service_name: tbd.runner.v1.RunnerService
+      outlier_detection:
+        consecutive_gateway_failure: 5
+        interval: 5s
+        base_ejection_time: 30s
+        max_ejection_percent: 50
+
     - name: chaos
       type: STRICT_DNS
       dns_lookup_family: V4_ONLY
@@ -890,6 +1814,49 @@ static_resources:
               - endpoint:
                   address:
                     socket_address: { address: auth-ui, port_value: 3000 }
+    - name: finances-ui
+      type: STRICT_DNS
+      dns_lookup_family: V4_ONLY
+      dns_refresh_rate: 5s
+      lb_policy: ROUND_ROBIN
+      connect_timeout: 1s
+      load_assignment:
+        cluster_name: finances-ui
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address: { address: finances-ui, port_value: 8080 }
+    - name: cv-ui
+      type: STRICT_DNS
+      dns_lookup_family: V4_ONLY
+      dns_refresh_rate: 5s
+      lb_policy: ROUND_ROBIN
+      connect_timeout: 1s
+      load_assignment:
+        cluster_name: cv-ui
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address: { address: cv-ui, port_value: 8080 }
+    - name: www
+      type: STRICT_DNS
+      dns_lookup_family: V4_ONLY
+      dns_refresh_rate: 5s
+      lb_policy: ROUND_ROBIN
+      connect_timeout: 1s
+      load_assignment:
+        cluster_name: www
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address: { address: www, port_value: 8080 }
+      # No active health check on purpose. STRICT_DNS resolves the Service to a
+      # single ClusterIP, so a probe that lands on a pod being replaced ejects
+      # the only endpoint and the whole site answers 503 for an interval. The
+      # readiness probe already keeps unready pods out of the Service.
     - name: otel-collector
       type: STRICT_DNS
       dns_lookup_family: V4_ONLY

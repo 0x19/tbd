@@ -60,13 +60,19 @@ same stack and timeline it uses for scenarios.
   by `[stop]`. Owner workers know *what* to send; the interpreter knows what an answer
   must have been. When a rule is added or changed, both must agree, and the lying-client
   test in `tests/it` is where a disagreement shows.
+- `stats.rs` is pure: quantiles, the percentile bootstrap behind every interval, and
+  `knee`. `sweep.rs` drives the points: one `measured_phase` per repeat, latencies pooled
+  per point, the interval computed from that pool. A sweep's numbers are only as honest as
+  the repeats, so never report a point from one measurement without saying so.
 - `executor.rs`: `run` connects and hands over to `run_with_clients` (what a test with
   a lying client calls): ping the targets (a stub ledger is an error), spawn workers over
   the targets round robin, warmup, the measured phase with a snapshot a second, join,
   collect, then shrink every finding while the workers are quiet. `[stop] max_findings`
   cancels the workers early.
 - `metrics.rs` is chaos's load metrics type, moved here so load runs and stress runs
-  report the same `LoadSnapshot`; chaos re-exports it at `load::metrics`.
+  report the same `LoadSnapshot`; chaos re-exports it at `load::metrics`. It also keeps a
+  bounded reservoir of successful latencies (a histogram gives quantiles but not a sample
+  to resample) and `absorb`, which merges one phase's numbers into a run total.
 
 Tests: unit tests next to the code (every invariant with hand-built pages, the model's
 transitions, the campaign checks, the signature normalisation, every fuzz case builds and

@@ -285,7 +285,7 @@ schedule's history.
 | `phase` | `{"id", "name"}` | `setup`, `load`, `assert`, `teardown` (scenario runs); `setup`, `warmup`, `run`, `shrink`, `done`, `teardown` (stress runs) |
 | `load` | `{"id", "snapshot": LoadSnapshot}` | once per second while load runs, plus one at the end of each phase |
 | `timeline` | `{"id", "event": {"at_s", "action", "error"}}` | a timeline action fired |
-| `stress` | `{"id", "snapshot": StressSnapshot}` | once per second during a campaign: `elapsed_s`, `phase`, `ops_total`, `ops_failed`, `tolerated`, `redriven`, `checks` (invariant to `{passed, violated}`), `findings`, `subjects`, `workers` (class to count) |
+| `stress` | `{"id", "snapshot": StressSnapshot}` | once per second during a campaign: `elapsed_s`, `phase`, `ops_total`, `ops_failed`, `tolerated`, `redriven`, `checks` (invariant to `{passed, violated}`), `findings`, `subjects`, `workers` (class to count), `sweep` (`{parameter, value, point, points, repeat, repeats}` while a sweep runs, else absent) |
 | `finding` | `{"id", "finding": FindingSummary}` | a campaign broke an invariant; the finding is stored, shrunk, when the run ends |
 | `finished` | `{"run": RunRecord}` | last frame; the stream ends |
 
@@ -327,7 +327,7 @@ finished run answers with its `finished` frame only.
 | `scenario` | the [`chaos run --json`](commands.md#chaos-run) object, for scenario runs |
 | `load` | the final `LoadSnapshot`, for load runs |
 | `validate` | the [`chaos validate --json`](commands.md#chaos-validate) report |
-| `stress` | a campaign's result: `name`, `passed`, `skipped`, `store`, `targets`, `load` (the measured phase's `LoadSnapshot`), `checks` (invariant to `{passed, violated}`), `tolerated`, `redriven`, `findings` (`[FindingSummary]`), `stopped_early`, `error` |
+| `stress` | a campaign's result: `name`, `passed`, `skipped`, `store`, `targets`, `load` (the measured phases' totals), `checks` (invariant to `{passed, violated}`), `tolerated`, `redriven`, `findings` (`[FindingSummary]`), `sweep`, `stopped_early`, `error`. `sweep` is `{parameter, points, knee, knee_reason}`; a point is `{value, achieved_rps, error_rate, requests, p50, p99, repeats, findings}` and `p50`/`p99` are `{estimate, low, high}` in milliseconds ([stress.md](stress.md#sweeps)) |
 | `campaign_id` | the campaign the run came from, for stress runs |
 | `replay` | a replay run's outcome: `at`, `target`, `reproduced`, `message`, `steps_run` |
 | `samples` | one `LoadSnapshot` per second, for charts; the last one equals the final snapshot |

@@ -38,8 +38,8 @@ const CATEGORIES = [
   {
     id: "services",
     title: "Services",
-    description: "The contract of every service and the identity stack in front of them.",
-    match: (p) => /^docs\/(protocol|ledger|auth|tbd|humans|engine)\//.test(p),
+    description: "The contract of every service, the identity stack in front of them, and the mobile client.",
+    match: (p) => /^docs\/(protocol|ledger|auth|tbd|humans|engine|mobile)\//.test(p),
   },
   {
     id: "deployment",
@@ -218,6 +218,25 @@ writeFileSync(
     `export const kindsDoc = ${JSON.stringify(named("docs/chaos/kinds.md"))};\n` +
     `export const stressDoc = ${JSON.stringify(named("docs/chaos/stress.md"))};\n` +
     `export const kbCategories = ${JSON.stringify(categories)};\n` +
-    `export const kbDocs = ${JSON.stringify(docs)};\n`,
+    // The shape is declared rather than inferred. A document with no markdown
+    // links emits `"links":[]`, which TypeScript infers as `never[]`; once that
+    // joins the union of 60-odd element types, `links.includes(someString)`
+    // resolves to `never` and the build fails somewhere else entirely. A
+    // scaffolded service's CLAUDE.md has no links, so `tbd new service` would
+    // break `ui:check` with an error pointing at src/lib/kb.ts.
+    `export type KbDocRaw = {\n` +
+    `  id: string;\n` +
+    `  path: string;\n` +
+    `  title: string;\n` +
+    `  summary: string;\n` +
+    `  category: string;\n` +
+    `  generated: boolean;\n` +
+    `  words: number;\n` +
+    `  updated: string | null;\n` +
+    `  headings: { level: number; title: string; id: string }[];\n` +
+    `  links: string[];\n` +
+    `  text: string;\n` +
+    `};\n` +
+    `export const kbDocs: KbDocRaw[] = ${JSON.stringify(docs)};\n`,
 );
 console.log(`gen-docs: ${docs.length} documents, ${docs.reduce((n, d) => n + d.text.length, 0)} chars`);

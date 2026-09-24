@@ -6,6 +6,13 @@ resources:
   - configmap.yaml
   - engine
   - protocol
+  - runner
+  - radar
+  - arena
+  - llm
+  - cv
+  - playground
+  - finance
   - humans
   - ledger
   - envoy

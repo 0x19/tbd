@@ -1,0 +1,54 @@
+# The company site (ui/www): a static export, served as files and nothing else.
+# No TLS here — Envoy terminates in front, and the public edge terminates TLS in
+# front of that.
+:8080 {
+	root * /srv
+	encode zstd gzip
+
+	# Liveness for Kubernetes and Envoy's cluster health check.
+	@health path /healthz
+	respond @health "ok" 200
+
+	# The visitor's country, as Cloudflare saw it (its IP geolocation header,
+	# forwarded through the edge and Envoy), so the page can open in Croatian for
+	# a visitor from Croatia, Bosnia, Serbia or Montenegro. Two letters or nothing;
+	# never cached, never stored: the page reads it once and keeps nothing but a
+	# choice the visitor makes themselves.
+	@whereami path /whereami
+	handle @whereami {
+		header Cache-Control "no-store"
+		header Content-Type "text/plain; charset=utf-8"
+		respond "{header.CF-IPCountry}" 200
+	}
+
+	# The lab's drafts (ui/www/tool/lab-data.ts): Envoy lets only admins through,
+	# and nothing in front may keep a copy, so never cached anywhere.
+	@drafts path /lab-private/*
+	handle @drafts {
+		header Cache-Control "private, no-store"
+		file_server
+	}
+
+	# Hashed asset names never change. Pages must revalidate every time, or a
+	# browser sits on yesterday's copy for the length of the max-age and a deploy
+	# looks like it did nothing; a revalidation of an unchanged page is a 304.
+	header /_next/static/* Cache-Control "public, max-age=31536000, immutable"
+	header Cache-Control "public, max-age=0, must-revalidate"
+	header -Server
+
+	# `trailingSlash` export: /contact -> /contact/index.html.
+	try_files {path} {path}/index.html {path}.html
+	file_server
+
+	handle_errors {
+		rewrite * /404.html
+		file_server {
+			status {err.status_code}
+		}
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

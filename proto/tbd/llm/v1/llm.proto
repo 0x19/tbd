@@ -1,0 +1,214 @@
+syntax = "proto3";
+
+package tbd.llm.v1;
+
+import "google/api/annotations.proto";
+
+// The llm service: the layer over whatever runs the weights. It owns the
+// contract, the caller's budget, the choice of tier and the record of every
+// generation; the engines behind it (an L1: Ollama, llama.cpp, later our own)
+// are configuration, and nothing here names one.
+service LlmService {
+  // Echo a message. Proves configuration, telemetry and fault injection reach
+  // an RPC.
+  rpc Ping(PingRequest) returns (PingResponse) {
+    option (google.api.http) = {get: "/v1/llm/ping"};
+  }
+  // Generate a completion for a conversation, streamed one chunk at a time.
+  // The last chunk has `done` set and carries the usage. Over REST this is
+  // server-sent events; on the multiplexed socket it is the same RPC by name.
+  // A tier runs a bounded number of generations at once with a bounded line
+  // behind them; beyond that, or after waiting too long in it, the answer is
+  // RESOURCE_EXHAUSTED starting "busy:", at once rather than after a minute.
+  rpc Generate(GenerateRequest) returns (stream GenerateResponse) {
+    option (google.api.http) = {
+      post: "/v1/llm/generate/events"
+      body: "*"
+    };
+  }
+  // Embed one or more texts with the tier's embedding model, for the tiers
+  // whose engine declares one (`ModelInfo.embeds`); FAILED_PRECONDITION
+  // otherwise.
+  rpc Embed(EmbedRequest) returns (EmbedResponse) {
+    option (google.api.http) = {
+      post: "/v1/llm/embed"
+      body: "*"
+    };
+  }
+  // The tiers this service routes to, the model each serves, and whether the
+  // engine answered its last probe.
+  rpc ListModels(ListModelsRequest) returns (ListModelsResponse) {
+    option (google.api.http) = {get: "/v1/llm/models"};
+  }
+  // The caller's token budget for today.
+  rpc GetBudget(GetBudgetRequest) returns (GetBudgetResponse) {
+    option (google.api.http) = {get: "/v1/llm/budget"};
+  }
+  // The agents the service speaks as (RFC 0011): who each is and whether the
+  // caller may talk to it. Never an agent's instructions.
+  rpc ListAgents(ListAgentsRequest) returns (ListAgentsResponse) {
+    option (google.api.http) = {get: "/v1/llm/agents"};
+  }
+}
+
+message PingRequest {
+  string message = 1;
+}
+
+message PingResponse {
+  string message = 1;
+  // Version of the binary that answered.
+  string version = 2;
+  // True while the service is a placeholder with nothing real behind it.
+  bool stub = 3;
+}
+
+// Which engine answers. FAST is the one that fits the GPU and answers a
+// visitor; DEEP is the large model that runs from memory for quality.
+enum Tier {
+  TIER_UNSPECIFIED = 0;
+  TIER_FAST = 1;
+  TIER_DEEP = 2;
+}
+
+// One turn of a conversation. `role` is system, user or assistant.
+message Message {
+  string role = 1;
+  string content = 2;
+}
+
+message GenerateRequest {
+  repeated Message messages = 1;
+  // Unspecified: the service's default tier.
+  Tier tier = 2;
+  // Longest completion, in tokens; clamped to the service's cap.
+  optional uint32 max_tokens = 3;
+  optional float temperature = 4;
+  // A session of the caller's to continue; empty starts a new one. Sessions
+  // are a record, not a memory: the request carries the whole conversation.
+  string session_id = 5;
+  // Whether the model may reason before it answers, for models that can.
+  // Unset leaves the engine's default. Reasoning spends the token budget
+  // before any answer appears; a short `max_tokens` with reasoning on can end
+  // with no answer at all.
+  optional bool reasoning = 6;
+  // Talk to this agent (an id from ListAgents): the service puts its
+  // instructions and knowledge in front of `messages`, which may then carry no
+  // system message of their own. Its tier and bounds apply where this request
+  // is silent. Empty: the bare model.
+  string agent = 7;
+  // The page the visitor is reading (a path such as "/about/"): with an agent,
+  // that page's text is added when the agent's knowledge has it.
+  string page = 8;
+}
+
+message Usage {
+  uint32 prompt_tokens = 1;
+  uint32 completion_tokens = 2;
+}
+
+message GenerateResponse {
+  // The text of this chunk; may be empty on the final chunk.
+  string text = 1;
+  // 0-based, contiguous.
+  uint32 index = 2;
+  // True on the last chunk of a completed generation.
+  bool done = 3;
+  // Set on the done chunk only, as the engine reported it.
+  Usage usage = 4;
+  // The engine kind that answered (ollama, llamacpp, stub) and the model it served.
+  string engine = 5;
+  string model = 6;
+  Tier tier = 7;
+  // True only when the engine is the test stub; never in a deployed
+  // configuration.
+  bool stub = 8;
+  // Empty when the service runs without a store.
+  string session_id = 9;
+  string generation_id = 10;
+  // The chunk is the model's reasoning, not its answer. A client shows or
+  // hides it; the answer is the chunks without it.
+  bool reasoning = 11;
+  // The agent that answered, when the request named one.
+  string agent = 12;
+}
+
+message EmbedRequest {
+  repeated string inputs = 1;
+  Tier tier = 2;
+}
+
+message Embedding {
+  repeated float values = 1;
+}
+
+message EmbedResponse {
+  // One vector per input, in order.
+  repeated Embedding vectors = 1;
+  string engine = 2;
+  string model = 3;
+  Tier tier = 4;
+  bool stub = 5;
+}
+
+message ListModelsRequest {}
+
+message ModelInfo {
+  Tier tier = 1;
+  string engine = 2;
+  string model = 3;
+  // The engine answered its last probe.
+  bool up = 4;
+  bool stub = 5;
+  // The engine's build, as it reports it, and the revision of the weights it
+  // serves (a digest, a file name): what a benchmark needs to be rerun. Empty
+  // until the first probe answered; "unknown" when the engine does not say.
+  string engine_version = 6;
+  string model_revision = 7;
+  // The tier has an embedding model configured; Embed on a tier without one
+  // is refused before any engine is asked. A chat model does not embed.
+  bool embeds = 8;
+  // Admission, now: requests running on the tier, the most it runs at once,
+  // and requests waiting for a slot. A full line is refused at once with
+  // RESOURCE_EXHAUSTED ("busy"), and so is a wait that runs out.
+  uint32 in_flight = 9;
+  uint32 max_in_flight = 10;
+  uint32 waiting = 11;
+}
+
+message ListModelsResponse {
+  repeated ModelInfo models = 1;
+  Tier default_tier = 2;
+}
+
+message GetBudgetRequest {}
+
+message GetBudgetResponse {
+  // Tokens (prompt plus completion) the caller may spend per UTC day; 0 when unlimited.
+  uint64 tokens_per_day = 1;
+  uint64 used_today = 2;
+  uint64 remaining = 3;
+  // No limit applies: none is configured, or nothing is recorded.
+  bool unlimited = 4;
+  // Generations are recorded, so the count above is real.
+  bool recorded = 5;
+  // The UTC date the count is for, YYYY-MM-DD.
+  string day = 6;
+}
+
+message ListAgentsRequest {}
+
+// An agent as a caller sees it (RFC 0011): never its instructions.
+message AgentInfo {
+  string id = 1;
+  string name = 2;
+  // One line on what it is.
+  string persona = 3;
+  Tier tier = 4;
+  // The caller may talk to it.
+  bool available = 5;
+}
+
+message ListAgentsResponse {
+  repeated AgentInfo agents = 1;
+}

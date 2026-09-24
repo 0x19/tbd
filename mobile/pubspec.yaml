@@ -1,0 +1,20 @@
+# The Dart pub workspace: one dependency resolution and one lock file for the
+# app and every package under it (dart.dev/tools/pub/workspaces). Members carry
+# `resolution: workspace`. Melos runs commands across them (melos.yaml).
+name: tbd_mobile_workspace
+publish_to: none
+
+environment:
+  sdk: ^3.12.0
+
+workspace:
+  - apps/tbd
+  - packages/tbd_core
+  - packages/tbd_auth
+  - packages/tbd_api
+  - packages/tbd_proto
+  - packages/tbd_ui
+  - packages/tbd_testing
+
+dev_dependencies:
+  melos: ^8.8.0

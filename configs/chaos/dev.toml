@@ -4,6 +4,13 @@
 [targets]
 protocol = "http://envoy:8080"
 engine = "http://envoy:50051"
+runner = "http://envoy:50051"
+radar = "http://envoy:50051"
+arena = "http://envoy:50051"
+llm = "http://envoy:50051"
+cv = "http://envoy:50051"
+playground = "http://envoy:50051"
+finance = "http://envoy:50051"
 humans = "http://envoy:50051"
 ledger = "http://envoy:50051"
 

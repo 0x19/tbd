@@ -1,0 +1,35 @@
+# The finance service under steady load: it answers, it stays fast, and it is
+# still honest about being a scaffold.
+#
+# The service has one RPC today. This scenario exists anyway, from the first
+# commit, so that the instance is drivable before it has anything worth
+# breaking — a service that arrives with real RPCs *and* its first chaos
+# coverage on the same day has neither reviewed properly.
+#
+# `finance_ping` asserts the echo and that `stub` is still true. When the real
+# RPCs land and Ping stops being a stub, this scenario fails and has to be
+# updated deliberately, which is the point: the stub flag cannot rot quietly.
+
+[scenario]
+name = "finance_baseline"
+description = "Finance under steady gRPC load: no errors, p99 under 50 ms, stub still labelled"
+
+[stack.finances.finance-1]
+
+[load]
+rate = 200
+duration = "3s"
+warmup = "300ms"
+
+[[load.operations]]
+op = "finance_ping"
+weight = 1
+
+[assertions]
+max_error_rate = 0.0
+max_p99_ms = 50
+min_requests = 400
+
+[assertions.services.finance-1]
+min_requests = 400
+max_failed = 0

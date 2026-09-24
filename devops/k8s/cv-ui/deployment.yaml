@@ -1,0 +1,65 @@
+# The cv UI (ui/cv): static files on Caddy, the same shape as www.
+# Envoy's `cv.*` virtual host sends the page here and `/v1/` to the
+# protocol; the browser login on that host is the only way in. One replica:
+# two pages behind the sign-in, not the public face of the domain.
+# Image: devops/docker/Dockerfile.cv-ui.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cv-ui
+  labels:
+    app.kubernetes.io/name: cv-ui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cv-ui
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: cv-ui
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 25
+      containers:
+        - name: caddy
+          # Overlays pin the tag.
+          image: ghcr.io/0x19/tbd-cv-ui:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sleep", "8"]
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 20
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 500m
+              memory: 128Mi
+      volumes:
+        - name: tmp
+          emptyDir: {}

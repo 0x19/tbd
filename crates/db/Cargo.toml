@@ -1,0 +1,37 @@
+[package]
+name = "tbd-db"
+description = "The shared database layer: the project's migrations, the Postgres pool, the error mapping every store shares, and the identity tables services point their keys at."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+chrono.workspace = true
+sqlx.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+# The test helper only: one shared Postgres for every crate's integration tests.
+testcontainers = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }
+url = { workspace = true, optional = true }
+
+[features]
+# `tbd_db::testing`: the one Postgres container every integration test in the
+# workspace shares, and a fresh database on it. Dev-dependencies enable it.
+testing = ["dep:testcontainers", "dep:tokio", "dep:url"]
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+# The crate's own integration tests use the helper too.
+tbd-db = { path = ".", features = ["testing"] }
+
+[[test]]
+name = "it"
+path = "tests/it/main.rs"
+
+[lints]
+workspace = true

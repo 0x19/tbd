@@ -68,6 +68,7 @@ when the file exists with different content, unless `--force`.
 | `chaos:k8s-env`, `chaos:compose-env`, `chaos:ansible-env` | `devops/k8s/chaos/deployment.yaml`, `compose.yaml`, the ansible compose template | after `CHAOS_ENGINE_URL` | `CHAOS_<NAME>_URL` |
 | `env:example` | `.env.example` | end of file | `<NAME>_LISTEN_ADDR=` (the block also carries a commented `CHAOS_<NAME>_URL` and the protocol's `PROTOCOL_<NAME>_URL`) |
 | `protocol:registry`, `protocol:{k8s,compose,ansible}-env` | `configs/protocol/base.toml`, `devops/k8s/base/configmap.yaml`, `compose.yaml`, the ansible compose template | before the `# tbd:services-end` marker; after `PROTOCOL_LEDGER_URL:` | `[services.<name>]`, `PROTOCOL_<NAME>_URL:` |
+| `protocol:test-registry` | `crates/protocol/tests/it/support.rs` | after the `humans` line of the embedded registry | `("<name>".to_owned()` |
 | `k8s:configmap`, `k8s:base` | `devops/k8s/base/{configmap,kustomization}.yaml` | after `PROTOCOL_METRICS_ADDR:`, after `  - protocol` | `<NAME>_LISTEN_ADDR:`, `  - <name>` |
 | `k8s:overlay:{local,dev,prod}:{image,patch}` | the overlay kustomizations | before `patches:`, before `configMapGenerator:` | the image name, the patch target line |
 | `envoy:header`, `envoy:route`, `envoy:cluster` | `devops/envoy/envoy.yaml` | the cluster list comment; before the `engine-lb` catch-all route (the service's RPC path route and its health route matched on `x-tbd-backend`); before `- name: chaos` under `clusters:` | `` `<name>`, ``, `/tbd.<name>.v1.<Name>Service/`, `    - name: <name>` |
@@ -91,6 +92,10 @@ step is a build:
 - `mise run chaos:docs`, which regenerates `docs/chaos/kinds.md` with the new kind.
 - The devops gate: `kustomize build devops/k8s/overlays/local`, `docker compose config -q`,
   `mise run envoy:validate`.
+- `mise run protocol:openapi`. The generated proto carries `google.api.http`, so the
+  protocol transcodes a route for it and `docs/protocol/openapi.json` gains that path.
+  Skipping this fails `openapi_is_served_and_matches_the_committed_document`, which
+  points at the document rather than at the step that was missed.
 - A Grafana dashboard, if the service wants one.
 
 ## Idempotency and rollback

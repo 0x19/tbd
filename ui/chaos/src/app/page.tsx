@@ -9,7 +9,6 @@ import {
   Gauge,
   ListChecks,
   ListOrdered,
-  RefreshCw,
   Server,
 } from "lucide-react";
 import Link from "next/link";
@@ -18,7 +17,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useChaos } from "@/app/providers";
 import { ChartHeadline, CompareChart, LatencyBars, Legend, LoadTrend, PassStrip } from "@/components/charts";
 import { KpiStrip, PageTitle } from "@/components/kit";
-import { EnvironmentCard, StackCard } from "@/components/overview-cards";
+import { EnvironmentStrip, OverviewActions, StackCard } from "@/components/overview-cards";
 import { RunsTable } from "@/components/runs-table";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
@@ -129,17 +128,16 @@ export default function OverviewPage() {
   return (
     <>
       <PageTitle title="Overview" description="What the stack and the last runs look like right now.">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => {
+        <OverviewActions
+          overview={overview}
+          onRefresh={() => {
             reload();
             runs.reload();
           }}
-        >
-          <RefreshCw /> Refresh
-        </Button>
+        />
       </PageTitle>
+
+      <EnvironmentStrip overview={overview} />
 
       <KpiStrip
         items={[
@@ -343,7 +341,9 @@ export default function OverviewPage() {
       </div>
 
       <div className="grid gap-4 xl:grid-cols-3">
-        <StackCard stack={overview.stack} kinds={kinds} topology={overview.config.paths.topology} />
+        <div className="xl:col-span-2">
+          <StackCard stack={overview.stack} kinds={kinds} topology={overview.config.paths.topology} />
+        </div>
         <Card>
           <CardHeader>
             <CardTitle>Recent activity</CardTitle>
@@ -419,7 +419,6 @@ export default function OverviewPage() {
             ) : null}
           </CardContent>
         </Card>
-        <EnvironmentCard overview={overview} />
       </div>
 
       <Card>

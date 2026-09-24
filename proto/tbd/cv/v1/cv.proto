@@ -1,0 +1,131 @@
+syntax = "proto3";
+
+package tbd.cv.v1;
+
+import "google/api/annotations.proto";
+
+// The cv service: the full CV, behind sign-in and the owner's approval.
+//
+// The public site carries the CV without contact details. Anyone signed in
+// may ask for the full version; the owner is told and decides; an approved
+// person downloads a PDF rendered for them, with their name on every page,
+// and every download is recorded. Ping is the liveness RPC every service
+// carries.
+service CvService {
+  // Echo a message. Proves configuration, telemetry and fault injection reach
+  // an RPC.
+  rpc Ping(PingRequest) returns (PingResponse) {
+    option (google.api.http) = {get: "/v1/cv/ping"};
+  }
+  // The caller's standing: none, requested, approved, refused or revoked.
+  rpc GetAccess(GetAccessRequest) returns (GetAccessResponse) {
+    option (google.api.http) = {get: "/v1/cv/access"};
+  }
+  // Ask for the full CV. Creates the caller's request, or renews a refused or
+  // revoked one, and tells the owner by mail. An approved request stays
+  // approved.
+  rpc RequestAccess(RequestAccessRequest) returns (RequestAccessResponse) {
+    option (google.api.http) = {
+      post: "/v1/cv/access"
+      body: "*"
+    };
+  }
+  // The full CV as a PDF rendered for the caller now, once approved; the
+  // download is recorded.
+  rpc DownloadCv(DownloadCvRequest) returns (DownloadCvResponse) {
+    option (google.api.http) = {get: "/v1/cv/document"};
+  }
+  // Every request, newest first. The owner only.
+  rpc ListRequests(ListRequestsRequest) returns (ListRequestsResponse) {
+    option (google.api.http) = {get: "/v1/cv/requests"};
+  }
+  // Approve, refuse or revoke one request. The owner only.
+  rpc DecideRequest(DecideRequestRequest) returns (DecideRequestResponse) {
+    option (google.api.http) = {
+      post: "/v1/cv/requests/{id}/decide"
+      body: "*"
+    };
+  }
+}
+
+message PingRequest {
+  string message = 1;
+}
+
+message PingResponse {
+  string message = 1;
+  // Version of the binary that answered.
+  string version = 2;
+  // True while the service is a placeholder with nothing real behind it.
+  bool stub = 3;
+}
+
+// One person's standing, as they see it.
+message AccessState {
+  // none, requested, approved, refused, revoked.
+  string status = 1;
+  string email = 2;
+  string name = 3;
+  string note = 4;
+  // RFC 3339; empty when there is no request.
+  string requested_at = 5;
+  string decided_at = 6;
+  // When the owner was told of the request; empty until that mail went out.
+  string notified_at = 7;
+  // Whether the service can tell the owner at all (a mailbox is configured).
+  bool notifications = 8;
+}
+
+message GetAccessRequest {}
+message GetAccessResponse {
+  AccessState state = 1;
+}
+
+message RequestAccessRequest {
+  // Why, in the requester's words. Kept with the request; shown to the owner.
+  string note = 1;
+}
+message RequestAccessResponse {
+  AccessState state = 1;
+}
+
+message DownloadCvRequest {}
+message DownloadCvResponse {
+  string content_type = 1;
+  bytes pdf = 2;
+  string filename = 3;
+}
+
+// One request, as the owner sees it.
+message AccessRequest {
+  string id = 1;
+  string subject = 2;
+  string email = 3;
+  string name = 4;
+  string note = 5;
+  // requested, approved, refused, revoked.
+  string status = 6;
+  string requested_at = 7;
+  string decided_at = 8;
+  string decided_by = 9;
+  string notified_at = 10;
+  int32 downloads = 11;
+  string last_download_at = 12;
+}
+
+message ListRequestsRequest {
+  // requested, approved, refused, revoked; empty for all.
+  string status = 1;
+}
+message ListRequestsResponse {
+  repeated AccessRequest requests = 1;
+}
+
+message DecideRequestRequest {
+  string id = 1;
+  // approve, refuse, revoke.
+  string decision = 2;
+}
+message DecideRequestResponse {
+  AccessRequest request = 1;
+}

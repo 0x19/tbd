@@ -1,0 +1,12 @@
+name: tbd_proto
+description: Dart generated from /proto by buf (mise run mobile:gen). Generated only; nothing hand-written lives here.
+version: 0.1.0
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ^3.12.0
+
+dependencies:
+  grpc: ^5.1.0
+  protobuf: ^6.1.0

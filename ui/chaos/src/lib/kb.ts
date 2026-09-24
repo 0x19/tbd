@@ -29,6 +29,7 @@ const ORDER: string[] = [
   "docs/protocol/README",
   "docs/ledger/README",
   "docs/auth/README",
+  "docs/mobile/README",
   "docs/tbd/README",
   "devops/README",
   "devops/envoy/README",
