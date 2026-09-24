@@ -16,7 +16,8 @@ service RadarService {
     option (google.api.http) = {get: "/v1/radar/ping"};
   }
 
-  // Published digests, newest week first.
+  // Digests, newest week first: published ones, and drafts too for an admin
+  // who asks for them.
   rpc ListDigests(ListDigestsRequest) returns (ListDigestsResponse) {
     option (google.api.http) = {get: "/v1/radar/digests"};
   }
@@ -46,6 +47,16 @@ service RadarService {
   rpc RunDigest(RunDigestRequest) returns (RunDigestResponse) {
     option (google.api.http) = {
       post: "/v1/radar/digests/run"
+      body: "*"
+    };
+  }
+
+  // Make a draft digest public, or take a published one back (`publish` false).
+  // Admin only. New digests are drafts until then: the page says they are
+  // human-reviewed, and this is the review.
+  rpc PublishDigest(PublishDigestRequest) returns (PublishDigestResponse) {
+    option (google.api.http) = {
+      post: "/v1/radar/digests/{id}/publish"
       body: "*"
     };
   }
@@ -91,6 +102,8 @@ message Digest {
   // RFC 3339.
   string created_at = 5;
   // Markdown, one per section.
+  // The old shape, before `summary` and `changes`: kept for the digests
+  // written then. New digests leave both empty.
   string changed = 6;
   string why = 7;
   string drill = 8;
@@ -104,6 +117,39 @@ message Digest {
   bool ai_written = 12;
   // True when the model was the llm service's stub engine (tests, local).
   bool stub = 13;
+  // Two or three sentences on the week.
+  string summary = 14;
+  // One entry per change, Breaking first. Empty for digests written before
+  // changes existed; those carry `changed` and `why` instead.
+  repeated Change changes = 15;
+  // "draft" (admins only) or "published".
+  string status = 16;
+  // RFC 3339; empty while a draft.
+  string published_at = 17;
+}
+
+// How much a change matters to someone running the language in production.
+// A named category, never a score.
+enum Impact {
+  IMPACT_UNSPECIFIED = 0;
+  // Can break a build or a running service.
+  IMPACT_BREAKING = 1;
+  // Changes how you work or what you should reach for.
+  IMPACT_WORTH_KNOWING = 2;
+  // Tooling and ergonomics.
+  IMPACT_NICE_TO_KNOW = 3;
+}
+
+// One change in a digest. Its `url` is always one of the week's source items.
+message Change {
+  string title = 1;
+  Impact impact = 2;
+  // runtime, compiler, stdlib, tooling, language or ecosystem.
+  string area = 3;
+  string url = 4;
+  string what = 5;
+  string production_impact = 6;
+  string try_it = 7;
 }
 
 message ListDigestsRequest {
@@ -113,6 +159,8 @@ message ListDigestsRequest {
   string lang = 2;
   // At most this many; 0 means the service's default.
   int32 limit = 3;
+  // Drafts too, for an admin; ignored for anyone else.
+  bool include_drafts = 4;
 }
 
 message ListDigestsResponse {
@@ -166,4 +214,14 @@ message RunDigestResponse {
   bool started = 3;
   // A run was already in progress; nothing new was started.
   bool already_running = 4;
+}
+
+message PublishDigestRequest {
+  int64 id = 1;
+  // False takes a published digest back to draft.
+  bool publish = 2;
+}
+
+message PublishDigestResponse {
+  Digest digest = 1;
 }

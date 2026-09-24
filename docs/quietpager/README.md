@@ -13,14 +13,31 @@ the open-source grader lives in `github.com/quietpager/qp` and the katas in
 | RPC | REST | Who |
 |---|---|---|
 | `Ping` | `GET /v1/radar/ping` | anyone (labelled stub, as in every service) |
-| `ListDigests` | `GET /v1/radar/digests?language=&lang=&limit=` | anyone |
-| `GetDigest` | `GET /v1/radar/digests/{id}` | anyone |
+| `ListDigests` | `GET /v1/radar/digests?language=&lang=&limit=&include_drafts=` | anyone; drafts only for the admin role |
+| `GetDigest` | `GET /v1/radar/digests/{id}` | anyone; a draft is not found for anyone but an admin |
 | `ListItems` | `GET /v1/radar/items?language=&limit=` | anyone |
 | `Refresh` | `POST /v1/radar/refresh` | admin role |
+| `PublishDigest` | `POST /v1/radar/digests/{id}/publish` (`publish` false takes it back to draft) | admin role |
 | `RunDigest` | `POST /v1/radar/digests/run`: starts the week's run in the background and returns (`started`, or `already_running`); `force` rewrites the week's, `wait` waits for it (direct callers only; the edge's timeouts cut a wait) | admin role |
 
 On the site's host (`www.`), Envoy serves the reads open with a per-address rate
-limit and gates the writes to the admin role; the service checks the role again.
+limit, carrying a signed-in visitor's identity when there is one (`ui-optional`, so an
+admin's page sees drafts), and gates the writes to the admin role; the service checks
+the role again.
+
+**Review.** Every digest the worker writes is a draft; the page calls issues
+human-reviewed, and `PublishDigest` is that review. A rewrite (`RunDigest` with `force`)
+sends a published digest back to draft.
+
+**Shape.** A digest is `summary` (the week in two or three sentences), `changes`, the
+drill and the avatar script. A change has a title, an impact from a fixed set
+(`IMPACT_BREAKING`, `IMPACT_WORTH_KNOWING`, `IMPACT_NICE_TO_KNOW`: named categories,
+never a score), an area (runtime, compiler, stdlib, tooling, language, ecosystem), its
+link, what changed, production impact and a try-it. A change's link must be one of the
+week's items, so the model cannot cite what it was not given; a change without every
+field, with another impact, or with another link is dropped, and a digest with no valid
+change is refused. Digests written before 2026-09-24's batch carry `changed` and `why`
+instead.
 
 **Sources** (`configs/radar/base.toml` `[[sources]]`, official only): the Go blog,
 Go releases, accepted Go proposals (GitHub search), the Rust blog, Inside Rust, This

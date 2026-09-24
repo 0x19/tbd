@@ -5,7 +5,8 @@ use std::fmt::Write as _;
 
 use chrono::{Duration, Utc};
 use tbd_proto::radar::v1::{
-    ListDigestsRequest, ListItemsRequest, RefreshRequest, RunDigestRequest,
+    GetDigestRequest, ListDigestsRequest, ListItemsRequest, PublishDigestRequest, RefreshRequest,
+    RunDigestRequest,
 };
 use tbd_radar::config::SourceKind;
 use tonic::Code;
@@ -291,8 +292,7 @@ async fn filters_are_checked() {
         .await
         .list_digests(ListDigestsRequest {
             language: "python".into(),
-            lang: String::new(),
-            limit: 0,
+            ..Default::default()
         })
         .await
         .unwrap_err();
@@ -327,4 +327,117 @@ async fn run_digest_starts_in_the_background_by_default() {
         "a background run returns before it writes"
     );
     assert!(run.week.contains("-W"));
+}
+
+/// A draft digest written straight into the store, the way the worker leaves one.
+async fn seed_draft(pool: &sqlx::PgPool) -> i64 {
+    sqlx::query_scalar(
+        "insert into radar.digests (week, language, lang, drill, script, item_count, model, summary, changes)
+         values ('2026-W39', 'go', 'en', 'Do x.', 'Hello.', 3, 'gpt-oss-120b', 'A quiet week.',
+                 '[{\"title\":\"t\",\"impact\":\"breaking\",\"area\":\"stdlib\",\"url\":\"https://go.dev/a\",
+                    \"what\":\"w\",\"production_impact\":\"p\",\"try_it\":\"x\"}]')
+         returning id",
+    )
+    .fetch_one(pool)
+    .await
+    .unwrap()
+}
+
+#[tokio::test]
+async fn a_draft_is_for_admins_until_it_is_published() {
+    let (server, pool) = support::start_with_store(|_| {}).await;
+    let id = seed_draft(&pool).await;
+    let mut client = server.client().await;
+    let everyone = |drafts: bool| ListDigestsRequest {
+        include_drafts: drafts,
+        ..Default::default()
+    };
+
+    let public = client
+        .list_digests(everyone(true))
+        .await
+        .unwrap()
+        .into_inner()
+        .digests;
+    assert!(
+        public.is_empty(),
+        "asking for drafts without the role gets none"
+    );
+    let viewer = client
+        .list_digests(as_caller("someone", Some("viewer"), everyone(true)))
+        .await
+        .unwrap()
+        .into_inner()
+        .digests;
+    assert!(viewer.is_empty());
+    let missing = client
+        .get_digest(GetDigestRequest { id })
+        .await
+        .unwrap_err();
+    assert_eq!(
+        missing.code(),
+        Code::NotFound,
+        "a draft does not exist for the public"
+    );
+
+    let admin = client
+        .list_digests(as_caller("owner", Some("admin"), everyone(true)))
+        .await
+        .unwrap()
+        .into_inner()
+        .digests;
+    assert_eq!(admin.len(), 1);
+    assert_eq!(admin[0].status, "draft");
+    assert_eq!(
+        admin[0].changes[0].impact(),
+        tbd_proto::radar::v1::Impact::Breaking
+    );
+
+    let denied = client
+        .publish_digest(as_caller(
+            "someone",
+            Some("viewer"),
+            PublishDigestRequest { id, publish: true },
+        ))
+        .await
+        .unwrap_err();
+    assert_eq!(denied.code(), Code::PermissionDenied);
+
+    let published = client
+        .publish_digest(as_caller(
+            "owner",
+            Some("admin"),
+            PublishDigestRequest { id, publish: true },
+        ))
+        .await
+        .unwrap()
+        .into_inner()
+        .digest
+        .unwrap();
+    assert_eq!(published.status, "published");
+    assert!(!published.published_at.is_empty());
+    let now_public = client
+        .list_digests(everyone(false))
+        .await
+        .unwrap()
+        .into_inner()
+        .digests;
+    assert_eq!(now_public.len(), 1);
+    assert_eq!(now_public[0].summary, "A quiet week.");
+
+    client
+        .publish_digest(as_caller(
+            "owner",
+            Some("admin"),
+            PublishDigestRequest { id, publish: false },
+        ))
+        .await
+        .unwrap();
+    let hidden = client
+        .list_digests(everyone(false))
+        .await
+        .unwrap()
+        .into_inner()
+        .digests;
+    assert!(hidden.is_empty(), "unpublished goes back to draft");
 }

@@ -5030,6 +5030,14 @@
               "type": "integer",
               "format": "int32"
             }
+          },
+          {
+            "name": "include_drafts",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -5125,6 +5133,60 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/tbd.radar.v1.GetDigestResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope, with the standard gRPC-to-HTTP status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/radar/digests/{id}/publish": {
+      "post": {
+        "tags": [
+          "radar"
+        ],
+        "summary": "tbd.radar.v1.RadarService/PublishDigest",
+        "description": "Transcoded from `/tbd.radar.v1.RadarService/PublishDigest` on the `radar` backend.",
+        "operationId": "RadarService.PublishDigest",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "`tbd.radar.v1.PublishDigestRequest`; path variables override their fields",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/tbd.radar.v1.PublishDigestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "`tbd.radar.v1.PublishDigestResponse`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tbd.radar.v1.PublishDigestResponse"
                 }
               }
             }
@@ -10094,6 +10156,40 @@
           }
         }
       },
+      "tbd.radar.v1.Change": {
+        "type": "object",
+        "description": "`tbd.radar.v1.Change`",
+        "properties": {
+          "area": {
+            "type": "string"
+          },
+          "impact": {
+            "type": "string",
+            "description": "`tbd.radar.v1.Impact`",
+            "enum": [
+              "IMPACT_UNSPECIFIED",
+              "IMPACT_BREAKING",
+              "IMPACT_WORTH_KNOWING",
+              "IMPACT_NICE_TO_KNOW"
+            ]
+          },
+          "production_impact": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "try_it": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "what": {
+            "type": "string"
+          }
+        }
+      },
       "tbd.radar.v1.Digest": {
         "type": "object",
         "description": "`tbd.radar.v1.Digest`",
@@ -10103,6 +10199,12 @@
           },
           "changed": {
             "type": "string"
+          },
+          "changes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/tbd.radar.v1.Change"
+            }
           },
           "created_at": {
             "type": "string"
@@ -10127,11 +10229,20 @@
           "model": {
             "type": "string"
           },
+          "published_at": {
+            "type": "string"
+          },
           "script": {
+            "type": "string"
+          },
+          "status": {
             "type": "string"
           },
           "stub": {
             "type": "boolean"
+          },
+          "summary": {
+            "type": "string"
           },
           "week": {
             "type": "string"
@@ -10214,6 +10325,28 @@
           },
           "version": {
             "type": "string"
+          }
+        }
+      },
+      "tbd.radar.v1.PublishDigestRequest": {
+        "type": "object",
+        "description": "`tbd.radar.v1.PublishDigestRequest`",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "int64"
+          },
+          "publish": {
+            "type": "boolean"
+          }
+        }
+      },
+      "tbd.radar.v1.PublishDigestResponse": {
+        "type": "object",
+        "description": "`tbd.radar.v1.PublishDigestResponse`",
+        "properties": {
+          "digest": {
+            "$ref": "#/components/schemas/tbd.radar.v1.Digest"
           }
         }
       },

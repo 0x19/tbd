@@ -13,12 +13,17 @@ reader language (`en`, `hr`). The contract is `docs/quietpager/README.md`.
   environment only and are never serialised.
 - `fetch.rs`: one HTTP client, a source at a time; a failing source is counted and
   logged, never fatal. Summaries are cleaned to plain text and cut on a word.
-- `store.rs`: the `radar` schema (`migrations/0031_radar.sql`): `items` unique on
-  `(source, guid)`, `digests` unique on `(week, language, lang)`.
+- `store.rs`: the `radar` schema (`migrations/0031_radar.sql`, `0032_radar_review.sql`):
+  `items` unique on `(source, guid)`, `digests` unique on `(week, language, lang)` with
+  `status`, `summary` and `changes` (JSON). Static SQL only: the column list is a macro
+  joined by `concat!`, since sqlx refuses a query string built at run time.
 - `digest.rs`: the call to the llm service as `svc:radar`, through Envoy's internal
   listener in a deployment. The llm service has no JSON mode, so the four headings in
-  `HEADINGS` are the contract: an answer missing one, or with an empty section, is
-  refused and nothing is stored. Reasoning chunks are dropped.
+  `HEADINGS` are the contract (level one or two; matched by their words after
+  normalising dashes, case and bold): an answer missing one, or with an empty section,
+  is refused and nothing is stored. `## Changes` holds `###` blocks of `Label: value`
+  lines; `parse_changes` keeps a block only with every field, an impact among the three
+  names, and a link among the week's items. Reasoning chunks are dropped.
 - `worker.rs`: `refresh` and `digest`, shared by the timers and the admin RPCs. The
   week written at `now` is the week of the day before, so a Monday run is last week.
   One digest run at a time (`running`, released on drop); `RunDigest` starts it in
@@ -28,6 +33,11 @@ reader language (`en`, `hr`). The contract is `docs/quietpager/README.md`.
   the caller Envoy verified. Without a store every RPC but `Ping` is `UNAVAILABLE`.
 
 Invariants:
+- Every digest the worker writes is a draft; only `PublishDigest` (admin) makes it
+  public, and a rewrite sends it back to draft. Reads show drafts to an admin who asks,
+  and a draft is `NOT_FOUND` for anyone else.
+- A change's impact is one of three named categories, never a score, and its link is
+  one of the items the model was given.
 - A digest is written by a model and says so on every surface (`ai_written`), and
   `stub` is true when the llm's stub engine wrote it: a placeholder never looks real.
 - `PingResponse.stub` is `true`, as in every service; the chaos check asserts it.

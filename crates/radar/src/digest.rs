@@ -16,19 +16,30 @@ use tonic::{
 
 use crate::{
     config::Llm,
-    store::{DigestRow, ItemRow},
+    store::{Change, DigestRow, Impact, ItemRow},
 };
 
 /// The subject the radar calls the llm service as; its daily budget is this
 /// subject's.
 pub const SERVICE_SUBJECT: &str = "svc:radar";
 
-/// The four headings, in order: the answer's contract.
+/// The four section headings, in order: the answer's contract. Sections are
+/// level one or two; the changes inside `## Changes` are level three.
 pub const HEADINGS: [&str; 4] = [
-    "## What changed",
-    "## Why it matters",
+    "## This week",
+    "## Changes",
     "## Ten-minute drill",
     "## Avatar script",
+];
+
+/// The areas a change may name; anything else is filed as `ecosystem`.
+pub const AREAS: [&str; 6] = [
+    "runtime",
+    "compiler",
+    "stdlib",
+    "tooling",
+    "language",
+    "ecosystem",
 ];
 
 /// Why a digest was not written.
@@ -49,6 +60,10 @@ pub enum DigestError {
     /// The answer lacks a heading or a section is empty.
     #[error("the answer has no usable {0:?} section")]
     Missing(&'static str),
+    /// No change in the answer had every field, a known impact, and a link
+    /// among the week's items.
+    #[error("the answer has no usable change")]
+    NoChanges,
 }
 
 /// Puts the service subject on every call, the way Envoy would forward a
@@ -151,12 +166,17 @@ impl Writer {
         .await
         .map_err(|_| DigestError::Timeout(self.config.timeout_secs))??;
         let sections = parse_sections(&text)?;
+        let links: Vec<&str> = items.iter().map(|r| r.item.url.as_str()).collect();
+        let changes = parse_changes(&sections[1], &links);
+        if changes.is_empty() {
+            return Err(DigestError::NoChanges);
+        }
         Ok(DigestRow {
             week: week.to_owned(),
             language: language.to_owned(),
             lang: lang.to_owned(),
-            changed: sections[0].clone(),
-            why: sections[1].clone(),
+            summary: sections[0].clone(),
+            changes,
             drill: sections[2].clone(),
             script: sections[3].clone(),
             item_count: i32::try_from(items.len()).unwrap_or(i32::MAX),
@@ -179,15 +199,26 @@ pub fn system_prompt(language: &str, lang: &str) -> String {
     let reader = if lang == "hr" { "Croatian" } else { "English" };
     format!(
         "You write the weekly Radar for working {name} engineers: what changed in {name} this week \
-         and why it matters to someone who ships {name} in production. Use only the items given; \
-         never invent a release, a version number, a date or a feature. If the items are thin, \
-         say so briefly instead of padding. Write in {reader}. Answer in Markdown with exactly \
-         these four headings, in this order, written exactly as shown in English even when the \
-         text is {reader}:\n\n\
-         ## What changed\n\
-         Five to eight bullets, each one item, each with its link.\n\n\
-         ## Why it matters\n\
-         Two short paragraphs on what a production engineer should do or watch.\n\n\
+         and what it means for someone who runs {name} in production. Use only the items given; \
+         never invent a release, a version number, a date, a benchmark or a feature, and cite each \
+         change with the exact link of the item it comes from. If the week is thin, say so \
+         instead of padding. Write in {reader}. Answer in Markdown with exactly these four \
+         headings, in this order, written exactly as shown in English even when the text is \
+         {reader}:\n\n\
+         ## This week\n\
+         Two or three sentences on the week as a whole.\n\n\
+         ## Changes\n\
+         Three to eight changes, the most important first, each as its own block:\n\
+         ### <short title>\n\
+         Impact: Breaking | Worth knowing | Nice to know\n\
+         Area: runtime | compiler | stdlib | tooling | language | ecosystem\n\
+         Link: <the item's exact link>\n\
+         What changed: <one or two sentences>\n\
+         Production impact: <what it means for a running service or a build>\n\
+         Try it: <one concrete thing to do or check>\n\
+         Breaking means it can break a build or a running service; Worth knowing means it \
+         changes how you work; Nice to know is tooling and ergonomics. Keep the labels in \
+         English.\n\n\
          ## Ten-minute drill\n\
          One small exercise a reader can do in ten minutes that uses something from this week.\n\n\
          ## Avatar script\n\
@@ -232,7 +263,10 @@ pub fn parse_sections(text: &str) -> Result<[String; 4], DigestError> {
             *pos += line.len() + 1;
             Some((here, line))
         })
-        .filter(|(_, line)| line.trim_start().starts_with('#'))
+        .filter(|(_, line)| {
+            let t = line.trim_start();
+            t.starts_with('#') && !t.starts_with("###")
+        })
         .map(|(at, line)| (at, normalise(line)))
         .collect();
     let mut starts = Vec::with_capacity(4);
@@ -265,7 +299,7 @@ pub fn parse_sections(text: &str) -> Result<[String; 4], DigestError> {
 /// What identifies each heading once normalised: models write "Ten‑minute" with
 /// a non-breaking hyphen, "10-minute", bold, or add "(60 seconds)", so the match
 /// is on these words, not on the exact line.
-const HEADING_KEYS: [&str; 4] = ["what changed", "why it matters", "drill", "avatar script"];
+const HEADING_KEYS: [&str; 4] = ["this week", "changes", "drill", "avatar script"];
 
 /// A heading line lowercased, without `#`, `*` or `_`, with every Unicode dash
 /// as `-` and whitespace collapsed.
@@ -282,6 +316,122 @@ fn normalise(line: &str) -> String {
     lowered.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
+/// The change blocks of a `## Changes` section: each `###` heading is a
+/// title, followed by `Label: value` lines (a value may continue on the lines
+/// after it). A block is kept only with every field, an impact among the three
+/// names, and a link that is one of `links` (the week's items), so the model
+/// cannot cite what it was not given; the rest are dropped and logged. Kept
+/// changes are ordered Breaking, Worth knowing, Nice to know, stable within.
+#[must_use]
+pub fn parse_changes(section: &str, links: &[&str]) -> Vec<Change> {
+    let mut blocks: Vec<(String, Vec<&str>)> = Vec::new();
+    for line in section.lines() {
+        let t = line.trim_start();
+        if t.starts_with("###") {
+            let title = t.trim_start_matches('#').replace("**", "");
+            blocks.push((title.trim().to_owned(), Vec::new()));
+        } else if let Some((_, lines)) = blocks.last_mut() {
+            lines.push(line);
+        }
+    }
+    let mut out: Vec<Change> = blocks
+        .into_iter()
+        .filter_map(|(title, lines)| {
+            let change = change_from(&title, &lines, links);
+            if change.is_none() {
+                tracing::info!(%title, "change dropped: a field missing, an unknown impact, or a link not among the items");
+            }
+            change
+        })
+        .collect();
+    out.sort_by_key(|c| c.impact);
+    out
+}
+
+fn change_from(title: &str, body: &[&str], links: &[&str]) -> Option<Change> {
+    let mut fields: Vec<(String, String)> = Vec::new();
+    for line in body {
+        let plain = line
+            .trim()
+            .trim_start_matches(['-', '*', ' '])
+            .replace("**", "");
+        let labelled = plain.split_once(':').and_then(|(label, value)| {
+            let label = normalise(label);
+            [
+                "impact",
+                "area",
+                "link",
+                "what changed",
+                "production impact",
+                "try it",
+            ]
+            .contains(&label.as_str())
+            .then(|| (label, value.trim().to_owned()))
+        });
+        match labelled {
+            Some(field) => fields.push(field),
+            None if !plain.trim().is_empty() => {
+                if let Some((_, value)) = fields.last_mut() {
+                    value.push(' ');
+                    value.push_str(plain.trim());
+                }
+            }
+            None => {}
+        }
+    }
+    let get = |key: &str| {
+        fields
+            .iter()
+            .find(|(k, _)| k == key)
+            .map(|(_, v)| v.trim().to_owned())
+    };
+    let impact = match normalise(&get("impact")?).as_str() {
+        "breaking" => Impact::Breaking,
+        "worth knowing" => Impact::WorthKnowing,
+        "nice to know" => Impact::NiceToKnow,
+        _ => return None,
+    };
+    let url = first_link(&get("link")?)?;
+    let same = |a: &str, b: &str| a.trim_end_matches('/') == b.trim_end_matches('/');
+    if !links.iter().any(|l| same(l, &url)) {
+        return None;
+    }
+    let area = normalise(&get("area").unwrap_or_default());
+    let area = if AREAS.contains(&area.as_str()) {
+        area
+    } else {
+        "ecosystem".to_owned()
+    };
+    let (what, production_impact, try_it) = (
+        get("what changed")?,
+        get("production impact")?,
+        get("try it")?,
+    );
+    if title.is_empty() || what.is_empty() || production_impact.is_empty() || try_it.is_empty() {
+        return None;
+    }
+    Some(Change {
+        title: title.to_owned(),
+        impact,
+        area,
+        url,
+        what,
+        production_impact,
+        try_it,
+    })
+}
+
+/// The first http(s) URL in a value written as a bare link, `<link>` or
+/// `[text](link)`.
+fn first_link(value: &str) -> Option<String> {
+    let start = value.find("http://").or_else(|| value.find("https://"))?;
+    let url: String = value[start..]
+        .chars()
+        .take_while(|c| !c.is_whitespace() && !matches!(c, ')' | '>' | ']' | '"'))
+        .collect();
+    Some(url.trim_end_matches(['.', ',', ';']).to_owned())
+}
+
 /// The ISO week label of a moment, e.g. `"2026-W39"`.
 #[must_use]
 pub fn iso_week(at: DateTime<Utc>) -> String {
@@ -295,47 +445,65 @@ mod tests {
 
     use super::*;
 
+    const FULL: &str = "Preamble.\n## This week\nA quiet week.\n## Changes\n\
+        ### Scheduler tweak\nImpact: Worth knowing\nArea: runtime\nLink: https://go.dev/a\n\
+        What changed: The scheduler\nnow yields sooner.\nProduction impact: Lower tail latency.\n\
+        Try it: Run your load test.\n\
+        ### **CancelRequest is gone**\n- **Impact:** Breaking\n- **Area:** stdlib\n\
+        - **Link:** <https://github.com/golang/go/issues/1>\n- **What changed:** Removed.\n\
+        - **Production impact:** Builds fail.\n- **Try it:** grep for it.\n\
+        ## Ten\u{2011}minute drill\nDo x.\n## Avatar script (60 seconds)\nHello.\n";
+
+    const LINKS: [&str; 2] = ["https://go.dev/a", "https://github.com/golang/go/issues/1"];
+
     #[test]
-    fn sections_split_on_the_headings_in_any_case() {
-        let text = "Preamble.\n## What changed\n- a\n- b\n## why it matters\nBecause.\n\
-                    ## Ten-minute drill\nDo x.\n## Avatar script (60 seconds)\nHello.\n";
-        let s = parse_sections(text).unwrap();
-        assert_eq!(s[0], "- a\n- b");
-        assert_eq!(s[1], "Because.");
+    fn sections_split_on_level_two_headings_only() {
+        let s = parse_sections(FULL).unwrap();
+        assert_eq!(s[0], "A quiet week.");
+        assert!(s[1].starts_with("### Scheduler tweak"));
         assert_eq!(s[2], "Do x.");
         assert_eq!(s[3], "Hello.");
     }
 
     #[test]
-    fn headings_match_despite_dashes_bold_and_numbers() {
-        let text = "## **What changed**\n- a\n### Why it matters:\nb\n\
-                    ## Ten\u{2011}minute drill\nc\n## Avatar script (60 seconds)\nd\n";
-        let s = parse_sections(text).unwrap();
-        assert_eq!(
-            s,
-            [
-                "- a".to_owned(),
-                "b".to_owned(),
-                "c".to_owned(),
-                "d".to_owned()
-            ]
-        );
-        let numbered =
-            "## What changed\na\n## Why it matters\nb\n## 10-minute drill\nc\n## Avatar script\nd";
-        assert_eq!(parse_sections(numbered).unwrap()[2], "c");
+    fn changes_parse_with_bold_bullets_and_continuations_breaking_first() {
+        let s = parse_sections(FULL).unwrap();
+        let c = parse_changes(&s[1], &LINKS);
+        assert_eq!(c.len(), 2);
+        assert_eq!(c[0].title, "CancelRequest is gone");
+        assert_eq!(c[0].impact, Impact::Breaking);
+        assert_eq!(c[0].url, "https://github.com/golang/go/issues/1");
+        assert_eq!(c[1].what, "The scheduler now yields sooner.");
+        assert_eq!(c[1].area, "runtime");
+    }
+
+    #[test]
+    fn a_change_citing_what_it_was_not_given_is_dropped() {
+        let s = parse_sections(FULL).unwrap();
+        let only_one = parse_changes(&s[1], &["https://go.dev/a"]);
+        assert_eq!(only_one.len(), 1);
+        assert_eq!(only_one[0].title, "Scheduler tweak");
+    }
+
+    #[test]
+    fn an_unknown_impact_or_a_missing_field_drops_the_change() {
+        let bad = "### A\nImpact: 8.7/10\nLink: https://go.dev/a\nWhat changed: x\n\
+                   Production impact: y\nTry it: z\n### B\nImpact: Breaking\nLink: https://go.dev/a\n\
+                   What changed: x\nTry it: z\n";
+        assert!(parse_changes(bad, &LINKS).is_empty());
     }
 
     #[test]
     fn a_missing_or_empty_section_is_refused() {
         assert!(matches!(
-            parse_sections("## What changed\nx\n## Why it matters\ny\n## Ten-minute drill\nz\n"),
+            parse_sections("## This week\nx\n## Changes\ny\n## Ten-minute drill\nz\n"),
             Err(DigestError::Missing("## Avatar script"))
         ));
         assert!(matches!(
             parse_sections(
-                "## What changed\n\n## Why it matters\ny\n## Ten-minute drill\nz\n## Avatar script\nw"
+                "## This week\n\n## Changes\ny\n## Ten-minute drill\nz\n## Avatar script\nw"
             ),
-            Err(DigestError::Missing("## What changed"))
+            Err(DigestError::Missing("## This week"))
         ));
     }
 

@@ -101,3 +101,7 @@ opens, and quietpager.com's redirect goes live.
 
 - 2026-09-24: opened. Name, domains and the endorsed-brand placement decided; plan approved
   for tracks A (Radar) and B (grader) in parallel.
+- 2026-09-24: the Radar is live on the site with its first issue (week 39). Its first
+  batch after review adds a review gate (drafts until published), one block per change
+  with a fixed impact category and a link among the week's items, a dated archive, and
+  copy that leads with value.

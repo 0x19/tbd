@@ -12,16 +12,17 @@ use tbd_common::{
     principal::Principal,
 };
 use tbd_proto::radar::v1::{
-    Digest, GetDigestRequest, GetDigestResponse, Item, ListDigestsRequest, ListDigestsResponse,
-    ListItemsRequest, ListItemsResponse, PingRequest, PingResponse, RefreshRequest,
-    RefreshResponse, RunDigestRequest, RunDigestResponse, radar_service_server::RadarService,
+    Change as WireChange, Digest, GetDigestRequest, GetDigestResponse, Impact as WireImpact, Item,
+    ListDigestsRequest, ListDigestsResponse, ListItemsRequest, ListItemsResponse, PingRequest,
+    PingResponse, PublishDigestRequest, PublishDigestResponse, RefreshRequest, RefreshResponse,
+    RunDigestRequest, RunDigestResponse, radar_service_server::RadarService,
 };
 use tonic::{Code, Request, Response, Status};
 
 use crate::{
     Runtime,
     config::Ping,
-    store::{DigestRow, ItemRow, Store},
+    store::{Change, DigestRow, Impact, ItemRow, PUBLISHED, Store},
     worker::{RunError, Worker},
 };
 
@@ -90,6 +91,14 @@ impl Radar {
     }
 
     /// The caller, and only if Envoy verified them as an admin.
+    /// Whether the caller Envoy verified, if any, is an admin. For reads: a
+    /// missing or other caller is simply not one, never an error.
+    fn is_admin<T>(request: &Request<T>) -> bool {
+        let headers = request.metadata().clone().into_headers();
+        Principal::from_headers(&headers, &[])
+            .is_some_and(|p| p.role.as_deref() == Some(ADMIN_ROLE))
+    }
+
     fn admin<T>(
         &self,
         request: &Request<T>,
@@ -163,6 +172,27 @@ fn to_digest(d: DigestRow) -> Digest {
         model: d.model,
         ai_written: true,
         stub: d.stub,
+        summary: d.summary,
+        changes: d.changes.into_iter().map(to_change).collect(),
+        status: d.status,
+        published_at: d.published_at.map(|t| t.to_rfc3339()).unwrap_or_default(),
+    }
+}
+
+fn to_change(c: Change) -> WireChange {
+    let impact = match c.impact {
+        Impact::Breaking => WireImpact::Breaking,
+        Impact::WorthKnowing => WireImpact::WorthKnowing,
+        Impact::NiceToKnow => WireImpact::NiceToKnow,
+    };
+    WireChange {
+        title: c.title,
+        impact: impact.into(),
+        area: c.area,
+        url: c.url,
+        what: c.what,
+        production_impact: c.production_impact,
+        try_it: c.try_it,
     }
 }
 
@@ -199,6 +229,8 @@ impl RadarService for Radar {
         request: Request<ListDigestsRequest>,
     ) -> Result<Response<ListDigestsResponse>, Status> {
         let mut timer = self.admit("RadarService/ListDigests").await?;
+        // Drafts only for an admin who asks; anyone else asking gets the published.
+        let drafts = Self::is_admin(&request) && request.get_ref().include_drafts;
         let req = request.into_inner();
         let language = filter(&req.language, &["go", "rust"], "language")
             .map_err(|s| self.reject(&mut timer, s))?;
@@ -207,7 +239,7 @@ impl RadarService for Radar {
         let limit = self.limit(req.limit);
         let store = self.store(&mut timer)?;
         let rows = store
-            .list_digests(&language, &lang, limit)
+            .list_digests(&language, &lang, limit, drafts)
             .await
             .map_err(|e| self.reject(&mut timer, internal(e)))?;
         Ok(Response::new(ListDigestsResponse {
@@ -220,6 +252,7 @@ impl RadarService for Radar {
         request: Request<GetDigestRequest>,
     ) -> Result<Response<GetDigestResponse>, Status> {
         let mut timer = self.admit("RadarService/GetDigest").await?;
+        let admin = Self::is_admin(&request);
         let id = request.into_inner().id;
         let store = self.store(&mut timer)?;
         match store
@@ -227,10 +260,12 @@ impl RadarService for Radar {
             .await
             .map_err(|e| self.reject(&mut timer, internal(e)))?
         {
-            Some(d) => Ok(Response::new(GetDigestResponse {
+            // A draft is not found for anyone but an admin, not forbidden: its
+            // existence is not public either.
+            Some(d) if admin || d.status == PUBLISHED => Ok(Response::new(GetDigestResponse {
                 digest: Some(to_digest(d)),
             })),
-            None => Err(self.reject(&mut timer, Status::not_found(format!("no digest {id}")))),
+            _ => Err(self.reject(&mut timer, Status::not_found(format!("no digest {id}")))),
         }
     }
 
@@ -322,6 +357,32 @@ impl RadarService for Radar {
                 Status::failed_precondition("no llm service configured"),
             )),
             Err(RunError::Store(e)) => Err(self.reject(&mut timer, internal(e))),
+        }
+    }
+
+    async fn publish_digest(
+        &self,
+        request: Request<PublishDigestRequest>,
+    ) -> Result<Response<PublishDigestResponse>, Status> {
+        let mut timer = self.admit("RadarService/PublishDigest").await?;
+        let who = self.admin(&request, &mut timer)?;
+        let req = request.into_inner();
+        let store = self.store(&mut timer)?;
+        let row = store
+            .set_published(req.id, req.publish, &who.sub)
+            .await
+            .map_err(|e| self.reject(&mut timer, internal(e)))?;
+        match row {
+            Some(d) => {
+                tracing::info!(subject = %who.sub, id = req.id, publish = req.publish, week = %d.week, "radar digest review");
+                Ok(Response::new(PublishDigestResponse {
+                    digest: Some(to_digest(d)),
+                }))
+            }
+            None => Err(self.reject(
+                &mut timer,
+                Status::not_found(format!("no digest {}", req.id)),
+            )),
         }
     }
 }
