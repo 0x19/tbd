@@ -1,6 +1,6 @@
 /**
- * The arithmetic behind the two mesh drawings on the home page (`hero-mesh`
- * and `closing-mesh`): a 72px cell, traces that run along the grid or at 45°,
+ * The arithmetic behind the mesh fabric (`mesh-fabric.tsx`, behind the hero
+ * and the footer): a 72px cell, traces that run along the grid or at 45°,
  * and the segments of a set of traces with each drawn once.
  */
 export const CELL = 72;

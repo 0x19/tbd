@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
-import { HeroMesh } from "@/components/hero-mesh";
+import { Opening } from "@/components/closing-mesh";
 import { Eyebrow, Frame, Reveal, SectionHead, Tag } from "@/components/kit";
 import { Pipeline } from "@/components/pipeline";
 import { Button } from "@/components/ui/button";
@@ -37,8 +37,7 @@ export function HomeContent() {
     <>
       {/* ---------------------------------------------------------- hero */}
       <section className="relative overflow-hidden">
-        <Grid />
-        <HeroMesh />
+        <Opening />
         <Frame className="relative pt-20 pb-14 sm:pt-32 sm:pb-20">
           <Eyebrow className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <span className="text-foreground">{facts.person}</span>
@@ -391,30 +390,5 @@ function Spine({
       className="spine-packet bg-foreground pointer-events-none absolute top-0 left-[calc(max(0px,50%-36rem)+0.75rem)] size-[5px] rounded-full sm:left-[calc(max(0px,50%-36rem)+1rem)]"
       style={{ "--spine-end": `${length}px` } as React.CSSProperties}
     />
-  );
-}
-
-/** A faint grid behind the hero, fading out downwards, anchored to the right edge
- * so the mesh drawing sits on its intersections. Decoration only. */
-function Grid() {
-  return (
-    <div
-      aria-hidden
-      className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[36rem]"
-      style={{
-        maskImage: "linear-gradient(to bottom, black 10%, transparent)",
-        WebkitMaskImage: "linear-gradient(to bottom, black 10%, transparent)",
-      }}
-    >
-      <div
-        className="absolute inset-0 opacity-[0.06] dark:opacity-[0.09]"
-        style={{
-          backgroundImage:
-            "linear-gradient(to right, currentColor 1px, transparent 1px), linear-gradient(to bottom, currentColor 1px, transparent 1px)",
-          backgroundSize: "72px 72px",
-          backgroundPosition: "right top",
-        }}
-      />
-    </div>
   );
 }

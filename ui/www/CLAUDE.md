@@ -158,27 +158,24 @@ practice log is `localStorage`, per browser, and its page says so.
   each, four playground tiles, the lab once `lab.public` is true, the email. The
   summary paragraph, the project rows and the contact hero belong to `/about/`,
   `/projects/` and `/contact/`; putting them back here is the repetition that was
-  removed. Behind the hero: the grid, anchored to the right edge, and
-  `src/components/hero-mesh.tsx` on its intersections: a small mesh of points of
-  presence routed like a board (grid-aligned and 45° traces, nodes that knock the
-  grid out, three packets crawling along it) in `currentColor`, shown from `xl` up
-  with a left fade that follows the viewport so no node sits under the headline;
-  decoration only, `aria-hidden`, and the packets stop under `prefers-reduced-motion`.
-  Below the hero the page is one drawing: a spine (a hairline half a gutter left of
-  the content, `left-3 sm:left-4` inside each Frame) runs from the facts strip to the
-  email, every section is a `Box` on it with a knock-out port where its rule meets
-  the line, and one packet (`Spine`, measured with a ResizeObserver) crawls the whole
-  way. The page opens and closes with the same kind of box: the facts strip under
-  the hero is where the request comes in and the email strip at the end is where
-  the reply leaves, so both carry `StripEdge` (a light round the outline, drops down
-  the dividers, mirrored on the last one) and the spine runs from the first strip's
-  corner to a filled port on the last one's. Behind the footer,
-  `src/components/closing-mesh.tsx` (`Closing`, wrapped round the footer in the root
-  layout, home route only) is the hero's mesh grown to the whole width: two hand-laid
-  tiles alternating across it, joined at their seams, anchored to the page's bottom
-  edge and strongest there, fading upward to nothing just under the last strip; the
-  grid is a pattern from the spine and the bottom edge. `src/lib/mesh.ts` is the arithmetic both
-  drawings share. A new home section
+  removed. Behind the hero and behind the footer is one drawing,
+  `src/components/mesh-fabric.tsx`: a mesh of points of presence grown to the whole
+  width, two hand-laid tiles alternating and joined at their seams, on a 72px grid
+  drawn as a pattern from the spine, faint, with packets, ripples from the hub and
+  breathing halos (all stop under `prefers-reduced-motion`). `Opening` hangs it from
+  the top of the home page, fading down into the facts strip (where the request comes
+  in from); `Closing`, wrapped round the footer in the root layout, hangs it from the
+  bottom of every page, fading up (where the reply goes out to), and on the home page
+  also drops the footer's top rule and leaves a small step under the last strip. The
+  spine below the hero: a hairline half a gutter left of the content
+  (`left-3 sm:left-4` inside each Frame) runs from the facts strip to the email, every
+  section is a `Box` on it with a knock-out port where its rule meets the line, and
+  one packet (`Spine`, measured with a ResizeObserver) crawls the whole way. The page
+  opens and closes with the same kind of box: the facts strip under the hero is where
+  the request comes in and the email strip at the end is where the reply leaves, so
+  both carry `StripEdge` (a light round the outline, drops down the dividers, mirrored
+  on the last one) and the spine runs from the first strip's corner to a filled port
+  on the last one's. `src/lib/mesh.ts` is the arithmetic the fabric uses. A new home section
   is a `Box`, so it gets its port and its stretch of the line for free.
 - The pipeline on the home page (`src/components/pipeline.tsx`, data in
   `pipeline` and `rails`) is a drawing of a real system, not an illustration:

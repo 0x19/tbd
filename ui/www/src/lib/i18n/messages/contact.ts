@@ -5,7 +5,7 @@ export const en: Dict = {
   "contact.eyebrow": "Contact",
   "contact.title": "Say hi.",
   "contact.lead":
-    "A question about something here, a bug in one of the libraries, an idea worth a prototype, or work that needs doing — all fine. I read every mail myself.",
+    "A question about something here, a bug in one of the libraries, an idea worth a prototype, or work that needs doing — all fine. I answer every mail personally.",
   "contact.email": "Email",
   "contact.elsewhere": "Elsewhere",
   "contact.where": "Where",
@@ -17,7 +17,7 @@ export const hr: Dict = {
   "contact.eyebrow": "Kontakt",
   "contact.title": "Javi se.",
   "contact.lead":
-    "Pitanje o nečemu odavde, greška u nekoj od biblioteka, ideja vrijedna prototipa ili posao koji treba obaviti -- sve je u redu. Svaku poruku čitam sam.",
+    "Pitanje o nečemu odavde, greška u nekoj od biblioteka, ideja vrijedna prototipa ili posao koji treba obaviti -- sve je u redu. Na svaku poruku odgovaram osobno.",
   "contact.email": "E-pošta",
   "contact.elsewhere": "Drugdje",
   "contact.where": "Gdje",
