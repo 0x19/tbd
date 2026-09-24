@@ -50,6 +50,8 @@ follows the RFC it measures.
 7. Replacing the model server: loading the weights ourselves, then the tokenizer, the
    KV cache, batching and sampling, one layer per study.
 8. Fine-tuning against recall, measured.
+9. What it takes to run a stranger's code: the sandbox's escape suite, a cold run's
+   latency per language, and what a run costs the machine (RFC 0010).
 
 The engine of our own (7) is a parallel track against the baselines, never the critical
 path of the service: each layer has to say what the baseline does, what ours does, where

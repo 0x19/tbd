@@ -82,3 +82,4 @@ is a false claim.
 | 0007 | [Quiet Pager, an InOrbit lab](0007-quiet-pager.md) | open, draft |
 | 0008 | [The grader](0008-the-grader.md) | open, draft |
 | 0009 | [Subscriptions](0009-subscriptions.md) | open, draft |
+| 0010 | [The sandbox](0010-the-sandbox.md) | open |
