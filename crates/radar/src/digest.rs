@@ -233,7 +233,10 @@ pub fn system_prompt(language: &str, lang: &str) -> String {
          change with the exact link of the item it comes from. If the week is thin, say so \
          instead of padding. The Radar reports on the {name} project; it is not the project, \
          so never write as if we released, shipped, accepted or fixed anything: name who did \
-         (the {name} team, the release, the proposal). Write in {reader}.{style} Answer in Markdown with exactly these four \
+         (the {name} team, the release, the proposal); a crate or a tool listed in This Week in \
+         {name} is its authors' work, not the {name} team's. Describe only what an item's own text \
+         says: when it gives only a title, say only that, and add no features, numbers or reasons \
+         of your own. A point release is never Breaking. Write in {reader}.{style} Answer in Markdown with exactly these four \
          headings, in this order, written exactly as shown in English even when the text is \
          {reader}:\n\n\
          ## This week\n\
@@ -493,6 +496,8 @@ mod tests {
         let en = system_prompt("go", "en");
         assert!(!en.contains("first person plural"));
         assert!(en.contains("never write as if we released"));
+        assert!(en.contains("Describe only what an item's own text says"));
+        assert!(en.contains("A point release is never Breaking"));
         assert!(!en.contains("sedmica"));
         let hr = system_prompt("rust", "hr");
         assert!(hr.contains("standard Croatian"));
