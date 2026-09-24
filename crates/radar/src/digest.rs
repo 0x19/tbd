@@ -157,7 +157,7 @@ impl Writer {
             max_tokens: Some(self.config.max_tokens),
             temperature: Some(self.config.temperature),
             session_id: String::new(),
-            reasoning: None,
+            reasoning: Some(self.config.reasoning),
             agent: String::new(),
             page: String::new(),
         };

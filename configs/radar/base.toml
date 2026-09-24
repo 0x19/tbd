@@ -35,6 +35,9 @@ tier = "deep"
 max_tokens = 4096
 temperature = 0.3
 timeout_secs = 900
+# Off: the fast tier reasoned through the whole budget and answered nothing. The
+# llm service sends each engine its own switch (gpt-oss: reasoning_effort low).
+reasoning = false
 
 [fetch]
 # Every source is read this often; 0 turns the timer off (Refresh still works).

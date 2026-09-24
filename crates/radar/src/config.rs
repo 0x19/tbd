@@ -169,6 +169,10 @@ pub struct Llm {
     pub temperature: f32,
     /// How long one digest may take, seconds.
     pub timeout_secs: u64,
+    /// Whether the model may reason before it answers. Off: a digest is a
+    /// rewrite of the items given, and reasoning on the fast tier spent the
+    /// whole budget before any answer.
+    pub reasoning: bool,
 }
 
 impl Default for Llm {
@@ -176,9 +180,10 @@ impl Default for Llm {
         Self {
             url: String::new(),
             tier: "deep".to_owned(),
-            max_tokens: 2048,
+            max_tokens: 4096,
             temperature: 0.3,
             timeout_secs: 900,
+            reasoning: false,
         }
     }
 }
