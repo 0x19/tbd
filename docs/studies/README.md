@@ -55,4 +55,4 @@ does, where the bottleneck was and what it did after the fix, or it is not a stu
 
 | # | Study | Status |
 |---|---|---|
-| 0001 | [What a 16 GB card really does](0001-what-a-16gb-card-really-does.md) | running |
+| 0001 | [What a 16 GB card really does](0001-what-a-16gb-card-really-does.md) | measured |

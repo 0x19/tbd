@@ -1,6 +1,6 @@
 ---
 title: What a 16 GB card really does
-status: running
+status: measured
 date: 2026-09-24
 public: true
 summary: Both tiers of the llm service measured with the chaos tool, on the processor while the card was dark and then on the card; what the numbers say about the model, the engine, the request, and the platform in front of them.
@@ -76,6 +76,35 @@ Offered at one and two a second, the deep tier only queued: latencies of thirty 
 seconds and more, every generation still finishing. The table above is the one that
 says what a generation costs.
 
+**Parallelism**, the setting the first runs had left at its default. Ollama serves one
+request at a time unless told otherwise; told to serve two, the fast model needs a second
+context on the card. With the deep tier beside it there was no room, the model spilled a
+sixth of itself to the processor, and everything collapsed. With the deep tier stopped,
+two slots fit, and the ceiling rose by about a tenth. 256 tokens per request:
+
+| Slots | Deep tier | Offered rate | Done | Latency p50 | TTFT p50 | Completion tok/s | Answered |
+|---|---|---|---|---|---|---|---|
+| 1 | running | 0.5/s | 29 | 2.4 s | 0.49 s | 97 | 22 of 29 |
+| 2 | running, model 16 % on the processor | 0.5/s | 20 | 31.2 s | 23.4 s | 40 | 15 of 20 |
+| 2 | stopped | 0.5/s | 29 | 2.5 s | 0.35 s | 99 | 18 of 29 |
+| 2 | stopped | 1/s | 56 | 16.7 s | 13.9 s | 129 | 41 of 56 |
+| 2 | stopped | 2/s | 71 | 38.8 s | 35.0 s | 131 | 53 of 71 |
+
+**The challenger**, Google's 26-billion-parameter mixture-of-experts model (3.8 billion
+active) at Q4_K_M, needed a newer engine to pull at all. On the same two slots with the
+deep tier stopped it did not fit either: a fifth of it on the processor. Its numbers on
+that footing, 256 tokens per request:
+
+| Offered rate | Done | Latency p50 | TTFT p50 | Completion tok/s | Answered |
+|---|---|---|---|---|---|
+| 0.5/s | 29 | 8.8 s | 4.6 s | 106 | 0 of 29 |
+| 1/s | 40 | 31.4 s | 27.1 s | 102 | 1 of 40 |
+| 2/s | 59 | 54.0 s | 49.9 s | 112 | 2 of 59 |
+
+It reasons even longer than the incumbent: with 256 tokens it answered almost nothing.
+The comparison is not settled by this table, because neither model was measured alone on
+one slot at the same budget; it is settled enough to keep the incumbent for the demo.
+
 Method notes, so the tables can be reread: latency is the whole stream from the request
 to the done chunk; TTFT is the first chunk of any kind, reasoning included; completion
 tokens per second is the engine's own count summed over the window divided by the
@@ -126,6 +155,20 @@ tokens was refused outright: the load operation's caller had spent its daily bud
 The platform's own instruments are now exempt from the limit and still recorded, and the
 fact that a day of measurement is a person's budget for a few weeks is worth knowing.
 
+**Load order decides who gets the card.** The deep tier's server takes about three
+gigabytes for its attention and cache when it starts; the fast model takes twelve to
+fourteen. Started first, the deep tier leaves the fast model short and a sixth of it
+lands on the processor; started second, into what the fast model left, both fit and the
+fast model stays whole. The order is now part of how the machine is brought up. The
+engine upgrade that the challenger required also changed the fast model's footprint
+from fourteen gigabytes to twelve and a half, which is what made the pair fit with room.
+
+**"Reasoning off" is a request, not an order.** The service can ask an engine not to
+reason. The fast tier's model reasons regardless of the switch, and the deep tier's
+server put the reasoning inside the answer text until it was told the format to separate
+it with. Both now arrive as reasoning chunks the page folds away; the demo's switch says
+what it can and cannot do.
+
 **The deep tier costs twelve to twenty tokens a second per stream, and it slows as the
 answer grows.** Forty-eight tokens took 3.2 seconds with the first token at 0.77
 seconds, about twenty a second after the first; an average of 165 tokens took 13.9
@@ -144,9 +187,10 @@ instrument before pointing it at a budget.
 
 ## Next
 
-The engine's parallelism set to match the card. The challenger model on the same table.
-The deep tier under two callers at once. The processor at 256 tokens, with the card
-disabled on purpose, to settle what the 48-token runs could not.
+Both candidates alone on one slot at the same budget, to settle the challenger. The deep
+tier under two callers at once. The processor at 256 tokens, with the card disabled on
+purpose, to settle what the 48-token runs could not. Then the studies that replace the
+engine, one layer at a time.
 
 ## Glossary
 

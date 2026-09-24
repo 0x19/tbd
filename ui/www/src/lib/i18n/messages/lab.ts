@@ -67,7 +67,7 @@ export const en: Dict = {
   "lab.demo.ask.tier": "tier",
   "lab.demo.ask.reasoning": "let it reason",
   "lab.demo.ask.reasoning_help":
-    "The model thinks before it answers. Off, it answers at once; on, the thinking streams into its own fold above the answer and spends the same token budget first.",
+    "Off asks the engine not to reason before answering; a model that always reasons still does, and its thinking lands in the fold above the answer either way, spending the same token budget first.",
   "lab.demo.reasoning.fold": "reasoning",
   "lab.demo.no_answer":
     "No answer: the model spent its budget reasoning. Ask again with reasoning off, or a shorter question.",
@@ -148,7 +148,7 @@ export const hr: Dict = {
   "lab.demo.ask.tier": "razina",
   "lab.demo.ask.reasoning": "neka razmišlja",
   "lab.demo.ask.reasoning_help":
-    "Model razmišlja prije nego što odgovori. Isključeno, odgovara odmah; uključeno, razmišljanje se prenosi u vlastiti odjeljak iznad odgovora i prvo troši isti proračun tokena.",
+    "Isključeno traži od motora da ne razmišlja prije odgovora; model koji uvijek razmišlja i dalje to čini, a njegovo razmišljanje u oba slučaja završi u odjeljku iznad odgovora i prvo troši isti proračun tokena.",
   "lab.demo.reasoning.fold": "razmišljanje",
   "lab.demo.no_answer":
     "Nema odgovora: model je potrošio proračun na razmišljanje. Pitaj ponovno s isključenim razmišljanjem, ili kraće.",

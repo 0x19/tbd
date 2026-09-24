@@ -93,7 +93,7 @@ Envoy. In the local cluster they run on the host (`host.k3d.internal`); in compo
 | Tier | Engine | Serves | Wire |
 |---|---|---|---|
 | `fast` | Ollama | the model that fits the 16 GB card | `POST /api/chat` as newline-delimited JSON, `GET /api/tags`, `POST /api/embed` |
-| `deep` | `llama-server` | the large mixture-of-experts model, attention on the GPU and experts in RAM | `POST /v1/chat/completions` as server-sent events with `stream_options.include_usage`, `GET /v1/models`, `POST /v1/embeddings` (needs `--embeddings`) |
+| `deep` | `llama-server` | the large mixture-of-experts model, attention on the GPU and experts in RAM; started after the fast model has loaded, into what it left of the card, and with `--reasoning-format` so its reasoning arrives apart from its answer | `POST /v1/chat/completions` as server-sent events with `stream_options.include_usage`, `GET /v1/models`, `POST /v1/embeddings` (needs `--embeddings`) |
 
 A missing usage is reported as zeros, never estimated. Which model each tier serves is
 one value in configuration; the RFC that chose it lives in the site's lab.
