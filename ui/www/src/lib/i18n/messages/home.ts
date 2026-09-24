@@ -10,7 +10,7 @@ export const en: Dict = {
   "home.now.based": "Based",
   "home.now.hours": "remote, European hours",
   "home.playgrounds.label": "Playgrounds",
-  "home.playgrounds.title": "Things to try, not screenshots of things to try.",
+  "home.playgrounds.title": "Things you can actually try.",
   "home.playgrounds.lead":
     "Small things I build for the fun of it, left running so you can press the button and have something actually happen. No sign-up, nothing to install.",
   "home.playgrounds.all": "All {n} of them →",
@@ -40,7 +40,7 @@ export const hr: Dict = {
   "home.now.based": "Gdje",
   "home.now.hours": "na daljinu, europsko radno vrijeme",
   "home.playgrounds.label": "Igrališta",
-  "home.playgrounds.title": "Stvari koje možeš isprobati, a ne slike stvari koje bi mogao isprobati.",
+  "home.playgrounds.title": "Stvari koje stvarno možeš isprobati.",
   "home.playgrounds.lead":
     "Male stvari koje gradim iz zabave, ostavljene upaljene da pritisneš gumb i nešto se stvarno dogodi. Bez prijave, bez instaliranja.",
   "home.playgrounds.all": "Sva {n} →",
