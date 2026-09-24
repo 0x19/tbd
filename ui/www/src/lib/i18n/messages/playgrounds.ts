@@ -3,7 +3,7 @@ import type { Dict } from "./index";
 
 export const en: Dict = {
   "playgrounds.eyebrow": "Playgrounds",
-  "playgrounds.title": "Things to try, not screenshots of things to try.",
+  "playgrounds.title": "Things you can actually try.",
   "playgrounds.lead":
     "Every so often I build a small thing for the fun of it — a parser you can paste into, a simulator you can push, a piece of a bigger system pulled out and left running. When one is worth keeping up, it lands here. No sign-up, nothing to install.",
   "playgrounds.since":
@@ -18,7 +18,7 @@ export const en: Dict = {
 
 export const hr: Dict = {
   "playgrounds.eyebrow": "Igrališta",
-  "playgrounds.title": "Stvari koje možeš isprobati, a ne slike stvari koje bi mogao isprobati.",
+  "playgrounds.title": "Stvari koje stvarno možeš isprobati.",
   "playgrounds.lead":
     "Svako toliko iz zabave izgradim nešto malo -- parser u koji možeš zalijepiti, simulator koji možeš gurati, komad većeg sustava izvučen i ostavljen da radi. Kad neki vrijedi držati gore, završi ovdje. Bez prijave, bez instaliranja.",
   "playgrounds.since":
