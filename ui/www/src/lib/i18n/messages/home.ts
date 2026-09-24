@@ -27,8 +27,8 @@ export const en: Dict = {
     "The working-out behind the platform and the playgrounds, published when a piece is ready to be read.",
   "home.lab.cta": "Into the lab →",
   "home.hi.label": "Write",
-  "home.hi.how": "Reply",
-  "home.hi.text": "Every message gets one.",
+  "home.hi.how": "Hours",
+  "home.hi.text": "European working hours, remote.",
 };
 
 export const hr: Dict = {
@@ -56,6 +56,6 @@ export const hr: Dict = {
   "home.lab.lead": "Razrada iza platforme i igrališta, objavljena kad je komad spreman za čitanje.",
   "home.lab.cta": "U laboratorij →",
   "home.hi.label": "Piši",
-  "home.hi.how": "Odgovor",
-  "home.hi.text": "Svaka poruka ga dobije.",
+  "home.hi.how": "Radno vrijeme",
+  "home.hi.text": "Europsko radno vrijeme, na daljinu.",
 };

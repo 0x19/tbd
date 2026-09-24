@@ -4,8 +4,9 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 import { Opening } from "@/components/closing-mesh";
-import { Eyebrow, Frame, Reveal, SectionHead, Tag } from "@/components/kit";
+import { Eyebrow, Frame, Reveal, SectionHead } from "@/components/kit";
 import { Pipeline } from "@/components/pipeline";
+import { PlaygroundTabs } from "@/components/playground-tabs";
 import { Button } from "@/components/ui/button";
 import { clients, company as facts, lab } from "@/data/site";
 import { useT } from "@/lib/i18n";
@@ -123,24 +124,7 @@ export function HomeContent() {
           lead={t("home.playgrounds.lead")}
         >
           <Reveal className="mt-10">
-            <div className="bg-border/70 grid gap-px border-y sm:grid-cols-2 lg:grid-cols-4">
-              {open.slice(0, 4).map((p) => (
-                <a
-                  key={p.href}
-                  href={p.href!}
-                  className="group bg-background hover:bg-muted/30 flex flex-col p-6 transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <h3 className="font-medium tracking-tight">{p.name}</h3>
-                    <Tag>{p.tag}</Tag>
-                    <span className="text-muted-foreground ml-auto transition-transform group-hover:translate-x-1">
-                      →
-                    </span>
-                  </div>
-                  <p className="text-muted-foreground mt-3 line-clamp-3 text-sm text-pretty">{p.what}</p>
-                </a>
-              ))}
-            </div>
+            <PlaygroundTabs items={open} limit={4} />
             <Button variant="ghost" className="mt-6 -ml-4" asChild>
               <Link href="/playgrounds/">{t("home.playgrounds.all", { n: open.length })}</Link>
             </Button>

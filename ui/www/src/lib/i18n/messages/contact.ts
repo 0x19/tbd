@@ -4,7 +4,7 @@ import type { Dict } from "./index";
 export const en: Dict = {
   "contact.eyebrow": "Contact",
   "contact.title": "Write.",
-  "contact.lead": "Questions, bugs, ideas or work. All welcome, and every message gets a reply.",
+  "contact.lead": "Questions, bugs, ideas or work. All welcome.",
   "contact.email": "Email",
   "contact.elsewhere": "Elsewhere",
   "contact.where": "Where",
@@ -15,7 +15,7 @@ export const en: Dict = {
 export const hr: Dict = {
   "contact.eyebrow": "Kontakt",
   "contact.title": "Piši.",
-  "contact.lead": "Pitanja, greške, ideje ili posao. Sve je dobrodošlo, i svaka poruka dobije odgovor.",
+  "contact.lead": "Pitanja, greške, ideje ili posao. Sve je dobrodošlo.",
   "contact.email": "E-pošta",
   "contact.elsewhere": "Drugdje",
   "contact.where": "Gdje",

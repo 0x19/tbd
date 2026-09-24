@@ -127,7 +127,11 @@ practice log is `localStorage`, per browser, and its page says so.
   `cv.fullUrl`, the gated site; the public page and PDF never carry a phone number, an
   address or references.
 - **`projects` are real repositories** and `playgrounds` are things that are
-  actually open (or honestly marked as being built, with `href: null`). Never
+  actually open (or honestly marked as being built, with `href: null`). Each
+  playground carries a `category` (the tab it sits under), a one-line `summary` and
+  two or three `specs` for its card, in both data files; the home section and
+  `/playgrounds/` draw them through `src/components/playground-tabs.tsx`, which
+  features the systems piece on `/playgrounds/` and keeps the tab in the hash. Never
   seed either with something that does not exist.
 - The about page is a **person**, not a capability deck: the story, the path in
   chapters, and a colophon. A grid of service lines with stack tags is the thing

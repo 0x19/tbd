@@ -2,12 +2,17 @@
 
 import Link from "next/link";
 
-import { Eyebrow, Frame, Reveal, Tag } from "@/components/kit";
+import { Eyebrow, Frame, Reveal } from "@/components/kit";
+import { PlaygroundTabs } from "@/components/playground-tabs";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/lib/i18n";
 import { useSite } from "@/lib/i18n/site";
 
-/** The playgrounds index in the reader's language; `app/playgrounds/page.tsx` carries the metadata. */
+/**
+ * The playgrounds index in the reader's language, as tabs by category with the
+ * systems piece featured (`PlaygroundTabs`); `app/playgrounds/page.tsx`
+ * carries the metadata.
+ */
 export function PlaygroundsContent() {
   const t = useT();
   const { playgrounds } = useSite();
@@ -24,41 +29,7 @@ export function PlaygroundsContent() {
 
       <Frame className="pb-24 sm:pb-32">
         {playgrounds.length ? (
-          <div className="bg-border/70 grid gap-px border-y sm:grid-cols-2">
-            {playgrounds.map((p) => {
-              const inner = (
-                <>
-                  <div className="flex items-center gap-3">
-                    <h2 className="text-xl font-medium tracking-tight">{p.name}</h2>
-                    <Tag>{p.tag}</Tag>
-                    {p.href ? (
-                      <span className="text-muted-foreground ml-auto transition-transform group-hover:translate-x-1">
-                        →
-                      </span>
-                    ) : (
-                      <span className="text-muted-foreground/70 ml-auto font-mono text-[11px] tracking-[0.18em] uppercase">
-                        {t("playgrounds.building")}
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-muted-foreground mt-3 text-sm text-pretty">{p.what}</p>
-                </>
-              );
-              return p.href ? (
-                <a
-                  key={p.name}
-                  href={p.href}
-                  className="group bg-background hover:bg-muted/30 p-8 transition-colors"
-                >
-                  {inner}
-                </a>
-              ) : (
-                <div key={p.name} className="bg-background p-8">
-                  {inner}
-                </div>
-              );
-            })}
-          </div>
+          <PlaygroundTabs items={playgrounds} feature hash columns="lg:grid-cols-3" />
         ) : (
           <Reveal>
             <div className="border-y py-20 text-center">

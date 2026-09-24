@@ -35,7 +35,15 @@ export type Site = {
   about: string[];
   chapters: { when: string; title: string; body: string; where: string }[];
   projects: { name: string; year: string; what: string; language: string; href: string }[];
-  playgrounds: { name: string; what: string; href: string | null; tag: string }[];
+  playgrounds: {
+    name: string;
+    what: string;
+    href: string | null;
+    tag: string;
+    category: "systems" | "music";
+    summary: string;
+    specs: string[];
+  }[];
   principles: { title: string; body: string }[];
   pipeline: { stage: string; name: string; rows: { k: string; v: string }[] }[];
   rails: { label: string; value: string }[];
@@ -52,7 +60,7 @@ function english(): Site {
     about: [...en.about],
     chapters: en.chapters.map((c) => ({ ...c })),
     projects: en.projects.map((p) => ({ ...p })),
-    playgrounds: en.playgrounds.map((p) => ({ ...p })),
+    playgrounds: en.playgrounds.map((p) => ({ ...p, specs: [...p.specs] })),
     principles: en.principles.map((p) => ({ ...p })),
     pipeline: en.pipeline.map((s) => ({ ...s, rows: s.rows.map((r) => ({ ...r })) })),
     rails: en.rails.map((r) => ({ ...r })),
