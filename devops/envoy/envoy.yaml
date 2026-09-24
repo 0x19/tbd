@@ -457,8 +457,10 @@ static_resources:
                             cluster: protocol
                             timeout: 0s
                         # The radar's reads (digests, items): public, like the
-                        # playground's calls, with a per-address rate limit. The
-                        # digests are model-written from public sources and say so.
+                        # playground's calls, with a per-address rate limit. A
+                        # signed-in visitor's cookie travels as x-jwt-payload
+                        # (`ui-optional`), so an admin's page also sees drafts; a
+                        # visitor passes with none and sees published issues only.
                         - match: { prefix: "/v1/radar/" }
                           typed_per_filter_config:
                             envoy.filters.http.oauth2:
@@ -466,7 +468,7 @@ static_resources:
                               disabled: true
                             envoy.filters.http.jwt_authn:
                               "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.PerRouteConfig
-                              disabled: true
+                              requirement_name: ui-optional
                             envoy.filters.http.rbac:
                               "@type": type.googleapis.com/envoy.config.route.v3.FilterConfig
                               disabled: true
