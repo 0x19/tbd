@@ -96,3 +96,8 @@ costs: the arena's own load on the platform, and the latency from an event to th
 - 2026-09-24: the arena runs. One snapshot a second from the model service, the metrics
   store and the chaos tool, over the same gateway as everything else; the ways in are the
   chaos tool's own end-to-end checks, run on a schedule, never inferred.
+- 2026-09-24: the workbench replaces the demo page. Sessions kept in the browser, a
+  transcript that streams with the reasoning shown while the model thinks, a slash menu
+  and a status line, the same turn over server-sent events, the socket or MCP, the
+  platform's tools as cards, and the arena beside it; the lab's own page carries the same
+  live view across its width. Preset runs are still to come.

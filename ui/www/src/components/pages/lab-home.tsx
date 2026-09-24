@@ -1,28 +1,39 @@
 "use client";
 
 import Link from "next/link";
-import type { ReactNode } from "react";
 
 import { Frame, Reveal, SectionHead } from "@/components/kit";
 import { DocList, latest, Timeline } from "@/components/pages/lab";
 import { Button } from "@/components/ui/button";
+import { LabLive } from "@/components/workbench/lab-live";
 import { labs } from "@/data/labs";
 import { rfcs, studies } from "@/generated/lab/index";
 import { useLang, useT } from "@/lib/i18n";
+import { useDrafts } from "@/lib/lab-drafts";
 
 /**
- * One lab's own page: what it is, its live view when it runs (the `live`
- * slot, filled by the arena's feed), the ways into it, its RFCs and studies,
- * and its timeline from their status logs. `app/lab/<id>/page.tsx` carries the
- * metadata and picks the lab.
+ * One lab's own page: what it is, its live view when it runs (the arena's
+ * feed, for a lab with `live`), the ways into it, its RFCs and studies (an
+ * admin also sees its drafts, stamped), and its timeline from their status
+ * logs. `app/lab/<id>/page.tsx` carries the metadata and picks the lab.
  */
-export function LabHomeContent({ id, live }: { id: string; live?: ReactNode }) {
+export function LabHomeContent({ id }: { id: string }) {
   const t = useT();
   const { lang } = useLang();
+  // A way in without a sentence in the dictionary shows its name alone.
+  const has = (key: string) => t(key) !== key;
+  const drafts = useDrafts(id).entries;
   const l = labs.find((x) => x.id === id);
   if (!l) return null;
   const mine = <T extends { lab: string }>(xs: T[]) => xs.filter((e) => e.lab === id);
-  const docs = [...mine(rfcs), ...mine(studies)];
+  // An admin sees this lab's drafts beside the published documents, stamped.
+  const labRfcs = [...mine(rfcs), ...drafts.filter((e) => e.kind === "rfc")].sort((a, b) =>
+    b.number.localeCompare(a.number),
+  );
+  const labStudies = [...mine(studies), ...drafts.filter((e) => e.kind === "study")].sort(
+    (a, b) => b.date.localeCompare(a.date) || b.number.localeCompare(a.number),
+  );
+  const docs = [...labRfcs, ...labStudies];
   let n = 0;
   const next = () => String(++n).padStart(2, "0");
   return (
@@ -59,7 +70,7 @@ export function LabHomeContent({ id, live }: { id: string; live?: ReactNode }) {
         <Frame className="pb-16">
           <SectionHead n={next()} label={t("lab.home.live.label")} lead={t("lab.home.live.lead")} />
           <Reveal className="mt-10">
-            {live ?? <p className="text-muted-foreground text-sm">{t("lab.home.live.none")}</p>}
+            <LabLive />
           </Reveal>
         </Frame>
       ) : null}
@@ -72,7 +83,7 @@ export function LabHomeContent({ id, live }: { id: string; live?: ReactNode }) {
               <div key={s} className="grid gap-1 py-4 sm:grid-cols-[9rem_minmax(0,1fr)] sm:gap-6">
                 <dt className="font-mono text-sm">{s}</dt>
                 <dd className="text-muted-foreground text-sm text-pretty">
-                  {t(`lab.surface.${s.toLowerCase()}`)}
+                  {has(`lab.surface.${s.toLowerCase()}`) ? t(`lab.surface.${s.toLowerCase()}`) : null}
                 </dd>
               </div>
             ))}
@@ -85,8 +96,8 @@ export function LabHomeContent({ id, live }: { id: string; live?: ReactNode }) {
           <SectionHead n={next()} label={t("lab.home.documents")} lead={t("lab.home.documents.lead")} />
         </div>
         <Reveal>
-          <DocList label={t("lab.rfcs.label")} entries={mine(rfcs)} empty={t("lab.empty.rfcs")} />
-          <DocList label={t("lab.studies.label")} entries={mine(studies)} empty={t("lab.empty.studies")} />
+          <DocList label={t("lab.rfcs.label")} entries={labRfcs} empty={t("lab.empty.rfcs")} />
+          <DocList label={t("lab.studies.label")} entries={labStudies} empty={t("lab.empty.studies")} />
         </Reveal>
       </Frame>
 

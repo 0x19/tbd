@@ -52,3 +52,18 @@ export function useMe(): Me | null {
   }, []);
   return me;
 }
+
+/** The same, and whether the answer is in yet: a page that shows "sign in" to nobody waits for it. */
+export function useMeState(): { me: Me | null; known: boolean } {
+  const [state, setState] = useState<{ me: Me | null; known: boolean }>({ me: null, known: false });
+  useEffect(() => {
+    let live = true;
+    void fetchMe().then((me) => {
+      if (live) setState({ me, known: true });
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
+  return state;
+}

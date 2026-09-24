@@ -6,6 +6,7 @@ import { useId, useState } from "react";
 import { Frame, IndexRow, Reveal, SectionHead } from "@/components/kit";
 import { StatusStamp } from "@/components/lab/status-stamp";
 import { TabList } from "@/components/tabs";
+import { LabLiveStrip } from "@/components/workbench/lab-live";
 import { labs } from "@/data/labs";
 import { rfcs, studies } from "@/generated/lab/index";
 import { useLang, useT } from "@/lib/i18n";
@@ -91,6 +92,7 @@ export function LabContent() {
                     </p>
                     <h2 className="text-2xl font-medium tracking-tight text-balance">{l.name[lang]}</h2>
                     <p className="text-muted-foreground text-sm text-pretty">{l.what[lang]}</p>
+                    {l.live ? <LabLiveStrip /> : null}
                     {last ? (
                       <p className="text-muted-foreground/80 mt-auto border-t pt-4 text-sm text-pretty">
                         <span className="text-foreground font-mono text-xs tabular-nums">{last.date}</span>{" "}

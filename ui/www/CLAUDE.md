@@ -30,7 +30,15 @@ card per lab, the newest status-log lines of every document ("Latest": the gener
 parses each `## Status log` into `log`), and every document with a tab per lab. A lab's
 own page is a static folder, `app/lab/<id>/page.tsx`, rendering
 `src/components/pages/lab-home.tsx` (what it is, its live view, its ways in, its
-documents, its timeline); the model lab's workbench is `/lab/llm/workbench/`. The lab is
+documents, its timeline); the model lab's workbench is `/lab/llm/workbench/`.
+The live parts read the arena (`src/lib/arena.ts`, `useArena`: the socket `/v1/ws`
+after a `/v1/me` refresh, then `/v1/arena/events`, then a poll) and draw it with
+`src/components/workbench/live-panel.tsx` (hand-drawn SVG series, no chart library);
+a figure the arena leaves out shows as a dash, never a zero. The workbench
+(`src/components/workbench/workbench.tsx`) keeps its sessions in `localStorage` only,
+sends a turn over SSE, the socket or MCP (`src/lib/llm.ts`, one event shape for all
+three), lists and runs the platform's MCP tools as cards, and says in its side column
+what it sends; publishing the lab means `/legal/` gains that sentence. The lab is
 admins-only until its first page is published: Envoy gates the prefix on the `www`
 host (sign-in, then the `admin` role), and `/v1/me` on the same host tells the page
 who is signed in with a 401 instead of a redirect, so the header and footer show the
