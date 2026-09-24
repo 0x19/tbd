@@ -1108,6 +1108,58 @@ else
 fi
 """
 
+[tasks."sandbox:install"]
+description = "Install gVisor (runsc, a pinned release, checksum verified) on the host and register it with Docker by reload, never restart: running containers stay up (docs/sandbox/README.md)"
+run = "devops/sandbox/install-gvisor.sh"
+
+[tasks."sandbox:images"]
+description = "Build the sandbox's two toolchain images locally (Go with its standard library pre-built, Rust); never pushed"
+run = """
+docker build -t tbd-sandbox-go:dev - < devops/docker/sandbox-go.Dockerfile
+docker build -t tbd-sandbox-rust:dev - < devops/docker/sandbox-rust.Dockerfile
+"""
+
+[tasks."sandbox:secrets"]
+description = "The token between the runner and sandboxd: a root-only systemd credential on the host and the runner-sandbox Secret in tbd, the same value. Kept if it exists; ROTATE=1 makes a new one"
+run = """
+set -euo pipefail
+cred=/etc/credstore/sandboxd.token
+if [ "${ROTATE:-0}" = 1 ] || ! sudo test -s "$cred"; then
+  sudo install -d -o root -g root -m 0700 /etc/credstore
+  openssl rand -hex 32 | sudo tee "$cred" >/dev/null
+  sudo chmod 0600 "$cred"
+  echo "new sandbox token written to the host credential store"
+fi
+kubectl apply -f devops/k8s/base/namespace.yaml >/dev/null
+sudo cat "$cred" | tr -d '\n' | kubectl -n tbd create secret generic runner-sandbox --from-file=token=/dev/stdin --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+echo "runner-sandbox Secret in tbd matches the host credential"
+"""
+
+[tasks."sandbox:deploy"]
+description = "Build sandboxd, install it with its config and the hardened systemd unit, and start it on this host (after sandbox:install, sandbox:images, sandbox:secrets)"
+run = """
+set -euo pipefail
+cargo build --release -p tbd-sandboxd
+sudo install -o root -g root -m 0755 target/release/sandboxd /usr/local/bin/sandboxd
+sudo install -d -o root -g root -m 0755 /etc/tbd/sandboxd
+sudo install -o root -g root -m 0644 configs/sandboxd/*.toml /etc/tbd/sandboxd/
+printf 'TBD_ENV=local\nSANDBOXD_CONFIG_DIR=/etc/tbd/sandboxd\nSANDBOXD_LISTEN_ADDR=0.0.0.0:7788\nRUST_LOG=info\nLOG_FORMAT=json\n' | sudo tee /etc/tbd/sandboxd.env >/dev/null
+sudo install -o root -g root -m 0644 devops/sandbox/sandboxd.service /etc/systemd/system/sandboxd.service
+sudo systemctl daemon-reload
+sudo systemctl enable sandboxd >/dev/null 2>&1
+sudo systemctl restart sandboxd
+for i in $(seq 1 30); do curl -fs http://127.0.0.1:7788/healthz >/dev/null && break; sleep 0.5; done
+curl -fs http://127.0.0.1:7788/healthz && echo " sandboxd up"
+"""
+
+[tasks."sandbox:test"]
+description = "Every sandbox test on this host, the escape suite included: real gVisor sandboxes (needs sandbox:install and sandbox:images)"
+run = "cargo nextest run -p tbd-sandboxd --run-ignored all --no-fail-fast --test-threads 1"
+
+[tasks."sandbox:escape"]
+description = "Only the escape suite, one line per hostile program (case, outcome, why it was stopped, milliseconds): study 0003's table"
+run = "cargo nextest run -p tbd-sandboxd --run-ignored only --no-capture --test-threads 1 -E 'test(/^escape::/)' 2>&1 | grep -E '^escape |Summary'"
+
 [tasks."radar:secrets"]
 description = "Create the radar Secrets in tbd: radar-db (the app database URL, derived from ledger-db like llm-db) and, given a token, radar-github (read-only, for GitHub's search API; without it the search runs unauthenticated). Run again with a token to replace it."
 usage = '''

@@ -1,0 +1,36 @@
+[package]
+name = "tbd-sandboxd"
+description = "The sandbox engine: a host daemon that compiles and runs one Go or Rust program in one throwaway gVisor container (RFC 0010, docs/sandbox/README.md)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "sandboxd"
+path = "src/main.rs"
+
+[dependencies]
+tbd-common.workspace = true
+
+anyhow.workspace = true
+axum.workspace = true
+clap.workspace = true
+humantime-serde.workspace = true
+metrics.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["process", "io-util"] }
+toml.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+reqwest.workspace = true
+tokio = { workspace = true, features = ["test-util"] }
+
+[lints]
+workspace = true

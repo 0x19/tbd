@@ -6658,6 +6658,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "tbd-sandboxd"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "clap",
+ "humantime-serde",
+ "metrics",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "tbd-common",
+ "thiserror 2.0.20",
+ "tokio",
+ "toml 1.1.5+spec-1.1.0",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "tbd-stress"
 version = "0.1.0"
 dependencies = [

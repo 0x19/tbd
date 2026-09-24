@@ -98,6 +98,14 @@ pub mod names {
     pub const ARENA_SOURCE_OK: &str = "tbd_arena_source_ok";
     /// Gauge: seconds since the arena last read a source successfully. Label `source`.
     pub const ARENA_SOURCE_AGE: &str = "tbd_arena_source_age_seconds";
+    /// Counter: sandbox runs, by `language` (`go`, `rust`) and `outcome` (`ok`,
+    /// `exit`, `compile_error`, `killed`).
+    pub const SANDBOX_RUNS_TOTAL: &str = "tbd_sandbox_runs_total";
+    /// Histogram: seconds a sandbox step took, by `language` and `step`
+    /// (`compile`, `run`).
+    pub const SANDBOX_DURATION: &str = "tbd_sandbox_duration_seconds";
+    /// Gauge: sandbox runs in progress on the machine.
+    pub const SANDBOX_IN_FLIGHT: &str = "tbd_sandbox_in_flight";
     /// Counter: the radar read a source. Labels `source` (the configured name),
     /// `outcome` (`ok`, `failed`).
     pub const RADAR_FETCHES_TOTAL: &str = "tbd_radar_fetches_total";
@@ -184,6 +192,11 @@ pub fn install(addr: SocketAddr, service: &str) -> Result<(), MetricsError> {
         .map_err(|e| MetricsError::Install(e.to_string()))?
         .set_buckets_for_metric(
             Matcher::Full(names::LLM_QUEUE_WAIT.into()),
+            DURATION_BUCKETS,
+        )
+        .map_err(|e| MetricsError::Install(e.to_string()))?
+        .set_buckets_for_metric(
+            Matcher::Full(names::SANDBOX_DURATION.into()),
             DURATION_BUCKETS,
         )
         .map_err(|e| MetricsError::Install(e.to_string()))?
@@ -366,6 +379,19 @@ fn describe_llm() {
     describe_gauge!(
         names::ARENA_SOURCE_OK,
         "1 while the arena's last read of a source succeeded, else 0."
+    );
+    describe_counter!(
+        names::SANDBOX_RUNS_TOTAL,
+        "Sandbox runs, by language and outcome (ok, exit, compile_error, killed)."
+    );
+    describe_histogram!(
+        names::SANDBOX_DURATION,
+        Unit::Seconds,
+        "Seconds a sandbox step took, by language and step (compile, run)."
+    );
+    describe_gauge!(
+        names::SANDBOX_IN_FLIGHT,
+        "Sandbox runs in progress on the machine."
     );
     describe_gauge!(
         names::ARENA_SOURCE_AGE,
