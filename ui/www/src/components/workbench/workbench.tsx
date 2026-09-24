@@ -20,6 +20,7 @@ import {
 } from "@/lib/llm";
 import { renderMarkdown } from "@/lib/markdown";
 import { useMeState } from "@/lib/me";
+import { runCode, type RunLanguage, type RunResult } from "@/lib/runner";
 import { cn } from "@/lib/utils";
 
 type Tier = "TIER_FAST" | "TIER_DEEP";
@@ -51,7 +52,17 @@ type Turn =
   | { kind: "tools"; id: string; tools: Tool[] | null; error?: string }
   | { kind: "tool"; id: string; name: string; args: unknown; result?: unknown; error?: boolean; ms?: number }
   | { kind: "connect"; id: string }
-  | { kind: "help"; id: string };
+  | { kind: "help"; id: string }
+  | {
+      kind: "code";
+      id: string;
+      language: RunLanguage;
+      source: string;
+      status: "running" | "done" | "error";
+      result?: RunResult;
+      error?: string;
+      code?: string;
+    };
 
 type Session = { id: string; title: string; createdAt: number; turns: Turn[] };
 
@@ -96,6 +107,8 @@ const COMMANDS = [
   { name: "/transport websocket", help: "wb.cmd.websocket" },
   { name: "/transport mcp", help: "wb.cmd.mcp" },
   { name: "/tools", help: "wb.cmd.tools" },
+  { name: "/run go", help: "wb.cmd.run_go" },
+  { name: "/run rust", help: "wb.cmd.run_rust" },
   { name: "/connect", help: "wb.cmd.connect" },
   { name: "/clear", help: "wb.cmd.clear" },
   { name: "/new", help: "wb.cmd.new" },
@@ -315,6 +328,24 @@ export function Workbench() {
     [append, context, current, edit, reasoning, refreshBudget, tier, transport],
   );
 
+  /** Run a program in the sandbox and show what it printed (RFC 0010). */
+  const runProgram = useCallback(
+    async (language: RunLanguage, source: string) => {
+      const sid = current;
+      const id = newId();
+      append({ kind: "code", id, language, source, status: "running" });
+      const r = await runCode(language, source);
+      edit(sid, id, (x) =>
+        x.kind !== "code"
+          ? x
+          : r.ok
+            ? { ...x, status: "done", result: r.result }
+            : { ...x, status: "error", error: r.error, code: r.code },
+      );
+    },
+    [append, current, edit],
+  );
+
   const runTool = useCallback(
     async (name: string, args: Record<string, unknown>) => {
       const sid = current;
@@ -386,8 +417,29 @@ export function Workbench() {
   const submit = () => {
     const line = prompt.trim();
     if (!line) return;
+    // `/run go` or `/run rust` with the program on the lines under it; alone, it
+    // puts a starting program in the prompt to edit.
+    const run = /^\/run\s+(go|rust)\s*(?:\n([\s\S]*))?$/.exec(line);
+    if (run) {
+      const language = run[1] as RunLanguage;
+      const code = (run[2] ?? "").trim();
+      if (code) {
+        setPrompt("");
+        void runProgram(language, code);
+      } else {
+        setPrompt(`/run ${language}\n${language === "go" ? GO_START : RUST_START}`);
+      }
+      setMenu(0);
+      return;
+    }
     if (line.startsWith("/")) {
       const chosen = matches[menu]?.name ?? line;
+      if (/^\/run (go|rust)$/.test(chosen)) {
+        const language = chosen.slice(5) as RunLanguage;
+        setPrompt(`/run ${language}\n${language === "go" ? GO_START : RUST_START}`);
+        setMenu(0);
+        return;
+      }
       void command(chosen);
       setPrompt("");
       setMenu(0);
@@ -525,6 +577,7 @@ export function Workbench() {
                     turn.kind === "chat" && !running && void ask(turn.prompt, tr, turn.tier, turn.reasoning)
                   }
                   onRun={(name, args) => void runTool(name, args)}
+                  onRunCode={(language, source) => void runProgram(language, source)}
                 />
               </li>
             ))}
@@ -649,9 +702,22 @@ function Intro({ onPick }: { onPick: (q: string) => void }) {
  * raw HTML as text, never loads an image, and keeps only http(s) links. Its
  * code blocks carry a copy button, wired here by delegation.
  */
-function Answer({ markdown }: { markdown: string }) {
+function Answer({
+  markdown,
+  onRunCode,
+}: {
+  markdown: string;
+  onRunCode: (language: RunLanguage, source: string) => void;
+}) {
   const html = useMemo(() => renderMarkdown(markdown), [markdown]);
   const onClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const run = (e.target as HTMLElement).closest("button[data-run]");
+    if (run) {
+      const source = run.closest(".md-code")?.querySelector("code")?.textContent;
+      const language = run.getAttribute("data-run");
+      if (source && (language === "go" || language === "rust")) onRunCode(language, source);
+      return;
+    }
     const button = (e.target as HTMLElement).closest("button[data-copy]");
     const code = button?.closest(".md-code")?.querySelector("code")?.textContent;
     if (!button || code === undefined || code === null) return;
@@ -661,6 +727,125 @@ function Answer({ markdown }: { markdown: string }) {
     });
   };
   return <div className="md" onClick={onClick} dangerouslySetInnerHTML={{ __html: html }} />;
+}
+
+const GO_START = `package main
+
+import "fmt"
+
+func main() {
+\tfmt.Println("hello from the sandbox")
+}`;
+
+const RUST_START = `fn main() {
+    println!("hello from the sandbox");
+}`;
+
+/** What a sandbox run printed: its streams, its exit, why it was stopped, and the times. */
+function CodeRun({
+  turn,
+  onRunCode,
+}: {
+  turn: Extract<Turn, { kind: "code" }>;
+  onRunCode: (language: RunLanguage, source: string) => void;
+}) {
+  const t = useT();
+  const r = turn.result;
+  const step = r?.run ?? r?.compile ?? null;
+  const why = step && step.killed !== "none" ? t(`wb.run.killed.${step.killed}`) : null;
+  const dot =
+    turn.status === "running"
+      ? "bg-muted-foreground/40 animate-pulse"
+      : turn.status === "error"
+        ? "bg-destructive"
+        : r?.outcome === "ok"
+          ? "bg-emerald-500"
+          : "bg-amber-500";
+  return (
+    <article className="rounded-md border">
+      <header className="flex flex-wrap items-center gap-2 border-b px-4 py-2 font-mono text-xs">
+        <span className={cn("size-2 rounded-full", dot)} />
+        <span>
+          {t("wb.run.title")} · {turn.language}
+        </span>
+        <span className="text-muted-foreground">
+          {turn.status === "running"
+            ? t("wb.run.running")
+            : turn.status === "error"
+              ? turn.code === "rate_limited"
+                ? t("wb.busy")
+                : t("wb.run.failed")
+              : t(`wb.run.outcome.${r?.outcome ?? "ok"}`)}
+        </span>
+        {r ? (
+          <span className="text-muted-foreground ml-auto tabular-nums">
+            {t("wb.run.times", {
+              compile: r.compile?.wall_ms ?? "—",
+              run: r.run?.wall_ms ?? "—",
+              total: r.total_ms,
+            })}
+            {r.stub ? " · stub" : ""}
+          </span>
+        ) : null}
+      </header>
+      <details className="border-b px-4 py-2">
+        <summary className="text-muted-foreground cursor-pointer font-mono text-[11px] tracking-[0.12em] uppercase">
+          {t("wb.run.source")} · {turn.source.length.toLocaleString()} {t("wb.chars")}
+        </summary>
+        <pre className="bg-muted/40 mt-2 max-h-72 overflow-auto rounded border p-3 font-mono text-[11px]">
+          {turn.source}
+        </pre>
+      </details>
+      <div className="grid gap-2 p-4">
+        {turn.status === "error" ? <p className="text-destructive text-sm">{turn.error}</p> : null}
+        {r?.outcome === "compile_error" ? (
+          <pre className="bg-muted/40 max-h-72 overflow-auto rounded border p-3 font-mono text-[11px] whitespace-pre-wrap text-amber-700 dark:text-amber-400">
+            {r.compile?.stderr}
+          </pre>
+        ) : null}
+        {r?.run ? (
+          <>
+            {r.run.stdout ? (
+              <pre className="bg-muted/40 max-h-96 overflow-auto rounded border p-3 font-mono text-[12px] whitespace-pre-wrap">
+                {r.run.stdout}
+              </pre>
+            ) : null}
+            {r.run.stderr ? (
+              <pre className="bg-muted/40 text-destructive max-h-60 overflow-auto rounded border p-3 font-mono text-[11px] whitespace-pre-wrap">
+                {r.run.stderr}
+              </pre>
+            ) : null}
+            {!r.run.stdout && !r.run.stderr ? (
+              <p className="text-muted-foreground text-xs">{t("wb.run.silent")}</p>
+            ) : null}
+          </>
+        ) : null}
+        {why || step?.truncated ? (
+          <p className="text-xs text-amber-700 dark:text-amber-400">
+            {why}
+            {step?.truncated ? ` ${t("wb.run.truncated")}` : ""}
+          </p>
+        ) : null}
+        <footer className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 border-t pt-2 font-mono text-[11px] tabular-nums">
+          {r?.run && r.run.exit_code !== undefined && r.run.exit_code !== null ? (
+            <span>
+              {t("wb.run.exit")} {r.run.exit_code}
+            </span>
+          ) : null}
+          {r ? <span>{t("wb.run.left", { n: r.runs_left_today })}</span> : null}
+          {turn.status !== "running" ? (
+            <button
+              type="button"
+              className="hover:text-foreground ml-auto underline-offset-2 hover:underline"
+              onClick={() => onRunCode(turn.language, turn.source)}
+            >
+              {t("wb.run.again")}
+            </button>
+          ) : null}
+        </footer>
+      </div>
+    </article>
+  );
 }
 
 function Json({ value }: { value: unknown }) {
@@ -676,13 +861,16 @@ function TurnView({
   now,
   onRerun,
   onRun,
+  onRunCode,
 }: {
   turn: Turn;
   now: number;
   onRerun: (transport: Transport) => void;
   onRun: (name: string, args: Record<string, unknown>) => void;
+  onRunCode: (language: RunLanguage, source: string) => void;
 }) {
   const t = useT();
+  if (turn.kind === "code") return <CodeRun turn={turn} onRunCode={onRunCode} />;
   if (turn.kind === "help") {
     return (
       <div className="rounded-md border p-4 text-xs">
@@ -813,7 +1001,7 @@ function TurnView({
         <p className="text-destructive text-sm">{turn.error}</p>
       ) : (
         <div className="text-sm leading-relaxed">
-          {turn.text ? <Answer markdown={turn.text} /> : null}
+          {turn.text ? <Answer markdown={turn.text} onRunCode={onRunCode} /> : null}
           {turn.status === "running" ? (
             <span className="bg-foreground ml-0.5 inline-block h-4 w-1.5 animate-pulse align-text-bottom" />
           ) : null}

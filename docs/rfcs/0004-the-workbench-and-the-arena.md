@@ -101,3 +101,7 @@ costs: the arena's own load on the platform, and the latency from an event to th
   and a status line, the same turn over server-sent events, the socket or MCP, the
   platform's tools as cards, and the arena beside it; the lab's own page carries the same
   live view across its width. Preset runs are still to come.
+- 2026-09-24: the workbench runs code. A Go or Rust block in an answer has a run button,
+  and `/run go` or `/run rust` runs code typed into the prompt; the program is compiled
+  and run once in the sandbox of RFC 0010 and its output comes back as a card, with why
+  it was stopped when it was.

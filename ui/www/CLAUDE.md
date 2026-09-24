@@ -41,7 +41,9 @@ three), lists and runs the platform's MCP tools as cards, and says in its side c
 what it sends. A model's answer is untrusted text rendered by `src/lib/markdown.ts`
 (`marked`, a runtime dependency since): raw HTML shows as text, an image is its
 description and is never fetched, only `http(s)` links survive (new tab, `nofollow`),
-and code blocks carry their language and a copy button; keep it that way, or the
+and code blocks carry their language and a copy button, and a run button for Go and
+Rust (`data-run`), which sends the block to the runner (`src/lib/runner.ts`, RFC 0010)
+and shows the result as a card; keep it that way, or the
 `/legal/` promise and the page's safety go with it; publishing the lab means `/legal/` gains that sentence. The lab is
 admins-only until its first page is published: Envoy gates the prefix on the `www`
 host (sign-in, then the `admin` role), and `/v1/me` on the same host tells the page

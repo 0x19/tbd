@@ -108,3 +108,5 @@ takes cold, and what a run costs the machine.
 - 2026-09-24: the runner is the platform's way in: a verified caller with the role, the
   bounds, a daily allowance, a bounded queue, then the sandbox; one audit line per run
   without its code, and a test that fails if the code ever reaches the log.
+- 2026-09-24: the workbench runs Go and Rust code blocks through it, as an admin; the
+  page's "what this page sends" says the code is run once and not kept.

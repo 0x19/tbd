@@ -484,6 +484,13 @@
 .md .md-code-head button:hover {
   color: var(--foreground);
 }
+.md .md-code-actions {
+  display: flex;
+  gap: 0.9rem;
+}
+.md .md-code-head button[data-run] {
+  color: var(--foreground);
+}
 .md .md-code pre {
   overflow-x: auto;
   padding: 0.75rem;
