@@ -35,8 +35,9 @@ use rmcp::{
     },
 };
 use serde_json::{Map, Value, json};
-use tbd_common::{metrics::RequestTimer, principal::Principal};
+use tbd_common::{metrics::RequestTimer, principal::Principal, telemetry::propagation};
 use tonic::metadata::{Ascii, MetadataValue};
+use tracing::Instrument as _;
 
 use crate::{
     AppState,
@@ -301,9 +302,29 @@ impl ServerHandler for Server {
             .and_then(|p| p.headers.get(crate::principal::PAYLOAD_HEADER))
             .and_then(|v| MetadataValue::try_from(v.as_bytes()).ok());
         let name = entry.rpc.name();
+        // rmcp runs the handler in its own task, outside the HTTP request's
+        // span, so the call gets its own, parented to the same `traceparent`:
+        // the backend call and the audit line join the request's trace.
+        let span = tracing::info_span!(
+            "mcp.call",
+            mcp.tool = %request.name,
+            rpc = %name,
+            trace_id = tracing::field::Empty,
+            enduser.id = %principal.sub,
+            enduser.kind = principal.kind_slug(),
+        );
+        if let Some(headers) = parts.map(|p| &p.headers)
+            && let Some(id) = propagation::adopt_parent(&span, &propagation::Headers(headers))
+        {
+            span.record("trace_id", id);
+        }
         let started = std::time::Instant::now();
         let mut timer = RequestTimer::start(TRANSPORT, name.clone());
-        let outcome = self.call(entry, payload, request.arguments).await;
+        let outcome = self
+            .call(entry, payload, request.arguments)
+            .instrument(span.clone())
+            .await;
+        let _entered = span.enter();
         let status = match &outcome {
             Ok(_) => "ok",
             Err(problem) => problem.code.slug(),
