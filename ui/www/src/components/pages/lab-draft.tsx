@@ -24,7 +24,9 @@ export function LabDraftContent() {
         <p className="text-muted-foreground font-mono text-[11px] tracking-[0.18em] uppercase">
           {t("drafts.stamp")}
         </p>
-        <p className="text-muted-foreground mt-4 max-w-xl text-pretty">{ready ? t("drafts.missing") : "…"}</p>
+        <p className="text-muted-foreground mt-4 max-w-xl text-pretty">
+          {ready ? t("drafts.missing") : t("drafts.note")}
+        </p>
       </Frame>
     );
   }

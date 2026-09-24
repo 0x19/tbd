@@ -38,6 +38,20 @@ export const labs: readonly Lab[] = [
     live: true,
     surfaces: ["REST", "SSE", "WebSocket", "MCP", "gRPC"],
   },
+  {
+    id: "quietpager",
+    href: "/lab/quietpager/",
+    name: {
+      en: "Quiet Pager",
+      hr: "Quiet Pager",
+    },
+    what: {
+      en: "Katas from production systems, each in Go and in Rust, graded on your own machine under injected latency, resets and restarts by an open-source tool, and a weekly radar of what changed in both languages.",
+      hr: "Kate iz produkcijskih sustava, svaka u Gou i u Rustu, ocijenjene na vlastitom računalu pod ubačenim kašnjenjem, prekidima veze i ponovnim pokretanjima alatom otvorenog koda, i tjedni radar onoga što se promijenilo u oba jezika.",
+    },
+    live: false,
+    surfaces: ["CLI", "REST"],
+  },
 ];
 
 export const labIds: readonly string[] = labs.map((l) => l.id);

@@ -10,6 +10,8 @@ import { labs } from "@/data/labs";
 import { rfcs, studies } from "@/generated/lab/index";
 import { useLang, useT } from "@/lib/i18n";
 import type { LabEntry } from "@/lib/lab";
+import { useDrafts } from "@/lib/lab-drafts";
+import { useMe } from "@/lib/me";
 
 /** Every status-log line of every public document, newest first, with where it came from. */
 export function latest(entries: LabEntry[], limit?: number) {
@@ -33,14 +35,22 @@ export function LabContent() {
   const { lang } = useLang();
   const id = useId();
   const [tab, setTab] = useState<string>("all");
-  const all = [...rfcs, ...studies];
+  // An admin also sees the drafts, stamped as such (src/lib/lab-drafts.ts).
+  const drafts = useDrafts().entries;
+  const allRfcs = [...drafts.filter((e) => e.kind === "rfc"), ...rfcs];
+  const allStudies = [...drafts.filter((e) => e.kind === "study"), ...studies];
+  const all = [...allRfcs, ...allStudies];
+  // A lab whose documents are all drafts is itself a draft: its card and tab show
+  // only to an admin, so publishing the lab never publishes a lab nobody wrote up.
+  const admin = useMe()?.role === "admin";
+  const shownLabs = labs.filter((l) => admin || [...rfcs, ...studies].some((e) => e.lab === l.id));
   const tabs = [
     { key: "all", label: t("lab.index.all"), n: all.length },
-    ...labs.map((l) => ({ key: l.id, label: l.id, n: all.filter((e) => e.lab === l.id).length })),
+    ...shownLabs.map((l) => ({ key: l.id, label: l.id, n: all.filter((e) => e.lab === l.id).length })),
   ];
   const inTab = (e: LabEntry) => tab === "all" || e.lab === tab;
-  const shownRfcs = rfcs.filter(inTab);
-  const shownStudies = studies.filter(inTab);
+  const shownRfcs = allRfcs.filter(inTab);
+  const shownStudies = allStudies.filter(inTab);
   return (
     <>
       <Frame className="pt-20 pb-10 sm:pt-28">
@@ -58,7 +68,7 @@ export function LabContent() {
         <SectionHead n="01" label={t("lab.labs.label")} lead={t("lab.labs.lead")} />
         <Reveal className="mt-10">
           <div className="grid gap-4 lg:grid-cols-2">
-            {labs.map((l) => {
+            {shownLabs.map((l) => {
               const docs = all.filter((e) => e.lab === l.id);
               const last = latest(docs, 1)[0];
               return (
@@ -164,6 +174,7 @@ export function DocList({ label, entries, empty }: { label: string; entries: Lab
           {entries.map((e) => (
             <IndexRow key={e.slug} n={e.number} name={e.title} year={e.date} href={e.href}>
               <span className="flex flex-col gap-2 sm:flex-row sm:items-baseline sm:gap-3">
+                {isDraft(e) ? <DraftStamp /> : null}
                 <StatusStamp status={e.status} className="shrink-0" />
                 {e.headline ? (
                   <span
@@ -180,5 +191,20 @@ export function DocList({ label, entries, empty }: { label: string; entries: Lab
         </div>
       )}
     </div>
+  );
+}
+
+/** Whether an entry is a draft: its link is the admin-only draft page. */
+export function isDraft(e: LabEntry): boolean {
+  return e.href.startsWith("/lab/draft/");
+}
+
+/** The mark a draft carries in every list, next to its status. */
+export function DraftStamp() {
+  const t = useT();
+  return (
+    <span className="shrink-0 rounded-sm border border-dashed px-1.5 py-0.5 font-mono text-[10px] tracking-[0.14em] whitespace-nowrap uppercase">
+      {t("drafts.stamp")}
+    </span>
   );
 }

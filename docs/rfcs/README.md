@@ -25,8 +25,9 @@ supersedes: 0000-an-older-slug
 
 - `status`: `open` while it is being argued with, `decided` once it is settled,
   `superseded` when a later RFC replaces it (`supersedes` on the newer one points back).
-- `public`: the publish switch. `false` pages are not rendered, not checked, not linked.
-  A public page may not reference a private one.
+- `public`: the publish switch. A `false` page is a draft: it is rendered only into an
+  admin-only file and read at `/lab/draft/?doc=rfc/<slug>`, before and after the lab is
+  published, is not redaction-checked, and may not be referenced by a public page.
 - `date`: the day it was first written; the status log at the end carries every later
   change.
 - `lab`: the lab it belongs to, an id in `ui/www/src/data/labs.ts`; the lab's page lists
@@ -78,3 +79,6 @@ is a false claim.
 | 0004 | [The workbench and the arena](0004-the-workbench-and-the-arena.md) | open |
 | 0005 | [The platform over MCP](0005-the-platform-over-mcp.md) | open |
 | 0006 | [Publication](0006-publication.md) | open |
+| 0007 | [Quiet Pager, an InOrbit lab](0007-quiet-pager.md) | open, draft |
+| 0008 | [The grader](0008-the-grader.md) | open, draft |
+| 0009 | [Subscriptions](0009-subscriptions.md) | open, draft |

@@ -65,8 +65,13 @@ practice log is `localStorage`, per browser, and its page says so.
   `tool/lab-data.ts` into the gitignored `src/generated/lab/` (`pnpm gen`, run before
   dev, build, lint and typecheck, and as `mise run www:lab`; `next dev` does not watch
   `docs/`, so re-run it after an edit). `public: true` in a page's front matter is the
-  publish switch; a private page is not rendered, not checked and may not be linked
-  from a public one. A public page is refused, with `file:line`, when it names an
+  publish switch; a private page is a draft, rendered only into the gitignored
+  `public/lab-private/drafts.json`, which Envoy serves to admins alone (a gate that
+  does not move when the lab is published) and Caddy marks `private, no-store`;
+  `src/lib/lab-drafts.ts` reads it for an admin, the lab lists stamp drafts, and
+  `/lab/draft/?doc=<kind>/<slug>` renders one. Nothing private goes into
+  `src/generated/`, which is compiled into the scripts. Drafts are not
+  redaction-checked and may not be linked from a public page. A public page is refused, with `file:line`, when it names an
   internal host, an address, a port, a path into the machine or the deployment, a
   secret or the shape of the gate, a cluster name, a word from
   `docs/lab/redaction.json`, or loads anything from elsewhere (`tool/lab-redaction.ts`

@@ -193,6 +193,10 @@ static_resources:
                         deny_redirect_matcher:
                           - name: ":path"
                             string_match: { prefix: "/api/" }
+                          # The lab's drafts file, fetched by the page for an admin:
+                          # a non-admin's fetch gets 401, never a sign-in redirect.
+                          - name: ":path"
+                            string_match: { prefix: "/lab-private/" }
                           # The site's "who am I" fetch: the filter still validates
                           # and refreshes the session, but answers 401, never a
                           # redirect, so the page can show a "Sign in" instead.
@@ -377,6 +381,33 @@ static_resources:
                               retry_on: connect-failure,refused-stream,reset,unavailable
                               num_retries: 2
                               per_try_timeout: 5s
+                        # The lab's drafts (`public: false` documents), rendered by
+                        # ui/www/tool/lab-data.ts into one file under /lab-private/ and
+                        # read by the lab's pages for an admin. Admins only, always:
+                        # this gate does NOT move when the lab is published, because a
+                        # draft is exactly what is not published yet. Caddy marks the
+                        # file private, no-store, so no cache in front keeps a copy.
+                        - match: { prefix: "/lab-private/" }
+                          typed_per_filter_config:
+                            envoy.filters.http.jwt_authn:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.PerRouteConfig
+                              requirement_name: ui
+                            envoy.filters.http.rbac:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.rbac.v3.RBACPerRoute
+                              rbac:
+                                rules:
+                                  action: ALLOW
+                                  policies:
+                                    admins:
+                                      permissions: [{ any: true }]
+                                      principals:
+                                        - metadata:
+                                            filter: envoy.filters.http.jwt_authn
+                                            path: [{ key: jwt }, { key: role }]
+                                            value: { string_match: { exact: admin } }
+                          route:
+                            cluster: www
+                            timeout: 15s
                         # Who am I, for the site: any signed-in person. The page shows
                         # their name, the sign-out, and the lab for an admin; the
                         # header's "Sign in" points here, so this route is where the

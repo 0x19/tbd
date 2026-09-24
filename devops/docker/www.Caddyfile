@@ -21,6 +21,14 @@
 		respond "{header.CF-IPCountry}" 200
 	}
 
+	# The lab's drafts (ui/www/tool/lab-data.ts): Envoy lets only admins through,
+	# and nothing in front may keep a copy, so never cached anywhere.
+	@drafts path /lab-private/*
+	handle @drafts {
+		header Cache-Control "private, no-store"
+		file_server
+	}
+
 	# Hashed asset names never change. Pages must revalidate every time, or a
 	# browser sits on yesterday's copy for the length of the max-age and a deploy
 	# looks like it did nothing; a revalidation of an unchanged page is a 304.
