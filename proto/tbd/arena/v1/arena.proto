@@ -71,6 +71,28 @@ message Snapshot {
   ChaosRun chaos = 6;
   // Every source the snapshot is built from, and whether it is current.
   repeated SourceState sources = 7;
+  // The sandbox runner (RFC 0010), as it answered and as the metrics store
+  // counts its runs; absent when no runner is configured.
+  RunnerState runner = 8;
+}
+
+message RunnerState {
+  // The runner answered its last read.
+  bool up = 1;
+  // It runs on the in-process stub engine; its figures are not real runs.
+  bool stub = 2;
+  // Runs now, and the most it runs at once.
+  uint32 in_flight = 3;
+  uint32 max_in_flight = 4;
+  // The languages it runs ("go", "rust").
+  repeated string languages = 5;
+  // Over the last five minutes, from the metrics store: runs a minute, runs a
+  // minute the sandbox did not answer ("unavailable"), and the whole run's
+  // median and 99th percentile in milliseconds (container start to removal).
+  optional double runs_per_minute = 6;
+  optional double unavailable_per_minute = 7;
+  optional double p50_ms = 8;
+  optional double p99_ms = 9;
 }
 
 message TierState {
@@ -130,7 +152,7 @@ message ChaosRun {
 }
 
 message SourceState {
-  // "llm", "metrics" or "chaos".
+  // "llm", "runner", "metrics" or "chaos".
   string name = 1;
   // The last read succeeded.
   bool ok = 2;

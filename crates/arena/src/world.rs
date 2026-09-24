@@ -13,11 +13,11 @@ use std::{
 };
 
 use tbd_common::metrics::names;
-use tbd_proto::arena::v1::{ChaosRun, Snapshot, SourceState, SurfaceState, TierState};
+use tbd_proto::arena::v1::{ChaosRun, RunnerState, Snapshot, SourceState, SurfaceState, TierState};
 use tokio::sync::broadcast;
 
 /// The sources, in the order `sources` lists them.
-pub const SOURCES: [&str; 3] = ["llm", "metrics", "chaos"];
+pub const SOURCES: [&str; 4] = ["llm", "runner", "metrics", "chaos"];
 
 /// One tier's rates from the metrics store.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
@@ -32,6 +32,19 @@ pub struct Rates {
     pub refused_per_minute: Option<f64>,
 }
 
+/// The sandbox runner's rates from the metrics store, over five minutes.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct RunnerRates {
+    /// Runs a minute.
+    pub runs_per_minute: Option<f64>,
+    /// Runs a minute the sandbox did not answer.
+    pub unavailable_per_minute: Option<f64>,
+    /// A whole run, median, in milliseconds.
+    pub p50_ms: Option<f64>,
+    /// A whole run, 99th percentile, in milliseconds.
+    pub p99_ms: Option<f64>,
+}
+
 #[derive(Debug, Clone)]
 struct Source {
     ok: bool,
@@ -43,6 +56,8 @@ struct Source {
 struct State {
     tiers: Vec<TierState>,
     rates: BTreeMap<String, Rates>,
+    runner: Option<RunnerState>,
+    runner_rates: RunnerRates,
     surfaces: Vec<SurfaceState>,
     surfaces_checked_at: Option<SystemTime>,
     mcp_tools: Option<u32>,
@@ -130,9 +145,24 @@ impl World {
         self.with(|s| s.tiers = tiers);
     }
 
-    /// The metrics store's rates, by tier.
-    pub fn set_rates(&self, rates: BTreeMap<String, Rates>) {
-        self.with(|s| s.rates = rates);
+    /// The metrics store's rates, by tier, and the runner's.
+    pub fn set_rates(&self, rates: BTreeMap<String, Rates>, runner: RunnerRates) {
+        self.with(|s| {
+            s.rates = rates;
+            s.runner_rates = runner;
+        });
+    }
+
+    /// The runner, as `ListLanguages` answered.
+    pub fn set_runner(&self, runner: RunnerState) {
+        self.with(|s| s.runner = Some(runner));
+    }
+
+    /// The runner did not answer: what it said last stays, marked down.
+    pub fn runner_down(&self) {
+        self.with(|s| {
+            s.runner.get_or_insert_with(RunnerState::default).up = false;
+        });
     }
 
     /// The last end-to-end check of every way in, and when it ran.
@@ -224,6 +254,14 @@ impl World {
                     ..ChaosRun::default()
                 })),
                 sources,
+                runner: s.runner.clone().map(|mut r| {
+                    let x = s.runner_rates;
+                    r.runs_per_minute = x.runs_per_minute;
+                    r.unavailable_per_minute = x.unavailable_per_minute;
+                    r.p50_ms = x.p50_ms;
+                    r.p99_ms = x.p99_ms;
+                    r
+                }),
             }
         })
     }
@@ -276,5 +314,30 @@ mod tests {
         assert!(!llm.ok);
         assert!(llm.age_s.is_some(), "the last good read is still dated");
         assert_eq!(llm.error, "connection refused");
+    }
+
+    #[test]
+    fn a_runner_that_stops_answering_is_down_with_its_last_figures() {
+        let world = World::new(&["runner"]);
+        assert!(world.snapshot().runner.is_none(), "absent until read");
+        world.set_runner(RunnerState {
+            up: true,
+            max_in_flight: 4,
+            languages: vec!["go".into()],
+            ..RunnerState::default()
+        });
+        world.set_rates(
+            BTreeMap::new(),
+            RunnerRates {
+                p50_ms: Some(900.0),
+                ..RunnerRates::default()
+            },
+        );
+        world.runner_down();
+        let r = world.snapshot().runner.unwrap();
+        assert!(!r.up);
+        assert_eq!(r.max_in_flight, 4);
+        assert_eq!(r.p50_ms, Some(900.0));
+        assert_eq!(r.runs_per_minute, None, "absent, never zero");
     }
 }

@@ -76,6 +76,22 @@ pub async fn start_live(adjust: impl FnOnce(&mut Config)) -> Server {
         .unwrap();
     });
 
+    // A real runner on its stub engine, the same way.
+    let runner_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let runner_addr = runner_listener.local_addr().unwrap();
+    let (runner_stop, runner_stopped) = oneshot::channel::<()>();
+    tokio::spawn(async move {
+        tbd_runner::serve_on(
+            runner_listener,
+            tbd_runner::Config::stub(runner_addr),
+            async {
+                let _ = runner_stopped.await;
+            },
+        )
+        .await
+        .unwrap();
+    });
+
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../configs/arena");
@@ -83,8 +99,10 @@ pub async fn start_live(adjust: impl FnOnce(&mut Config)) -> Server {
     config.server.listen = addr;
     config.metrics.listen = None;
     config.sources.llm_url = format!("http://{llm_addr}");
+    config.sources.runner_url = format!("http://{runner_addr}");
     let fast = std::time::Duration::from_millis(50);
     config.collect.llm_every = fast;
+    config.collect.runner_every = fast;
     config.collect.metrics_every = fast;
     config.collect.chaos_every = fast;
     config.watch.tick = fast;
@@ -94,6 +112,7 @@ pub async fn start_live(adjust: impl FnOnce(&mut Config)) -> Server {
         tbd_arena::serve_on(listener, config, async {
             let _ = stopped.await;
             drop(llm_stop);
+            drop(runner_stop);
         })
         .await
         .unwrap();

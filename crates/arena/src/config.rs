@@ -44,6 +44,9 @@ pub struct Config {
 pub struct Sources {
     /// The model service (gRPC), through Envoy's internal listener when deployed.
     pub llm_url: String,
+    /// The sandbox runner (gRPC, RFC 0010), through Envoy's internal listener
+    /// when deployed.
+    pub runner_url: String,
     /// The metrics store's Prometheus query API (`/api/v1/query`), for rates
     /// and percentiles. Observability, dialled directly like a database.
     pub metrics_url: String,
@@ -60,6 +63,7 @@ impl Default for Sources {
     fn default() -> Self {
         Self {
             llm_url: "http://127.0.0.1:50057".to_owned(),
+            runner_url: "http://127.0.0.1:50060".to_owned(),
             metrics_url: String::new(),
             chaos_url: String::new(),
             validate_cron: "0 */2 * * * *".to_owned(),
@@ -74,6 +78,9 @@ pub struct Collect {
     /// The model service's tiers.
     #[serde(with = "humantime_serde")]
     pub llm_every: Duration,
+    /// The sandbox runner's state.
+    #[serde(with = "humantime_serde")]
+    pub runner_every: Duration,
     /// The metrics store's rates.
     #[serde(with = "humantime_serde")]
     pub metrics_every: Duration,
@@ -89,6 +96,7 @@ impl Default for Collect {
     fn default() -> Self {
         Self {
             llm_every: Duration::from_secs(1),
+            runner_every: Duration::from_secs(2),
             metrics_every: Duration::from_secs(5),
             chaos_every: Duration::from_secs(5),
             timeout: Duration::from_secs(3),
@@ -192,6 +200,9 @@ pub struct Overrides {
     /// The model service. Default: `[sources] llm_url`.
     #[arg(long, env = "ARENA_LLM_URL")]
     pub llm_url: Option<String>,
+    /// The sandbox runner. Default: `[sources] runner_url`.
+    #[arg(long, env = "ARENA_RUNNER_URL")]
+    pub runner_url: Option<String>,
     /// The metrics store's query API. Default: `[sources] metrics_url`.
     #[arg(long, env = "ARENA_METRICS_URL")]
     pub metrics_url: Option<String>,
@@ -211,6 +222,9 @@ impl Overrides {
         }
         if let Some(v) = &self.llm_url {
             config.sources.llm_url.clone_from(v);
+        }
+        if let Some(v) = &self.runner_url {
+            config.sources.runner_url.clone_from(v);
         }
         if let Some(v) = &self.metrics_url {
             config.sources.metrics_url.clone_from(v);

@@ -23,8 +23,12 @@ max_message_len = 1024
 # The model service, through Envoy's internal listener when deployed
 # (ARENA_LLM_URL).
 llm_url = "http://127.0.0.1:50057"
+# The sandbox runner (RFC 0010), the same way (ARENA_RUNNER_URL): what it runs
+# and how full it is, read as svc:arena.
+runner_url = "http://127.0.0.1:50060"
 # The metrics store's Prometheus query API, for tokens a second, time to the
-# first token and refusals (ARENA_METRICS_URL). Observability is dialled
+# first token and refusals, and the runner's runs and run times
+# (ARENA_METRICS_URL). Observability is dialled
 # directly, like a database.
 metrics_url = ""
 # The chaos tool's API root, ending in /api/chaos/v1 (ARENA_CHAOS_URL): its
@@ -39,6 +43,7 @@ validate_cron = "0 */2 * * * *"
 [collect]
 # How often each source is read, and one read's deadline.
 llm_every = "1s"
+runner_every = "2s"
 metrics_every = "5s"
 chaos_every = "5s"
 timeout = "3s"

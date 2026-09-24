@@ -1,14 +1,15 @@
 # The arena
 
 One live view of what the platform is doing, for the lab's pages (RFC 0004). The arena
-reads three sources and republishes them as one snapshot, a second apart, to every
+reads four sources and republishes them as one snapshot, a second apart, to every
 viewer over the gateway: `GET /v1/arena/snapshot` (one answer), `GET /v1/arena/events`
 (server-sent events), and `tbd.arena.v1.ArenaService/Watch` on the multiplexed socket.
 
 | Source | Read | Gives | Config |
 |---|---|---|---|
 | the model service | `ListModels` every `[collect] llm_every`, as `svc:arena` | per tier: engine, model, up, stub, running, slots, waiting | `[sources] llm_url` (`ARENA_LLM_URL`), Envoy's internal listener when deployed |
-| the metrics store | four PromQL instant queries every `[collect] metrics_every` | per tier: completion tokens a second (1 min), time to the first token p50 and p99 (5 min), refusals in the last minute | `[sources] metrics_url` (`ARENA_METRICS_URL`), VictoriaMetrics' `/api/v1/query` |
+| the sandbox runner | `ListLanguages` every `[collect] runner_every`, as `svc:arena` | `runner`: up (it answered), stub, runs now and the most at once, the languages | `[sources] runner_url` (`ARENA_RUNNER_URL`), Envoy's internal listener when deployed |
+| the metrics store | eight PromQL instant queries every `[collect] metrics_every` | per tier: completion tokens a second (1 min), time to the first token p50 and p99 (5 min), refusals in the last minute; for the runner (5 min, runs are rarer): runs a minute, runs a minute the sandbox did not answer (`outcome="unavailable"`), a whole run's p50 and p99 | `[sources] metrics_url` (`ARENA_METRICS_URL`), VictoriaMetrics' `/api/v1/query` |
 | the chaos tool | `GET /overview` every `[collect] chaos_every`; a running run's `GET /runs/{id}/events`; a new `last_validate`'s `GET /runs/{id}` | the current run (kind, name, phase, requests a second, failed share, p99, tokens a second), and each way in's last end-to-end check | `[sources] chaos_url` (`ARENA_CHAOS_URL`), the API root ending in `/api/chaos/v1` |
 
 - **Absent, never zero.** A source with an empty URL is "not configured"; one that did
@@ -33,7 +34,10 @@ viewer over the gateway: `GET /v1/arena/snapshot` (one answer), `GET /v1/arena/e
 - **How many may watch.** `[watch] max_viewers` streams at once; one more is
   `RESOURCE_EXHAUSTED` ("busy: ..."). Each viewer gets the current snapshot at once,
   then the broadcast; a slow one skips to the next whole frame.
-- **Addressing.** The model service is reached through Envoy like every service. The
+- **The runner is up when it answers.** Whether the sandbox behind it answers shows as
+  the unavailable rate, not as a separate health bit; a runner that stops answering
+  keeps its last figures with `up: false`.
+- **Addressing.** The model service and the runner are reached through Envoy like every service. The
   metrics store is observability and the chaos tool is the operator's tool; both are
   dialled directly, like a database, and only by overlays that deploy them
   (`ARENA_CHAOS_URL` is set by the local and dev overlays; empty in production).

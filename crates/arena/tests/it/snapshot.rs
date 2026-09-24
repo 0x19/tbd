@@ -70,8 +70,58 @@ async fn the_first_frame_arrives_at_once_and_the_tiers_follow_the_model_service(
 }
 
 #[tokio::test]
+async fn the_runner_is_read_as_it_answers() {
+    let server = support::start_live(|_| {}).await;
+    let snap = until(&server, "the runner", |s| {
+        s.runner.as_ref().is_some_and(|r| r.up)
+    })
+    .await;
+    let r = snap.runner.unwrap();
+    assert!(r.stub, "the stub engine says so: {r:?}");
+    assert_eq!(r.max_in_flight, 4, "the stub config's slots");
+    assert_eq!(r.languages, ["go", "rust"]);
+    assert_eq!(
+        r.runs_per_minute, None,
+        "no metrics store: absent, never zero"
+    );
+    let source = snap.sources.iter().find(|s| s.name == "runner").unwrap();
+    assert!(source.ok, "{source:?}");
+}
+
+#[tokio::test]
+async fn a_runner_that_does_not_answer_is_down_and_says_why() {
+    // A port nothing listens on.
+    let closed = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap();
+    let server =
+        support::start_live(move |c| c.sources.runner_url = format!("http://{closed}")).await;
+    let snap = until(&server, "the runner's failure", |s| {
+        s.sources
+            .iter()
+            .any(|x| x.name == "runner" && !x.ok && x.error != "not read yet")
+    })
+    .await;
+    assert!(!snap.runner.unwrap().up);
+}
+
+#[tokio::test]
+async fn no_runner_url_is_no_runner_and_says_not_configured() {
+    let server = support::start_live(|c| c.sources.runner_url = String::new()).await;
+    let snap = until(&server, "the tiers", |s| s.tiers.len() == 2).await;
+    assert!(snap.runner.is_none());
+    let source = snap.sources.iter().find(|s| s.name == "runner").unwrap();
+    assert_eq!(source.error, "not configured");
+}
+
+#[tokio::test]
 async fn rates_come_from_the_metrics_store_and_an_empty_window_is_absent() {
     let store = MockServer::start().await;
+    let scalar = |v: &str| {
+        serde_json::json!({"status": "success", "data": {"resultType": "vector",
+            "result": [{"metric": {}, "value": [1.0, v]}]}})
+    };
     let vector = |tier: &str, v: &str| {
         serde_json::json!({"status": "success", "data": {"resultType": "vector",
             "result": [{"metric": {"tier": tier}, "value": [1.0, v]}]}})
@@ -81,6 +131,9 @@ async fn rates_come_from_the_metrics_store_and_an_empty_window_is_absent() {
         (metrics::TTFT_P50, vector("fast", "NaN")),
         (metrics::TTFT_P99, vector("fast", "NaN")),
         (metrics::REFUSED, vector("fast", "3")),
+        (metrics::RUNNER_RUNS, scalar("4")),
+        (metrics::RUNNER_P50, scalar("0.9")),
+        (metrics::RUNNER_P99, scalar("NaN")),
     ] {
         Mock::given(method("GET"))
             .and(path("/api/v1/query"))
@@ -89,6 +142,15 @@ async fn rates_come_from_the_metrics_store_and_an_empty_window_is_absent() {
             .mount(&store)
             .await;
     }
+    // Any other query: the store's answer for an empty window, no series.
+    Mock::given(method("GET"))
+        .and(path("/api/v1/query"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(
+            serde_json::json!({"status": "success", "data": {"resultType": "vector", "result": []}}),
+        ))
+        .with_priority(10)
+        .mount(&store)
+        .await;
     let url = store.uri();
     let server = support::start_live(move |c| c.sources.metrics_url = url).await;
     let snap = until(&server, "the fast tier's rate", |s| {
@@ -106,6 +168,20 @@ async fn rates_come_from_the_metrics_store_and_an_empty_window_is_absent() {
     );
     let deep = snap.tiers.iter().find(|t| t.tier == "deep").unwrap();
     assert_eq!(deep.tokens_per_second, None);
+    let snap = until(&server, "the runner's rates", |s| {
+        s.runner
+            .as_ref()
+            .is_some_and(|r| r.runs_per_minute.is_some())
+    })
+    .await;
+    let r = snap.runner.unwrap();
+    assert_eq!(r.runs_per_minute, Some(4.0));
+    assert_eq!(r.p50_ms, Some(900.0));
+    assert_eq!(r.p99_ms, None, "an empty histogram is absent");
+    assert_eq!(
+        r.unavailable_per_minute, None,
+        "no series: absent, never zero"
+    );
 }
 
 #[tokio::test]

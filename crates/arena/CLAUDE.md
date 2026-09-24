@@ -9,9 +9,10 @@ The arena service: one live snapshot of what the platform is doing, for the lab'
   source's failure keeps its last figures and records why; `snapshot()` fills each
   tier's rates from the metrics store's map and leaves a rate absent (never zero) when
   nothing measured it. `tick()` broadcasts a whole snapshot every `[watch] tick`.
-- `collect/`: one task per configured source. `llm.rs` calls `ListModels` as
-  `svc:arena` (`ServiceCaller`, the cv service's pattern); `metrics.rs` runs the four
-  PromQL queries (constants, so tests match them exactly); `chaos.rs` reads `/overview`,
+- `collect/`: one task per configured source. `llm.rs` calls `ListModels` and
+  `runner.rs` `ListLanguages`, both as `svc:arena` (`ServiceCaller` in `mod.rs`, the cv
+  service's pattern); `metrics.rs` runs the PromQL queries, four per tier and four
+  summed for the runner (constants, so tests match them exactly); `chaos.rs` reads `/overview`,
   follows a running run's SSE feed and diffs its `load` frames into rates, turns a new
   `last_validate` report into the surfaces through `SURFACES` (way in to check name),
   and keeps the `arena: every way in` schedule there (recreated within a minute if it goes missing), notifications off.
@@ -47,5 +48,5 @@ Invariants:
 Tests: `tests/it/main.rs` boots the server on port 0 through `support.rs` with the
 shipped `configs/arena` and env `local`, and exposes the `Runtime` so tests can
 inject faults and read counters. `tests/it/snapshot.rs` runs the collectors against a
-real llm on its stub engine (`support::start_live`) and wiremock servers playing the
+real llm and a real runner on their stub engines (`support::start_live`) and wiremock servers playing the
 metrics store and the chaos tool; `support::as_role` is a caller Envoy verified.

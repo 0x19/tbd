@@ -171,6 +171,7 @@ services:
       ARENA_LISTEN_ADDR: 0.0.0.0:{{ arena_port }}
       ARENA_METRICS_ADDR: 0.0.0.0:9464
       ARENA_LLM_URL: http://llm:{{ llm_port }}
+      ARENA_RUNNER_URL: http://runner:{{ runner_port }}
       ARENA_METRICS_URL: "{{ arena_metrics_url | default('') }}"
       ARENA_CHAOS_URL: "{{ 'http://chaos:7700/api/chaos/v1' if (chaos_enabled | default(false)) else '' }}"
       OTEL_EXPORTER_OTLP_ENDPOINT: "{{ otlp_endpoint | default('') }}"

@@ -6190,6 +6190,7 @@ dependencies = [
  "tbd-common",
  "tbd-llm",
  "tbd-proto",
+ "tbd-runner",
  "thiserror 2.0.20",
  "tokio",
  "tokio-stream",

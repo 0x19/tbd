@@ -7,7 +7,7 @@ use std::{collections::BTreeMap, time::Duration};
 
 use serde::Deserialize;
 
-use crate::world::{Rates, World};
+use crate::world::{Rates, RunnerRates, World};
 
 /// The queries, each answered per `tier`. Windows are wide enough to hold a
 /// few generations on a quiet day and short enough to move while one runs.
@@ -19,6 +19,19 @@ pub const TTFT_P50: &str = "histogram_quantile(0.5, sum by (le, tier) (rate(tbd_
 pub const TTFT_P99: &str = "histogram_quantile(0.99, sum by (le, tier) (rate(tbd_llm_time_to_first_token_seconds_bucket[5m])))";
 /// Refusals by admission in the last minute.
 pub const REFUSED: &str = "sum by (tier) (increase(tbd_llm_refused_total[1m]))";
+
+/// The sandbox runner's, over five minutes (runs are rarer than tokens):
+/// runs a minute.
+pub const RUNNER_RUNS: &str = "sum(rate(tbd_runner_runs_total[5m])) * 60";
+/// Runs a minute the sandbox did not answer.
+pub const RUNNER_UNAVAILABLE: &str =
+    r#"sum(rate(tbd_runner_runs_total{outcome="unavailable"}[5m])) * 60"#;
+/// A whole run, median, seconds.
+pub const RUNNER_P50: &str =
+    "histogram_quantile(0.5, sum by (le) (rate(tbd_runner_duration_seconds_bucket[5m])))";
+/// A whole run, 99th percentile, seconds.
+pub const RUNNER_P99: &str =
+    "histogram_quantile(0.99, sum by (le) (rate(tbd_runner_duration_seconds_bucket[5m])))";
 
 #[derive(Debug, Deserialize)]
 struct Response {
@@ -61,8 +74,8 @@ pub fn start(
         loop {
             tick.tick().await;
             match read(&http, &base).await {
-                Ok(rates) => {
-                    world.set_rates(rates);
+                Ok((rates, runner)) => {
+                    world.set_rates(rates, runner);
                     world.source_ok("metrics");
                 }
                 Err(error) => world.source_failed("metrics", error),
@@ -71,13 +84,28 @@ pub fn start(
     })
 }
 
-async fn read(http: &reqwest::Client, base: &str) -> Result<BTreeMap<String, Rates>, String> {
+async fn read(
+    http: &reqwest::Client,
+    base: &str,
+) -> Result<(BTreeMap<String, Rates>, RunnerRates), String> {
     let (tps, p50, p99, refused) = tokio::try_join!(
         query(http, base, TOKENS_PER_SECOND),
         query(http, base, TTFT_P50),
         query(http, base, TTFT_P99),
         query(http, base, REFUSED),
     )?;
+    let (runs, unavailable, run_p50, run_p99) = tokio::try_join!(
+        series(http, base, RUNNER_RUNS),
+        series(http, base, RUNNER_UNAVAILABLE),
+        series(http, base, RUNNER_P50),
+        series(http, base, RUNNER_P99),
+    )?;
+    let runner = RunnerRates {
+        runs_per_minute: scalar(runs),
+        unavailable_per_minute: scalar(unavailable),
+        p50_ms: scalar(run_p50).map(|v| v * 1000.0),
+        p99_ms: scalar(run_p99).map(|v| v * 1000.0),
+    };
     let mut rates: BTreeMap<String, Rates> = BTreeMap::new();
     for (tier, v) in tps {
         rates.entry(tier).or_default().tokens_per_second = Some(v);
@@ -91,7 +119,7 @@ async fn read(http: &reqwest::Client, base: &str) -> Result<BTreeMap<String, Rat
     for (tier, v) in refused {
         rates.entry(tier).or_default().refused_per_minute = Some(v);
     }
-    Ok(rates)
+    Ok((rates, runner))
 }
 
 /// One instant query, as tier to value; a value that is not a finite number
@@ -101,6 +129,11 @@ async fn query(
     base: &str,
     promql: &str,
 ) -> Result<Vec<(String, f64)>, String> {
+    Ok(parse(series(http, base, promql).await?))
+}
+
+/// One instant query's series, as the store answered them.
+async fn series(http: &reqwest::Client, base: &str, promql: &str) -> Result<Vec<Series>, String> {
     let resp = http
         .get(format!("{base}/api/v1/query"))
         .query(&[("query", promql)])
@@ -115,7 +148,15 @@ async fn query(
     if body.status != "success" {
         return Err(format!("query: {}", body.error.unwrap_or(body.status)));
     }
-    Ok(parse(body.data.map(|d| d.result).unwrap_or_default()))
+    Ok(body.data.map(|d| d.result).unwrap_or_default())
+}
+
+/// A query summed to one series: its value, when it is a finite number. No
+/// series (nothing in the window) and `NaN` (an empty histogram) are absent.
+fn scalar(series: Vec<Series>) -> Option<f64> {
+    let s = series.into_iter().next()?;
+    let v: f64 = s.value.1.parse().ok()?;
+    v.is_finite().then_some(v)
 }
 
 fn parse(series: Vec<Series>) -> Vec<(String, f64)> {
@@ -142,5 +183,15 @@ mod tests {
         ]))
         .unwrap();
         assert_eq!(parse(series), vec![("fast".to_owned(), 12.5)]);
+    }
+
+    #[test]
+    fn a_summed_series_is_its_value_and_nan_or_nothing_is_absent() {
+        let one = |v: &str| -> Vec<Series> {
+            serde_json::from_value(serde_json::json!([{"metric": {}, "value": [1.0, v]}])).unwrap()
+        };
+        assert_eq!(scalar(one("2.5")), Some(2.5));
+        assert_eq!(scalar(one("NaN")), None);
+        assert_eq!(scalar(Vec::new()), None);
     }
 }
