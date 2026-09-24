@@ -20,6 +20,7 @@ import {
 } from "@/components/chat/turn";
 import { Button } from "@/components/ui/button";
 import { LivePanel } from "@/components/workbench/live-panel";
+import { rfcs, studies } from "@/generated/lab/index";
 import { type Agent, useAgents, useBudget } from "@/lib/agents";
 import { useArena } from "@/lib/arena";
 import { useT } from "@/lib/i18n";
@@ -37,8 +38,73 @@ type Turn =
   | { kind: "connect"; id: string }
   | { kind: "help"; id: string };
 
-/** A session talks to the bare model, or to one agent (`agent`, RFC 0011). */
-type Session = { id: string; title: string; createdAt: number; agent?: string; turns: Turn[] };
+/**
+ * A session talks to the bare model, or to one agent (`agent`, RFC 0011), which
+ * is told the visitor is reading `page` when one is set. Its title is the first
+ * question until it is named (`named`), and then only a rename changes it.
+ */
+type Session = {
+  id: string;
+  title: string;
+  named?: boolean;
+  createdAt: number;
+  updatedAt?: number;
+  agent?: string;
+  page?: string;
+  turns: Turn[];
+};
+
+/** Pages an agent can be told the visitor is reading: the site's own, then every public document. */
+const PAGES = [
+  "/",
+  "/about/",
+  "/open-source/",
+  "/playgrounds/",
+  "/contact/",
+  "/lab/",
+  "/lab/llm/",
+  ...[...rfcs, ...studies].map((e) => e.href),
+];
+
+/** A path an agent may be told about: one leading slash and plain path characters. */
+const pagePath = (s: string) => (/^\/(?![/\\])[A-Za-z0-9\-._~/]*$/.test(s) ? s : undefined);
+
+/** A session as markdown: its title, then every question and answer, and every run. */
+function toMarkdown(s: Session): string {
+  const lines = [`# ${s.title || "Untitled"}`, ""];
+  if (s.agent) lines.push(`Agent: ${s.agent}${s.page ? `, reading ${s.page}` : ""}`, "");
+  for (const x of s.turns) {
+    if (x.kind === "chat") {
+      lines.push(`## › ${x.prompt}`, "", x.text || `_(${x.status})_`, "");
+      const fig = [x.agent, x.tier === "TIER_DEEP" ? "deep" : "fast", x.model, x.transport];
+      if (x.usage) fig.push(`${x.usage.prompt_tokens} + ${x.usage.completion_tokens} tok`);
+      lines.push(`<sub>${fig.filter(Boolean).join(" · ")}</sub>`, "");
+    } else if (x.kind === "code") {
+      lines.push(`## run · ${x.language}`, "", "```" + x.language, x.source, "```", "");
+      if (x.result?.run?.stdout) lines.push("```text", x.result.run.stdout, "```", "");
+    }
+  }
+  return lines.join("\n");
+}
+
+/** Hand the browser a file; nothing leaves it. */
+function download(name: string, text: string) {
+  const url = URL.createObjectURL(new Blob([text], { type: "text/markdown" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  a.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/** How long ago, short. */
+function ago(t: number, now: number): string {
+  const m = Math.round((now - t) / 60000);
+  if (m < 1) return "now";
+  if (m < 60) return `${m}m`;
+  const h = Math.round(m / 60);
+  return h < 24 ? `${h}h` : `${Math.round(h / 24)}d`;
+}
 
 const MAX_TOKENS = 1024;
 
@@ -84,6 +150,9 @@ const COMMANDS = [
   { name: "/transport mcp", help: "wb.cmd.mcp" },
   { name: "/agent site", help: "wb.cmd.agent" },
   { name: "/agent none", help: "wb.cmd.agent_none" },
+  { name: "/page", help: "wb.cmd.page" },
+  { name: "/name", help: "wb.cmd.name" },
+  { name: "/export", help: "wb.cmd.export" },
   { name: "/tools", help: "wb.cmd.tools" },
   { name: "/run go", help: "wb.cmd.run_go" },
   { name: "/run rust", help: "wb.cmd.run_rust" },
@@ -118,6 +187,11 @@ export function Workbench() {
   const [prompt, setPrompt] = useState("");
   const [menu, setMenu] = useState(0);
   const [panel, setPanel] = useState(true);
+  // Which title is being renamed: a session in the list (its id), or the open one in the header.
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const [renamingHead, setRenamingHead] = useState(false);
+  const [picking, setPicking] = useState(false);
+  const [filter, setFilter] = useState("");
   const [now, setNow] = useState(() => Date.now());
   const abort = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -137,12 +211,12 @@ export function Workbench() {
   const turns = useMemo(() => session?.turns ?? [], [session]);
   const running = turns.some((x) => x.kind === "chat" && x.status === "running");
   const agentId = session?.agent ?? "";
+  const page = session?.page;
   const agent: Agent | undefined = agentId ? agents?.find((a) => a.id === agentId) : undefined;
 
   // A clock for the live rate while a turn runs.
   useEffect(() => {
-    if (!running) return;
-    const timer = window.setInterval(() => setNow(Date.now()), 250);
+    const timer = window.setInterval(() => setNow(Date.now()), running ? 250 : 30000);
     return () => window.clearInterval(timer);
   }, [running]);
   // Follow the newest turn by scrolling the transcript's own box, never the
@@ -172,11 +246,38 @@ export function Workbench() {
     (turn: Turn, title?: string) =>
       setSessions((all) =>
         all.map((s) =>
-          s.id === current ? { ...s, title: s.title || title || s.title, turns: [...s.turns, turn] } : s,
+          s.id === current
+            ? {
+                ...s,
+                // The first question names a session until someone names it.
+                title: s.named ? s.title : s.title || title || s.title,
+                updatedAt: Date.now(),
+                turns: [...s.turns, turn],
+              }
+            : s,
         ),
       ),
     [current],
   );
+  /** Change the open session. */
+  const update = useCallback(
+    (f: (s: Session) => Session) => setSessions((all) => all.map((s) => (s.id === current ? f(s) : s))),
+    [current],
+  );
+  const rename = useCallback((id: string, title: string) => {
+    const clean = title.trim().slice(0, 80);
+    setSessions((all) => all.map((s) => (s.id === id ? { ...s, title: clean, named: clean.length > 0 } : s)));
+    setRenaming(null);
+    setRenamingHead(false);
+    inputRef.current?.focus({ preventScroll: true });
+  }, []);
+  const start = useCallback((withAgent?: string) => {
+    const s = blank(withAgent);
+    setSessions((all) => [s, ...all]);
+    setCurrent(s.id);
+    setPicking(false);
+    inputRef.current?.focus({ preventScroll: true });
+  }, []);
 
   const ask = useCallback(
     async (
@@ -188,7 +289,7 @@ export function Workbench() {
       const sid = current;
       // With an agent its own tier and bounds apply: the request leaves them out.
       const turn = agent
-        ? startTurn(question, over, agent.tier, false, agent.id)
+        ? startTurn(question, over, agent.tier, false, agent.id, page)
         : startTurn(question, over, withTier, withReasoning);
       append(turn, question.slice(0, 60));
       abort.current?.abort();
@@ -196,14 +297,14 @@ export function Workbench() {
       abort.current = controller;
       const messages = [...contextOf(turns), { role: "user" as const, content: question }];
       const req = agent
-        ? { messages, agent: agent.id }
+        ? { messages, agent: agent.id, ...(page ? { page } : {}) }
         : { messages, tier: withTier, max_tokens: MAX_TOKENS, reasoning: withReasoning };
       await streamTurn(turn, req, controller.signal, (f) =>
         edit(sid, turn.id, (x) => (x.kind === "chat" ? f(x) : x)),
       );
       void refreshBudget();
     },
-    [agent, append, current, edit, reasoning, refreshBudget, tier, transport, turns],
+    [agent, append, current, edit, page, reasoning, refreshBudget, tier, transport, turns],
   );
 
   /** Run a program in the sandbox and show what it printed (RFC 0010). */
@@ -248,7 +349,8 @@ export function Workbench() {
 
   const command = useCallback(
     async (line: string) => {
-      const [name, arg] = line.trim().split(/\s+/, 2);
+      const [name, ...rest] = line.trim().split(/\s+/);
+      const arg = rest.join(" ");
       switch (name) {
         case "/tier":
           setTier(arg === "deep" ? "TIER_DEEP" : "TIER_FAST");
@@ -262,18 +364,30 @@ export function Workbench() {
         case "/agent": {
           // Only an agent this caller may use; anything else is the bare model.
           const next = agents?.find((a) => a.id === arg && a.available)?.id;
-          setSessions((all) => all.map((s) => (s.id === current ? { ...s, agent: next } : s)));
+          update((s) => ({ ...s, agent: next }));
           return;
         }
+        case "/page":
+          // `/page /lab/` tells the agent which page is being read; `/page` alone forgets it.
+          update((s) => ({ ...s, page: arg === "none" ? undefined : pagePath(arg) }));
+          return;
+        case "/name":
+          if (arg) rename(current, arg);
+          else setRenamingHead(true);
+          return;
+        case "/export":
+          if (session)
+            download(
+              `workbench-${(session.title || "session").replace(/[^\w-]+/g, "-").slice(0, 40)}.md`,
+              toMarkdown(session),
+            );
+          return;
         case "/clear":
-          setSessions((all) => all.map((s) => (s.id === current ? { ...s, turns: [] } : s)));
+          update((s) => ({ ...s, turns: [] }));
           return;
-        case "/new": {
-          const s = blank(agentId || undefined);
-          setSessions((all) => [s, ...all]);
-          setCurrent(s.id);
+        case "/new":
+          start(agentId || undefined);
           return;
-        }
         case "/connect":
           append({ kind: "connect", id: newId() });
           return;
@@ -293,7 +407,7 @@ export function Workbench() {
           append({ kind: "help", id: newId() });
       }
     },
-    [agentId, agents, append, current, edit],
+    [agentId, agents, append, current, edit, rename, session, start, update],
   );
 
   // `/agent <id>` for every agent this caller may use, beside the fixed commands.
@@ -307,6 +421,15 @@ export function Workbench() {
     [agents],
   );
   const matches = prompt.startsWith("/") ? commands.filter((c) => c.name.startsWith(prompt.trim())) : [];
+  const needle = filter.trim().toLowerCase();
+  const shown = needle
+    ? sessions.filter((s) =>
+        [s.title, s.agent ?? "", ...s.turns.map((x) => (x.kind === "chat" ? x.prompt : ""))]
+          .join(" ")
+          .toLowerCase()
+          .includes(needle),
+      )
+    : sessions;
 
   const submit = () => {
     const line = prompt.trim();
@@ -394,50 +517,95 @@ export function Workbench() {
   return (
     <div
       className={cn(
-        "grid min-h-[70dvh] overflow-hidden rounded-lg border lg:h-[calc(100dvh-13rem)]",
+        "grid min-h-[70dvh] grid-cols-[minmax(0,1fr)] overflow-hidden rounded-lg border lg:h-[calc(100dvh-13rem)]",
         panel ? "lg:grid-cols-[13rem_minmax(0,1fr)_22rem]" : "lg:grid-cols-[13rem_minmax(0,1fr)]",
       )}
     >
       {/* Sessions */}
-      <aside className="bg-muted/20 hidden flex-col border-r lg:flex">
-        <div className="flex items-center justify-between border-b px-3 py-2">
+      <aside className="bg-muted/20 hidden min-h-0 flex-col border-r lg:flex">
+        <div className="relative flex items-center justify-between border-b px-3 py-2">
           <span className="font-mono text-[11px] tracking-[0.12em] uppercase">{t("wb.sessions")}</span>
           <button
             type="button"
             className="text-muted-foreground hover:text-foreground text-xs"
-            onClick={() => void command("/new")}
+            aria-expanded={picking}
+            onClick={() => setPicking((p) => !p)}
           >
             + {t("wb.new")}
           </button>
+          {picking ? <NewMenu agents={agents} onPick={start} onClose={() => setPicking(false)} /> : null}
         </div>
+        {sessions.length > 8 ? (
+          <input
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            placeholder={t("wb.sessions.find")}
+            aria-label={t("wb.sessions.find")}
+            className="bg-background mx-1.5 mt-1.5 rounded border px-2 py-1 text-xs outline-none"
+          />
+        ) : null}
         <ul className="flex-1 overflow-y-auto p-1.5">
-          {sessions.map((s) => (
+          {shown.map((s) => (
             <li key={s.id} className="group flex items-center">
-              <button
-                type="button"
-                onClick={() => setCurrent(s.id)}
-                className={cn(
-                  "min-w-0 flex-1 truncate rounded px-2 py-1.5 text-left text-xs",
-                  s.id === current ? "bg-background border" : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {s.title || t("wb.untitled")}
-              </button>
-              <button
-                type="button"
-                aria-label={t("wb.delete")}
-                className="text-muted-foreground hover:text-destructive px-1.5 text-xs opacity-0 group-hover:opacity-100"
-                onClick={() =>
-                  setSessions((all) => {
-                    const left = all.filter((x) => x.id !== s.id);
-                    const next = left.length ? left : [blank()];
-                    if (s.id === current) setCurrent(next[0].id);
-                    return next;
-                  })
-                }
-              >
-                ×
-              </button>
+              {renaming === s.id ? (
+                <TitleInput
+                  initial={s.title}
+                  onDone={(title) => (title === null ? setRenaming(null) : rename(s.id, title))}
+                />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setCurrent(s.id)}
+                  onDoubleClick={() => setRenaming(s.id)}
+                  title={t("wb.rename.hint")}
+                  className={cn(
+                    "min-w-0 flex-1 rounded px-2 py-1.5 text-left",
+                    s.id === current ? "bg-background border" : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  <span className={cn("block truncate text-xs", s.named ? "" : "italic")}>
+                    {s.title || t("wb.untitled")}
+                  </span>
+                  <span className="text-muted-foreground mt-0.5 flex gap-2 font-mono text-[10px]">
+                    <span className={s.agent ? "text-foreground/80" : ""}>
+                      {s.agent
+                        ? (agents?.find((a) => a.id === s.agent)?.name ?? s.agent)
+                        : t("wb.agent.model")}
+                    </span>
+                    <span>{s.turns.filter((x) => x.kind === "chat").length}</span>
+                    <span className="ml-auto">{ago(s.updatedAt ?? s.createdAt, now)}</span>
+                  </span>
+                </button>
+              )}
+              {renaming === s.id ? null : (
+                <span className="flex flex-col opacity-0 group-focus-within:opacity-100 group-hover:opacity-100">
+                  <button
+                    type="button"
+                    aria-label={t("wb.rename")}
+                    title={t("wb.rename")}
+                    className="text-muted-foreground hover:text-foreground px-1.5 text-[11px]"
+                    onClick={() => setRenaming(s.id)}
+                  >
+                    ✎
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={t("wb.delete")}
+                    title={t("wb.delete")}
+                    className="text-muted-foreground hover:text-destructive px-1.5 text-xs"
+                    onClick={() =>
+                      setSessions((all) => {
+                        const left = all.filter((x) => x.id !== s.id);
+                        const next = left.length ? left : [blank()];
+                        if (s.id === current) setCurrent(next[0].id);
+                        return next;
+                      })
+                    }
+                  >
+                    ×
+                  </button>
+                </span>
+              )}
             </li>
           ))}
         </ul>
@@ -448,9 +616,38 @@ export function Workbench() {
 
       {/* Transcript and prompt */}
       <section className="flex min-h-0 flex-col">
-        <div className="flex items-center gap-3 border-b px-4 py-2 font-mono text-[11px]">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b px-4 py-2 font-mono text-[11px]">
           <span className="tracking-[0.12em] uppercase">{t("lab.demo.title")}</span>
-          <span className="text-muted-foreground truncate">{session?.title || t("wb.untitled")}</span>
+          {renamingHead && session ? (
+            <TitleInput
+              initial={session.title}
+              onDone={(title) => (title === null ? setRenamingHead(false) : rename(current, title))}
+            />
+          ) : (
+            <button
+              type="button"
+              className="text-muted-foreground hover:text-foreground hidden min-w-0 truncate lg:inline"
+              title={t("wb.rename.hint")}
+              onClick={() => setRenamingHead(true)}
+            >
+              {session?.title || t("wb.untitled")} <span aria-hidden>✎</span>
+            </button>
+          )}
+          <select
+            value={current}
+            onChange={(e) =>
+              e.target.value === "+" ? start(agentId || undefined) : setCurrent(e.target.value)
+            }
+            className="bg-background min-w-0 flex-1 truncate rounded border px-1.5 py-0.5 font-mono text-[11px] lg:hidden"
+            aria-label={t("wb.sessions")}
+          >
+            {sessions.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.title || t("wb.untitled")}
+              </option>
+            ))}
+            <option value="+">+ {t("wb.new")}</option>
+          </select>
           <label className="text-muted-foreground ml-auto flex items-center gap-1.5">
             <span className="hidden sm:inline">{t("wb.agent")}</span>
             <select
@@ -479,7 +676,12 @@ export function Workbench() {
         <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6" aria-live="polite">
           {turns.length === 0 ? (
             agent ? (
-              <Persona agent={agent} onPick={(q) => setPrompt(q)} />
+              <Persona
+                agent={agent}
+                page={page}
+                onPage={(p) => update((s) => ({ ...s, page: p }))}
+                onPick={(q) => setPrompt(q)}
+              />
             ) : (
               <Intro onPick={(q) => setPrompt(q)} />
             )
@@ -552,6 +754,7 @@ export function Workbench() {
           </div>
           <p className="text-muted-foreground mt-2 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[11px] tabular-nums">
             {agent ? <span className="text-foreground">{agent.name}</span> : null}
+            {agent ? <span>{page ? `@ ${page}` : t("wb.page.none")}</span> : null}
             <span>
               {TIER_NAME[shownTier]} · {liveTier?.model ?? "—"}
             </span>
@@ -582,7 +785,15 @@ export function Workbench() {
       {/* Behind the scenes */}
       {panel ? (
         <aside className="bg-muted/10 min-h-0 overflow-y-auto border-t p-3 lg:border-t-0 lg:border-l">
-          <p className="mb-2 font-mono text-[11px] tracking-[0.12em] uppercase">{t("wb.behind")}</p>
+          <AgentsPanel
+            agents={agents}
+            current={agentId}
+            page={page}
+            onUse={(id) => void command(`/agent ${id}`)}
+            onStart={start}
+            onPage={(p) => update((s) => ({ ...s, page: p }))}
+          />
+          <p className="mt-5 mb-2 font-mono text-[11px] tracking-[0.12em] uppercase">{t("wb.behind")}</p>
           <LivePanel arena={arena} />
           <p className="text-muted-foreground mt-4 text-[11px] leading-snug">{t("wb.sends")}</p>
         </aside>
@@ -615,8 +826,18 @@ function Intro({ onPick }: { onPick: (q: string) => void }) {
   );
 }
 
-/** A session with an agent opens with who it is (RFC 0011), and a question to start from. */
-function Persona({ agent, onPick }: { agent: Agent; onPick: (q: string) => void }) {
+/** A session with an agent opens with who it is (RFC 0011), the page it reads, and a question to start from. */
+function Persona({
+  agent,
+  page,
+  onPage,
+  onPick,
+}: {
+  agent: Agent;
+  page?: string;
+  onPage: (page: string | undefined) => void;
+  onPick: (q: string) => void;
+}) {
   const t = useT();
   const examples = [t("wb.agent.example.1"), t("wb.agent.example.2")];
   return (
@@ -625,8 +846,9 @@ function Persona({ agent, onPick }: { agent: Agent; onPick: (q: string) => void 
         {agent.name} · {TIER_NAME[agent.tier]}
       </p>
       <p className="text-muted-foreground mt-2">{agent.persona}</p>
+      <PageField page={page} onPage={onPage} />
       <ul className="text-muted-foreground mt-4 grid gap-2">
-        {examples.map((q) => (
+        {(page ? [t("wb.agent.example.page"), ...examples] : examples).map((q) => (
           <li key={q}>
             <button
               type="button"
@@ -640,6 +862,213 @@ function Persona({ agent, onPick }: { agent: Agent; onPick: (q: string) => void 
       </ul>
       <p className="text-muted-foreground mt-4 text-xs">{t("wb.agent.note")}</p>
     </div>
+  );
+}
+
+/** The page an agent is told the visitor is reading: any path, with the site's pages suggested. */
+function PageField({ page, onPage }: { page?: string; onPage: (page: string | undefined) => void }) {
+  const t = useT();
+  const [draft, setDraft] = useState(page ?? "");
+  useEffect(() => setDraft(page ?? ""), [page]);
+  const commit = () => onPage(draft.trim() ? pagePath(draft.trim()) : undefined);
+  return (
+    <label className="mt-3 grid gap-1">
+      <span className="text-muted-foreground font-mono text-[10px] tracking-[0.12em] uppercase">
+        {t("wb.page.label")}
+      </span>
+      <input
+        list="wb-pages"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            commit();
+          }
+        }}
+        placeholder={t("wb.page.placeholder")}
+        className="bg-background rounded border px-2 py-1 font-mono text-xs outline-none"
+      />
+      <datalist id="wb-pages">
+        {PAGES.map((p) => (
+          <option key={p} value={p} />
+        ))}
+      </datalist>
+    </label>
+  );
+}
+
+/** Rename in place: enter keeps it, esc leaves it as it was, leaving the field keeps it. */
+function TitleInput({ initial, onDone }: { initial: string; onDone: (title: string | null) => void }) {
+  const t = useT();
+  const [value, setValue] = useState(initial);
+  const done = useRef(false);
+  const finish = (title: string | null) => {
+    if (done.current) return;
+    done.current = true;
+    onDone(title);
+  };
+  return (
+    <input
+      autoFocus
+      value={value}
+      maxLength={80}
+      onChange={(e) => setValue(e.target.value)}
+      onFocus={(e) => e.currentTarget.select()}
+      onBlur={() => finish(value)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          finish(value);
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          e.stopPropagation();
+          finish(null);
+        }
+      }}
+      aria-label={t("wb.rename")}
+      className="bg-background min-w-0 flex-1 rounded border px-2 py-1 font-sans text-xs outline-none"
+    />
+  );
+}
+
+/** What a new session talks to: the bare model, or an agent this caller may use. */
+function NewMenu({
+  agents,
+  onPick,
+  onClose,
+}: {
+  agents: Agent[] | null;
+  onPick: (agent?: string) => void;
+  onClose: () => void;
+}) {
+  const t = useT();
+  const ref = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    ref.current?.querySelector("button")?.focus();
+    const away = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
+    window.addEventListener("mousedown", away);
+    return () => window.removeEventListener("mousedown", away);
+  }, [onClose]);
+  return (
+    <div
+      ref={ref}
+      role="menu"
+      onKeyDown={(e) => {
+        if (e.key === "Escape") onClose();
+      }}
+      className="bg-background absolute top-full right-2 left-2 z-10 mt-1 grid rounded-md border p-1 text-xs shadow-md"
+    >
+      <button
+        type="button"
+        role="menuitem"
+        className="hover:bg-muted rounded px-2 py-1.5 text-left"
+        onClick={() => onPick()}
+      >
+        {t("wb.agent.model")}
+        <span className="text-muted-foreground block text-[10px]">{t("wb.new.model")}</span>
+      </button>
+      {(agents ?? [])
+        .filter((a) => a.available)
+        .map((a) => (
+          <button
+            key={a.id}
+            type="button"
+            role="menuitem"
+            className="hover:bg-muted rounded px-2 py-1.5 text-left"
+            onClick={() => onPick(a.id)}
+          >
+            {a.name}
+            <span className="text-muted-foreground block truncate text-[10px]">{a.persona}</span>
+          </button>
+        ))}
+    </div>
+  );
+}
+
+/**
+ * The agents the service speaks as: who each is, its tier, whether this caller
+ * may use it; the one this session talks to, with the page it is told about.
+ */
+function AgentsPanel({
+  agents,
+  current,
+  page,
+  onUse,
+  onStart,
+  onPage,
+}: {
+  agents: Agent[] | null;
+  current: string;
+  page?: string;
+  onUse: (id: string) => void;
+  onStart: (id: string) => void;
+  onPage: (page: string | undefined) => void;
+}) {
+  const t = useT();
+  return (
+    <section>
+      <p className="mb-2 font-mono text-[11px] tracking-[0.12em] uppercase">
+        {t("wb.agents")} {agents ? `· ${agents.length}` : ""}
+      </p>
+      {agents === null ? <p className="text-muted-foreground text-xs">{t("wb.agents.none")}</p> : null}
+      <ul className="grid gap-2">
+        {(agents ?? []).map((a) => (
+          <li
+            key={a.id}
+            className={cn("rounded-md border p-3 text-xs", a.id === current ? "border-foreground/40" : "")}
+          >
+            <p className="flex items-center gap-2 font-mono text-[11px]">
+              <span
+                className={cn(
+                  "size-1.5 rounded-full",
+                  a.available ? "bg-emerald-500" : "bg-muted-foreground/40",
+                )}
+              />
+              {a.name}
+              <span className="text-muted-foreground">
+                {a.id} · {TIER_NAME[a.tier]}
+              </span>
+            </p>
+            <p className="text-muted-foreground mt-1.5 text-pretty">{a.persona}</p>
+            {a.id === current ? (
+              <>
+                <PageField page={page} onPage={onPage} />
+                <button
+                  type="button"
+                  className="text-muted-foreground hover:text-foreground mt-2 font-mono text-[11px] underline-offset-2 hover:underline"
+                  onClick={() => onUse("none")}
+                >
+                  {t("wb.agents.leave")}
+                </button>
+              </>
+            ) : a.available ? (
+              <span className="mt-2 flex gap-3 font-mono text-[11px]">
+                <button
+                  type="button"
+                  className="hover:text-foreground text-muted-foreground underline-offset-2 hover:underline"
+                  onClick={() => onUse(a.id)}
+                >
+                  {t("wb.agents.use")}
+                </button>
+                <button
+                  type="button"
+                  className="hover:text-foreground text-muted-foreground underline-offset-2 hover:underline"
+                  onClick={() => onStart(a.id)}
+                >
+                  {t("wb.agents.start")}
+                </button>
+              </span>
+            ) : (
+              <p className="text-muted-foreground mt-2 text-[11px]">{t("wb.agents.not_yours")}</p>
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

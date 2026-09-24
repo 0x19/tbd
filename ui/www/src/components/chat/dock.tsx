@@ -129,9 +129,16 @@ function Dock({ agent, page }: { agent: Agent; page: string }) {
     if (box) box.scrollTop = box.scrollHeight;
   }, [turns, open]);
 
-  // `/` or ctrl+k opens it from anywhere that is not a field; esc stops a turn, then closes.
+  // `/` or ctrl+k opens it from anywhere that is not a field; esc closes it from
+  // anywhere at all, wherever the focus is (an answer, a button, the fold). A
+  // turn that is running keeps running; the stop button stops it.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && open) {
+        e.preventDefault();
+        setOpen(false);
+        return;
+      }
       if ((e.key === "k" || e.key === "K") && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
         setOpen((o) => !o);
@@ -158,7 +165,7 @@ function Dock({ agent, page }: { agent: Agent; page: string }) {
 
   const ask = useCallback(
     async (question: string) => {
-      const turn = startTurn(question, "sse", agent.tier, false, agent.id);
+      const turn = startTurn(question, "sse", agent.tier, false, agent.id, page);
       const messages = [...contextOf(turns), { role: "user" as const, content: question }];
       setTurns((all) => [...all, turn]);
       abort.current?.abort();
@@ -200,12 +207,6 @@ function Dock({ agent, page }: { agent: Agent; page: string }) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       submit();
-      return;
-    }
-    if (e.key === "Escape") {
-      e.preventDefault();
-      if (running) abort.current?.abort();
-      else setOpen(false);
       return;
     }
     if (e.key === "ArrowUp" && !prompt) {

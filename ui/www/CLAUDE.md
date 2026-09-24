@@ -50,13 +50,20 @@ an agent points at a page; keep it that way, or the
 share their turns (`src/components/chat/turn.tsx`: `ChatView`, `CodeRun`, `Answer`,
 `streamTurn`); a workbench session talks to the bare model or to one agent (RFC 0011,
 `src/lib/agents.ts`, `GET /v1/llm/agents`), and with an agent the request names only
-the agent (its tier and bounds are the service's), never a `system` message.
+the agent (its tier and bounds are the service's) and the page it is told is being read
+(`/page`, a plain site path), never a `system` message. A session's title is its first
+question until it is named (`named`: a rename in the list or the header, or `/name`),
+and a rename is the only thing that changes it after; `/export` writes the session as
+markdown in the browser. The side column lists the agents (`AgentsPanel`) above the
+arena.
 `src/components/chat/dock.tsx` is the chat at the bottom of every page, mounted once in
 the root layout: the site guide, for whoever may use it (an admin while the lab is
 private; it does not even ask the service otherwise), never on the workbench. It sends
 the page's path as `page`, keeps its conversation in `localStorage`
 (`inorbit.dock.turns`) and whether it is open in `sessionStorage`, opens with `/` or
-ctrl+k (or the `DOCK_OPEN` event, which the home page's card sends), closes with esc,
+ctrl+k (or the `DOCK_OPEN` event, which the home page's card sends), closes with esc
+from wherever the focus is (a window listener, not the prompt's: a running turn keeps
+running and the stop button stops it),
 says what it sends under a fold, and "continue in the workbench" puts the conversation
 first in the workbench's sessions (`src/components/chat/sessions.ts`). The home page's
 "Lab, live" box (`src/components/pages/home-lab-live.tsx`) is for an admin: the tiers

@@ -110,3 +110,7 @@ costs: the arena's own load on the platform, and the latency from an event to th
   tier and bounds apply and the status line says so. The same conversation, with the same
   figures under every answer, is a chat at the bottom of every page for an admin, and it
   hands over to the workbench whole.
+- 2026-09-24: sessions are named and agents are first-class in the workbench. A session
+  is started for the bare model or for an agent, keeps its name once given one, shows
+  whom it talks to, and saves as markdown; the side column lists the agents, and an
+  agent can be told which page is being read, to test its grounding.

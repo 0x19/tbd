@@ -29,6 +29,8 @@ export type ChatTurn = {
   transport: Transport;
   /** The agent it spoke to (RFC 0011); absent for the bare model. */
   agent?: string;
+  /** The page the agent was told the visitor is reading. */
+  page?: string;
   status: "running" | "done" | "busy" | "error" | "stopped";
   thinking: string;
   text: string;
@@ -79,6 +81,7 @@ export function startTurn(
   tier: Tier,
   reasoning: boolean,
   agent?: string,
+  page?: string,
 ): ChatTurn {
   return {
     kind: "chat",
@@ -88,6 +91,7 @@ export function startTurn(
     reasoning,
     transport: over,
     agent: agent || undefined,
+    page: page || undefined,
     status: "running",
     thinking: "",
     text: "",
@@ -376,6 +380,7 @@ export function ChatView({
       ) : null}
       <footer className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 border-t pt-2 font-mono text-[11px] tabular-nums">
         {turn.agent ? <span className="text-foreground">{turn.agent}</span> : null}
+        {turn.page ? <span title={turn.page}>@ {turn.page}</span> : null}
         <span>{TIER_NAME[turn.tier]}</span>
         <span>
           {turn.model ?? "—"}
