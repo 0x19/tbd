@@ -134,7 +134,7 @@ export const hr = {
   ],
   projects: {
     solgo: {
-      what: "Solidity parser u Gou koji izvorni kod ugovora pretvara u strukturirani oblik koji se može analizirati -- temelj za detektore, rad s ABI-jem i otkrivanje standarda.",
+      what: "Solidity parser u Gou koji izvorni kod ugovora pretvara u strukturirani oblik koji se može analizirati: temelj za detektore, rad s ABI-jem i otkrivanje standarda.",
     },
     "sourcify-go": {
       what: "Go klijent za Sourcify API: provjeri ugovor, dohvati njegove metapodatke i izvore, vidi što lanac već zna o adresi.",
@@ -152,10 +152,10 @@ export const hr = {
       what: "Pretvara JSON objekt u Go strukturu, kao biblioteka i kao javni alat koji je radio na jsonstruct.com. Napisan jer mi je dojadilo raditi to ručno.",
     },
     disposable: {
-      what: "JSON i gRPC API koji odgovara na jedno pitanje -- je li ovo jednokratna adresa e-pošte? Malen, javan, i otad ga tiho koriste stranci.",
+      what: "JSON i gRPC API koji odgovara na jedno pitanje: je li ovo jednokratna adresa e-pošte? Malen, javan i otad u tihoj upotrebi.",
     },
     goesl: {
-      what: "FreeSWITCH Event Socket biblioteka za Go. Napisana 2015. i još je drugi granaju i isporučuju -- telefonija je bila prvi sustav koji sam morao držati na nogama.",
+      what: "FreeSWITCH Event Socket biblioteka za Go. Napisana 2015. i još je drugi granaju i isporučuju. Telefonija je bila prvi sustav koji sam morao držati na nogama.",
     },
   } as Record<string, { what?: string }>,
   playgrounds: {

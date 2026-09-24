@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useState } from "react";
 
+import { TabList } from "@/components/tabs";
 import { useT } from "@/lib/i18n";
 import type { Site } from "@/lib/i18n/site";
 import { cn } from "@/lib/utils";
@@ -16,8 +17,7 @@ type Tab = "all" | Playground["category"];
  * whether it is live, the name, one line of what it does and two or three
  * facts in its foot. On `/playgrounds/` the first systems piece is featured
  * across the full width with its longer description, and the chosen tab
- * lives in the URL's hash so a link can open on it. Keyboard: arrows move
- * between tabs, Home and End jump to the ends (the WAI-ARIA tabs pattern).
+ * lives in the URL's hash so a link can open on it. The tab bar is `TabList`.
  */
 export function PlaygroundTabs({
   items,
@@ -35,12 +35,14 @@ export function PlaygroundTabs({
   const t = useT();
   const id = useId();
   const [tab, setTab] = useState<Tab>("all");
-  const refs = useRef<(HTMLButtonElement | null)[]>([]);
-
-  const tabs: { key: Tab; n: number }[] = [
-    { key: "all", n: items.length },
+  const tabs: { key: Tab; label: string; n: number }[] = [
+    { key: "all", label: t("playgrounds.cat.all"), n: items.length },
     ...(["systems", "music"] as const)
-      .map((key) => ({ key, n: items.filter((p) => p.category === key).length }))
+      .map((key) => ({
+        key,
+        label: t(`playgrounds.cat.${key}`),
+        n: items.filter((p) => p.category === key).length,
+      }))
       .filter((x) => x.n > 0),
   ];
 
@@ -55,65 +57,13 @@ export function PlaygroundTabs({
     if (hash) window.history.replaceState(null, "", key === "all" ? window.location.pathname : `#${key}`);
   };
 
-  const onKey = (e: React.KeyboardEvent, i: number) => {
-    const last = tabs.length - 1;
-    const next =
-      e.key === "ArrowRight"
-        ? i === last
-          ? 0
-          : i + 1
-        : e.key === "ArrowLeft"
-          ? i === 0
-            ? last
-            : i - 1
-          : e.key === "Home"
-            ? 0
-            : e.key === "End"
-              ? last
-              : null;
-    if (next === null) return;
-    e.preventDefault();
-    choose(tabs[next]!.key);
-    refs.current[next]?.focus();
-  };
-
   const shown = items.filter((p) => tab === "all" || p.category === tab);
   const featured = feature ? shown.find((p) => p.category === "systems") : undefined;
   const rest = (featured ? shown.filter((p) => p !== featured) : shown).slice(0, limit);
 
   return (
     <div>
-      <div role="tablist" aria-label={t("playgrounds.cat.label")} className="flex gap-7 border-b">
-        {tabs.map((x, i) => {
-          const on = x.key === tab;
-          return (
-            <button
-              key={x.key}
-              ref={(el) => {
-                refs.current[i] = el;
-              }}
-              role="tab"
-              id={`${id}-tab-${x.key}`}
-              aria-selected={on}
-              aria-controls={`${id}-panel`}
-              tabIndex={on ? 0 : -1}
-              onClick={() => choose(x.key)}
-              onKeyDown={(e) => onKey(e, i)}
-              className={cn(
-                "relative -mb-px flex items-baseline gap-1.5 border-b py-3 font-mono text-[11px] tracking-[0.18em] uppercase transition-colors",
-                on
-                  ? "border-foreground text-foreground"
-                  : "text-muted-foreground hover:text-foreground border-transparent",
-              )}
-            >
-              {t(`playgrounds.cat.${x.key}`)}
-              <span className={cn("tabular-nums", on ? "text-foreground/50" : "text-muted-foreground/50")}>
-                {x.n}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+      <TabList id={id} label={t("playgrounds.cat.label")} tabs={tabs} value={tab} onChange={choose} />
 
       <div
         role="tabpanel"

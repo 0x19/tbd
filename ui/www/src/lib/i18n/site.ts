@@ -34,7 +34,14 @@ export type Site = {
   achievements: string[];
   about: string[];
   chapters: { when: string; title: string; body: string; where: string }[];
-  projects: { name: string; year: string; what: string; language: string; href: string }[];
+  projects: {
+    name: string;
+    domain: "blockchain" | "data" | "tools";
+    year: string;
+    what: string;
+    language: string;
+    href: string;
+  }[];
   playgrounds: {
     name: string;
     what: string;

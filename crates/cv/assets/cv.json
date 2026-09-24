@@ -181,7 +181,7 @@
     {
       "name": "solgo",
       "year": "2023",
-      "what": "A Solidity parser in Go that turns contract source into a structured form you can analyse — the base for detectors, ABI work and standards discovery.",
+      "what": "A Solidity parser in Go that turns contract source into a structured form you can analyse: the base for detectors, ABI work and standards discovery.",
       "href": "github.com/unpackdev/solgo"
     },
     {
@@ -217,13 +217,13 @@
     {
       "name": "disposable",
       "year": "2016",
-      "what": "A JSON and gRPC API that answers one question — is this a throwaway email address? Small, public, and quietly used by strangers ever since.",
+      "what": "A JSON and gRPC API that answers one question: is this a throwaway email address? Small, public, and in quiet use ever since.",
       "href": "github.com/0x19/disposable"
     },
     {
       "name": "goesl",
       "year": "2015",
-      "what": "A FreeSWITCH Event Socket library for Go. Written in 2015 and still forked and shipped by other people — telephony was the first system I had to keep up.",
+      "what": "A FreeSWITCH Event Socket library for Go. Written in 2015 and still forked and shipped by others. Telephony was the first system I had to keep up.",
       "href": "github.com/0x19/goesl"
     }
   ],

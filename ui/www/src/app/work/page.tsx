@@ -4,7 +4,7 @@ import { ProjectsContent } from "@/components/pages/projects";
 
 export const metadata: Metadata = {
   title: "Work",
-  description: "Libraries and tools I have written and left in the open.",
+  description: "Open-source libraries and tools in Go: blockchain tooling, data and storage, telecom.",
   alternates: { canonical: "/work/" },
 };
 

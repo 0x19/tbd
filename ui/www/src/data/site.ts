@@ -187,13 +187,15 @@ export const achievements = [
 export const projects = [
   {
     name: "solgo",
+    domain: "blockchain",
     year: "2023",
-    what: "A Solidity parser in Go that turns contract source into a structured form you can analyse — the base for detectors, ABI work and standards discovery.",
+    what: "A Solidity parser in Go that turns contract source into a structured form you can analyse: the base for detectors, ABI work and standards discovery.",
     language: "Go",
     href: "https://github.com/unpackdev/solgo",
   },
   {
     name: "sourcify-go",
+    domain: "blockchain",
     year: "2023",
     what: "A Go client for the Sourcify API: verify a contract, fetch its metadata and sources, check what a chain already knows about an address.",
     language: "Go",
@@ -201,6 +203,7 @@ export const projects = [
   },
   {
     name: "fdb",
+    domain: "data",
     year: "2024",
     what: "A high-performance transport layer in front of embedded key-value databases such as MDBX, for the reads a node or an indexer cannot wait on.",
     language: "Go",
@@ -208,6 +211,7 @@ export const projects = [
   },
   {
     name: "solc-switch",
+    domain: "blockchain",
     year: "2023",
     what: "Manages every Solidity compiler version at once and compiles with the right one, concurrently, instead of juggling toolchains by hand.",
     language: "Go",
@@ -215,6 +219,7 @@ export const projects = [
   },
   {
     name: "go-clickhouse-orm",
+    domain: "data",
     year: "2023",
     what: "Model and migration support for ClickHouse in Go, so an analytics schema is versioned like any other part of a service.",
     language: "Go",
@@ -222,6 +227,7 @@ export const projects = [
   },
   {
     name: "gotostruct",
+    domain: "tools",
     year: "2015",
     what: "Turns a JSON object into a Go struct, as a library and as the public tool that ran at jsonstruct.com. Written because I was tired of doing it by hand.",
     language: "Go",
@@ -229,15 +235,17 @@ export const projects = [
   },
   {
     name: "disposable",
+    domain: "tools",
     year: "2016",
-    what: "A JSON and gRPC API that answers one question — is this a throwaway email address? Small, public, and quietly used by strangers ever since.",
+    what: "A JSON and gRPC API that answers one question: is this a throwaway email address? Small, public, and in quiet use ever since.",
     language: "Go",
     href: "https://github.com/0x19/disposable",
   },
   {
     name: "goesl",
+    domain: "tools",
     year: "2015",
-    what: "A FreeSWITCH Event Socket library for Go. Written in 2015 and still forked and shipped by other people — telephony was the first system I had to keep up.",
+    what: "A FreeSWITCH Event Socket library for Go. Written in 2015 and still forked and shipped by others. Telephony was the first system I had to keep up.",
     language: "Go",
     href: "https://github.com/0x19/goesl",
   },
