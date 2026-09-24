@@ -29,7 +29,9 @@ Publication is one deliberate change, made when the conditions below hold, touch
 **The conditions.** The workbench answers and shows the arena live (RFC 0004); admission
 refuses quickly rather than queueing (RFC 0001), so a crowd meets a named refusal rather
 than a minute of nothing; the shield is in front of the edge (RFC 0003); every public
-document passes the redaction check, which it already has to in order to build.
+document passes the redaction check, which it already has to in order to build; the
+site guide (RFC 0011) has an allowance for callers who are not signed in, a limit per
+address at the edge, and the privacy page says what the chat sends and keeps.
 
 ## Alternatives considered
 
@@ -45,3 +47,4 @@ Open. Fixed so far: one change, the four places, the conditions.
 ## Status log
 
 - 2026-09-24: opened.
+- 2026-09-24: the chat with the site guide joins the conditions (RFC 0011).

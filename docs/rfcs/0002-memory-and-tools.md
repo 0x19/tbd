@@ -99,3 +99,4 @@ back, how often a wrong one does, and what it costs per turn.
 
 - 2026-09-24: opened.
 - 2026-09-24: a multi-model database considered in place of Postgres; rejected for now, with the condition that would reopen it.
+- 2026-09-24: agents (RFC 0011) are the first users of tools and memory once they exist; until then an agent is grounded by a brief and the page it is on.

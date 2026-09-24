@@ -83,3 +83,4 @@ is a false claim.
 | 0008 | [The grader](0008-the-grader.md) | open, draft |
 | 0009 | [Subscriptions](0009-subscriptions.md) | open, draft |
 | 0010 | [The sandbox](0010-the-sandbox.md) | open |
+| 0011 | [Agents](0011-agents.md) | open |
