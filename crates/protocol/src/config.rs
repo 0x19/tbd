@@ -124,9 +124,10 @@ impl Default for Socket {
     }
 }
 
-/// `[mcp]`: every public RPC as an MCP tool at `/mcp` (streamable HTTP,
-/// stateless). The same registry as REST and the socket; the caller is
-/// whoever Envoy verified, as everywhere else.
+/// `[mcp]`: public RPCs as MCP tools at `/mcp` (streamable HTTP, stateless).
+/// The same registry as REST and the socket, narrowed to an allowlist: an
+/// agent gets only the tools named here, never a new RPC by default. The
+/// caller is whoever Envoy verified, as everywhere else.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct Mcp {
@@ -140,7 +141,25 @@ pub struct Mcp {
     pub stream_timeout: Duration,
     /// Largest request body.
     pub max_body_bytes: usize,
+    /// The tools an agent may list and call, by name (`<backend>_<method>`).
+    /// Default deny: an RPC not named here is not a tool. Nothing that
+    /// writes, deletes, sends, moves money, reads personal data or injects a
+    /// fault belongs here.
+    pub tools: Vec<String>,
 }
+
+/// The tools offered when `[mcp] tools` is not set: the models, read and used
+/// under the caller's budget, and the health pings. Equal to `base.toml`.
+pub const DEFAULT_MCP_TOOLS: &[&str] = &[
+    "llm_generate",
+    "llm_list_models",
+    "llm_get_budget",
+    "llm_embed",
+    "llm_ping",
+    "humans_ping",
+    "ledger_ping",
+    "playground_ping",
+];
 
 impl Default for Mcp {
     fn default() -> Self {
@@ -149,6 +168,7 @@ impl Default for Mcp {
             max_stream_items: 512,
             stream_timeout: Duration::from_secs(300),
             max_body_bytes: 2 * 1024 * 1024,
+            tools: DEFAULT_MCP_TOOLS.iter().map(|&t| t.to_owned()).collect(),
         }
     }
 }

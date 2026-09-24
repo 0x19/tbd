@@ -258,13 +258,20 @@ own frame shape, which chaos reads. New clients use `/v1/ws`. Neither socket is 
 
 ## Over MCP
 
-`/mcp` offers every public RPC as a tool over the Model Context Protocol (streamable
-HTTP, stateless: JSON-RPC over `POST`, either replica answers any request, no session).
-It is a fourth rendering of the same registry as REST, SSE and the socket, so a new
-annotated RPC is a new tool with nothing written by hand.
+`/mcp` offers public RPCs as tools over the Model Context Protocol (streamable HTTP,
+stateless: JSON-RPC over `POST`, either replica answers any request, no session). It is
+a fourth rendering of the same registry as REST, SSE and the socket, narrowed by an
+allowlist.
 
+- **Default deny.** Only the RPCs `[mcp] tools` names are tools; the rest are neither
+  listed nor callable (`no tool named ...`), whoever asks. The shipped list is the
+  models (`llm_generate`, `llm_list_models`, `llm_get_budget`, `llm_embed`) and the
+  health pings. Nothing that writes, deletes, sends, moves money, reads personal data,
+  injects a fault or streams without end is ever added; a test holds every listed
+  name to the registry and the code's default to the file, and the chaos check
+  `http_mcp_tools` fails on a stack that offers such a tool.
 - **Names.** `<backend>_<method>` in snake case: `llm_generate`, `llm_list_models`,
-  `ledger_ping`, `finance_list_transactions`.
+  `ledger_ping`.
 - **Descriptions and arguments.** The RPC's comment in the `.proto` is the tool's
   description; the arguments are the request message, described as an inline JSON
   Schema by the same spellings the `OpenAPI` document uses (64-bit integers as strings,
@@ -280,6 +287,9 @@ annotated RPC is a new tool with nothing written by hand.
   so when it stopped early; when the messages carry `text` (a generation's chunks), the
   text is joined into `text`, reasoning into `reasoning`, and the last message is kept
   whole under `last` for its usage.
+- **The audit trail.** Every call is one log line, target `audit`: the tool, the RPC,
+  the caller's subject and kind, the outcome code and the time taken. Never the
+  arguments or the answer.
 - **The gate.** On the API host, like every route there: a verified bearer token for
   the API audience ([auth/README.md](../auth/README.md)). Envoy gives `/mcp` no timeout;
   the protocol's own cap bounds a call. `Host` checking is off on purpose: it guards a

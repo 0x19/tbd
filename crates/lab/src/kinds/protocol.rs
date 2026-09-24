@@ -100,7 +100,7 @@ pub static KIND: Kind = Kind {
         Check {
             name: "http_mcp_tools",
             surface: "http",
-            doc: "`POST /mcp` `tools/list` offers the public RPCs as tools, each with an object input schema",
+            doc: "`POST /mcp` `tools/list` answers; every tool has an object input schema and none is an operation that writes, deletes, sends or injects a fault (the allowlist holds)",
             run: |e| Box::pin(http_mcp_tools(e)),
         },
         Check {
@@ -275,8 +275,31 @@ async fn http_readyz(e: Ep) -> Result<String, String> {
     get_2xx(&e, "/readyz").await
 }
 
+/// Name parts of operations an agent must never be offered over MCP; the
+/// protocol's allowlist keeps them out, and this catches a config that let one in.
+const HARMFUL: &[&str] = &[
+    "_delete",
+    "_erase",
+    "_retract",
+    "_restore",
+    "_append",
+    "_send",
+    "_cancel",
+    "_close",
+    "_lock",
+    "_approve",
+    "_record_payment",
+    "_inject_fault",
+    "_upsert",
+    "_create",
+    "_update",
+    "_download",
+    "_decide",
+];
+
 /// The MCP transport lists tools the way an agent asks for them: JSON-RPC
-/// over POST, JSON or one server-sent event back.
+/// over POST, JSON or one server-sent event back. The list may be empty (a
+/// stack with no allowlisted backend); what it may not hold is a harmful tool.
 async fn http_mcp_tools(e: Ep) -> Result<String, String> {
     let text = e
         .http()
@@ -301,8 +324,15 @@ async fn http_mcp_tools(e: Ep) -> Result<String, String> {
     let tools = v["result"]["tools"]
         .as_array()
         .ok_or_else(|| format!("no tools in {v}"))?;
-    if tools.is_empty() {
-        return Err("no tools listed".into());
+    if let Some(bad) = tools.iter().find(|t| {
+        t["name"]
+            .as_str()
+            .is_some_and(|n| HARMFUL.iter().any(|verb| n.contains(verb)))
+    }) {
+        return Err(format!(
+            "a tool that can do harm is offered to agents: {}",
+            bad["name"]
+        ));
     }
     if let Some(bad) = tools.iter().find(|t| t["inputSchema"]["type"] != "object") {
         return Err(format!("a tool without an object schema: {bad}"));

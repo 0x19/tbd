@@ -87,7 +87,11 @@ the logic belongs in the service. The contract is `docs/protocol/README.md`.
   message strictly, `invoke` calls unary or streaming over `backend.transport()` with
   the forwarded `x-jwt-payload`). `mux.rs` and `mcp.rs` both call it; the REST path
   binds path and query first and stays in `transcode/call.rs`.
-- `mcp.rs`: `/mcp`, every RPC in `transcoder.rpcs()` as an MCP tool (rmcp, streamable
+- `mcp.rs`: `/mcp`, the RPCs in `transcoder.rpcs()` that `[mcp] tools` allowlists as
+  MCP tools, default deny (`DEFAULT_MCP_TOOLS` equals `base.toml`; a unit test holds
+  both to the registry). Never allowlist anything that writes, deletes, sends, moves
+  money, reads personal data, injects a fault or streams without end. Each call logs
+  one `audit`-target line (tool, subject, status, time; never content). rmcp, streamable
   HTTP, stateless, `NeverSessionManager`, JSON responses, `Host` check off: the API host
   takes bearer tokens only). Tool name `<backend>_<method_snake>`, description from the
   proto comment (`transcode/schema.rs::method_comment`; the descriptor set carries

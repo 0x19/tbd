@@ -68,7 +68,7 @@ max_calls = 64
 max_frame_bytes = 262144
 
 [mcp]
-# Every public RPC as an MCP tool at /mcp (streamable HTTP, stateless), named
+# Public RPCs as MCP tools at /mcp (streamable HTTP, stateless), named
 # <backend>_<method> and described by the contract's comments. The caller is
 # whoever the gateway verified, as on every other surface. A streaming tool is
 # collected into one answer: at most max_stream_items messages, at most
@@ -77,6 +77,19 @@ enabled = true
 max_stream_items = 512
 stream_timeout = "300s"
 max_body_bytes = 2097152
+# Default deny: only these are tools. Never add one that writes, deletes,
+# sends, moves money, reads personal data, injects a fault or streams without
+# end. A test holds every name to the registry.
+tools = [
+  "llm_generate",
+  "llm_list_models",
+  "llm_get_budget",
+  "llm_embed",
+  "llm_ping",
+  "humans_ping",
+  "ledger_ping",
+  "playground_ping",
+]
 
 [principals]
 # Token subjects that are our own services (callers of kind `service`). Empty

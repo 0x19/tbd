@@ -57,9 +57,12 @@ platform's gate already works over HTTP.
 
 Open. Fixed so far: MCP as a transport of the gateway over the same registry and schema
 rules; tools named by service and method; calls as the caller; streams collected under a
-cap; streamable HTTP, stateless, on the API host behind the existing gate. Still to
-decide: whether some RPCs are withheld from agents by default, and how an agent is told
-its budget before it spends it.
+cap; streamable HTTP, stateless, on the API host behind the existing gate. Agents get
+nothing by default: only an explicit list of RPCs are tools, and an operation that
+writes, deletes, sends, moves money, reads personal data, injects a fault or never
+ends is never on it; every call leaves an audit line naming who called what and how it
+ended, never what was said. Still to decide: how an agent is told its budget before it
+spends it.
 
 ## Publication
 
@@ -74,3 +77,7 @@ does not, and the tests say which.
   and the tools' descriptions come from the contract and its comments; a streaming tool
   answers once with what it collected. Resources are not offered yet: the tool list is
   itself the catalogue.
+- 2026-09-24: default deny. The first cut offered every public RPC, the platform's
+  bookkeeping and mail included; now only the models and the health checks are tools,
+  a check fails any deployment that offers more of the harmful kind, and every call is
+  audited.

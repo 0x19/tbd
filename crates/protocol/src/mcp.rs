@@ -1,8 +1,10 @@
-//! The platform over MCP: every public RPC as a tool, at `/mcp`.
+//! The platform over MCP: allowlisted public RPCs as tools, at `/mcp`.
 //!
 //! A fourth rendering of the same registry REST, SSE and the multiplexed
 //! socket are built from (`Transcoder::rpcs`), so the tools and the other
-//! surfaces cannot drift apart. A tool is named `<backend>_<method>` in snake
+//! surfaces cannot drift apart. Default deny: only the RPCs `[mcp] tools`
+//! names are tools, so a new RPC never reaches an agent by accident, and every
+//! call is one audit line (who, which tool, the outcome; never the content). A tool is named `<backend>_<method>` in snake
 //! case, described by the RPC's comment in the contract, and takes the request
 //! message as its arguments, described by `transcode::schema`. A call is the
 //! RPC, made as the caller: the identity Envoy verified travels to the backend
@@ -67,13 +69,18 @@ pub struct Server {
 }
 
 impl Server {
-    /// The registry as tools: every RPC the gateway serves, in the registry's order.
+    /// The allowlisted part of the registry as tools, in the registry's order.
+    /// A name in `[mcp] tools` that no RPC answers to is logged and ignored.
     #[must_use]
     pub fn new(state: AppState, transcoder: &Transcoder) -> Self {
+        let allowed = &state.mcp().tools;
         let mut tools = Vec::new();
         let mut by_name = HashMap::new();
         for rpc in transcoder.rpcs().values() {
             let name = tool_name(rpc);
+            if !allowed.contains(&name) {
+                continue;
+            }
             let tool = describe(&name, rpc);
             by_name.insert(
                 name,
@@ -83,6 +90,9 @@ impl Server {
                 },
             );
             tools.push(tool);
+        }
+        for name in allowed.iter().filter(|n| !by_name.contains_key(*n)) {
+            tracing::warn!(tool = %name, "mcp: allowlisted tool has no RPC in this registry");
         }
         let limits = state.mcp().clone();
         Self {
@@ -143,7 +153,7 @@ impl Server {
 }
 
 /// `<backend>_<method>` in snake case: `llm_generate`, `finance_list_transactions`.
-fn tool_name(rpc: &Rpc) -> String {
+pub(crate) fn tool_name(rpc: &Rpc) -> String {
     let mut out = format!("{}_", rpc.backend);
     for (i, ch) in rpc.method.name().chars().enumerate() {
         if ch.is_ascii_uppercase() {
@@ -250,7 +260,7 @@ impl ServerHandler for Server {
         ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
             .with_server_info(Implementation::new("tbd", tbd_common::VERSION))
             .with_instructions(
-                "The platform's public RPCs as tools, named <backend>_<method>. Each call runs as the caller the gateway verified, under the caller's rights and budget. llm_generate answers a conversation; llm_list_models says which tiers are up; llm_get_budget says what is left today.",
+                "A chosen set of the platform's public RPCs as tools, named <backend>_<method>. Each call runs as the caller the gateway verified, under the caller's rights and budget. llm_generate answers a conversation; llm_list_models says which tiers are up; llm_get_budget says what is left today.",
             )
     }
 
@@ -291,16 +301,30 @@ impl ServerHandler for Server {
             .and_then(|p| p.headers.get(crate::principal::PAYLOAD_HEADER))
             .and_then(|v| MetadataValue::try_from(v.as_bytes()).ok());
         let name = entry.rpc.name();
-        tracing::debug!(tool = %request.name, rpc = %name, caller = principal.kind_slug(), "mcp call");
-        let mut timer = RequestTimer::start(TRANSPORT, name);
+        let started = std::time::Instant::now();
+        let mut timer = RequestTimer::start(TRANSPORT, name.clone());
         let outcome = self.call(entry, payload, request.arguments).await;
+        let status = match &outcome {
+            Ok(_) => "ok",
+            Err(problem) => problem.code.slug(),
+        };
+        // The audit trail: who called which tool and how it ended. Never the
+        // arguments or the answer, which are the caller's content.
+        tracing::info!(
+            target: "audit",
+            surface = TRANSPORT,
+            tool = %request.name,
+            rpc = %name,
+            subject = %principal.sub,
+            caller = principal.kind_slug(),
+            status,
+            elapsed_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
+            "mcp tool call"
+        );
+        timer.set_status(status);
         let result = match outcome {
-            Ok(value) => {
-                timer.set_status("ok");
-                text_result(&value, false)
-            }
+            Ok(value) => text_result(&value, false),
             Err(problem) => {
-                timer.set_status(problem.code.slug());
                 problem.log();
                 let wire = problem.wire();
                 text_result(
@@ -336,6 +360,22 @@ pub fn service(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every tool `base.toml` allows is an RPC of the full registry, and the
+    /// code's default equals the file, so a typo cannot silently shrink the
+    /// set and a rename cannot silently drop a tool.
+    #[test]
+    fn the_shipped_allowlist_names_real_rpcs_and_equals_the_default() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../configs/protocol");
+        let (config, _) = crate::config::Config::load(&dir, "production").unwrap();
+        let pool = crate::transcode::pool().unwrap();
+        let transcoder = Transcoder::from_config(&pool, &config).unwrap();
+        let names: Vec<String> = transcoder.rpcs().values().map(|r| tool_name(r)).collect();
+        for tool in &config.mcp.tools {
+            assert!(names.contains(tool), "{tool} is not an RPC; have {names:?}");
+        }
+        assert_eq!(config.mcp.tools, Mcp::default().tools);
+    }
 
     #[test]
     fn a_stream_of_chunks_is_joined_with_reasoning_apart() {

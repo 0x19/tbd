@@ -97,6 +97,15 @@ pub async fn start() -> Stack {
     // The engine's subscribe stream never ends on its own: a small cap lets the
     // MCP tests see a stream collected and cut.
     protocol_config.mcp.max_stream_items = 3;
+    // The tests call these; production's allowlist is narrower (base.toml).
+    protocol_config.mcp.tools = [
+        "ledger_ping",
+        "engine_subscribe",
+        "llm_generate",
+        "llm_list_models",
+    ]
+    .map(str::to_owned)
+    .to_vec();
     let (stop_protocol, protocol_stopped) = oneshot::channel();
     tokio::spawn(async move {
         tbd_protocol::serve_on(protocol_listener, protocol_config, async {

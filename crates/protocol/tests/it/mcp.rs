@@ -1,5 +1,5 @@
-//! The MCP transport at `/mcp`: every public RPC as a tool, over streamable
-//! HTTP, as a client speaks it on the wire (JSON-RPC over POST).
+//! The MCP transport at `/mcp`: the allowlisted public RPCs as tools, over
+//! streamable HTTP, as a client speaks it on the wire (JSON-RPC over POST).
 
 use serde_json::{Value, json};
 
@@ -71,7 +71,7 @@ async fn initialize_names_the_platform_and_offers_tools() {
 }
 
 #[tokio::test]
-async fn every_public_rpc_is_a_tool_with_a_description_and_an_object_schema() {
+async fn exactly_the_allowlisted_rpcs_are_tools_each_described_with_an_object_schema() {
     let stack = support::start().await;
     let response = rpc(&stack, "tools/list", json!({}), Some("agent-1")).await;
     let tools = response["result"]["tools"]
@@ -86,6 +86,7 @@ async fn every_public_rpc_is_a_tool_with_a_description_and_an_object_schema() {
     ] {
         assert!(names.contains(&want), "{want} missing from {names:?}");
     }
+    assert_eq!(names.len(), 4, "only the allowlist: {names:?}");
     for tool in tools {
         assert_eq!(tool["inputSchema"]["type"], "object", "{tool}");
         assert!(
@@ -120,6 +121,26 @@ async fn a_call_runs_the_rpc_as_the_caller() {
     let (value, error) = answer(&response);
     assert!(!error, "{response}");
     assert_eq!(value["message"], "hi");
+}
+
+/// Default deny: an RPC the gateway serves on REST but the allowlist does not
+/// name cannot be called as a tool, whoever asks.
+#[tokio::test]
+async fn an_rpc_not_on_the_allowlist_cannot_be_called() {
+    let stack = support::start().await;
+    let response = rpc(
+        &stack,
+        "tools/call",
+        json!({"name": "ledger_append", "arguments": {}}),
+        Some("agent-1"),
+    )
+    .await;
+    assert!(
+        response["error"]["message"]
+            .as_str()
+            .is_some_and(|m| m.contains("no tool named")),
+        "{response}"
+    );
 }
 
 #[tokio::test]
